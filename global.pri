@@ -34,6 +34,11 @@ win*{
 	Release:QMAKE_LFLAGS += /DEBUG:FULL /OPT:REF /OPT:ICF /TIME /LTCG:INCREMENTAL
 }
 
+mac{
+	QMAKE_MACOSX_DEPLOYMENT_TARGET = 13.3
+	QMAKE_CXXFLAGS += -include arm_acle.h
+}
+
 linux*:Release {
 	QMAKE_CXXFLAGS += -flto=auto -ffat-lto-objects
 	QMAKE_CFLAGS   += -flto=auto -ffat-lto-objects
