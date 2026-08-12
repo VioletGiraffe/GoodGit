@@ -45,15 +45,28 @@ struct JobQueue
 
 static JobQueue s_queue;
 
+// The §3 invariants, applied to every invocation - async and sync alike
+static void applyInvariants(QStringList& args, bool readOnlyQuery)
+{
+	if (readOnlyQuery)
+		args.prepend(QStringLiteral("--no-optional-locks"));
+	args.prepend(QStringLiteral("core.quotepath=false"));
+	args.prepend(QStringLiteral("-c"));
+}
+
+static QProcessEnvironment gitEnvironment()
+{
+	auto env = QProcessEnvironment::systemEnvironment();
+	env.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
+	return env;
+}
+
 Job* run(const QString& workDir, QStringList args, const QObject* context, Callback callback, QByteArray stdinData, bool readOnlyQuery)
 {
 	auto* job = new Job;
 	job->_workDir = workDir;
 	job->_args = std::move(args);
-	if (readOnlyQuery)
-		job->_args.prepend(QStringLiteral("--no-optional-locks"));
-	job->_args.prepend(QStringLiteral("core.quotepath=false"));
-	job->_args.prepend(QStringLiteral("-c"));
+	applyInvariants(job->_args, readOnlyQuery);
 	job->_stdinData = std::move(stdinData);
 	job->_callback = std::move(callback);
 	job->_context = context;
@@ -80,10 +93,7 @@ void Job::start()
 {
 	_process = new QProcess(this);
 	_process->setWorkingDirectory(_workDir);
-
-	auto env = QProcessEnvironment::systemEnvironment();
-	env.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
-	_process->setProcessEnvironment(env);
+	_process->setProcessEnvironment(gitEnvironment());
 
 	QObject::connect(_process, &QProcess::finished, this, [this](int exitCode, QProcess::ExitStatus status) {
 		GitResult result;
@@ -106,6 +116,32 @@ void Job::start()
 	if (!_stdinData.isEmpty())
 		_process->write(_stdinData);
 	_process->closeWriteChannel();
+}
+
+GitResult runSync(const QString& workDir, QStringList args, int timeoutMs)
+{
+	applyInvariants(args, /*readOnlyQuery=*/true);
+
+	const QString git = Settings::gitExecutable();
+	QProcess process;
+	process.setWorkingDirectory(workDir);
+	process.setProcessEnvironment(gitEnvironment());
+	process.start(git, args);
+	process.closeWriteChannel();
+
+	GitResult result;
+	if (!process.waitForFinished(timeoutMs))
+	{
+		result.launchFailed = true;
+		result.err = process.readAllStandardError();
+		return result;
+	}
+	result.exitCode = process.exitCode();
+	result.out = process.readAllStandardOutput();
+	result.err = process.readAllStandardError();
+	result.launchFailed = process.exitStatus() != QProcess::NormalExit;
+	result.ok = !result.launchFailed && result.exitCode == 0;
+	return result;
 }
 
 void Job::finish(GitResult result)

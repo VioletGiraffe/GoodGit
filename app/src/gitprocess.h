@@ -58,4 +58,8 @@ private:
 Job* run(const QString& workDir, QStringList args, const QObject* context, Callback callback,
 	QByteArray stdinData = {}, bool readOnlyQuery = false);
 
+// Blocking variant with the same invariants, for the one moment before the event loop exists
+// (resolving the repo root at startup). Read-only queries only; everything else goes through run().
+GitResult runSync(const QString& workDir, QStringList args, int timeoutMs = 10000);
+
 } // namespace Git
