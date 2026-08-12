@@ -1,47 +1,31 @@
 #include "changedfilesmodel.h"
+#include "theme.h"
 
 #include <QApplication>
 #include <QBrush>
 #include <QFont>
-#include <QPalette>
 #include <QStyle>
 
 #include <unordered_map>
 
 namespace {
 
-bool isDarkTheme()
-{
-	return QApplication::palette().color(QPalette::Base).lightness() < 128;
-}
-
 QColor stateColor(const FileEntry& entry)
 {
-	const bool dark = isDarkTheme();
+	const Theme& t = activeTheme();
 	if (entry.isSubmodule)
-	{
-		if (entry.dirtyTrackedInside)
-			return dark ? QColor(0xef, 0x8c, 0x82) : QColor(0xb8, 0x30, 0x2a);
-		return dark ? QColor(0xdd, 0xa4, 0x5c) : QColor(0xa1, 0x5c, 0x00);
-	}
+		return entry.dirtyTrackedInside ? t.stDeleted : t.stSubmodule;
 	switch (entry.type)
 	{
-	case ChangeType::Modified:    return dark ? QColor(0x6c, 0xb0, 0xf0) : QColor(0x16, 0x68, 0xc4);
-	case ChangeType::Added:       return dark ? QColor(0x62, 0xc9, 0x8a) : QColor(0x12, 0x78, 0x3c);
-	case ChangeType::Untracked:   return dark ? QColor(0xd4, 0xb3, 0x52) : QColor(0x8a, 0x6a, 0x08);
-	case ChangeType::Deleted:     return dark ? QColor(0xef, 0x8c, 0x82) : QColor(0xb8, 0x30, 0x2a);
-	case ChangeType::Renamed:     return dark ? QColor(0xb3, 0x94, 0xef) : QColor(0x73, 0x45, 0xc0);
-	case ChangeType::TypeChanged: return dark ? QColor(0xe0, 0xa0, 0x5a) : QColor(0xa3, 0x58, 0x00);
-	case ChangeType::Conflicted:  return dark ? QColor(0xef, 0x8c, 0x82) : QColor(0xb8, 0x30, 0x2a);
+	case ChangeType::Modified:    return t.stModified;
+	case ChangeType::Added:       return t.stAdded;
+	case ChangeType::Untracked:   return t.stUntracked;
+	case ChangeType::Deleted:     return t.stDeleted;
+	case ChangeType::Renamed:     return t.stRenamed;
+	case ChangeType::TypeChanged: return t.stSubmodule; // same amber family
+	case ChangeType::Conflicted:  return t.stDeleted;
 	}
 	return {};
-}
-
-QColor blockedRowTint()
-{
-	QColor warn = isDarkTheme() ? QColor(0x3a, 0x30, 0x13) : QColor(0xff, 0xf4, 0xd6);
-	warn.setAlpha(160); // let selection and alternating base show through
-	return warn;
 }
 
 } // namespace
@@ -200,16 +184,21 @@ QVariant ChangedFilesModel::data(const QModelIndex& index, int role) const
 			return QBrush{ stateColor(entry) };
 		return {};
 	case Qt::FontRole:
-		if (index.column() == PathColumn && entry.type == ChangeType::Deleted)
+		if (index.column() == StateColumn)
 		{
 			QFont font = QApplication::font();
-			font.setStrikeOut(true);
+			font.setWeight(QFont::DemiBold);
 			return font;
 		}
-		return {};
+		else // the path: monospace, struck through when deleted (FileListDelegate recolors the strike)
+		{
+			QFont font = monospaceFont();
+			font.setStrikeOut(entry.type == ChangeType::Deleted);
+			return font;
+		}
 	case Qt::BackgroundRole:
 		if (entry.isSubmodule && entry.dirtyTrackedInside)
-			return QBrush{ blockedRowTint() };
+			return QBrush{ activeTheme().blockedRowTint() };
 		return {};
 	case Qt::ToolTipRole:
 		if (entry.isSubmodule)

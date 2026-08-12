@@ -36,22 +36,28 @@ HEADERS += \
 	src/changedfilesmodel.h \
 	src/commitwindow.h \
 	src/diffhighlighter.h \
+	src/filelistdelegate.h \
 	src/gitparsers.h \
 	src/gitprocess.h \
 	src/messageedit.h \
 	src/repository.h \
-	src/settings.h
+	src/settings.h \
+	src/theme.h
 
 SOURCES += \
 	src/changedfilesmodel.cpp \
 	src/commitwindow.cpp \
 	src/diffhighlighter.cpp \
+	src/filelistdelegate.cpp \
 	src/gitparsers.cpp \
 	src/gitprocess.cpp \
 	src/main.cpp \
 	src/messageedit.cpp \
 	src/repository.cpp \
-	src/settings.cpp
+	src/settings.cpp \
+	src/theme.cpp
+
+RESOURCES += res/theme.qrc
 
 ###################################################
 #                 LIBS

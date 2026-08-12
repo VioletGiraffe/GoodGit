@@ -1,5 +1,6 @@
 #include "commitwindow.h"
 #include "gitprocess.h"
+#include "theme.h"
 
 #include <QApplication>
 #include <QDir>
@@ -10,6 +11,7 @@ int main(int argc, char* argv[])
 	QApplication app{ argc, argv };
 	QApplication::setOrganizationName(QStringLiteral("GoodGit"));
 	QApplication::setApplicationName(QStringLiteral("GoodGit"));
+	applyTheme(app);
 
 	const QString startPath = argc > 1 ? QString::fromLocal8Bit(argv[1]) : QDir::currentPath();
 

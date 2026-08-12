@@ -1,7 +1,9 @@
 #include "commitwindow.h"
 #include "diffhighlighter.h"
+#include "filelistdelegate.h"
 #include "messageedit.h"
 #include "settings.h"
+#include "theme.h"
 
 #include "dialogs/messagebox.h"
 #include "widgets/clabelmidelision.h"
@@ -17,7 +19,7 @@
 #include <QEvent>
 #include <QFile>
 #include <QFileInfo>
-#include <QFontDatabase>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QKeyEvent>
@@ -144,7 +146,8 @@ void CommitWindow::buildUi()
 	leftLayout->setSpacing(0);
 
 	// Repo header row: name, branch, ahead count, then the secondary actions
-	auto* repoBar = new QWidget;
+	auto* repoBar = new QFrame;
+	repoBar->setObjectName(QStringLiteral("repoBar"));
 	auto* repoBarLayout = new QHBoxLayout(repoBar);
 	repoBarLayout->setContentsMargins(8, 6, 8, 6);
 	_repoNameLabel = new QLabel;
@@ -154,7 +157,10 @@ void CommitWindow::buildUi()
 		_repoNameLabel->setFont(bold);
 	}
 	_branchLabel = new QLabel;
+	_branchLabel->setObjectName(QStringLiteral("branchChip"));
+	_branchLabel->setFont(monospaceFont());
 	_aheadLabel = new QLabel;
+	_aheadLabel->setObjectName(QStringLiteral("aheadLabel"));
 	_pushButton = new QPushButton(tr("Push"));
 	_refreshButton = new QPushButton(tr("Refresh"));
 	_refreshButton->setToolTip(QStringLiteral("F5"));
@@ -166,20 +172,21 @@ void CommitWindow::buildUi()
 	repoBarLayout->addWidget(_refreshButton);
 	leftLayout->addWidget(repoBar);
 
-	const auto makeStrip = [](const QString& background, const QString& text) {
+	const auto makeStrip = [](const QColor& background, const QColor& text) {
 		auto* strip = new QLabel;
 		strip->setWordWrap(true);
 		strip->setMargin(6);
-		strip->setStyleSheet(QStringLiteral("background-color: %1; color: %2;").arg(background, text));
+		strip->setStyleSheet(QStringLiteral("background-color: %1; color: %2;").arg(background.name(), text.name()));
 		strip->setVisible(false);
 		return strip;
 	};
-	_opStrip = makeStrip(QStringLiteral("#ffe9e6"), QStringLiteral("#8f2318"));
-	_detachedStrip = makeStrip(QStringLiteral("#fff4d6"), QStringLiteral("#6b4e00"));
+	_opStrip = makeStrip(activeTheme().errBg, activeTheme().errFg);
+	_detachedStrip = makeStrip(activeTheme().warnBg, activeTheme().warnFg);
 	leftLayout->addWidget(_opStrip);
 	leftLayout->addWidget(_detachedStrip);
 
-	auto* counterBar = new QWidget;
+	auto* counterBar = new QFrame;
+	counterBar->setObjectName(QStringLiteral("counterBar"));
 	auto* counterLayout = new QHBoxLayout(counterBar);
 	counterLayout->setContentsMargins(8, 4, 8, 4);
 	_checkAllBox = new QCheckBox(tr("0 of 0 checked"));
@@ -192,6 +199,7 @@ void CommitWindow::buildUi()
 
 	_filesView = new QTreeView;
 	_filesView->setModel(&_filesModel);
+	_filesView->setItemDelegate(new FileListDelegate{ _filesView });
 	_filesView->setRootIsDecorated(false);
 	_filesView->setUniformRowHeights(true);
 	_filesView->setAllColumnsShowFocus(true);
@@ -205,6 +213,7 @@ void CommitWindow::buildUi()
 	leftLayout->addWidget(_filesView, 1);
 
 	auto* messageHeader = new QWidget;
+	messageHeader->setObjectName(QStringLiteral("messageHeader"));
 	auto* messageHeaderLayout = new QHBoxLayout(messageHeader);
 	messageHeaderLayout->setContentsMargins(8, 6, 8, 4);
 	messageHeaderLayout->addWidget(new QLabel(tr("Commit message")));
@@ -220,13 +229,16 @@ void CommitWindow::buildUi()
 	auto* messageLayout = new QVBoxLayout(messageArea);
 	messageLayout->setContentsMargins(8, 0, 8, 8);
 	_messageEdit = new MessageEdit;
+	_messageEdit->setObjectName(QStringLiteral("messageEdit"));
 	_messageEdit->setMinimumHeight(90);
 	_messageEdit->setMaximumHeight(160);
 	messageLayout->addWidget(_messageEdit);
 	_commitButton = new QPushButton(tr("Commit"));
+	_commitButton->setObjectName(QStringLiteral("commitButton"));
 	_commitButton->setDefault(false);
 	_commitButton->setToolTip(QStringLiteral("Ctrl+Enter"));
 	_commitPushButton = new QPushButton(tr("Commit && Push"));
+	_commitPushButton->setObjectName(QStringLiteral("commitPushButton"));
 	_commitPushButton->setToolTip(QStringLiteral("Ctrl+Shift+Enter"));
 	messageLayout->addWidget(_commitButton);
 	messageLayout->addWidget(_commitPushButton);
@@ -237,25 +249,29 @@ void CommitWindow::buildUi()
 	rightLayout->setContentsMargins(0, 0, 0, 0);
 	rightLayout->setSpacing(0);
 
-	auto* diffHeader = new QWidget;
+	auto* diffHeader = new QFrame;
+	diffHeader->setObjectName(QStringLiteral("diffHeader"));
 	auto* diffHeaderLayout = new QHBoxLayout(diffHeader);
 	diffHeaderLayout->setContentsMargins(8, 6, 8, 6);
 	_diffPathLabel = new CLabelMidElision;
+	_diffPathLabel->setFont(monospaceFont());
 	_diffTagLabel = new QLabel;
-	_diffTagLabel->setEnabled(false); // dimmed
+	_diffTagLabel->setObjectName(QStringLiteral("diffTagLabel"));
 	diffHeaderLayout->addWidget(_diffPathLabel, 1);
 	diffHeaderLayout->addWidget(_diffTagLabel);
 	rightLayout->addWidget(diffHeader);
 
 	_diffView = new QPlainTextEdit;
+	_diffView->setObjectName(QStringLiteral("diffView"));
 	_diffView->setReadOnly(true);
 	_diffView->setLineWrapMode(QPlainTextEdit::WidgetWidth);
-	_diffView->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+	_diffView->setFont(monospaceFont());
 	new DiffHighlighter(_diffView->document());
 	rightLayout->addWidget(_diffView, 1);
 
 	_splitter = new QSplitter(Qt::Horizontal);
 	_splitter->setChildrenCollapsible(false);
+	_splitter->setHandleWidth(1);
 	_splitter->addWidget(leftPane);
 	_splitter->addWidget(rightPane);
 	_splitter->setStretchFactor(0, 0);

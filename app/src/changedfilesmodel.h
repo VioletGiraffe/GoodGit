@@ -8,8 +8,9 @@
 #include <vector>
 
 // The checkable file list. Columns: 0 = checkbox + icon + state text, 1 = path.
-// Per-state colors, the deleted strikethrough, the folder icon and the blocked-row tint are all
-// supplied via item data roles - no delegate needed.
+// Row styling comes from the theme via item data roles (per-state colors, fonts, the folder icon,
+// the blocked-row tint); FileListDelegate paints what roles cannot express - the red recolor of the
+// deleted strikethrough and the selected-row accent stripe.
 class ChangedFilesModel final : public QAbstractTableModel
 {
 	Q_OBJECT

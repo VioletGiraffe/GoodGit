@@ -1,8 +1,8 @@
 #include "messageedit.h"
+#include "theme.h"
 
 #include <QAbstractItemView>
 #include <QCompleter>
-#include <QFontDatabase>
 #include <QKeyEvent>
 #include <QPainter>
 #include <QScrollBar>
@@ -16,7 +16,7 @@ static constexpr int AutoPopupMinPrefixLength = 3;
 MessageEdit::MessageEdit(QWidget* parent) :
 	QPlainTextEdit(parent)
 {
-	setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+	setFont(monospaceFont());
 	setTabChangesFocus(true);
 
 	_completerModel = new QStringListModel(this);
