@@ -25,6 +25,9 @@ struct RepoState
 	QStringList localBranchesAtHead;
 	QStringList remoteBranchesAtHead;
 
+	// Subjects of the commits the upstream has not seen, newest first; capped, `ahead` holds the true count
+	QStringList unpushedSubjects;
+
 	[[nodiscard]] bool operationInProgress() const { return op != RepoOp::None; }
 };
 

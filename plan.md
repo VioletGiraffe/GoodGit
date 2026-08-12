@@ -295,6 +295,8 @@ it. Right side: diff, full height. Splitter position persisted.
 - Renames render as `new/path (was old/path)` in the single path column (Q).
 - Check-all is a tri-state checkbox in the "N of M checked" line above the list.
 - Recent-messages dropdown, last ~20 per repo in `QSettings` (P).
+- Hovering the Push button or the ahead-count lists the unpushed commit subjects (capped, with an
+  "and N more" tail).
 - Commit disabled with zero checked or an empty message; the count lives on the button.
 - Keyboard: Space toggles the selection, Del trashes, F5 refreshes, Ctrl+Enter commits, Enter and double-click
   open the external difftool.

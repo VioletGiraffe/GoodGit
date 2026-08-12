@@ -289,6 +289,17 @@ void CommitWindow::updateHeader()
 
 	_pushButton->setText(state.ahead > 0 ? tr("Push (%1)").arg(state.ahead) : tr("Push"));
 
+	QString unpushedTooltip;
+	if (!state.unpushedSubjects.isEmpty())
+	{
+		QStringList lines = state.unpushedSubjects;
+		if (state.ahead > lines.size())
+			lines.push_back(tr("... and %1 more").arg(state.ahead - lines.size()));
+		unpushedTooltip = lines.join(QLatin1Char('\n'));
+	}
+	_pushButton->setToolTip(unpushedTooltip);
+	_aheadLabel->setToolTip(unpushedTooltip);
+
 	setWindowTitle(QStringLiteral("%1 [%2] - GoodGit").arg(_repo.name(), state.detached ? QStringLiteral("detached") : state.branch));
 }
 

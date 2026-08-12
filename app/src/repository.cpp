@@ -9,6 +9,8 @@
 
 namespace {
 
+constexpr int MaxUnpushedLogEntries = 30; // tooltip fodder; state.ahead carries the true count
+
 QByteArray nulJoined(const QStringList& paths)
 {
 	QByteArray data;
@@ -115,13 +117,21 @@ void Repository::refresh()
 				[run, path = sub.path](const GitResult& r) { run->submoduleDirtiness[path] = parsePorcelainDirtiness(r.out); }, phase3);
 		}
 
+		if (!run->header.upstream.isEmpty() && run->header.ahead > 0)
+		{
+			launch(_rootPath, { QStringLiteral("log"), QStringLiteral("--oneline"), QStringLiteral("--no-decorate"),
+					QStringLiteral("-n"), QString::number(MaxUnpushedLogEntries), QStringLiteral("@{upstream}..HEAD") },
+				[this](const GitResult& r) { _state.unpushedSubjects = parseLines(r.out); }, phase3);
+		}
+
 		if (run->pendingJobs == 0)
 			phase3();
 	};
 
-	// The detached-branch lists are refilled by phase 2 when still applicable
+	// Refilled by phase 2 when still applicable
 	_state.localBranchesAtHead.clear();
 	_state.remoteBranchesAtHead.clear();
+	_state.unpushedSubjects.clear();
 
 	// Phase 1: the four independent base queries (plan.md §4), plus one-time gitdir resolution
 	if (_gitDir.isEmpty())
