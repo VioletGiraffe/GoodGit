@@ -216,6 +216,7 @@ void CommitWindow::buildUi()
 	});
 
 	new QShortcut(QKeySequence(Qt::Key_F5), this, [this] { _repo.refresh(); });
+	new QShortcut(QKeySequence(Qt::Key_Escape), this, [this] { close(); });
 	const auto commitShortcut = [this] {
 		if (_commitButton->isEnabled())
 			startCommit(false);
