@@ -19,8 +19,8 @@ public:
 	explicit ChangedFilesModel(QObject* parent = nullptr);
 
 	// Rebuilds the rows. Check state is re-derived by path: persisting rows keep their state, new rows
-	// default to checked only on the initial load. In merge mode all tracked rows are
-	// forced on and not user-changeable (B1).
+	// default to checked unless untracked. In merge mode all tracked rows are forced on and not
+	// user-changeable (B1).
 	void setEntries(const std::vector<FileEntry>& entries, bool mergeMode);
 
 	[[nodiscard]] const FileEntry& entryAt(int row) const { return _rows[size_t(row)].entry; }
@@ -58,5 +58,4 @@ private:
 	[[nodiscard]] static QString pathText(const FileEntry& entry);
 
 	std::vector<Row> _rows;
-	bool _loadedOnce = false;
 };

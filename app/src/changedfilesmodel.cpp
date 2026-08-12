@@ -76,12 +76,11 @@ void ChangedFilesModel::setEntries(const std::vector<FileEntry>& entries, bool m
 			row.checked = false;
 		else if (const auto it = previousChecks.find(entry.path); it != previousChecks.end())
 			row.checked = it->second;
-		else if (!_loadedOnce)
+		else
 			row.checked = entry.type != ChangeType::Untracked;
 
 		_rows.push_back(std::move(row));
 	}
-	_loadedOnce = true;
 	endResetModel();
 	emit checksChanged();
 }

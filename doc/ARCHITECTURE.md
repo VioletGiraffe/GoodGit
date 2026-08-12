@@ -58,9 +58,8 @@ errors through the normal failure path, not silent re-scans.
 untracked list, submodule enumeration), then the queries the results call for (per-submodule dirtiness,
 unborn-HEAD fallback, detached-HEAD branch tips, unpushed-commit subjects). Re-entry is coalesced.
 
-Check state survives refresh, re-derived by path: persisting rows keep their state; new rows arrive checked
-only on the initial load, unchecked on every later refresh - so a refresh fired by an unrelated action can
-never quietly grow a selection the user already built.
+Check state survives refresh, re-derived by path: persisting rows keep their state; new rows default the
+same way on every refresh - checked unless untracked.
 
 ## Submodules
 
