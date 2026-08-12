@@ -4,6 +4,7 @@
 
 TEMPLATE = app
 TARGET   = gg
+VERSION  = 0.1.0 # embedded in the exe's version resource; the installer reads its version from there
 
 include(../global.pri)
 

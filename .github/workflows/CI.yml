@@ -45,7 +45,26 @@ jobs:
       run: |
         %QT_ROOT_DIR%\bin\qmake.exe -v
         %QT_ROOT_DIR%\bin\qmake.exe -tp vc -r
-        msbuild /t:Build /p:Configuration=Release
+        msbuild /t:Build /p:Configuration=Release || exit /b 1
+
+        @echo on
+        set STAGING_DIR=dist
+        RMDIR /S /Q %STAGING_DIR%
+        mkdir %STAGING_DIR%
+        copy /y bin\release\gg.exe "%STAGING_DIR%\" >nul
+        %QT_ROOT_DIR%\bin\windeployqt.exe --dir %STAGING_DIR% --force --release --compiler-runtime --no-translations --no-system-d3d-compiler --no-system-dxc-compiler --no-opengl-sw --skip-plugin-types networkinformation --skip-plugin-types tls %STAGING_DIR%\gg.exe
+
+        del %STAGING_DIR%\dxil.dll >nul
+        del %STAGING_DIR%\dxcompiler.dll >nul
+
+        "%programfiles(x86)%\Inno Setup 6\iscc" installer.iss
+
+    - name: Archive Installer
+      if: success() && startsWith(matrix.os, 'windows')
+      uses: actions/upload-artifact@v4
+      with:
+        name: GoodGit-installer
+        path: GoodGit.exe
 
     - name: Mac
       if: startsWith(matrix.os, 'macos')
