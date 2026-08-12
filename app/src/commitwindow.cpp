@@ -94,6 +94,7 @@ void CommitWindow::buildUi()
 	_aheadLabel = new QLabel;
 	_pushButton = new QPushButton(tr("Push"));
 	_refreshButton = new QPushButton(tr("Refresh"));
+	_refreshButton->setToolTip(QStringLiteral("F5"));
 	repoBarLayout->addWidget(_repoNameLabel);
 	repoBarLayout->addWidget(_branchLabel);
 	repoBarLayout->addWidget(_aheadLabel);
@@ -158,7 +159,9 @@ void CommitWindow::buildUi()
 	messageLayout->addWidget(_messageEdit);
 	_commitButton = new QPushButton(tr("Commit"));
 	_commitButton->setDefault(false);
+	_commitButton->setToolTip(QStringLiteral("Ctrl+Enter"));
 	_commitPushButton = new QPushButton(tr("Commit && Push"));
+	_commitPushButton->setToolTip(QStringLiteral("Ctrl+Shift+Enter"));
 	messageLayout->addWidget(_commitButton);
 	messageLayout->addWidget(_commitPushButton);
 	leftLayout->addWidget(messageArea);
@@ -223,6 +226,12 @@ void CommitWindow::buildUi()
 	};
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return), this, commitShortcut);
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Enter), this, commitShortcut); // the numpad Enter
+	const auto commitPushShortcut = [this] {
+		if (_commitPushButton->isEnabled())
+			startCommit(true);
+	};
+	new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Return), this, commitPushShortcut);
+	new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Enter), this, commitPushShortcut);
 
 	reloadRecentMessages();
 	updateButtons();
@@ -674,6 +683,11 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	menu.addSeparator();
 	QAction* deleteAction = menu.addAction(tr("Delete to Recycle Bin"), this, &CommitWindow::deleteSelection);
 	deleteAction->setEnabled(anyDeletable);
+	// Display-only: the view's event filter owns the actual Del handling; WidgetShortcut on an action
+	// belonging to no widget never registers globally, so the key cannot trigger twice
+	deleteAction->setShortcut(QKeySequence::Delete);
+	deleteAction->setShortcutContext(Qt::WidgetShortcut);
+	deleteAction->setShortcutVisibleInContextMenu(true);
 
 	menu.exec(_filesView->viewport()->mapToGlobal(pos));
 }
