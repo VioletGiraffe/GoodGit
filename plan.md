@@ -265,8 +265,13 @@ The state is shown in the header **before** you press anything, not discovered a
 | `FileRowDelegate` | `QStyledItemDelegate`: per-state colour, strikethrough on deleted paths, folder icon, warning tint on blocked submodule rows |
 | `DiffView` | `QPlainTextEdit` + `DiffHighlighter : QSyntaxHighlighter`, prefix-driven |
 | `CommitWindow` | `.ui` + class. Orchestration; owns a `Repository`; opens submodule windows |
-| `Settings` | `QSettings` wrapper: window geometry, splitter state, recent messages per repo, git executable path |
+| `Settings` | Key vocabulary over qtutils `CSettings`: splitter state, recent messages per repo, git executable path. Window geometry via qtutils `CPersistenceEnabler` |
 | `main` | Arg parsing, repo resolution via `rev-parse --show-toplevel`, window creation |
+
+From qtutils, besides the above: `MessageBox::notice` is the git-failure dialog (stderr verbatim as the
+scrollable details), `MessageBox::question` the confirmation/ask dialogs, `CHistoryComboBox` the
+recent-messages dropdown (extended to multi-line items showing their first line), `CLabelMidElision` for
+path labels.
 
 `FileRowDelegate` is needed in v1 regardless of any later styling pass — the state colours, the strikethrough,
 the folder icon and the blocked-row tint all require it.
@@ -304,8 +309,11 @@ it. Right side: diff, full height. Splitter position persisted.
 
 - `QT = core gui widgets`, dropping `CONFIG -= qt` and `CONFIG += console`
 - `TARGET = GoodGit`
-- Either add `qtutils` as a submodule or drop the existing `INCLUDEPATH` entry pointing at it
+- qtutils wired into the build: root `SUBDIRS` + `app.depends`, `-lqtutils`
 - `README.md` still describes the project template
+
+All submodules are first-party: when a helper almost fits, extend it in the library (ask before changing
+existing behavior — other projects share them) rather than working around it here.
 
 ---
 

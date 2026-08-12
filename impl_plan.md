@@ -8,16 +8,19 @@ Delete both files once the code and an architecture doc supersede them.
 
 ---
 
+**All submodules are first-party** (cpputils, cpp-template-utils, qtutils). When a helper or widget almost
+fits, extend or fix it in the library — in library shape, not GoodGit-flavored — rather than working around it
+here. Ask before changing existing behavior; other projects share these. Each such change is a commit in the
+submodule plus a pointer bump here.
+
 ## Step 0 — build configuration
 
 - `app/app.pro`: `QT = core gui widgets`, drop `CONFIG -= qt` and `CONFIG += console`, `TARGET = GoodGit` (§8).
+- The qtutils submodule is already added; wire it into the build: root `app.pro` `SUBDIRS` + `app.depends`,
+  `-lqtutils` in `app/app.pro` (the `INCLUDEPATH` entry is already there).
 - Trivial `QApplication` + empty `QMainWindow` in `main.cpp` so the result is runnable.
 
-**Decision needed here:** `INCLUDEPATH` already points at `../qtutils`, which is not a submodule. Add it as
-one, or drop the entry. Nothing in v1 strictly requires qtutils, but if it is wanted at all, wiring it in now
-is cheaper than mid-project.
-
-**Checkpoint:** a window opens; both submodules still build.
+**Checkpoint:** a window opens; all three submodules build.
 
 ## Step 1 — process layer
 
@@ -59,7 +62,8 @@ exercised directly.
   splitter persisted (§7).
 - `ChangedFilesModel` over the entries; check state re-derivation by path across refreshes (§5.1);
   tri-state check-all in the counter line; commit button enable state + count.
-- `Settings` (§6): geometry, splitter. Recent messages storage comes with the commit step.
+- Settings: qtutils `CSettings` (key vocabulary only) + `CPersistenceEnabler` for window geometry/state;
+  splitter position alongside. Recent messages storage comes with the commit step.
 - `main`: repo resolution via `rev-parse --show-toplevel`, error exit if not a repo.
 - F5 refresh. Startup refresh.
 
@@ -85,19 +89,23 @@ by hand to see them).
 
 ## Step 6 — commit
 
-- Normal-mode commit sequence (§4): untracked confirmation dialog (§5.3), `add`, `commit`, rollback on
-  failure. Post-action refresh (§5.1). Ticked rows are the pathspec, verbatim.
-- Message editor glue: recent-messages dropdown (per-repo, ~20), Ctrl+Enter, disabled-state rules.
+- Normal-mode commit sequence (§4): untracked confirmation dialog (§5.3, qtutils `MessageBox::question`),
+  `add`, `commit`, rollback on failure. Post-action refresh (§5.1). Ticked rows are the pathspec, verbatim.
+- Message editor glue: recent-messages dropdown (per-repo, ~20) via qtutils `CHistoryComboBox`; it is
+  single-line today, so first extend it in qtutils to carry multi-line items with a display role showing the
+  first line (approved). Ctrl+Enter, disabled-state rules.
 - Merge mode (§4): tracked changes forced on, untracked keep checkboxes, no-pathspec commit path.
-- Failure dialog showing stderr verbatim (§5.6) — built here, reused by everything after.
+- Failure dialog (§5.6): qtutils `MessageBox::notice` — fixed text above scrollable details — with stderr
+  verbatim as the details. Used by everything after.
 
 **Checkpoint:** real commits in a scratch repo: plain, with untracked, rejected by a hook (rollback observed),
 merge commit.
 
 ## Step 7 — detached HEAD reattachment
 
-- The §5.5 table: silent checkout cases, the ask-dialog for multiple candidates, refusals with explanation.
-  Runs at commit time; the strip from step 4 already announces the state beforehand.
+- The §5.5 table: silent checkout cases, the ask-dialog for multiple candidates (`MessageBox::question`,
+  one button per branch), refusals with explanation. Runs at commit time; the strip from step 4 already
+  announces the state beforehand.
 
 **Checkpoint:** scripted scenarios in a scratch repo for each of the five table rows.
 
