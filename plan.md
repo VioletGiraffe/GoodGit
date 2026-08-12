@@ -260,18 +260,18 @@ The state is shown in the header **before** you press anything, not discovered a
 | `GitProcess` | Async `QProcess` wrapper. Args, cwd, optional stdin payload, completion callback with `GitResult`. Owns the invariants from §3 |
 | `GitResult` | `{ int exitCode; QByteArray out, err; bool ok; }` |
 | `Repository` | One repo: path, git dir, `RepoState` (branch, upstream, ahead/behind, in-progress op, detached info) and `std::vector<FileEntry>`. Issues the queries, performs the actions, emits `refreshed()` |
-| `FileEntry` | `{ path, oldPath, ChangeType, bool untracked, SubmoduleInfo }` |
-| `ChangedFilesModel` | `QAbstractTableModel` over the entries: check state, columns check / state / path |
-| `FileRowDelegate` | `QStyledItemDelegate`: per-state colour, strikethrough on deleted paths, folder icon, warning tint on blocked submodule rows |
+| `FileEntry` | `{ path, oldPath, ChangeType (incl. Untracked), submodule flags }` |
+| `ChangedFilesModel` | `QAbstractTableModel` over the entries: check state, columns state / path. Per-state colour, deleted strikethrough, folder icon and blocked-row tint are all item data roles - no delegate |
 | `DiffView` | `QPlainTextEdit` + `DiffHighlighter : QSyntaxHighlighter`, prefix-driven |
-| `CommitWindow` | `.ui` + class. Orchestration; owns a `Repository`; opens submodule windows |
+| `CommitWindow` | Orchestration; owns a `Repository`; opens submodule windows. Layout built in code |
 | `Settings` | Key vocabulary over qtutils `CSettings`: splitter state, recent messages per repo, git executable path. Window geometry via qtutils `CPersistenceEnabler` |
 | `main` | Arg parsing, repo resolution via `rev-parse --show-toplevel`, window creation |
 
 From qtutils, besides the above: `MessageBox::notice` is the git-failure dialog (stderr verbatim as the
-scrollable details), `MessageBox::question` the confirmation/ask dialogs, `CHistoryComboBox` the
-recent-messages dropdown (extended to multi-line items showing their first line), `CLabelMidElision` for
-path labels.
+scrollable details), `MessageBox::question` the confirmation/ask dialogs, `CLabelMidElision` for path labels.
+The recent-messages dropdown is a plain non-editable `QComboBox` (full message in the item data, first line
+as display text) - `CHistoryComboBox` was considered and rejected: it is an editable combobox whose own line
+edit is the input field, the wrong base for a picker feeding a separate multi-line editor.
 
 `FileRowDelegate` is needed in v1 regardless of any later styling pass — the state colours, the strikethrough,
 the folder icon and the blocked-row tint all require it.

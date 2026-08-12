@@ -36,7 +36,15 @@ before anything is built on top of them:
 2. `git diff --no-index -- /dev/null <path>` works on Git for Windows, or the all-`+` synthesis is needed (§4).
 3. `-F <tmpfile>` + stdin pathspec ordering behaves as expected in one live commit.
 
-Record the results in this file; adjust §3/§4 if any fail.
+**Verified 2026-08-12 against git 2.37.1.windows.1:**
+
+1. Accepted by `git commit`. Confirmed live: only the pathspec'd file was committed, other modified and
+   untracked files and the index untouched.
+2. Works; exits 1 when the file has content, so exit code 1 is success for this one command.
+3. Works. The collision is real: `-F -` together with `--pathspec-from-file=-` reads the pathspec as the
+   message ("Aborting commit due to empty commit message"), so the temp-file message is mandatory, not
+   an option.
+4. (extra) `diff --name-status -z` rename field order confirmed: `R<score>\0<old>\0<new>\0`.
 
 **Checkpoint:** a scratch `main()` that runs two overlapping queries and prints raw results.
 
@@ -57,9 +65,9 @@ exercised directly.
 
 ## Step 3 — window skeleton with live file list
 
-- `CommitWindow` `.ui`: layout 4 exactly as drawn in `doc/UI/mockup.html` — 430 px left column (repo header
+- `CommitWindow`: layout 4 exactly as drawn in `doc/UI/mockup.html` — 430 px left column (repo header
   row, file list, message editor with 50-column marker, Commit / Commit & Push), diff placeholder right,
-  splitter persisted (§7).
+  splitter persisted (§7). Layout built in code, not a `.ui` file.
 - `ChangedFilesModel` over the entries; check state re-derivation by path across refreshes (§5.1);
   tri-state check-all in the counter line; commit button enable state + count.
 - Settings: qtutils `CSettings` (key vocabulary only) + `CPersistenceEnabler` for window geometry/state;
@@ -71,8 +79,9 @@ exercised directly.
 
 ## Step 4 — row presentation
 
-- `FileRowDelegate` (§6): per-state colors, strikethrough deleted paths, folder icon, warning tint + disabled
-  checkbox on blocked submodule rows, `new/path (was old/path)` rename rendering.
+- Per-state colors, strikethrough deleted paths, folder icon, warning tint + no checkbox on blocked
+  submodule rows, `new/path (was old/path)` rename rendering. All supplied as item data roles from the
+  model; the planned `FileRowDelegate` turned out unnecessary.
 - Header strips for merge-in-progress and detached HEAD — display only at this step; the behavior behind them
   comes in steps 6–7.
 
@@ -91,9 +100,10 @@ by hand to see them).
 
 - Normal-mode commit sequence (§4): untracked confirmation dialog (§5.3, qtutils `MessageBox::question`),
   `add`, `commit`, rollback on failure. Post-action refresh (§5.1). Ticked rows are the pathspec, verbatim.
-- Message editor glue: recent-messages dropdown (per-repo, ~20) via qtutils `CHistoryComboBox`; it is
-  single-line today, so first extend it in qtutils to carry multi-line items with a display role showing the
-  first line (approved). Ctrl+Enter, disabled-state rules.
+- Message editor glue: recent-messages dropdown (per-repo, ~20) as a plain non-editable `QComboBox`
+  (full message in item data, first line displayed; persisted via `CSettings`). `CHistoryComboBox` was
+  rejected on reading it: an editable combobox whose own line edit is the input - the wrong base for a
+  picker feeding a separate editor. Ctrl+Enter, disabled-state rules.
 - Merge mode (§4): tracked changes forced on, untracked keep checkboxes, no-pathspec commit path.
 - Failure dialog (§5.6): qtutils `MessageBox::notice` — fixed text above scrollable details — with stderr
   verbatim as the details. Used by everything after.

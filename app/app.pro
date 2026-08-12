@@ -3,11 +3,9 @@
 ###################################################
 
 TEMPLATE = app
-TARGET   = NewAwesomeApplication
+TARGET   = GoodGit
 
-#QT = core gui widgets network qt5compat
-CONFIG -= qt
-CONFIG += console
+QT = core gui widgets
 
 CONFIG += strict_c++ c++latest
 
@@ -38,17 +36,35 @@ INCLUDEPATH += \
 #                 SOURCES
 ###################################################
 
+HEADERS += \
+	src/changedfilesmodel.h \
+	src/commitwindow.h \
+	src/diffhighlighter.h \
+	src/gitparsers.h \
+	src/gitprocess.h \
+	src/messageedit.h \
+	src/repository.h \
+	src/settings.h
+
 SOURCES += \
-	src/main.cpp
+	src/changedfilesmodel.cpp \
+	src/commitwindow.cpp \
+	src/diffhighlighter.cpp \
+	src/gitparsers.cpp \
+	src/gitprocess.cpp \
+	src/main.cpp \
+	src/messageedit.cpp \
+	src/repository.cpp \
+	src/settings.cpp
 
 ###################################################
 #                 LIBS
 ###################################################
 
-LIBS += -L$${DESTDIR} -lcpputils
+LIBS += -L$${DESTDIR} -lqtutils -lcpputils
 
 mac*|linux*|freebsd*{
-	PRE_TARGETDEPS += $${DESTDIR}/libcpputils.a
+	PRE_TARGETDEPS += $${DESTDIR}/libqtutils.a $${DESTDIR}/libcpputils.a
 }
 
 ###################################################
@@ -56,7 +72,6 @@ mac*|linux*|freebsd*{
 ###################################################
 
 win*{
-	#LIBS += -lole32 -lShell32 -lUser32
 	QMAKE_CXXFLAGS += /MP /wd4251
 	QMAKE_CXXFLAGS += /std:c++latest /permissive- /Zc:__cplusplus /FS
 	QMAKE_CXXFLAGS_WARN_ON = /W4
@@ -84,4 +99,3 @@ linux*|mac*|freebsd {
 	Release:DEFINES += NDEBUG=1
 	Debug:DEFINES += _DEBUG
 }
-

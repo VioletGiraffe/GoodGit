@@ -1,0 +1,803 @@
+#include "commitwindow.h"
+#include "diffhighlighter.h"
+#include "messageedit.h"
+#include "settings.h"
+
+#include "dialogs/messagebox.h"
+#include "widgets/clabelmidelision.h"
+#include "widgets/cpersistentwindow.h"
+
+#include <QApplication>
+#include <QCheckBox>
+#include <QClipboard>
+#include <QComboBox>
+#include <QCryptographicHash>
+#include <QDesktopServices>
+#include <QDir>
+#include <QEvent>
+#include <QFile>
+#include <QFileInfo>
+#include <QFontDatabase>
+#include <QHBoxLayout>
+#include <QHeaderView>
+#include <QKeyEvent>
+#include <QLabel>
+#include <QMenu>
+#include <QProcess>
+#include <QPushButton>
+#include <QShortcut>
+#include <QSplitter>
+#include <QTreeView>
+#include <QUrl>
+#include <QVBoxLayout>
+
+#include <algorithm>
+#include <assert.h>
+
+namespace {
+
+constexpr int LeftColumnWidth = 430; // sized so the 50-column subject guide fits the message editor (plan.md §7)
+constexpr qsizetype MaxDiffBytes = 2 * 1024 * 1024;
+constexpr int MaxListedPathsInDialog = 20;
+
+QString elidedFirstLine(const QString& message)
+{
+	QString line = message.left(message.indexOf(QLatin1Char('\n'))).trimmed();
+	if (message.contains(QLatin1Char('\n')) || line.length() > 80)
+		line = line.left(80) + QStringLiteral("...");
+	return line;
+}
+
+QString listedPaths(const QStringList& paths)
+{
+	QStringList shown = paths.mid(0, MaxListedPathsInDialog);
+	if (paths.size() > shown.size())
+		shown.push_back(QStringLiteral("... and %1 more").arg(paths.size() - shown.size()));
+	return shown.join(QLatin1Char('\n'));
+}
+
+} // namespace
+
+CommitWindow::CommitWindow(const QString& repoPath) :
+	_repo{ repoPath }
+{
+	setAttribute(Qt::WA_DeleteOnClose);
+	buildUi();
+
+	// Per-repo geometry, so a submodule window does not inherit or clobber the parent's placement
+	const QString geometryKey = QStringLiteral("CommitWindow_")
+		+ QString::fromLatin1(QCryptographicHash::hash(QDir::cleanPath(repoPath).toUtf8(), QCryptographicHash::Md5).toHex());
+	installEventFilter(new CPersistenceEnabler(geometryKey, this));
+
+	connect(&_repo, &Repository::refreshed, this, &CommitWindow::onRefreshed);
+	_repo.refresh();
+}
+
+void CommitWindow::buildUi()
+{
+	auto* leftPane = new QWidget;
+	auto* leftLayout = new QVBoxLayout(leftPane);
+	leftLayout->setContentsMargins(0, 0, 0, 0);
+	leftLayout->setSpacing(0);
+
+	// Repo header row: name, branch, ahead count, then the secondary actions (plan.md §7)
+	auto* repoBar = new QWidget;
+	auto* repoBarLayout = new QHBoxLayout(repoBar);
+	repoBarLayout->setContentsMargins(8, 6, 8, 6);
+	_repoNameLabel = new QLabel;
+	{
+		QFont bold = _repoNameLabel->font();
+		bold.setBold(true);
+		_repoNameLabel->setFont(bold);
+	}
+	_branchLabel = new QLabel;
+	_aheadLabel = new QLabel;
+	_pushButton = new QPushButton(tr("Push"));
+	_refreshButton = new QPushButton(tr("Refresh"));
+	repoBarLayout->addWidget(_repoNameLabel);
+	repoBarLayout->addWidget(_branchLabel);
+	repoBarLayout->addWidget(_aheadLabel);
+	repoBarLayout->addStretch();
+	repoBarLayout->addWidget(_pushButton);
+	repoBarLayout->addWidget(_refreshButton);
+	leftLayout->addWidget(repoBar);
+
+	const auto makeStrip = [](const QString& background, const QString& text) {
+		auto* strip = new QLabel;
+		strip->setWordWrap(true);
+		strip->setMargin(6);
+		strip->setStyleSheet(QStringLiteral("background-color: %1; color: %2;").arg(background, text));
+		strip->setVisible(false);
+		return strip;
+	};
+	_opStrip = makeStrip(QStringLiteral("#ffe9e6"), QStringLiteral("#8f2318"));
+	_detachedStrip = makeStrip(QStringLiteral("#fff4d6"), QStringLiteral("#6b4e00"));
+	leftLayout->addWidget(_opStrip);
+	leftLayout->addWidget(_detachedStrip);
+
+	auto* counterBar = new QWidget;
+	auto* counterLayout = new QHBoxLayout(counterBar);
+	counterLayout->setContentsMargins(8, 4, 8, 4);
+	_checkAllBox = new QCheckBox(tr("0 of 0 checked"));
+	counterLayout->addWidget(_checkAllBox);
+	counterLayout->addStretch();
+	leftLayout->addWidget(counterBar);
+
+	_filesView = new QTreeView;
+	_filesView->setModel(&_filesModel);
+	_filesView->setRootIsDecorated(false);
+	_filesView->setUniformRowHeights(true);
+	_filesView->setAllColumnsShowFocus(true);
+	_filesView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+	_filesView->setSelectionBehavior(QAbstractItemView::SelectRows);
+	_filesView->setContextMenuPolicy(Qt::CustomContextMenu);
+	_filesView->header()->hide();
+	_filesView->header()->setSectionResizeMode(ChangedFilesModel::StateColumn, QHeaderView::ResizeToContents);
+	_filesView->header()->setSectionResizeMode(ChangedFilesModel::PathColumn, QHeaderView::Stretch);
+	_filesView->installEventFilter(this);
+	leftLayout->addWidget(_filesView, 1);
+
+	auto* messageHeader = new QWidget;
+	auto* messageHeaderLayout = new QHBoxLayout(messageHeader);
+	messageHeaderLayout->setContentsMargins(8, 6, 8, 4);
+	messageHeaderLayout->addWidget(new QLabel(tr("Commit message")));
+	messageHeaderLayout->addStretch();
+	_recentCombo = new QComboBox;
+	_recentCombo->setPlaceholderText(tr("Recent"));
+	_recentCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+	_recentCombo->setMinimumContentsLength(10);
+	messageHeaderLayout->addWidget(_recentCombo);
+	leftLayout->addWidget(messageHeader);
+
+	auto* messageArea = new QWidget;
+	auto* messageLayout = new QVBoxLayout(messageArea);
+	messageLayout->setContentsMargins(8, 0, 8, 8);
+	_messageEdit = new MessageEdit;
+	_messageEdit->setMinimumHeight(90);
+	_messageEdit->setMaximumHeight(160);
+	messageLayout->addWidget(_messageEdit);
+	_commitButton = new QPushButton(tr("Commit"));
+	_commitButton->setDefault(false);
+	_commitPushButton = new QPushButton(tr("Commit && Push"));
+	messageLayout->addWidget(_commitButton);
+	messageLayout->addWidget(_commitPushButton);
+	leftLayout->addWidget(messageArea);
+
+	auto* rightPane = new QWidget;
+	auto* rightLayout = new QVBoxLayout(rightPane);
+	rightLayout->setContentsMargins(0, 0, 0, 0);
+	rightLayout->setSpacing(0);
+
+	auto* diffHeader = new QWidget;
+	auto* diffHeaderLayout = new QHBoxLayout(diffHeader);
+	diffHeaderLayout->setContentsMargins(8, 6, 8, 6);
+	_diffPathLabel = new CLabelMidElision;
+	_diffTagLabel = new QLabel;
+	_diffTagLabel->setEnabled(false); // dimmed
+	diffHeaderLayout->addWidget(_diffPathLabel, 1);
+	diffHeaderLayout->addWidget(_diffTagLabel);
+	rightLayout->addWidget(diffHeader);
+
+	_diffView = new QPlainTextEdit;
+	_diffView->setReadOnly(true);
+	_diffView->setLineWrapMode(QPlainTextEdit::NoWrap);
+	_diffView->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+	new DiffHighlighter(_diffView->document());
+	rightLayout->addWidget(_diffView, 1);
+
+	_splitter = new QSplitter(Qt::Horizontal);
+	_splitter->setChildrenCollapsible(false);
+	_splitter->addWidget(leftPane);
+	_splitter->addWidget(rightPane);
+	_splitter->setStretchFactor(0, 0);
+	_splitter->setStretchFactor(1, 1);
+	if (const QByteArray state = Settings::splitterState(); !state.isEmpty())
+		_splitter->restoreState(state);
+	else
+		_splitter->setSizes({ LeftColumnWidth, 750 });
+	setCentralWidget(_splitter);
+	resize(1180, 740);
+
+	connect(_refreshButton, &QPushButton::clicked, &_repo, &Repository::refresh);
+	connect(_pushButton, &QPushButton::clicked, this, &CommitWindow::doPush);
+	connect(_commitButton, &QPushButton::clicked, this, [this] { startCommit(false); });
+	connect(_commitPushButton, &QPushButton::clicked, this, [this] { startCommit(true); });
+	connect(_messageEdit, &QPlainTextEdit::textChanged, this, &CommitWindow::updateButtons);
+	connect(&_filesModel, &ChangedFilesModel::checksChanged, this, &CommitWindow::updateButtons);
+	connect(_checkAllBox, &QCheckBox::clicked, this, [this] {
+		_filesModel.setAllChecked(_filesModel.checkedCount() < _filesModel.checkableCount());
+	});
+	connect(_filesView, &QAbstractItemView::activated, this, &CommitWindow::onRowActivated);
+	connect(_filesView, &QWidget::customContextMenuRequested, this, &CommitWindow::showContextMenu);
+	connect(_filesView->selectionModel(), &QItemSelectionModel::currentChanged, this, &CommitWindow::showDiffForCurrentRow);
+	connect(_recentCombo, &QComboBox::activated, this, [this](int index) {
+		_messageEdit->setPlainText(_recentCombo->itemData(index).toString());
+		_recentCombo->setCurrentIndex(-1);
+	});
+
+	new QShortcut(QKeySequence(Qt::Key_F5), this, [this] { _repo.refresh(); });
+	const auto commitShortcut = [this] {
+		if (_commitButton->isEnabled())
+			startCommit(false);
+	};
+	new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return), this, commitShortcut);
+	new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Enter), this, commitShortcut); // the numpad Enter
+
+	reloadRecentMessages();
+	updateButtons();
+}
+
+void CommitWindow::closeEvent(QCloseEvent* event)
+{
+	Settings::setSplitterState(_splitter->saveState());
+	QMainWindow::closeEvent(event);
+}
+
+bool CommitWindow::eventFilter(QObject* watched, QEvent* event)
+{
+	if (watched == _filesView && event->type() == QEvent::KeyPress)
+	{
+		const auto* keyEvent = static_cast<QKeyEvent*>(event);
+		if (keyEvent->key() == Qt::Key_Space)
+		{
+			toggleCheckOnSelection();
+			return true;
+		}
+		if (keyEvent->key() == Qt::Key_Delete)
+		{
+			deleteSelection();
+			return true;
+		}
+	}
+	return QMainWindow::eventFilter(watched, event);
+}
+
+void CommitWindow::onRefreshed()
+{
+	const RepoState& state = _repo.state();
+	_filesModel.setEntries(_repo.files(), state.operationInProgress());
+
+	updateHeader();
+	updateStrips();
+	updateButtons();
+
+	if (_filesModel.rowCount() > 0 && !_filesView->currentIndex().isValid())
+		_filesView->setCurrentIndex(_filesModel.index(0, 0));
+	showDiffForCurrentRow();
+}
+
+void CommitWindow::updateHeader()
+{
+	const RepoState& state = _repo.state();
+
+	_repoNameLabel->setText(_repo.name());
+	const QString branchText = state.detached ? tr("detached HEAD at %1").arg(state.headSha.left(7))
+		: state.unborn ? state.branch + tr(" (no commits yet)")
+		: state.branch;
+	_branchLabel->setText(branchText);
+
+	if (state.upstream.isEmpty())
+		_aheadLabel->setText(state.unborn || state.detached ? QString{} : tr("no upstream"));
+	else if (state.ahead > 0 && state.behind > 0)
+		_aheadLabel->setText(tr("%1 to push, %2 behind %3").arg(state.ahead).arg(state.behind).arg(state.upstream));
+	else if (state.ahead > 0)
+		_aheadLabel->setText(tr("%1 to push to %2").arg(state.ahead).arg(state.upstream));
+	else if (state.behind > 0)
+		_aheadLabel->setText(tr("%1 behind %2").arg(state.behind).arg(state.upstream));
+	else
+		_aheadLabel->setText(tr("in sync with %1").arg(state.upstream));
+
+	_pushButton->setText(state.ahead > 0 ? tr("Push (%1)").arg(state.ahead) : tr("Push"));
+
+	setWindowTitle(QStringLiteral("%1 [%2] - GoodGit").arg(_repo.name(), state.detached ? QStringLiteral("detached") : state.branch));
+}
+
+void CommitWindow::updateStrips()
+{
+	const RepoState& state = _repo.state();
+
+	QString opText;
+	switch (state.op)
+	{
+	case RepoOp::Merge:      opText = tr("Merge in progress: everything must be committed together."); break;
+	case RepoOp::CherryPick: opText = tr("Cherry-pick in progress: everything must be committed together."); break;
+	case RepoOp::Revert:     opText = tr("Revert in progress: everything must be committed together."); break;
+	case RepoOp::Rebase:     opText = tr("Rebase in progress: everything must be committed together."); break;
+	case RepoOp::None:       break;
+	}
+	_opStrip->setText(opText);
+	_opStrip->setVisible(!opText.isEmpty());
+
+	QString detachedText;
+	if (state.detached)
+	{
+		if (state.localBranchesAtHead.size() == 1)
+			detachedText = tr("Not on a branch. '%1' points here and will be checked out when you commit.").arg(state.localBranchesAtHead.front());
+		else if (state.localBranchesAtHead.size() > 1)
+			detachedText = tr("Not on a branch. Several branches point here - you will choose one when committing.");
+		else if (!state.remoteBranchesAtHead.isEmpty())
+			detachedText = tr("Not on a branch. HEAD matches %1 - a local branch will be created when you commit.").arg(state.remoteBranchesAtHead.front());
+		else
+			detachedText = tr("Not on a branch, and no branch points at this commit. Committing is blocked - check out a branch first.");
+	}
+	_detachedStrip->setText(detachedText);
+	_detachedStrip->setVisible(!detachedText.isEmpty());
+}
+
+void CommitWindow::updateButtons()
+{
+	const RepoState& state = _repo.state();
+	const int checkedCount = _filesModel.checkedCount();
+	const int checkableCount = _filesModel.checkableCount();
+
+	{
+		QSignalBlocker blocker{ _checkAllBox };
+		_checkAllBox->setText(tr("%1 of %2 checked").arg(checkedCount).arg(checkableCount));
+		_checkAllBox->setCheckState(checkedCount == 0 ? Qt::Unchecked
+			: checkedCount == checkableCount ? Qt::Checked : Qt::PartiallyChecked);
+	}
+
+	const bool detachedAndStuck = state.detached && state.localBranchesAtHead.isEmpty() && state.remoteBranchesAtHead.isEmpty();
+	const bool canCommit = checkedCount > 0 && !_messageEdit->toPlainText().trimmed().isEmpty()
+		&& !detachedAndStuck && !_commitInFlight;
+	_commitButton->setEnabled(canCommit);
+	_commitPushButton->setEnabled(canCommit);
+	_commitButton->setText(state.operationInProgress() ? tr("Commit (%1 files)").arg(checkedCount)
+		: tr("Commit %1 file(s)").arg(checkedCount));
+}
+
+void CommitWindow::reloadRecentMessages()
+{
+	_recentCombo->clear();
+	for (const QString& message : Settings::recentMessages(_repo.path()))
+		_recentCombo->addItem(elidedFirstLine(message), message);
+	_recentCombo->setCurrentIndex(-1);
+	_recentCombo->setEnabled(_recentCombo->count() > 0);
+}
+
+void CommitWindow::startCommit(bool pushAfterwards)
+{
+	if (_commitInFlight)
+		return;
+
+	if (_repo.state().detached)
+		reattachHead([this, pushAfterwards] { confirmUntrackedThenCommit(pushAfterwards); });
+	else
+		confirmUntrackedThenCommit(pushAfterwards);
+}
+
+void CommitWindow::confirmUntrackedThenCommit(bool pushAfterwards)
+{
+	const QStringList untracked = _filesModel.checkedUntrackedPaths();
+	if (!untracked.isEmpty())
+	{
+		const auto answer = MessageBox::question(this, tr("Start tracking new files?"),
+			tr("%1 checked file(s) are not tracked by git yet. Committing will add them to the repository:\n\n%2")
+				.arg(untracked.size()).arg(listedPaths(untracked)),
+			{ tr("Track and commit") });
+		if (answer != 0)
+			return;
+	}
+	doCommit(pushAfterwards);
+}
+
+// Reattachment rules from plan.md §5.5: only ever attach to a branch whose tip is exactly HEAD,
+// so the working tree never moves. Anything else refuses.
+void CommitWindow::reattachHead(std::function<void()> onReattached)
+{
+	const RepoState& state = _repo.state();
+
+	const auto checkoutAndGo = [this, onReattached](const QString& branch) {
+		_repo.checkoutBranch(branch, [this, onReattached](const GitResult& result) {
+			if (result.ok)
+				onReattached();
+			else
+				showGitError(tr("Failed to check out the branch"), result);
+		});
+	};
+
+	if (state.localBranchesAtHead.size() == 1)
+	{
+		checkoutAndGo(state.localBranchesAtHead.front());
+		return;
+	}
+
+	if (state.localBranchesAtHead.size() > 1)
+	{
+		const auto answer = MessageBox::question(this, tr("Not on a branch"),
+			tr("Several branches point at the current commit. Which one should be checked out for this commit?"),
+			state.localBranchesAtHead);
+		if (answer)
+			checkoutAndGo(state.localBranchesAtHead[*answer]);
+		return;
+	}
+
+	if (!state.remoteBranchesAtHead.isEmpty())
+	{
+		QString remoteBranch = state.remoteBranchesAtHead.front();
+		if (state.remoteBranchesAtHead.size() > 1)
+		{
+			const auto answer = MessageBox::question(this, tr("Not on a branch"),
+				tr("HEAD matches several remote branches. Create a local branch tracking which one?"),
+				state.remoteBranchesAtHead);
+			if (!answer)
+				return;
+			remoteBranch = state.remoteBranchesAtHead[*answer];
+		}
+
+		const QString localName = remoteBranch.mid(remoteBranch.indexOf(QLatin1Char('/')) + 1);
+		_repo.localBranchExists(localName, this, [this, localName, remoteBranch, onReattached](bool exists) {
+			if (exists)
+			{
+				// Taking the name would move the working tree - that disqualifies it (plan.md §5.5)
+				MessageBox::notice(this, tr("Cannot reattach"),
+					tr("HEAD matches %1, but the local branch '%2' already exists and points elsewhere.\n"
+					   "Committing is blocked - resolve the branch state first.").arg(remoteBranch, localName), {});
+				return;
+			}
+			_repo.createTrackingBranch(localName, remoteBranch, [this, onReattached](const GitResult& result) {
+				if (result.ok)
+					onReattached();
+				else
+					showGitError(tr("Failed to create the branch"), result);
+			});
+		});
+		return;
+	}
+
+	MessageBox::notice(this, tr("Cannot commit"),
+		tr("Not on a branch, and no branch points at this commit.\n"
+		   "A commit made here could not be pushed. Check out a branch first."), {});
+}
+
+void CommitWindow::doCommit(bool pushAfterwards)
+{
+	const QString message = _messageEdit->toPlainText();
+	const QStringList pathspec = _filesModel.checkedPathspec();
+	const QStringList untracked = _filesModel.checkedUntrackedPaths();
+	assert(!message.trimmed().isEmpty() && !pathspec.isEmpty());
+
+	_commitInFlight = true;
+	updateButtons();
+
+	const auto onDone = [this, message, pushAfterwards](const GitResult& result) {
+		_commitInFlight = false;
+		if (!result.ok)
+		{
+			showGitError(tr("Commit failed"), result);
+			_repo.refresh();
+			return;
+		}
+		Settings::addRecentMessage(_repo.path(), message);
+		reloadRecentMessages();
+		_messageEdit->clear();
+		emit committed();
+		_repo.refresh();
+		if (pushAfterwards)
+			doPush();
+	};
+
+	if (_repo.state().operationInProgress())
+		_repo.commitMergeState(message, untracked, onDone);
+	else
+		_repo.commit(message, pathspec, untracked, onDone);
+}
+
+void CommitWindow::doPush()
+{
+	_pushButton->setEnabled(false);
+	_repo.push([this](const GitResult& result) {
+		_pushButton->setEnabled(true);
+		if (result.ok)
+		{
+			_repo.refresh();
+			return;
+		}
+
+		const QString err = QString::fromUtf8(result.err);
+		if (err.contains(QLatin1String("no upstream")))
+		{
+			const auto answer = MessageBox::question(this, tr("No upstream branch"),
+				tr("The current branch has no upstream configured. Push it to 'origin' and set the upstream?"),
+				{ tr("Push and set upstream") });
+			if (answer != 0)
+				return;
+			_pushButton->setEnabled(false);
+			_repo.pushSetUpstream([this](const GitResult& upstreamResult) {
+				_pushButton->setEnabled(true);
+				if (upstreamResult.ok)
+					_repo.refresh();
+				else
+					showGitError(tr("Push failed"), upstreamResult);
+			});
+		}
+		else
+			showGitError(tr("Push failed"), result);
+	});
+}
+
+void CommitWindow::showDiffForCurrentRow()
+{
+	const int generation = ++_diffGeneration;
+	if (_diffJob)
+		_diffJob->cancel();
+
+	const QModelIndex current = _filesView->currentIndex();
+	if (!current.isValid() || current.row() >= _filesModel.rowCount())
+	{
+		setDiffText({}, {}, {});
+		return;
+	}
+
+	const FileEntry entry = _filesModel.entryAt(current.row());
+
+	if (entry.isSubmodule)
+	{
+		if (!entry.pointerMoved)
+		{
+			setDiffText(entry.path, tr("submodule"), tr("The submodule pointer has not moved.\nThere are uncommitted changes inside - double-click to open the submodule."));
+			return;
+		}
+		setDiffText(entry.path, tr("new commits"), tr("Loading..."));
+		_repo.submodulePointerLog(entry, this, [this, generation, entry](const GitResult& result) {
+			if (generation != _diffGeneration)
+				return;
+			if (!result.ok)
+				setDiffText(entry.path, tr("new commits"), result.errorText());
+			else
+				setDiffText(entry.path, tr("new commits"), tr("Commits being pulled in:\n\n") + QString::fromUtf8(result.out));
+		});
+		return;
+	}
+
+	const QString tag = entry.type == ChangeType::Untracked ? tr("new file") : tr("HEAD %1 working tree").arg(QChar(0x2192));
+	setDiffText(entry.path, tag, tr("Loading..."));
+	_diffJob = _repo.diffFile(entry, [this, generation, entry](const GitResult& result) {
+		if (generation != _diffGeneration)
+			return;
+		// --no-index exits 1 when the files differ; that is the expected outcome, not an error
+		const bool failed = result.launchFailed || (result.exitCode != 0 && entry.type != ChangeType::Untracked) || result.exitCode > 1;
+		if (failed)
+			setDiffText(entry.path, {}, result.errorText());
+		else if (result.out.size() > MaxDiffBytes)
+			setDiffText(entry.path, {}, tr("The diff is too large to display (%1 MB).").arg(result.out.size() / (1024 * 1024)));
+		else if (result.out.isEmpty())
+			setDiffText(entry.path, {}, tr("No content changes (mode-only change, or the file matches HEAD)."));
+		else
+			setDiffText(entry.path, entry.type == ChangeType::Untracked ? tr("new file") : tr("HEAD %1 working tree").arg(QChar(0x2192)),
+				QString::fromUtf8(result.out));
+	});
+}
+
+void CommitWindow::setDiffText(const QString& pathLabel, const QString& tag, const QString& text)
+{
+	_diffPathLabel->setText(pathLabel);
+	_diffTagLabel->setText(tag);
+	_diffView->setPlainText(text);
+}
+
+void CommitWindow::onRowActivated(const QModelIndex& index)
+{
+	if (!index.isValid())
+		return;
+	const FileEntry entry = _filesModel.entryAt(index.row());
+
+	if (entry.isSubmodule)
+	{
+		openSubmoduleWindow(entry);
+		return;
+	}
+	if (entry.type == ChangeType::Untracked)
+	{
+		QDesktopServices::openUrl(QUrl::fromLocalFile(absolutePath(entry)));
+		return;
+	}
+	if (entry.type == ChangeType::Deleted)
+		return;
+
+	// External difftool, detached from the process queue: the tool blocks git until closed,
+	// and a queue slot held for minutes would starve refreshes
+	QProcess::startDetached(Settings::gitExecutable(),
+		{ QStringLiteral("difftool"), QStringLiteral("-y"), QStringLiteral("HEAD"), QStringLiteral("--"), entry.path },
+		_repo.path());
+}
+
+void CommitWindow::openSubmoduleWindow(const FileEntry& entry)
+{
+	auto* window = new CommitWindow(absolutePath(entry));
+	connect(window, &CommitWindow::committed, &_repo, &Repository::refresh);
+	window->show();
+}
+
+void CommitWindow::showContextMenu(const QPoint& pos)
+{
+	const std::vector<int> rows = selectedRows();
+	if (rows.empty())
+		return;
+
+	// Entries are captured by value: menu.exec() spins an event loop, so a completing refresh can reset
+	// the model while the menu is open, invalidating row indexes. The slots for the git actions re-query
+	// the selection instead, which the reset safely empties.
+	std::vector<FileEntry> entries;
+	entries.reserve(rows.size());
+	for (const int row : rows)
+		entries.push_back(_filesModel.entryAt(row));
+
+	bool anyUntracked = false, anyAdded = false, anyDeletable = false;
+	for (const FileEntry& entry : entries)
+	{
+		if (entry.isSubmodule)
+			continue;
+		anyUntracked |= entry.type == ChangeType::Untracked;
+		anyAdded |= entry.type == ChangeType::Added;
+		anyDeletable |= entry.type != ChangeType::Deleted;
+	}
+	const bool singleFile = entries.size() == 1 && !entries.front().isSubmodule && entries.front().type != ChangeType::Deleted;
+
+	QMenu menu{ this };
+	QAction* addAction = menu.addAction(tr("Add to index"), this, &CommitWindow::addSelectionToIndex);
+	addAction->setEnabled(anyUntracked);
+	QAction* unAddAction = menu.addAction(tr("Un-add"), this, &CommitWindow::unAddSelection);
+	unAddAction->setEnabled(anyAdded);
+	menu.addSeparator();
+	QAction* openAction = menu.addAction(tr("Open"), this, [this, entry = entries.front()] {
+		QDesktopServices::openUrl(QUrl::fromLocalFile(absolutePath(entry)));
+	});
+	openAction->setEnabled(singleFile);
+	QAction* explorerAction = menu.addAction(tr("Show in Explorer"), this, [this, entry = entries.front()] {
+		const QString nativePath = QDir::toNativeSeparators(absolutePath(entry));
+#ifdef Q_OS_WIN
+		QProcess::startDetached(QStringLiteral("explorer"), { QStringLiteral("/select,") + nativePath });
+#else
+		QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(nativePath).absolutePath()));
+#endif
+	});
+	explorerAction->setEnabled(entries.size() == 1 && !entries.front().isSubmodule);
+	menu.addAction(tr("Copy path"), this, [this, entries] {
+		QStringList paths;
+		for (const FileEntry& entry : entries)
+			paths.push_back(QDir::toNativeSeparators(absolutePath(entry)));
+		QApplication::clipboard()->setText(paths.join(QLatin1Char('\n')));
+	});
+	menu.addSeparator();
+	QAction* deleteAction = menu.addAction(tr("Delete to Recycle Bin"), this, &CommitWindow::deleteSelection);
+	deleteAction->setEnabled(anyDeletable);
+
+	menu.exec(_filesView->viewport()->mapToGlobal(pos));
+}
+
+std::vector<int> CommitWindow::selectedRows() const
+{
+	std::vector<int> rows;
+	const auto indexes = _filesView->selectionModel()->selectedRows(ChangedFilesModel::StateColumn);
+	rows.reserve(size_t(indexes.size()));
+	for (const QModelIndex& index : indexes)
+		rows.push_back(index.row());
+	std::sort(rows.begin(), rows.end());
+	return rows;
+}
+
+void CommitWindow::toggleCheckOnSelection()
+{
+	const std::vector<int> rows = selectedRows();
+
+	bool allChecked = true;
+	for (const int row : rows)
+	{
+		if (_filesModel.isUserCheckable(row) && !_filesModel.isChecked(row))
+		{
+			allChecked = false;
+			break;
+		}
+	}
+	for (const int row : rows)
+		_filesModel.setRowChecked(row, !allChecked);
+}
+
+void CommitWindow::deleteSelection()
+{
+	// Per-state delete rules from plan.md §5.4. Submodules and already-deleted rows are skipped.
+	QStringList untrackedPaths, addedPaths, trackedPaths;
+	for (const int row : selectedRows())
+	{
+		const FileEntry& entry = _filesModel.entryAt(row);
+		if (entry.isSubmodule || entry.type == ChangeType::Deleted)
+			continue;
+		if (entry.type == ChangeType::Untracked)
+			untrackedPaths.push_back(entry.path);
+		else if (entry.type == ChangeType::Added)
+			addedPaths.push_back(entry.path);
+		else
+			trackedPaths.push_back(entry.path);
+	}
+	if (untrackedPaths.isEmpty() && addedPaths.isEmpty() && trackedPaths.isEmpty())
+		return;
+
+	if (!trackedPaths.isEmpty() || !addedPaths.isEmpty())
+	{
+		const QStringList prompted = trackedPaths + addedPaths;
+		const auto answer = MessageBox::question(this, tr("Delete files?"),
+			tr("Move %1 tracked file(s) to the Recycle Bin?\n\n%2").arg(prompted.size()).arg(listedPaths(prompted)),
+			{ tr("Delete") });
+		if (answer != 0)
+			return;
+	}
+
+	const auto trashAll = [this](const QStringList& paths) {
+		for (const QString& path : paths)
+		{
+			if (QFile::moveToTrash(QDir(_repo.path()).filePath(path)))
+				continue;
+			// Never fall back to a permanent delete (plan.md §5.4)
+			MessageBox::notice(this, tr("Delete failed"),
+				tr("Could not move '%1' to the Recycle Bin (the file may be locked, or the volume has no Recycle Bin).\n"
+				   "Remaining files were not touched.").arg(path), {});
+			return;
+		}
+	};
+
+	if (!addedPaths.isEmpty())
+	{
+		// Un-add first: trashing a staged-as-added file would leave the index pointing at a file that no longer exists
+		_repo.unAdd(addedPaths, [this, paths = untrackedPaths + trackedPaths + addedPaths, trashAll](const GitResult& result) {
+			if (!result.ok)
+			{
+				showGitError(tr("Failed to un-add before deleting"), result);
+				return;
+			}
+			trashAll(paths);
+			_repo.refresh();
+		});
+		return;
+	}
+
+	trashAll(untrackedPaths + trackedPaths);
+	_repo.refresh();
+}
+
+void CommitWindow::addSelectionToIndex()
+{
+	QStringList paths;
+	for (const int row : selectedRows())
+	{
+		const FileEntry& entry = _filesModel.entryAt(row);
+		if (!entry.isSubmodule && entry.type == ChangeType::Untracked)
+			paths.push_back(entry.path); // tracked rows in a mixed selection are a deliberate no-op
+	}
+	if (paths.isEmpty())
+		return;
+	_repo.addToIndex(paths, [this](const GitResult& result) {
+		if (!result.ok)
+			showGitError(tr("Add to index failed"), result);
+		_repo.refresh();
+	});
+}
+
+void CommitWindow::unAddSelection()
+{
+	QStringList paths;
+	for (const int row : selectedRows())
+	{
+		const FileEntry& entry = _filesModel.entryAt(row);
+		if (!entry.isSubmodule && entry.type == ChangeType::Added)
+			paths.push_back(entry.path);
+	}
+	if (paths.isEmpty())
+		return;
+	_repo.unAdd(paths, [this](const GitResult& result) {
+		if (!result.ok)
+			showGitError(tr("Un-add failed"), result);
+		_repo.refresh();
+	});
+}
+
+void CommitWindow::showGitError(const QString& title, const GitResult& result)
+{
+	// The command's own stderr, verbatim - hook output is the only thing that makes a rejected commit diagnosable
+	MessageBox::notice(this, title, title + QLatin1Char('.'), result.errorText());
+}
+
+QString CommitWindow::absolutePath(const FileEntry& entry) const
+{
+	return QDir{ _repo.path() }.filePath(entry.path);
+}
