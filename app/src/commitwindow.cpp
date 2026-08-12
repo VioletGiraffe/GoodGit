@@ -186,7 +186,7 @@ void CommitWindow::buildUi()
 
 	_diffView = new QPlainTextEdit;
 	_diffView->setReadOnly(true);
-	_diffView->setLineWrapMode(QPlainTextEdit::NoWrap);
+	_diffView->setLineWrapMode(QPlainTextEdit::WidgetWidth);
 	_diffView->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
 	new DiffHighlighter(_diffView->document());
 	rightLayout->addWidget(_diffView, 1);
