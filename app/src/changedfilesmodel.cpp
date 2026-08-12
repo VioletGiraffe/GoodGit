@@ -143,8 +143,19 @@ void ChangedFilesModel::setRowChecked(int row, bool checked)
 
 void ChangedFilesModel::setAllChecked(bool checked)
 {
+	applyChecked([checked](const FileEntry&) { return checked; });
+}
+
+void ChangedFilesModel::checkAllExceptUntracked()
+{
+	applyChecked([](const FileEntry& entry) { return entry.type != ChangeType::Untracked; });
+}
+
+void ChangedFilesModel::applyChecked(const std::function<bool(const FileEntry&)>& shouldCheck)
+{
 	for (int row = 0; row < int(_rows.size()); ++row)
 	{
+		const bool checked = shouldCheck(_rows[size_t(row)].entry);
 		if (isUserCheckable(row) && _rows[size_t(row)].checked != checked)
 		{
 			_rows[size_t(row)].checked = checked;

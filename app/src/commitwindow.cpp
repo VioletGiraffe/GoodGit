@@ -121,6 +121,9 @@ void CommitWindow::buildUi()
 	counterLayout->setContentsMargins(8, 4, 8, 4);
 	_checkAllBox = new QCheckBox(tr("0 of 0 checked"));
 	counterLayout->addWidget(_checkAllBox);
+	auto* modifiedOnlyButton = new QPushButton(tr("Modified only"));
+	modifiedOnlyButton->setToolTip(tr("Check all tracked changes, uncheck untracked files"));
+	counterLayout->addWidget(modifiedOnlyButton);
 	counterLayout->addStretch();
 	leftLayout->addWidget(counterBar);
 
@@ -210,6 +213,7 @@ void CommitWindow::buildUi()
 	connect(_checkAllBox, &QCheckBox::clicked, this, [this] {
 		_filesModel.setAllChecked(_filesModel.checkedCount() < _filesModel.checkableCount());
 	});
+	connect(modifiedOnlyButton, &QPushButton::clicked, &_filesModel, &ChangedFilesModel::checkAllExceptUntracked);
 	connect(_filesView, &QAbstractItemView::activated, this, &CommitWindow::onRowActivated);
 	connect(_filesView, &QWidget::customContextMenuRequested, this, &CommitWindow::showContextMenu);
 	connect(_filesView->selectionModel(), &QItemSelectionModel::currentChanged, this, &CommitWindow::showDiffForCurrentRow);

@@ -4,6 +4,7 @@
 
 #include <QAbstractTableModel>
 
+#include <functional>
 #include <vector>
 
 // The checkable file list. Columns: 0 = checkbox + icon + state text, 1 = path.
@@ -36,6 +37,7 @@ public:
 
 	void setRowChecked(int row, bool checked);
 	void setAllChecked(bool checked);
+	void checkAllExceptUntracked();
 
 	int rowCount(const QModelIndex& parent = {}) const override;
 	int columnCount(const QModelIndex& parent = {}) const override;
@@ -56,6 +58,8 @@ private:
 
 	[[nodiscard]] static QString stateText(const FileEntry& entry);
 	[[nodiscard]] static QString pathText(const FileEntry& entry);
+
+	void applyChecked(const std::function<bool(const FileEntry&)>& shouldCheck);
 
 	std::vector<Row> _rows;
 };
