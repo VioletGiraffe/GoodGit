@@ -380,6 +380,14 @@ Git::Job* Repository::diffFile(const FileEntry& entry, Git::Callback onDone)
 	return Git::run(_rootPath, std::move(args), this, std::move(onDone), {}, /*readOnlyQuery=*/true);
 }
 
+Git::Job* Repository::diffAllChanges(Git::Callback onDone)
+{
+	QStringList args = _state.unborn
+		? QStringList{ QStringLiteral("diff"), QStringLiteral("--cached"), QStringLiteral("-U0") }
+		: QStringList{ QStringLiteral("diff"), QStringLiteral("-U0"), QStringLiteral("--ignore-submodules"), QStringLiteral("HEAD") };
+	return Git::run(_rootPath, std::move(args), this, std::move(onDone), {}, /*readOnlyQuery=*/true);
+}
+
 void Repository::submodulePointerLog(const FileEntry& entry, const QObject* context, Git::Callback onDone)
 {
 	const QString subPath = _rootPath + QLatin1Char('/') + entry.path;

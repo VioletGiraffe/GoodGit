@@ -25,6 +25,8 @@
 #include <QMenu>
 #include <QProcess>
 #include <QPushButton>
+#include <QRegularExpression>
+#include <QSet>
 #include <QShortcut>
 #include <QSplitter>
 #include <QTreeView>
@@ -54,6 +56,67 @@ QString listedPaths(const QStringList& paths)
 	if (paths.size() > shown.size())
 		shown.push_back(QStringLiteral("... and %1 more").arg(paths.size() - shown.size()));
 	return shown.join(QLatin1Char('\n'));
+}
+
+bool looksLikeHexSha(const QString& token)
+{
+	if (token.length() < 7)
+		return false;
+	for (const QChar c : token)
+	{
+		if (!c.isDigit() && !(c >= QLatin1Char('a') && c <= QLatin1Char('f')) && !(c >= QLatin1Char('A') && c <= QLatin1Char('F')))
+			return false;
+	}
+	return true;
+}
+
+// The message completion pool: every changed file's path and basename, plus identifier-shaped words
+// from the changed lines themselves. Length < 4 and a small stoplist weed out prose function words;
+// hex-sha-shaped tokens are dropped so submodule pointer diffs don't pollute the pool.
+QStringList completionWordsFor(const std::vector<FileEntry>& files, QByteArray diff)
+{
+	constexpr qsizetype MaxDiffBytesForWords = 8 * 1024 * 1024;
+	constexpr qsizetype MaxWords = 20000;
+	static const QSet<QString> stopWords = {
+		QStringLiteral("with"), QStringLiteral("from"), QStringLiteral("this"), QStringLiteral("that"),
+		QStringLiteral("when"), QStringLiteral("then"), QStringLiteral("than"), QStringLiteral("they"),
+		QStringLiteral("them"), QStringLiteral("their"), QStringLiteral("there"), QStringLiteral("these"),
+		QStringLiteral("those"), QStringLiteral("have"), QStringLiteral("been"), QStringLiteral("being"),
+		QStringLiteral("will"), QStringLiteral("would"), QStringLiteral("should"), QStringLiteral("could"),
+		QStringLiteral("into"), QStringLiteral("onto"), QStringLiteral("only"), QStringLiteral("over"),
+		QStringLiteral("also"), QStringLiteral("each"), QStringLiteral("some"), QStringLiteral("such"),
+		QStringLiteral("must"), QStringLiteral("does"), QStringLiteral("done"), QStringLiteral("upon"),
+		QStringLiteral("very"), QStringLiteral("more"), QStringLiteral("most"), QStringLiteral("here"),
+		QStringLiteral("where"), QStringLiteral("which"), QStringLiteral("while"), QStringLiteral("after"),
+		QStringLiteral("before"), QStringLiteral("about"), QStringLiteral("because"),
+	};
+	static const QRegularExpression wordRe(QStringLiteral("[A-Za-z_][A-Za-z0-9_]{3,}"));
+
+	QSet<QString> words;
+	for (const FileEntry& file : files)
+	{
+		words.insert(file.path);
+		words.insert(file.path.mid(file.path.lastIndexOf(QLatin1Char('/')) + 1));
+	}
+
+	diff.truncate(MaxDiffBytesForWords);
+	for (const QByteArray& rawLine : diff.split('\n'))
+	{
+		if (words.size() >= MaxWords)
+			break;
+		if (rawLine.size() < 2 || (rawLine[0] != '+' && rawLine[0] != '-')
+			|| rawLine.startsWith("+++") || rawLine.startsWith("---"))
+			continue;
+
+		const QString line = QString::fromUtf8(rawLine);
+		for (auto it = wordRe.globalMatch(line); it.hasNext(); )
+		{
+			const QString token = it.next().captured();
+			if (!stopWords.contains(token.toLower()) && !looksLikeHexSha(token))
+				words.insert(token);
+		}
+	}
+	return QStringList{ words.begin(), words.end() };
 }
 
 } // namespace
@@ -278,6 +341,10 @@ void CommitWindow::onRefreshed()
 	if (_filesModel.rowCount() > 0 && !_filesView->currentIndex().isValid())
 		_filesView->setCurrentIndex(_filesModel.index(0, 0));
 	showDiffForCurrentRow();
+
+	_repo.diffAllChanges([this](const GitResult& result) {
+		_messageEdit->setCompletionWords(completionWordsFor(_repo.files(), result.ok ? result.out : QByteArray{}));
+	});
 }
 
 void CommitWindow::updateHeader()

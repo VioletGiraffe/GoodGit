@@ -82,6 +82,8 @@ public:
 
 	// Diff providers for the window. Kill the returned job when the selection moves on.
 	Git::Job* diffFile(const FileEntry& entry, Git::Callback onDone);
+	// One context-free diff of every change at once; feeds the message completion word pool
+	Git::Job* diffAllChanges(Git::Callback onDone);
 	// For a moved submodule pointer: the commits being pulled in, as `log --oneline old..HEAD` run inside the submodule
 	void submodulePointerLog(const FileEntry& entry, const QObject* context, Git::Callback onDone);
 

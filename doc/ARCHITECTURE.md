@@ -33,7 +33,7 @@ Consequences that follow from this choice, all deliberate:
 | `repository` | `Repository` - one repo: `RepoState`, `FileEntry` list, refresh, and every git action (commit, push, add/un-add, checkout, diff providers). The unit of the application |
 | `changedfilesmodel` | Checkable table over the entries. All row styling (state colors, deleted strikethrough, submodule folder icon, blocked-row tint) is item data roles - there is no delegate |
 | `commitwindow` | One window = one repository. Owns a `Repository` and all user flows. Submodule rows open another `CommitWindow` on the submodule, same process; the child's `committed()` signal refreshes the parent |
-| `diffhighlighter`, `messageedit` | Prefix-driven unified-diff highlighting; message editor with the 50-column subject guide |
+| `diffhighlighter`, `messageedit` | Prefix-driven unified-diff highlighting; message editor with the 50-column subject guide and word completion (changed file names + identifier-shaped words from one `diff -U0 HEAD` per refresh; Tab accepts, Enter always stays a newline, Ctrl+Space forces the popup) |
 | `settings` | Key vocabulary over qtutils `CSettings`. Window geometry is per-repo via qtutils `CPersistenceEnabler` |
 
 ## Git invocation invariants
