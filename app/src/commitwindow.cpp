@@ -36,7 +36,7 @@
 
 namespace {
 
-constexpr int LeftColumnWidth = 430; // sized so the 50-column subject guide fits the message editor (plan.md §7)
+constexpr int LeftColumnWidth = 430; // sized so the 50-column subject guide fits the message editor
 constexpr qsizetype MaxDiffBytes = 2 * 1024 * 1024;
 constexpr int MaxListedPathsInDialog = 20;
 
@@ -80,7 +80,7 @@ void CommitWindow::buildUi()
 	leftLayout->setContentsMargins(0, 0, 0, 0);
 	leftLayout->setSpacing(0);
 
-	// Repo header row: name, branch, ahead count, then the secondary actions (plan.md §7)
+	// Repo header row: name, branch, ahead count, then the secondary actions
 	auto* repoBar = new QWidget;
 	auto* repoBarLayout = new QHBoxLayout(repoBar);
 	repoBarLayout->setContentsMargins(8, 6, 8, 6);
@@ -393,7 +393,7 @@ void CommitWindow::confirmUntrackedThenCommit(bool pushAfterwards)
 	doCommit(pushAfterwards);
 }
 
-// Reattachment rules from plan.md §5.5: only ever attach to a branch whose tip is exactly HEAD,
+// Reattachment rule (doc/ARCHITECTURE.md): only ever attach to a branch whose tip is exactly HEAD,
 // so the working tree never moves. Anything else refuses.
 void CommitWindow::reattachHead(std::function<void()> onReattached)
 {
@@ -441,7 +441,7 @@ void CommitWindow::reattachHead(std::function<void()> onReattached)
 		_repo.localBranchExists(localName, this, [this, localName, remoteBranch, onReattached](bool exists) {
 			if (exists)
 			{
-				// Taking the name would move the working tree - that disqualifies it (plan.md §5.5)
+				// Taking the name would move the working tree - that disqualifies it
 				MessageBox::notice(this, tr("Cannot reattach"),
 					tr("HEAD matches %1, but the local branch '%2' already exists and points elsewhere.\n"
 					   "Committing is blocked - resolve the branch state first.").arg(remoteBranch, localName), {});
@@ -708,7 +708,7 @@ void CommitWindow::toggleCheckOnSelection()
 
 void CommitWindow::deleteSelection()
 {
-	// Per-state delete rules from plan.md §5.4. Submodules and already-deleted rows are skipped.
+	// Per-state delete rules. Submodules and already-deleted rows are skipped.
 	QStringList untrackedPaths, addedPaths, trackedPaths;
 	for (const int row : selectedRows())
 	{
@@ -740,7 +740,7 @@ void CommitWindow::deleteSelection()
 		{
 			if (QFile::moveToTrash(QDir(_repo.path()).filePath(path)))
 				continue;
-			// Never fall back to a permanent delete (plan.md §5.4)
+			// Never fall back to a permanent delete
 			MessageBox::notice(this, tr("Delete failed"),
 				tr("Could not move '%1' to the Recycle Bin (the file may be locked, or the volume has no Recycle Bin).\n"
 				   "Remaining files were not touched.").arg(path), {});

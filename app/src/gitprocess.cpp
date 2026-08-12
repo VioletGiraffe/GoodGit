@@ -45,7 +45,7 @@ struct JobQueue
 
 static JobQueue s_queue;
 
-// The §3 invariants, applied to every invocation - async and sync alike
+// The doc/ARCHITECTURE.md invocation invariants, applied to every invocation - async and sync alike
 static void applyInvariants(QStringList& args, bool readOnlyQuery)
 {
 	if (readOnlyQuery)

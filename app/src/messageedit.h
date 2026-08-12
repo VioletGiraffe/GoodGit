@@ -3,7 +3,7 @@
 #include <QPlainTextEdit>
 
 // Commit message editor: monospace, with a subject-length guide line at 50 columns
-// (the column width the guide dictated the window layout for - plan.md §7).
+// (the width the left column of the window was sized for).
 class MessageEdit final : public QPlainTextEdit
 {
 public:

@@ -19,7 +19,7 @@ public:
 	explicit ChangedFilesModel(QObject* parent = nullptr);
 
 	// Rebuilds the rows. Check state is re-derived by path: persisting rows keep their state, new rows
-	// default to checked only on the initial load (plan.md §5.1). In merge mode all tracked rows are
+	// default to checked only on the initial load. In merge mode all tracked rows are
 	// forced on and not user-changeable (B1).
 	void setEntries(const std::vector<FileEntry>& entries, bool mergeMode);
 
@@ -30,7 +30,7 @@ public:
 	[[nodiscard]] int checkedCount() const;
 	[[nodiscard]] int checkableCount() const;
 
-	// All checked paths as a commit pathspec - includes both sides of every rename (plan.md §2)
+	// All checked paths as a commit pathspec - includes both sides of every rename
 	[[nodiscard]] QStringList checkedPathspec() const;
 	[[nodiscard]] QStringList checkedUntrackedPaths() const;
 

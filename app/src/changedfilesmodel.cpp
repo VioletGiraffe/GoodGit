@@ -65,7 +65,7 @@ void ChangedFilesModel::setEntries(const std::vector<FileEntry>& entries, bool m
 		Row row{ .entry = entry };
 		if (mergeMode)
 		{
-			// All tracked changes go into the merge commit; untracked files keep their checkboxes (plan.md §4)
+			// All tracked changes go into the merge commit; untracked files keep their checkboxes
 			row.forced = entry.type != ChangeType::Untracked;
 			if (row.forced)
 				row.checked = true;

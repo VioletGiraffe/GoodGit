@@ -51,7 +51,7 @@ private:
 	friend struct JobQueue;
 };
 
-// Runs `git <args>` in workDir with the invariants from plan.md §3 applied:
+// Runs `git <args>` in workDir with the invariants from doc/ARCHITECTURE.md applied:
 // -c core.quotepath=false, GIT_TERMINAL_PROMPT=0, --no-optional-locks for read-only queries,
 // stdin payload support, at most 4 concurrent git processes (excess is queued).
 // The callback fires on the GUI thread; it is skipped if the job is cancelled or `context` dies.

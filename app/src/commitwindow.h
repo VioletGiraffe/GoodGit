@@ -16,7 +16,7 @@ class QPlainTextEdit;
 class MessageEdit;
 class CLabelMidElision;
 
-// One window = one repository (plan.md E). Submodule rows open another instance of this window.
+// One window = one repository. Submodule rows open another instance of this window.
 class CommitWindow final : public QMainWindow
 {
 	Q_OBJECT

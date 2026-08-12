@@ -133,7 +133,7 @@ void Repository::refresh()
 	_state.remoteBranchesAtHead.clear();
 	_state.unpushedSubjects.clear();
 
-	// Phase 1: the four independent base queries (plan.md §4), plus one-time gitdir resolution
+	// Phase 1: the four independent base queries, plus one-time gitdir resolution
 	if (_gitDir.isEmpty())
 	{
 		launch(_rootPath, { QStringLiteral("rev-parse"), QStringLiteral("--absolute-git-dir") },
@@ -203,7 +203,7 @@ void Repository::finishRefresh()
 		_files.push_back(std::move(entry));
 	}
 
-	// Unborn HEAD: everything staged shows as Added (plan.md §2)
+	// Unborn HEAD: everything staged shows as Added
 	for (const QString& path : run.unbornCachedFiles)
 		_files.push_back({ .path = path, .type = ChangeType::Added });
 
@@ -211,7 +211,7 @@ void Repository::finishRefresh()
 		_files.push_back({ .path = path, .type = ChangeType::Untracked });
 
 	// Submodules with an unmoved pointer but modified tracked files inside: shown so the state is visible
-	// and the row double-clickable (plan.md §5.2). Untracked-only content inside does not earn a row.
+	// and the row double-clickable. Untracked-only content inside does not earn a row.
 	for (const SubmoduleStatusEntry& sub : run.submodules)
 	{
 		const WorktreeDirtiness* dirt = submoduleDirtiness(sub.path);
@@ -255,7 +255,7 @@ void Repository::commit(const QString& message, const QStringList& pathspec, con
 					return;
 				}
 				// The commit failed after the untracked files were added - undo the add so the visible
-				// Untracked state stays truthful (plan.md §5.3)
+				// Untracked state stays truthful
 				Git::run(_rootPath, { QStringLiteral("reset"), QStringLiteral("-q"),
 						QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") }, this,
 					[onDone, result](const GitResult&) { onDone(result); }, nulJoined(untrackedPaths));

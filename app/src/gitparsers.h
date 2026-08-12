@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <vector>
 
-// Free-function parsers for the git outputs listed in plan.md §4, kept UI- and process-free
+// Free-function parsers for the git outputs the app consumes, kept UI- and process-free
 // so they can be exercised directly.
 
 enum class ChangeType : uint8_t { Modified, Added, Untracked, Deleted, Renamed, TypeChanged, Conflicted };

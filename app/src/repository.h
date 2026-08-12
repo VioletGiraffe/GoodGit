@@ -21,7 +21,7 @@ struct RepoState
 	bool unborn = false;
 	RepoOp op = RepoOp::None;
 
-	// Filled only when detached: branch tips that equal HEAD, for the reattachment logic (plan.md §5.5)
+	// Filled only when detached: branch tips that equal HEAD, for the reattachment logic
 	QStringList localBranchesAtHead;
 	QStringList remoteBranchesAtHead;
 
@@ -39,7 +39,7 @@ struct FileEntry
 
 	bool isSubmodule = false;
 	bool pointerMoved = false;       // the recorded commit differs from HEAD's
-	bool dirtyTrackedInside = false; // modified tracked files inside - blocks committing the pointer (plan.md K)
+	bool dirtyTrackedInside = false; // modified tracked files inside - blocks committing the pointer
 	bool untrackedInside = false;    // indicated on the row, does not block
 
 	[[nodiscard]] bool committable() const { return !isSubmodule || (pointerMoved && !dirtyTrackedInside); }
@@ -66,7 +66,7 @@ public:
 	// untrackedPaths (a subset of the pathspec) is `git add`ed first and un-added again if the commit fails.
 	void commit(const QString& message, const QStringList& pathspec, const QStringList& untrackedPaths, Git::Callback onDone);
 
-	// Merge/rebase mode (plan.md B1): stages all tracked changes plus the given untracked paths, commits with no pathspec
+	// Merge/rebase mode: stages all tracked changes plus the given untracked paths, commits with no pathspec
 	void commitMergeState(const QString& message, const QStringList& untrackedPaths, Git::Callback onDone);
 
 	void push(Git::Callback onDone);
