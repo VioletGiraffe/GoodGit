@@ -1,6 +1,7 @@
 #include "commitwindow.h"
 #include "diffhighlighter.h"
 #include "filelistdelegate.h"
+#include "historymodels.h"
 #include "historywindow.h"
 #include "messageedit.h"
 #include "settings.h"
@@ -46,6 +47,9 @@ namespace {
 constexpr int LeftColumnWidth = 430; // sized so the 50-column subject guide fits the message editor
 constexpr qsizetype MaxDiffBytes = 2 * 1024 * 1024;
 constexpr int MaxListedPathsInDialog = 20;
+constexpr int MaxIncomingCommits = 200; // a peek, not a history window - that is what History is for
+constexpr int IncomingPopupWidth = 560;
+constexpr int IncomingPopupHeight = 320;
 
 // Ignore pattern candidates for one untracked file, most specific first. Literal path patterns
 // are anchored to the repo root with a leading '/'.
@@ -190,6 +194,8 @@ void CommitWindow::buildUi()
 	_aheadLabel = new QLabel;
 	_aheadLabel->setObjectName(QStringLiteral("aheadLabel"));
 	_pushButton = new QPushButton(tr("Push"));
+	_peekButton = new QPushButton(tr("Peek"));
+	_peekButton->setToolTip(tr("Fetch, then list what the upstream has and this branch does not"));
 	_refreshButton = new QPushButton(tr("Refresh"));
 	_refreshButton->setToolTip(QStringLiteral("F5"));
 	_historyButton = new QPushButton(tr("History"));
@@ -198,6 +204,7 @@ void CommitWindow::buildUi()
 	repoBarLayout->addWidget(_aheadLabel);
 	repoBarLayout->addStretch();
 	repoBarLayout->addWidget(_pushButton);
+	repoBarLayout->addWidget(_peekButton);
 	repoBarLayout->addWidget(_refreshButton);
 	repoBarLayout->addWidget(_historyButton);
 	leftLayout->addWidget(repoBar);
@@ -332,6 +339,7 @@ void CommitWindow::buildUi()
 
 	connect(_refreshButton, &QPushButton::clicked, &_repo, &Repository::refresh);
 	connect(_pushButton, &QPushButton::clicked, this, [this] { doPush(/*setUpstream=*/false); });
+	connect(_peekButton, &QPushButton::clicked, this, &CommitWindow::peekIncoming);
 	connect(_historyButton, &QPushButton::clicked, this, &CommitWindow::showHistoryWindow);
 	connect(hidePushLogButton, &QPushButton::clicked, _pushLogPane, &QWidget::hide);
 	connect(_commitButton, &QPushButton::clicked, this, [this] { startCommit(false); });
@@ -500,6 +508,9 @@ void CommitWindow::updateButtons()
 	_commitPushButton->setEnabled(canCommit);
 	_commitButton->setText(state.operationInProgress() ? tr("Commit (%1 files)").arg(checkedCount)
 		: tr("Commit %1 file(s)").arg(checkedCount));
+
+	// Without an upstream there is no ref for the incoming walk to name
+	_peekButton->setEnabled(!state.upstream.isEmpty() && !_peekInFlight);
 }
 
 void CommitWindow::startCommit(bool pushAfterwards)
@@ -661,6 +672,76 @@ void CommitWindow::doPush(bool setUpstream)
 		_repo.pushSetUpstream(onDone);
 	else
 		_repo.push(onDone);
+}
+
+void CommitWindow::peekIncoming()
+{
+	_peekInFlight = true;
+	updateButtons();
+
+	_repo.fetch([this](const GitResult& fetchResult) {
+		_peekInFlight = false;
+		updateButtons();
+
+		if (!fetchResult.ok)
+		{
+			showGitError(tr("Fetch failed"), fetchResult);
+			return;
+		}
+		_repo.refresh(); // the fetch moved the remote-tracking ref, so the header's counts are stale
+
+		_repo.incomingCommits(MaxIncomingCommits, this, [this](const GitResult& logResult) {
+			if (!logResult.ok)
+			{
+				showGitError(tr("Could not list the incoming commits"), logResult);
+				return;
+			}
+			const std::vector<CommitRecord> commits = parseCommitLog(logResult.out);
+			showIncomingCommits(commits, int(commits.size()) >= MaxIncomingCommits);
+		});
+	});
+}
+
+void CommitWindow::showIncomingCommits(const std::vector<CommitRecord>& commits, bool capped)
+{
+	if (!_incomingPopup)
+	{
+		_incomingPopup = new QFrame(this, Qt::Popup);
+		_incomingPopup->setFrameShape(QFrame::StyledPanel);
+		auto* popupLayout = new QVBoxLayout(_incomingPopup);
+		popupLayout->setContentsMargins(8, 8, 8, 8);
+		popupLayout->setSpacing(6);
+		_incomingHeaderLabel = new QLabel;
+		_incomingView = new QPlainTextEdit;
+		_incomingView->setReadOnly(true);
+		_incomingView->setFont(monospaceFont());
+		_incomingView->setLineWrapMode(QPlainTextEdit::NoWrap);
+		popupLayout->addWidget(_incomingHeaderLabel);
+		popupLayout->addWidget(_incomingView, 1);
+	}
+
+	const QString upstream = _repo.state().upstream;
+	_incomingHeaderLabel->setText(commits.empty()
+		? tr("Nothing to pull from %1").arg(upstream)
+		: tr("%1 commit(s) waiting in %2").arg(int(commits.size())).arg(upstream));
+
+	QStringList lines;
+	lines.reserve(qsizetype(commits.size()) + 1);
+	for (const CommitRecord& commit : commits)
+		lines.push_back(shortSha(commit.sha) + QStringLiteral("  ") + commit.subject());
+	if (capped)
+		lines.push_back(tr("... and older ones, not listed"));
+	_incomingView->setPlainText(lines.join(QLatin1Char('\n')));
+
+	// Nothing to list shrinks the popup to its one line, rather than framing a lot of nothing
+	_incomingView->setVisible(!commits.empty());
+	if (commits.empty())
+		_incomingPopup->adjustSize();
+	else
+		_incomingPopup->resize(IncomingPopupWidth, IncomingPopupHeight);
+
+	_incomingPopup->move(_peekButton->mapToGlobal(QPoint{ 0, _peekButton->height() }));
+	_incomingPopup->show();
 }
 
 void CommitWindow::appendPushLog(const QString& commandLabel, const GitResult& result)

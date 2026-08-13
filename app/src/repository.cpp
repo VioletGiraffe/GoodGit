@@ -22,6 +22,13 @@ QByteArray nulJoined(const QStringList& paths)
 	return data;
 }
 
+// The base of every commit-listing query; the walk itself is whatever the caller appends
+QStringList commitLogArgs(int maxCommits)
+{
+	return { QStringLiteral("log"), QStringLiteral("-z"), QStringLiteral("--max-count=%1").arg(maxCommits),
+		QStringLiteral("--format=") + QLatin1String(CommitLogFormat) };
+}
+
 } // namespace
 
 struct Repository::RefreshRun
@@ -322,6 +329,12 @@ void Repository::pushSetUpstream(Git::Callback onDone)
 		QStringLiteral("--set-upstream"), QStringLiteral("origin"), QStringLiteral("HEAD") }, this, std::move(onDone));
 }
 
+void Repository::fetch(Git::Callback onDone)
+{
+	// Not a read-only query despite reading from the network: it writes the remote-tracking refs
+	Git::run(_rootPath, { QStringLiteral("fetch") }, this, std::move(onDone));
+}
+
 void Repository::addToIndex(const QStringList& paths, Git::Callback onDone)
 {
 	Git::run(_rootPath, { QStringLiteral("add"), QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") },
@@ -387,11 +400,16 @@ Git::Job* Repository::diffAllChanges(const QObject* context, Git::Callback onDon
 
 Git::Job* Repository::commitLog(int maxCommits, const QString& path, const QObject* context, Git::Callback onDone)
 {
-	QStringList args = { QStringLiteral("log"), QStringLiteral("-z"),
-		QStringLiteral("--max-count=%1").arg(maxCommits),
-		QStringLiteral("--format=") + QLatin1String(CommitLogFormat) };
+	QStringList args = commitLogArgs(maxCommits);
 	if (!path.isEmpty())
 		args << QStringLiteral("--follow") << QStringLiteral("--") << path; // --follow takes one path, which is all we ever pass
+	return Git::run(_rootPath, std::move(args), context, std::move(onDone), {}, /*readOnlyQuery=*/true);
+}
+
+Git::Job* Repository::incomingCommits(int maxCommits, const QObject* context, Git::Callback onDone)
+{
+	QStringList args = commitLogArgs(maxCommits);
+	args << QStringLiteral("HEAD..@{upstream}");
 	return Git::run(_rootPath, std::move(args), context, std::move(onDone), {}, /*readOnlyQuery=*/true);
 }
 

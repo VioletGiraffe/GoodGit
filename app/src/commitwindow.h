@@ -8,6 +8,7 @@
 #include <QSet>
 
 class QCheckBox;
+class QFrame;
 class QLabel;
 class QPushButton;
 class QSplitter;
@@ -46,6 +47,8 @@ private:
 	void reattachHead(std::function<void()> onReattached);
 	void doCommit(bool pushAfterwards);
 	void doPush(bool setUpstream);
+	void peekIncoming();
+	void showIncomingCommits(const std::vector<CommitRecord>& commits, bool capped);
 	void appendPushLog(const QString& commandLabel, const GitResult& result);
 
 	void showHistoryWindow();
@@ -85,6 +88,7 @@ private:
 	QLabel* _branchLabel = nullptr;
 	QLabel* _aheadLabel = nullptr;
 	QPushButton* _pushButton = nullptr;
+	QPushButton* _peekButton = nullptr;
 	QPushButton* _refreshButton = nullptr;
 	QPushButton* _historyButton = nullptr;
 	QLabel* _opStrip = nullptr;
@@ -100,8 +104,13 @@ private:
 	QWidget* _pushLogPane = nullptr; // hidden until the first push of the session
 	QPlainTextEdit* _pushLogView = nullptr;
 
+	QFrame* _incomingPopup = nullptr; // built on the first peek; Qt::Popup, so it closes on a click outside
+	QLabel* _incomingHeaderLabel = nullptr;
+	QPlainTextEdit* _incomingView = nullptr;
+
 	QPointer<HistoryWindow> _historyWindow; // at most one per repo window, raised again on a second click
 	QPointer<Git::Job> _diffJob;
 	int _diffGeneration = 0; // stale async diff results (incl. the two-step submodule log) are dropped by this
 	bool _commitInFlight = false;
+	bool _peekInFlight = false; // a fetch is slow, and a refresh landing meanwhile must not re-enable the button
 };

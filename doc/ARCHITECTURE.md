@@ -103,6 +103,14 @@ Push is `git push --recurse-submodules=on-demand`, passed explicitly (machine co
 referenced submodule commits first, which is a correctness requirement, not a preference - a superproject
 commit referencing an unpushed submodule commit is unfetchable.
 
+## Fetching
+
+"Peek" is the only thing in the app that fetches, and so the only thing that moves a remote-tracking ref:
+it runs `git fetch`, refreshes (the header's ahead/behind counts are derived from that ref), and pops up
+`log HEAD..@{upstream}`. Without the fetch that list would be empty almost always, nothing else advancing
+the ref. It is disabled when the branch has no upstream, there being no ref for the walk to name. Nothing
+pulls or merges.
+
 ## Detached HEAD
 
 Reattachment happens at commit time and is allowed only when the working tree would not move: a single local

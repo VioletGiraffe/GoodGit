@@ -71,6 +71,9 @@ public:
 
 	void push(Git::Callback onDone);
 	void pushSetUpstream(Git::Callback onDone);
+	// Moves the remote-tracking refs. Nothing else in the app does, so state.behind and the incoming
+	// list mean only what the last fetch left behind.
+	void fetch(Git::Callback onDone);
 
 	void addToIndex(const QStringList& paths, Git::Callback onDone);
 	void unAdd(const QStringList& paths, Git::Callback onDone);
@@ -94,6 +97,9 @@ public:
 	Git::Job* commitLog(int maxCommits, const QString& path, const QObject* context, Git::Callback onDone);
 	// The files one commit touched, as parseNameStatusZ input. Empty for a merge - git shows no diff
 	// for one without --cc - so detect merges from the parent count, not from an empty result.
+	// What the upstream has and HEAD does not, newest first, as parseCommitLog input. Compares against
+	// the remote-tracking ref, so it is only as current as the last fetch.
+	Git::Job* incomingCommits(int maxCommits, const QObject* context, Git::Callback onDone);
 	Git::Job* commitFiles(const QString& sha, const QObject* context, Git::Callback onDone);
 	Git::Job* commitFileDiff(const QString& sha, const NameStatusEntry& file, const QObject* context, Git::Callback onDone);
 	// The shas HEAD holds that its upstream does not, as parseLineList input. Fails when there is no
