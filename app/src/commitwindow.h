@@ -5,6 +5,7 @@
 
 #include <QMainWindow>
 #include <QPointer>
+#include <QSet>
 
 class QCheckBox;
 class QLabel;
@@ -54,6 +55,16 @@ private:
 	void onRowActivated(const QModelIndex& index);
 	void openSubmoduleWindow(const FileEntry& entry);
 	void showContextMenu(const QPoint& pos);
+
+	// A refresh resets the model, so row numbers do not survive it. The selection travels by path
+	// instead - the same identity the check state is re-derived from.
+	struct SelectionByPath
+	{
+		QSet<QString> paths;
+		QString currentPath; // drives the diff pane, so it is restored even when nothing was selected
+	};
+	[[nodiscard]] SelectionByPath captureSelectionByPath() const;
+	void restoreSelectionByPath(const SelectionByPath& selection);
 
 	[[nodiscard]] std::vector<int> selectedRows() const;
 	void toggleCheckOnSelection();
