@@ -35,7 +35,8 @@ void ConsoleLogView::appendOutput(const QByteArray& chunk)
 		return;
 	_entryHasOutput = true;
 
-	for (const QChar c : _decoder(chunk))
+	const QString text = _decoder(chunk); // the decoder returns a lazy proxy, not something iterable
+	for (const QChar c : text)
 	{
 		if (c == QLatin1Char('\r'))
 		{
