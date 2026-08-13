@@ -69,8 +69,15 @@ not of that sha. `--skip` avoids that bug but re-walks the skipped commits anywa
 re-run costs. The only alternative is streaming one `log` process, which needs the `readyRead` path
 `gitprocess` does not have.
 
-Selecting a commit queries its files, selecting a file queries that file's diff - one short-lived job
-each, cancelled when the selection moves on. A merge is shown as a note instead: `git show` prints no
+Search runs entirely in memory, over the records already loaded - sha, author, refs, date and message
+are all held there, so no git process is involved and non-matching rows are simply hidden. This is why
+a miss is reported against the loaded count rather than as "not found": the commit may just be older
+than the limit. Searching diff *content* is the one thing the records cannot answer; that needs the
+pickaxe (`log -S`), a query rather than a filter.
+
+Selecting a commit shows its message and queries its files; selecting a file queries that file's diff -
+one short-lived job each, cancelled when the selection moves on. The diff highlighting is switched off
+for message text, where a leading `-` is a bullet rather than a deletion. A merge is shown as a note instead: `git show` prints no
 diff for one without `--cc`, so the emptiness is answered from the parent count rather than guessed from
 an empty result.
 

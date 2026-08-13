@@ -7,6 +7,7 @@
 #include <QPointer>
 
 class QLabel;
+class QLineEdit;
 class QPlainTextEdit;
 class QPushButton;
 class QSplitter;
@@ -29,11 +30,14 @@ public:
 	void reload();
 
 protected:
+	bool eventFilter(QObject* watched, QEvent* event) override;
 	void closeEvent(QCloseEvent* event) override;
 
 private:
 	void buildUi();
 
+	void applySearch();
+	void updateCountLabel();
 	void showCommitContextMenu(const QPoint& pos);
 	void showFilesForCurrentCommit();
 	void showDiffForCurrentFile();
@@ -49,12 +53,14 @@ private:
 	// Widened by Load more. A date-ordered walk cannot be resumed from a cursor, so widening it
 	// means re-running the whole query - see doc/ARCHITECTURE.md.
 	int _maxCommits;
+	bool _logCapped = false; // the last query returned its full limit, so older commits exist unread
 
 	QSplitter* _splitter = nullptr;       // log above, the commit's detail below
 	QSplitter* _detailSplitter = nullptr; // file list beside the diff
 	QTreeView* _logView = nullptr;
 	QTreeView* _filesView = nullptr;
 	QLabel* _countLabel = nullptr;
+	QLineEdit* _searchEdit = nullptr;
 	QLabel* _fileCountLabel = nullptr;
 	QPushButton* _loadMoreButton = nullptr;
 	CLabelMidElision* _diffPathLabel = nullptr;

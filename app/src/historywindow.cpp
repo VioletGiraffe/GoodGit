@@ -14,7 +14,9 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenu>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -59,6 +61,12 @@ void HistoryWindow::buildUi()
 	auto* logBarLayout = new QHBoxLayout(logBar);
 	logBarLayout->setContentsMargins(8, 6, 8, 6);
 	_countLabel = new QLabel;
+	_searchEdit = new QLineEdit;
+	_searchEdit->setPlaceholderText(tr("Search commits"));
+	_searchEdit->setToolTip(tr("Ctrl+F. Matches the hash, author, refs, date or message; non-matching commits are hidden"));
+	_searchEdit->setClearButtonEnabled(true);
+	_searchEdit->setMinimumWidth(220);
+	_searchEdit->installEventFilter(this);
 	_loadMoreButton = new QPushButton(tr("Load more"));
 	_loadMoreButton->setToolTip(tr("Re-read the log with twice the limit"));
 	_loadMoreButton->setVisible(false);
@@ -66,6 +74,7 @@ void HistoryWindow::buildUi()
 	refreshButton->setToolTip(QStringLiteral("F5"));
 	logBarLayout->addWidget(_countLabel);
 	logBarLayout->addStretch();
+	logBarLayout->addWidget(_searchEdit);
 	logBarLayout->addWidget(_loadMoreButton);
 	logBarLayout->addWidget(refreshButton);
 	logLayout->addWidget(logBar);
@@ -166,12 +175,40 @@ void HistoryWindow::buildUi()
 		_maxCommits *= 2;
 		reload();
 	});
+	connect(_searchEdit, &QLineEdit::textChanged, this, &HistoryWindow::applySearch);
 	connect(_logView, &QWidget::customContextMenuRequested, this, &HistoryWindow::showCommitContextMenu);
 	connect(_logView->selectionModel(), &QItemSelectionModel::currentChanged, this, &HistoryWindow::showFilesForCurrentCommit);
 	connect(_filesView->selectionModel(), &QItemSelectionModel::currentChanged, this, &HistoryWindow::showDiffForCurrentFile);
 
 	new QShortcut(QKeySequence(Qt::Key_F5), this, [this] { reload(); });
-	new QShortcut(QKeySequence(Qt::Key_Escape), this, [this] { close(); });
+	new QShortcut(QKeySequence::Find, this, [this] {
+		_searchEdit->setFocus();
+		_searchEdit->selectAll();
+	});
+	new QShortcut(QKeySequence(Qt::Key_Escape), this, [this] {
+		if (_searchEdit->text().isEmpty())
+			close();
+		else
+			_searchEdit->clear(); // closing the window out from under a search in progress would be a surprise
+	});
+
+	_logView->setFocus(); // the search box would otherwise take it, being first in the tab order
+}
+
+bool HistoryWindow::eventFilter(QObject* watched, QEvent* event)
+{
+	// Down and Enter hand the search box over to the list, closing the Ctrl+F - type - navigate loop.
+	// applySearch has already made the first match current, so the arrows work straight away.
+	if (watched == _searchEdit && event->type() == QEvent::KeyPress)
+	{
+		const int key = static_cast<QKeyEvent*>(event)->key();
+		if (key == Qt::Key_Down || key == Qt::Key_Return || key == Qt::Key_Enter)
+		{
+			_logView->setFocus();
+			return true;
+		}
+	}
+	return QMainWindow::eventFilter(watched, event);
 }
 
 void HistoryWindow::closeEvent(QCloseEvent* event)
@@ -190,6 +227,7 @@ void HistoryWindow::reload()
 	_logJob = _repo.commitLog(_maxCommits, this, [this](const GitResult& result) {
 		if (!result.ok)
 		{
+			_logCapped = false;
 			_logModel.setCommits({}); // resetting the model clears the panes below through currentChanged
 			_countLabel->clear();
 			_loadMoreButton->setVisible(false);
@@ -199,20 +237,40 @@ void HistoryWindow::reload()
 
 		std::vector<CommitRecord> commits = parseCommitLog(result.out);
 		// Exactly the limit means the walk was cut short, not that history ends here
-		const bool capped = int(commits.size()) >= _maxCommits;
-		_countLabel->setText(capped ? tr("%1 commits, more to load").arg(commits.size()) : tr("%1 commits").arg(commits.size()));
-		_loadMoreButton->setVisible(capped);
+		_logCapped = int(commits.size()) >= _maxCommits;
+		_loadMoreButton->setVisible(_logCapped);
 
-		_logModel.setCommits(std::move(commits));
-		if (_logModel.commitCount() > 0)
+		_logModel.setCommits(std::move(commits)); // re-applies the active search to the new records
+		updateCountLabel();
+		if (_logModel.rowCount() > 0)
 			_logView->setCurrentIndex(_logModel.index(0, CommitLogModel::ShaColumn));
 	});
+}
+
+void HistoryWindow::applySearch()
+{
+	_logModel.setSearchText(_searchEdit->text());
+	updateCountLabel();
+
+	// Land on the first match, so typing walks the list and the arrows step between matches from there
+	if (_logModel.rowCount() > 0)
+		_logView->setCurrentIndex(_logModel.index(0, CommitLogModel::ShaColumn));
+}
+
+void HistoryWindow::updateCountLabel()
+{
+	const int shown = _logModel.rowCount();
+	const int total = _logModel.totalCount();
+
+	const QString counts = shown == total ? tr("%1 commits").arg(total) : tr("%1 of %2 commits").arg(shown).arg(total);
+	// Kept visible during a search too: finding nothing may only mean the commit is older than the limit
+	_countLabel->setText(_logCapped ? tr("%1, more to load").arg(counts) : counts);
 }
 
 void HistoryWindow::showCommitContextMenu(const QPoint& pos)
 {
 	const QModelIndex index = _logView->indexAt(pos);
-	if (!index.isValid() || index.row() >= _logModel.commitCount())
+	if (!index.isValid() || index.row() >= _logModel.rowCount())
 		return;
 
 	// Read before exec() spins an event loop: a log query finishing then resets the model, and the
@@ -231,7 +289,7 @@ void HistoryWindow::showFilesForCurrentCommit()
 		_filesJob->cancel();
 
 	const QModelIndex current = _logView->currentIndex();
-	if (!current.isValid() || current.row() >= _logModel.commitCount())
+	if (!current.isValid() || current.row() >= _logModel.rowCount())
 	{
 		_filesModel.setEntries({});
 		_fileCountLabel->clear();
@@ -283,7 +341,7 @@ void HistoryWindow::showDiffForCurrentFile()
 	const QModelIndex currentFile = _filesView->currentIndex();
 	const QModelIndex currentCommit = _logView->currentIndex();
 	if (!currentFile.isValid() || currentFile.row() >= _filesModel.rowCount()
-		|| !currentCommit.isValid() || currentCommit.row() >= _logModel.commitCount())
+		|| !currentCommit.isValid() || currentCommit.row() >= _logModel.rowCount())
 	{
 		return; // no file picked: the pane keeps the commit message showFilesForCurrentCommit put there
 	}

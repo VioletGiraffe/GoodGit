@@ -20,9 +20,13 @@ public:
 	explicit CommitLogModel(QObject* parent = nullptr);
 
 	void setCommits(std::vector<CommitRecord> commits);
+	// Hides every commit that does not contain `text` in its sha, author, refs, date or message.
+	// Empty text shows all of them again.
+	void setSearchText(const QString& text);
 
-	[[nodiscard]] const CommitRecord& commitAt(int row) const { return _commits[size_t(row)]; }
-	[[nodiscard]] int commitCount() const { return int(_commits.size()); }
+	// Row indexes address what is shown, so they mean the same thing with a search active as without.
+	[[nodiscard]] const CommitRecord& commitAt(int row) const { return _commits[size_t(_visible[size_t(row)])]; }
+	[[nodiscard]] int totalCount() const { return int(_commits.size()); } // rowCount() is the shown count
 
 	int rowCount(const QModelIndex& parent = {}) const override;
 	int columnCount(const QModelIndex& parent = {}) const override;
@@ -30,7 +34,12 @@ public:
 	QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
 
 private:
+	void rebuildVisible();
+
+private:
 	std::vector<CommitRecord> _commits;
+	std::vector<int> _visible; // indexes into _commits, every one of them while the search is empty
+	QString _searchText;
 };
 
 // The files one commit touched. ChangedFilesModel cannot serve here: its rows carry the state of a

@@ -64,6 +64,16 @@ QString subjectText(const CommitRecord& commit)
 	return commit.refs.isEmpty() ? subject : QStringLiteral("(%1) %2").arg(commit.refs, subject);
 }
 
+// Cheapest fields first: || stops before scanning the message, which is far the longest of them
+bool matchesSearch(const CommitRecord& commit, const QString& text)
+{
+	return commit.sha.contains(text, Qt::CaseInsensitive)
+		|| commit.author.contains(text, Qt::CaseInsensitive)
+		|| commit.refs.contains(text, Qt::CaseInsensitive)
+		|| commit.date.contains(text, Qt::CaseInsensitive)
+		|| commit.message.contains(text, Qt::CaseInsensitive);
+}
+
 QString pathText(const NameStatusEntry& entry)
 {
 	return entry.oldPath.isEmpty() ? entry.path : QStringLiteral("%1 (was %2)").arg(entry.path, entry.oldPath);
@@ -85,12 +95,35 @@ void CommitLogModel::setCommits(std::vector<CommitRecord> commits)
 {
 	beginResetModel();
 	_commits = std::move(commits);
+	rebuildVisible();
 	endResetModel();
+}
+
+void CommitLogModel::setSearchText(const QString& text)
+{
+	if (_searchText == text)
+		return;
+
+	beginResetModel();
+	_searchText = text;
+	rebuildVisible();
+	endResetModel();
+}
+
+void CommitLogModel::rebuildVisible()
+{
+	_visible.clear();
+	_visible.reserve(_commits.size());
+	for (int i = 0; i < int(_commits.size()); ++i)
+	{
+		if (_searchText.isEmpty() || matchesSearch(_commits[size_t(i)], _searchText))
+			_visible.push_back(i);
+	}
 }
 
 int CommitLogModel::rowCount(const QModelIndex& parent) const
 {
-	return parent.isValid() ? 0 : int(_commits.size());
+	return parent.isValid() ? 0 : int(_visible.size());
 }
 
 int CommitLogModel::columnCount(const QModelIndex& parent) const
@@ -100,10 +133,10 @@ int CommitLogModel::columnCount(const QModelIndex& parent) const
 
 QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 {
-	if (!index.isValid() || index.row() >= int(_commits.size()))
+	if (!index.isValid() || index.row() >= int(_visible.size()))
 		return {};
 
-	const CommitRecord& commit = _commits[size_t(index.row())];
+	const CommitRecord& commit = commitAt(index.row());
 
 	switch (role)
 	{
