@@ -7,7 +7,6 @@
 #include <QPointer>
 
 class QCheckBox;
-class QComboBox;
 class QLabel;
 class QPushButton;
 class QSplitter;
@@ -38,7 +37,6 @@ private:
 	void updateHeader();
 	void updateStrips();
 	void updateButtons();
-	void reloadRecentMessages();
 
 	void startCommit(bool pushAfterwards);
 	void confirmUntrackedThenCommit(bool pushAfterwards);
@@ -76,7 +74,6 @@ private:
 	QLabel* _detachedStrip = nullptr;
 	QCheckBox* _checkAllBox = nullptr;
 	QTreeView* _filesView = nullptr;
-	QComboBox* _recentCombo = nullptr;
 	MessageEdit* _messageEdit = nullptr;
 	QPushButton* _commitButton = nullptr;
 	QPushButton* _commitPushButton = nullptr;

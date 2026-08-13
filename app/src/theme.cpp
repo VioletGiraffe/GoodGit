@@ -60,16 +60,6 @@ QPushButton#commitButton:hover { background: @accentHover@; }
 QPushButton#commitButton:pressed { background: @accentPressed@; }
 QPushButton#commitButton:disabled { background: @paneAlt@; color: @dim@; border-color: @btnBorder@; font-weight: 400; }
 
-/* ---------- recent-messages picker: plain dim text with a drop-down arrow ---------- */
-QComboBox { background: transparent; border: none; color: @dim@; padding: 2px 4px; }
-QComboBox:disabled { color: @btnBorder@; }
-QComboBox::drop-down { border: none; width: 16px; }
-QComboBox::down-arrow { image: url(:/theme/arrow-@mode@.svg); width: 8px; height: 8px; }
-QComboBox QAbstractItemView {
-	background: @pane@; color: @text@; border: 1px solid @border@;
-	selection-background-color: @sel@; selection-color: @text@; outline: none;
-}
-
 /* ---------- editors ---------- */
 QPlainTextEdit { background: @pane@; color: @text@; border: none; }
 QPlainTextEdit#messageEdit { border: 1px solid @btnBorder@; border-radius: 4px; }

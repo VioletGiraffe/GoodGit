@@ -12,7 +12,6 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
-#include <QComboBox>
 #include <QCryptographicHash>
 #include <QDesktopServices>
 #include <QDir>
@@ -43,14 +42,6 @@ namespace {
 constexpr int LeftColumnWidth = 430; // sized so the 50-column subject guide fits the message editor
 constexpr qsizetype MaxDiffBytes = 2 * 1024 * 1024;
 constexpr int MaxListedPathsInDialog = 20;
-
-QString elidedFirstLine(const QString& message)
-{
-	QString line = message.left(message.indexOf(QLatin1Char('\n'))).trimmed();
-	if (message.contains(QLatin1Char('\n')) || line.length() > 80)
-		line = line.left(80) + QStringLiteral("...");
-	return line;
-}
 
 // Ignore pattern candidates for one untracked file, most specific first. Literal path patterns
 // are anchored to the repo root with a leading '/'.
@@ -250,12 +241,6 @@ void CommitWindow::buildUi()
 	auto* messageHeaderLayout = new QHBoxLayout(messageHeader);
 	messageHeaderLayout->setContentsMargins(8, 6, 8, 4);
 	messageHeaderLayout->addWidget(new QLabel(tr("Commit message")));
-	messageHeaderLayout->addStretch();
-	_recentCombo = new QComboBox;
-	_recentCombo->setPlaceholderText(tr("Recent"));
-	_recentCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-	_recentCombo->setMinimumContentsLength(10);
-	messageHeaderLayout->addWidget(_recentCombo);
 	leftLayout->addWidget(messageHeader);
 
 	auto* messageArea = new QWidget;
@@ -329,10 +314,6 @@ void CommitWindow::buildUi()
 	connect(_filesView, &QAbstractItemView::activated, this, &CommitWindow::onRowActivated);
 	connect(_filesView, &QWidget::customContextMenuRequested, this, &CommitWindow::showContextMenu);
 	connect(_filesView->selectionModel(), &QItemSelectionModel::currentChanged, this, &CommitWindow::showDiffForCurrentRow);
-	connect(_recentCombo, &QComboBox::activated, this, [this](int index) {
-		_messageEdit->setPlainText(_recentCombo->itemData(index).toString());
-		_recentCombo->setCurrentIndex(-1);
-	});
 
 	new QShortcut(QKeySequence(Qt::Key_F5), this, [this] { _repo.refresh(); });
 	new QShortcut(QKeySequence(Qt::Key_Escape), this, [this] { close(); });
@@ -349,7 +330,6 @@ void CommitWindow::buildUi()
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Return), this, commitPushShortcut);
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Enter), this, commitPushShortcut);
 
-	reloadRecentMessages();
 	updateButtons();
 }
 
@@ -487,15 +467,6 @@ void CommitWindow::updateButtons()
 		: tr("Commit %1 file(s)").arg(checkedCount));
 }
 
-void CommitWindow::reloadRecentMessages()
-{
-	_recentCombo->clear();
-	for (const QString& message : Settings::recentMessages(_repo.path()))
-		_recentCombo->addItem(elidedFirstLine(message), message);
-	_recentCombo->setCurrentIndex(-1);
-	_recentCombo->setEnabled(_recentCombo->count() > 0);
-}
-
 void CommitWindow::startCommit(bool pushAfterwards)
 {
 	if (_commitInFlight)
@@ -609,8 +580,6 @@ void CommitWindow::doCommit(bool pushAfterwards)
 			_repo.refresh();
 			return;
 		}
-		Settings::addRecentMessage(_repo.path(), message);
-		reloadRecentMessages();
 		_messageEdit->clear();
 		emit committed();
 		_repo.refresh();

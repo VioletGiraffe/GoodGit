@@ -244,7 +244,7 @@ const window_ = () => `<div class="win">
 			${filelist()}
 			<div style="border-top:1px solid var(--border)">
 				<div class="msg">
-					<div class="lbl"><span>Commit message</span><span class="grow"></span><span>Recent &#9662;</span></div>
+					<div class="lbl"><span>Commit message</span></div>
 					<div class="box"><span class="ruler"></span>
 						<div>${esc(MSG_SUBJECT)}<span class="caret"></span></div></div>
 				</div>
