@@ -22,6 +22,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QItemSelectionModel>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMenu>
@@ -361,6 +362,7 @@ void CommitWindow::buildUi()
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Enter), this, commitPushShortcut);
 
 	updateButtons();
+	_messageEdit->setFocus(); // typing the message is what the window is opened to do
 }
 
 void CommitWindow::closeEvent(QCloseEvent* event)
@@ -390,6 +392,8 @@ bool CommitWindow::eventFilter(QObject* watched, QEvent* event)
 
 void CommitWindow::onRefreshed()
 {
+	const SelectionByPath selection = captureSelectionByPath();
+
 	const RepoState& state = _repo.state();
 	_filesModel.setEntries(_repo.files(), state.operationInProgress());
 
@@ -397,8 +401,9 @@ void CommitWindow::onRefreshed()
 	updateStrips();
 	updateButtons();
 
-	if (_filesModel.rowCount() > 0 && !_filesView->currentIndex().isValid())
-		_filesView->setCurrentIndex(_filesModel.index(0, 0));
+	restoreSelectionByPath(selection);
+	// Selecting a row is not what makes this needed: an emptied list leaves nothing to make current,
+	// and content that changed under a selection that did not move has to be re-read anyway
 	showDiffForCurrentRow();
 
 	_repo.diffAllChanges(this, [this](const GitResult& result) {
@@ -868,6 +873,45 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	deleteAction->setShortcutVisibleInContextMenu(true);
 
 	menu.exec(_filesView->viewport()->mapToGlobal(pos));
+}
+
+CommitWindow::SelectionByPath CommitWindow::captureSelectionByPath() const
+{
+	SelectionByPath selection;
+	for (const int row : selectedRows())
+		selection.paths.insert(_filesModel.entryAt(row).path);
+
+	if (const QModelIndex current = _filesView->currentIndex();
+		current.isValid() && current.row() < _filesModel.rowCount())
+	{
+		selection.currentPath = _filesModel.entryAt(current.row()).path;
+	}
+	return selection;
+}
+
+void CommitWindow::restoreSelectionByPath(const SelectionByPath& selection)
+{
+	// One pass over the new rows rather than a lookup per remembered path, so a large selection
+	// over a large list stays linear
+	QItemSelection restored;
+	int currentRow = -1;
+	for (int row = 0; row < _filesModel.rowCount(); ++row)
+	{
+		const QString& path = _filesModel.entryAt(row).path;
+		if (selection.paths.contains(path))
+			restored.select(_filesModel.index(row, 0), _filesModel.index(row, ChangedFilesModel::ColumnCount - 1));
+		if (path == selection.currentPath)
+			currentRow = row;
+	}
+
+	if (currentRow < 0 && _filesModel.rowCount() > 0)
+		currentRow = 0; // the file is gone - committed, or discarded elsewhere
+	if (currentRow >= 0)
+		_filesView->setCurrentIndex(_filesModel.index(currentRow, ChangedFilesModel::StateColumn));
+
+	// After setCurrentIndex, which selects the row it lands on and would otherwise be the selection
+	if (!restored.isEmpty())
+		_filesView->selectionModel()->select(restored, QItemSelectionModel::ClearAndSelect);
 }
 
 std::vector<int> CommitWindow::selectedRows() const
