@@ -140,7 +140,10 @@ void Repository::refresh()
 		launch(_rootPath, { QStringLiteral("rev-parse"), QStringLiteral("--absolute-git-dir") },
 			[this](const GitResult& r) { _gitDir = QString::fromUtf8(r.out.trimmed()); }, phase2);
 	}
-	launch(_rootPath, { QStringLiteral("status"), QStringLiteral("--porcelain=v2"), QStringLiteral("--branch"), QStringLiteral("--untracked-files=no"), QStringLiteral("-z") },
+	// Only the branch header is parsed out of this, so the flags keep git from scanning the working tree and
+	// recursing into submodules to produce entries nobody reads
+	launch(_rootPath, { QStringLiteral("status"), QStringLiteral("--porcelain=v2"), QStringLiteral("--branch"),
+			QStringLiteral("--untracked-files=no"), QStringLiteral("--ignore-submodules=all"), QStringLiteral("-z") },
 		[run](const GitResult& r) { run->header = parseBranchHeader(r.out); }, phase2);
 	launch(_rootPath, { QStringLiteral("diff"), QStringLiteral("--name-status"), QStringLiteral("-M"), QStringLiteral("--ignore-submodules=dirty"), QStringLiteral("-z"), QStringLiteral("HEAD") },
 		[run](const GitResult& r) { if (r.ok) run->diffEntries = parseNameStatusZ(r.out); }, phase2); // fails on unborn HEAD - phase 2 covers that
