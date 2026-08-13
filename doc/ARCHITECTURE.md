@@ -20,12 +20,12 @@ Consequences that follow from this choice, all deliberate:
   so "tracked in HEAD, absent from index, present on disk" is inexpressible. Do not re-attempt; un-adding an
   `A` file is supported and is a different operation.
 - Hunk/line staging is out, permanently - the commit primitive was chosen with that explicitly waived.
-- Reverting selected files is that same delta run backwards, `git restore --source=HEAD --staged --worktree`.
+- Discarding changes to selected files is that same delta run backwards, `git restore --source=HEAD --staged --worktree`.
   Untracked files lie outside it (git aborts the whole command on a path it does not know) and an `A` file is
   only un-added, since restore would delete it outright.
 - A merge/cherry-pick/revert/rebase in progress is a separate mode, since git forbids path-limited commits
-  then: the commit stages everything and runs with no pathspec, and reverting a file is refused - restoring
-  a path to HEAD mid-operation would silently drop that operation's result for it.
+  then: the commit stages everything and runs with no pathspec, and discarding is refused - restoring a path
+  to HEAD mid-operation would silently drop that operation's result for it.
 
 ## Components (app/src/)
 
@@ -110,8 +110,8 @@ A submodule is just another `Repository` shown in another window. In the parent'
 exists when the pointer moved or tracked files inside are modified; modified tracked content inside blocks
 committing the pointer, untracked content inside neither blocks nor earns a row by itself. The parent's diff
 query uses `--ignore-submodules=dirty` so a merely-dirty submodule does not masquerade as a committable
-pointer change. Reverting a submodule row checks the recorded commit out inside it, which leaves it on a
-detached HEAD; the same dirtiness that blocks committing the pointer also blocks reverting it, because that
+pointer change. Discarding a submodule row checks the recorded commit out inside it, which leaves it on a
+detached HEAD; the same dirtiness that blocks committing the pointer also blocks discarding it, because that
 checkout would overwrite the changes inside without a word.
 
 Push is `git push --recurse-submodules=on-demand`, passed explicitly (machine config varies): git pushes

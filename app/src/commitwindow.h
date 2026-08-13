@@ -72,7 +72,7 @@ private:
 	[[nodiscard]] std::vector<int> selectedRows() const;
 	void toggleCheckOnSelection();
 	void deleteSelection();
-	void revertSelection();
+	void discardSelection();
 	void addSelectionToIndex();
 	void unAddSelection();
 	void appendToGitIgnore(const QString& pattern);

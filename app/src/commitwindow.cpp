@@ -85,10 +85,10 @@ QStringList gitIgnorePatterns(const QString& repoRelativePath)
 	return patterns;
 }
 
-// What Revert can act on. Untracked files are not git's to restore, and a submodule with changes inside
+// What discarding can act on. Untracked files are not git's to restore, and a submodule with changes inside
 // would be checked out over. Mid-operation nothing is: restoring a path to HEAD there would silently
 // drop the merge's or rebase's result for it, conflicted or not.
-bool revertible(const FileEntry& entry, bool operationInProgress)
+bool discardable(const FileEntry& entry, bool operationInProgress)
 {
 	if (operationInProgress)
 		return false;
@@ -897,10 +897,10 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 		entries.push_back(_filesModel.entryAt(row));
 
 	const bool operationInProgress = _repo.state().operationInProgress();
-	bool anyUntracked = false, anyAdded = false, anyDeletable = false, anyRevertible = false;
+	bool anyUntracked = false, anyAdded = false, anyDeletable = false, anyDiscardable = false;
 	for (const FileEntry& entry : entries)
 	{
-		anyRevertible |= revertible(entry, operationInProgress);
+		anyDiscardable |= discardable(entry, operationInProgress);
 		if (entry.isSubmodule)
 			continue;
 		anyUntracked |= entry.type == ChangeType::Untracked;
@@ -960,8 +960,8 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 		QApplication::clipboard()->setText(paths.join(QLatin1Char('\n')));
 	});
 	menu.addSeparator();
-	QAction* revertAction = menu.addAction(tr("Revert"), this, &CommitWindow::revertSelection);
-	revertAction->setEnabled(anyRevertible);
+	QAction* discardAction = menu.addAction(tr("Discard changes"), this, &CommitWindow::discardSelection);
+	discardAction->setEnabled(anyDiscardable);
 	QAction* deleteAction = menu.addAction(tr("Delete to Recycle Bin"), this, &CommitWindow::deleteSelection);
 	deleteAction->setEnabled(anyDeletable);
 	// Display-only: the view's event filter owns the actual Del handling; WidgetShortcut on an action
@@ -1101,7 +1101,7 @@ void CommitWindow::deleteSelection()
 	_repo.refresh();
 }
 
-void CommitWindow::revertSelection()
+void CommitWindow::discardSelection()
 {
 	const bool operationInProgress = _repo.state().operationInProgress();
 
@@ -1114,9 +1114,9 @@ void CommitWindow::revertSelection()
 	for (const int row : selectedRows())
 	{
 		const FileEntry& entry = _filesModel.entryAt(row);
-		if (!revertible(entry, operationInProgress))
+		if (!discardable(entry, operationInProgress))
 		{
-			++skippedRows; // rows in a mixed selection that Revert does not cover are a deliberate no-op
+			++skippedRows; // rows in a mixed selection that discarding does not cover are a deliberate no-op
 			continue;
 		}
 		if (!entry.isSubmodule && entry.type == ChangeType::Added)
@@ -1138,14 +1138,14 @@ void CommitWindow::revertSelection()
 		QString text = tr("Discard all changes to %1 file(s)? This cannot be undone.\n\n%2")
 			.arg(promptPaths.size()).arg(listedPaths(promptPaths));
 		if (anySubmodule)
-			text += tr("\n\nA submodule is reverted by checking out the recorded commit inside it, which leaves it on a detached HEAD.");
+			text += tr("\n\nDiscarding a submodule's pointer change checks the recorded commit out inside it, which leaves it on a detached HEAD.");
 		if (!addedPaths.isEmpty())
 			text += tr("\n\n%1 added file(s) will be un-added and left on disk.").arg(addedPaths.size());
 		if (skippedRows > 0)
 			text += tr("\n\n%1 other selected row(s) stay as they are: untracked files and submodules with changes inside "
-					   "cannot be reverted.").arg(skippedRows);
+					   "cannot be discarded.").arg(skippedRows);
 
-		const auto answer = MessageBox::question(this, tr("Revert files?"), text, { tr("Revert") });
+		const auto answer = MessageBox::question(this, tr("Discard changes?"), text, { tr("Discard") });
 		if (answer != 0)
 			return;
 	}
@@ -1172,7 +1172,7 @@ void CommitWindow::revertSelection()
 	_repo.discardChanges(pathspec, [this, unAddThenRefresh](const GitResult& result) {
 		if (!result.ok)
 		{
-			showGitError(tr("Revert failed"), result);
+			showGitError(tr("Discard failed"), result);
 			_repo.refresh();
 			return;
 		}
