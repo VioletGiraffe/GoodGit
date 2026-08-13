@@ -32,6 +32,13 @@ struct JobQueue
 		{
 			Job* job = pending.front();
 			pending.pop_front();
+
+			if (job->_hasContext && !job->_context)
+			{
+				job->deleteLater(); // nothing left to deliver the result to; starting the process would only hold a slot
+				continue;
+			}
+
 			++running;
 			job->start();
 		}

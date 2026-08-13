@@ -80,10 +80,13 @@ public:
 	void createTrackingBranch(const QString& localName, const QString& remoteBranch, Git::Callback onDone);
 	void localBranchExists(const QString& name, const QObject* context, std::function<void(bool)> onDone);
 
+	// Read-only queries. The job dies with `context`, so pass the object that will display the answer -
+	// not the Repository, which outlives any one view of it.
+
 	// Diff providers for the window. Kill the returned job when the selection moves on.
-	Git::Job* diffFile(const FileEntry& entry, Git::Callback onDone);
-	// One context-free diff of every change at once; feeds the message completion word pool
-	Git::Job* diffAllChanges(Git::Callback onDone);
+	Git::Job* diffFile(const FileEntry& entry, const QObject* context, Git::Callback onDone);
+	// One `-U0` diff of every change at once; feeds the message completion word pool
+	Git::Job* diffAllChanges(const QObject* context, Git::Callback onDone);
 	// For a moved submodule pointer: the commits being pulled in, as `log --oneline old..HEAD` run inside the submodule
 	void submodulePointerLog(const FileEntry& entry, const QObject* context, Git::Callback onDone);
 

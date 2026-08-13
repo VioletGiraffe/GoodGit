@@ -397,7 +397,7 @@ void CommitWindow::onRefreshed()
 		_filesView->setCurrentIndex(_filesModel.index(0, 0));
 	showDiffForCurrentRow();
 
-	_repo.diffAllChanges([this](const GitResult& result) {
+	_repo.diffAllChanges(this, [this](const GitResult& result) {
 		_messageEdit->setCompletionWords(completionWordsFor(_repo.files(), result.ok ? result.out : QByteArray{}));
 	});
 }
@@ -708,7 +708,7 @@ void CommitWindow::showDiffForCurrentRow()
 
 	const QString tag = entry.type == ChangeType::Untracked ? tr("new file") : tr("HEAD %1 working tree").arg(QChar(0x2192));
 	setDiffText(entry.path, tag, tr("Loading..."));
-	_diffJob = _repo.diffFile(entry, [this, generation, entry](const GitResult& result) {
+	_diffJob = _repo.diffFile(entry, this, [this, generation, entry](const GitResult& result) {
 		if (generation != _diffGeneration)
 			return;
 		// --no-index exits 1 when the files differ; that is the expected outcome, not an error
