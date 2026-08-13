@@ -19,7 +19,7 @@ QString GitResult::errorText() const
 
 namespace Git {
 
-static constexpr int MaxConcurrentProcesses = 4;
+static constexpr int MaxConcurrentProcesses = 8;
 
 struct JobQueue
 {

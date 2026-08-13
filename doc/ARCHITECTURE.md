@@ -27,7 +27,7 @@ Consequences that follow from this choice, all deliberate:
 
 | | |
 |---|---|
-| `gitprocess` | `Git::run()` - async `QProcess` jobs, at most 4 concurrent, cancellable, and scoped to a context `QObject` - once it dies the callback is skipped and a still-queued job is discarded unstarted. `Git::runSync()` - blocking variant for the one startup moment before the event loop exists. Both apply the invariants below |
+| `gitprocess` | `Git::run()` - async `QProcess` jobs, at most 8 concurrent, cancellable, and scoped to a context `QObject` - once it dies the callback is skipped and a still-queued job is discarded unstarted. `Git::runSync()` - blocking variant for the one startup moment before the event loop exists. Both apply the invariants below |
 | `gitparsers` | Free-function parsers for the git outputs the app consumes. UI- and process-free deliberately: exercisable directly |
 | `repository` | `Repository` - one repo: state, file entries, refresh, and every git action. The unit of the application. Its read-only queries take the object that will show the answer as the job's context, so a query dies with its view rather than with the repo |
 | `changedfilesmodel` | Checkable table over the entries; row styling comes from the theme as item data roles |

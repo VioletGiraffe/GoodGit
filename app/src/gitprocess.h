@@ -53,7 +53,7 @@ private:
 
 // Runs `git <args>` in workDir with the invariants from doc/ARCHITECTURE.md applied:
 // -c core.quotepath=false, GIT_TERMINAL_PROMPT=0, --no-optional-locks for read-only queries,
-// stdin payload support, at most 4 concurrent git processes (excess is queued).
+// stdin payload support, and a cap on concurrent git processes - excess is queued.
 // The callback fires on the GUI thread; it is skipped if the job is cancelled or `context` dies.
 // A job whose `context` died while it was still queued is discarded without ever running.
 Job* run(const QString& workDir, QStringList args, const QObject* context, Callback callback,
