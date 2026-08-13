@@ -380,6 +380,8 @@ Git::Job* Repository::diffAllChanges(const QObject* context, Git::Callback onDon
 	QStringList args = _state.unborn
 		? QStringList{ QStringLiteral("diff"), QStringLiteral("--cached"), QStringLiteral("-U0") }
 		: QStringList{ QStringLiteral("diff"), QStringLiteral("-U0"), QStringLiteral("--ignore-submodules"), QStringLiteral("HEAD") };
+	// Or a wholesale line-ending conversion floods the word pool with every line of the file
+	args.insert(1, QStringLiteral("--ignore-cr-at-eol"));
 	return Git::run(_rootPath, std::move(args), context, std::move(onDone), {}, /*readOnlyQuery=*/true);
 }
 
