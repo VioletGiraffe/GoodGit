@@ -6,12 +6,29 @@
 
 #include <deque>
 
+namespace {
+
+// Only the last state of a line a progress meter kept rewriting is text; a CRLF ends its line as an LF does
+QString collapseCarriageReturns(QString text)
+{
+	QStringList lines = text.split(QLatin1Char('\n'));
+	for (QString& line : lines)
+	{
+		if (line.endsWith(QLatin1Char('\r')))
+			line.chop(1);
+		line = line.mid(line.lastIndexOf(QLatin1Char('\r')) + 1);
+	}
+	return lines.join(QLatin1Char('\n'));
+}
+
+} // namespace
+
 QString GitResult::errorText() const
 {
 	if (launchFailed)
 		return QStringLiteral("Failed to launch git. Check that git is installed and on PATH.");
 
-	QString text = QString::fromUtf8(err).trimmed();
+	QString text = collapseCarriageReturns(QString::fromUtf8(err)).trimmed();
 	if (text.isEmpty())
 		text = QStringLiteral("git exited with code %1").arg(exitCode);
 	return text;
@@ -96,17 +113,38 @@ void Job::cancel()
 	}
 }
 
+void Job::streamTo(std::function<void(const QByteArray&)> sink)
+{
+	_sink = std::move(sink);
+}
+
+void Job::collect(const QByteArray& chunk, QByteArray& buffer)
+{
+	if (chunk.isEmpty())
+		return;
+
+	buffer += chunk;
+	if (_sink && !_cancelled && (!_hasContext || _context))
+		_sink(chunk);
+}
+
 void Job::start()
 {
 	_process = new QProcess(this);
 	_process->setWorkingDirectory(_workDir);
 	_process->setProcessEnvironment(gitEnvironment());
 
+	QObject::connect(_process, &QProcess::readyReadStandardOutput, this, [this] { collect(_process->readAllStandardOutput(), _out); });
+	QObject::connect(_process, &QProcess::readyReadStandardError, this, [this] { collect(_process->readAllStandardError(), _err); });
+
 	QObject::connect(_process, &QProcess::finished, this, [this](int exitCode, QProcess::ExitStatus status) {
+		collect(_process->readAllStandardOutput(), _out); // whatever exit raced past the last readyRead
+		collect(_process->readAllStandardError(), _err);
+
 		GitResult result;
 		result.exitCode = exitCode;
-		result.out = _process->readAllStandardOutput();
-		result.err = _process->readAllStandardError();
+		result.out = std::move(_out);
+		result.err = std::move(_err);
 		result.launchFailed = status != QProcess::NormalExit;
 		result.ok = !result.launchFailed && exitCode == 0;
 		finish(std::move(result));

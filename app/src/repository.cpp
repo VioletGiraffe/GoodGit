@@ -355,15 +355,17 @@ void Repository::commitMergeState(const QString& message, const QStringList& unt
 		});
 }
 
-void Repository::push(Git::Callback onDone)
+Git::Job* Repository::push(Git::Callback onDone)
 {
-	Git::run(_rootPath, { QStringLiteral("push"), QStringLiteral("--recurse-submodules=on-demand") }, this, std::move(onDone));
+	return Git::run(_rootPath, { QStringLiteral("push"), QStringLiteral("--recurse-submodules=on-demand"),
+		QStringLiteral("--progress") }, this, std::move(onDone));
 }
 
-void Repository::pushSetUpstream(Git::Callback onDone)
+Git::Job* Repository::pushSetUpstream(Git::Callback onDone)
 {
-	Git::run(_rootPath, { QStringLiteral("push"), QStringLiteral("--recurse-submodules=on-demand"),
-		QStringLiteral("--set-upstream"), QStringLiteral("origin"), QStringLiteral("HEAD") }, this, std::move(onDone));
+	return Git::run(_rootPath, { QStringLiteral("push"), QStringLiteral("--recurse-submodules=on-demand"),
+		QStringLiteral("--progress"), QStringLiteral("--set-upstream"), QStringLiteral("origin"), QStringLiteral("HEAD") },
+		this, std::move(onDone));
 }
 
 void Repository::fetch(Git::Callback onDone)

@@ -39,6 +39,7 @@ Consequences that follow from this choice, all deliberate:
 | `theme` | The whole visual style in one place, mirroring the mockup's CSS variables. Applied once at startup; light or dark follows the system theme |
 | `commitwindow` | One window = one repository. Owns a `Repository` and all user flows. Submodule rows open another `CommitWindow` on the submodule, same process; the child's `committed()` signal refreshes the parent |
 | `historywindow`, `historymodels` | The commit history, read-only: log above, the selected commit's file list beside that file's diff. The same window narrowed to one path is a file history. Owns its own `Repository`, so a submodule's history opens without a `CommitWindow` on that submodule |
+| `consolelogview` | The push log's view: raw process output rendered as a terminal renders it, so a progress meter's carriage returns rewrite one line instead of filling the log |
 | `diffhighlighter`, `messageedit` | Prefix-driven unified-diff highlighting; message editor with the 50-column subject guide and word completion fed by one `diff -U0 HEAD` per refresh |
 | `settings` | Key vocabulary over qtutils `CSettings`. Window geometry is per-repo via qtutils `CPersistenceEnabler` |
 
@@ -54,8 +55,15 @@ The diff shown in either window carries `--ignore-cr-at-eol`, so a CRLF/LF-only 
 That is a display choice and nothing more: the file still lists as modified and still commits its
 working-tree content byte for byte.
 
-Output is harvested once, on process exit - no streaming, though QProcess drains the pipes as data arrives,
-so a chatty child cannot deadlock. Live progress display would need a `readyRead` path in `gitprocess`.
+Output accumulates as it arrives, so a chatty child cannot fill a pipe and stall, and reaches the result
+callback whole - every parser still runs on a finished result. A job may additionally stream each chunk to a
+sink (`Job::streamTo`), attached before control returns to the event loop or the first chunks are missed.
+
+Push is the one command that streams: it carries `--progress`, because into a pipe git prints nothing at all
+until it finishes. The meter arrives as carriage returns rewriting a single line - `ConsoleLogView` renders
+that as a terminal would, and
+`GitResult::errorText()` collapses it so error dialogs read as before. A submodule push announces itself
+(`Pushing submodule 'x'`) but does not inherit `--progress`, so its own phases stay silent.
 
 ## Refresh
 

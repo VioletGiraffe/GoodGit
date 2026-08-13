@@ -14,6 +14,7 @@ class QPushButton;
 class QSplitter;
 class QTreeView;
 class QPlainTextEdit;
+class ConsoleLogView;
 class MessageEdit;
 class CLabelMidElision;
 class HistoryWindow;
@@ -49,7 +50,7 @@ private:
 	void doPush(bool setUpstream);
 	void peekIncoming();
 	void showIncomingCommits(const std::vector<CommitRecord>& commits, bool capped);
-	void appendPushLog(const QString& commandLabel, const GitResult& result);
+	void closePushLogEntry(const GitResult& result);
 
 	void showHistoryWindow();
 
@@ -103,7 +104,7 @@ private:
 	QLabel* _diffTagLabel = nullptr;
 	QPlainTextEdit* _diffView = nullptr;
 	QWidget* _pushLogPane = nullptr; // hidden until the first push of the session
-	QPlainTextEdit* _pushLogView = nullptr;
+	ConsoleLogView* _pushLogView = nullptr;
 
 	QFrame* _incomingPopup = nullptr; // built on the first peek; Qt::Popup, so it closes on a click outside
 	QLabel* _incomingHeaderLabel = nullptr;

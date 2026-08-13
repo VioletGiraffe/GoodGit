@@ -1,4 +1,5 @@
 #include "commitwindow.h"
+#include "consolelogview.h"
 #include "diffhighlighter.h"
 #include "filelistdelegate.h"
 #include "historymodels.h"
@@ -32,7 +33,6 @@
 #include <QProcess>
 #include <QPushButton>
 #include <QRegularExpression>
-#include <QScrollBar>
 #include <QSet>
 #include <QShortcut>
 #include <QSplitter>
@@ -326,10 +326,7 @@ void CommitWindow::buildUi()
 	auto* hidePushLogButton = new QPushButton(tr("Hide"));
 	pushLogHeaderLayout->addWidget(hidePushLogButton);
 	pushLogLayout->addWidget(pushLogHeader);
-	_pushLogView = new QPlainTextEdit;
-	_pushLogView->setReadOnly(true);
-	_pushLogView->setFont(monospaceFont());
-	_pushLogView->setMaximumBlockCount(500); // bounds a chatty remote's hook output
+	_pushLogView = new ConsoleLogView;
 	_pushLogView->setMinimumHeight(70);
 	_pushLogView->setMaximumHeight(170);
 	pushLogLayout->addWidget(_pushLogView);
@@ -656,12 +653,15 @@ void CommitWindow::doPush(bool setUpstream)
 {
 	_pushButton->setEnabled(false);
 	if (!setUpstream)
-		_pushLogView->clear(); // the set-upstream retry continues the same push - its report joins the failed attempt's
+		_pushLogView->clearLog(); // the set-upstream retry continues the same push - its report joins the failed attempt's
+
+	_pushLogPane->show(); // before the entry: the log's scrolling needs a laid-out viewport
+	// A label, not the literal argv: the invocation invariants, --recurse-submodules and --progress are noise there
+	_pushLogView->beginEntry(setUpstream ? QStringLiteral("git push --set-upstream origin HEAD") : QStringLiteral("git push"));
 
 	const auto onDone = [this, setUpstream](const GitResult& result) {
 		_pushButton->setEnabled(true);
-		// A label for the log, not the literal argv: the invocation invariants and --recurse-submodules are noise there
-		appendPushLog(setUpstream ? QStringLiteral("git push --set-upstream origin HEAD") : QStringLiteral("git push"), result);
+		closePushLogEntry(result);
 
 		if (result.ok)
 		{
@@ -681,10 +681,9 @@ void CommitWindow::doPush(bool setUpstream)
 		showGitError(tr("Push failed"), result);
 	};
 
-	if (setUpstream)
-		_repo.pushSetUpstream(onDone);
-	else
-		_repo.push(onDone);
+	Git::Job* job = setUpstream ? _repo.pushSetUpstream(onDone) : _repo.push(onDone);
+	// Before the event loop runs again, so the first chunk is not missed
+	job->streamTo([this](const QByteArray& chunk) { _pushLogView->appendOutput(chunk); });
 }
 
 void CommitWindow::peekIncoming()
@@ -757,23 +756,14 @@ void CommitWindow::showIncomingCommits(const std::vector<CommitRecord>& commits,
 	_incomingPopup->show();
 }
 
-void CommitWindow::appendPushLog(const QString& commandLabel, const GitResult& result)
+void CommitWindow::closePushLogEntry(const GitResult& result)
 {
-	QStringList entry{ QStringLiteral("> ") + commandLabel };
-	// git push reports everything - updated refs, remote messages, errors - on stderr; stdout is normally empty
-	for (const QByteArray& stream : { result.err, result.out })
-	{
-		if (const QString text = QString::fromUtf8(stream).trimmed(); !text.isEmpty())
-			entry << text;
-	}
-	if (entry.size() == 1)
-		entry << (result.launchFailed ? result.errorText() : tr("(no output; exit code %1)").arg(result.exitCode));
-
-	_pushLogPane->show(); // before the append: the scroll below needs a laid-out viewport
-	if (_pushLogView->blockCount() > 1) // blank line between entries; an empty document still has one block
-		_pushLogView->appendPlainText({});
-	_pushLogView->appendPlainText(entry.join(QLatin1Char('\n')));
-	_pushLogView->verticalScrollBar()->setValue(_pushLogView->verticalScrollBar()->maximum());
+	// Everything the push had to say is already in the log, streamed as it ran. What is left is what the
+	// process could not say for itself.
+	if (result.launchFailed)
+		_pushLogView->appendNote(result.errorText());
+	else if (!_pushLogView->entryHasOutput())
+		_pushLogView->appendNote(tr("(no output; exit code %1)").arg(result.exitCode));
 }
 
 void CommitWindow::showDiffForCurrentRow()

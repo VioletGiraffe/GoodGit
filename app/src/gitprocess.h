@@ -31,11 +31,18 @@ class Job final : public QObject
 public:
 	void cancel();
 
+	// Delivers output to `sink` as it arrives, both channels in arrival order, on top of the complete
+	// output the result still carries. Attach it before returning to the event loop - QProcess reads
+	// only from there, so nothing has been read yet and nothing to come is missed. Like the result
+	// callback, the sink stops being called once `context` dies.
+	void streamTo(std::function<void(const QByteArray&)> sink);
+
 private:
 	friend Job* run(const QString&, QStringList, const QObject*, Callback, QByteArray, bool);
 	explicit Job(QObject* parent = nullptr) : QObject(parent) {}
 
 	void start();
+	void collect(const QByteArray& chunk, QByteArray& buffer);
 	void finish(GitResult result);
 
 private:
@@ -43,6 +50,8 @@ private:
 	QStringList _args;
 	QByteArray _stdinData;
 	Callback _callback;
+	std::function<void(const QByteArray&)> _sink;
+	QByteArray _out, _err; // filled as the process runs, so a sink and the result see the same bytes
 	QPointer<const QObject> _context;
 	bool _hasContext = false;
 	QProcess* _process = nullptr;

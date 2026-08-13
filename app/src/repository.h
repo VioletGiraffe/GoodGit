@@ -69,8 +69,10 @@ public:
 	// Merge/rebase mode: stages all tracked changes plus the given untracked paths, commits with no pathspec
 	void commitMergeState(const QString& message, const QStringList& untrackedPaths, Git::Callback onDone);
 
-	void push(Git::Callback onDone);
-	void pushSetUpstream(Git::Callback onDone);
+	// Both return the job, so the caller can stream the output into a log while the push runs. They ask for
+	// --progress because git writes none into a pipe otherwise; the meter arrives as carriage returns.
+	Git::Job* push(Git::Callback onDone);
+	Git::Job* pushSetUpstream(Git::Callback onDone);
 	// Moves the remote-tracking refs. Nothing else in the app does, so state.behind and the incoming
 	// list mean only what the last fetch left behind.
 	void fetch(Git::Callback onDone);

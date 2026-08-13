@@ -35,6 +35,7 @@ INCLUDEPATH += \
 HEADERS += \
 	src/changedfilesmodel.h \
 	src/commitwindow.h \
+	src/consolelogview.h \
 	src/diffhighlighter.h \
 	src/filelistdelegate.h \
 	src/gitparsers.h \
@@ -49,6 +50,7 @@ HEADERS += \
 SOURCES += \
 	src/changedfilesmodel.cpp \
 	src/commitwindow.cpp \
+	src/consolelogview.cpp \
 	src/diffhighlighter.cpp \
 	src/filelistdelegate.cpp \
 	src/gitparsers.cpp \
