@@ -12,6 +12,7 @@ class QPushButton;
 class QSplitter;
 class QTreeView;
 class CLabelMidElision;
+class DiffHighlighter;
 
 // The commit history of one repository, read-only. Owns its own Repository - it only ever asks
 // read-only questions, and a submodule's history is opened without a CommitWindow on that submodule
@@ -36,6 +37,8 @@ private:
 	void showCommitContextMenu(const QPoint& pos);
 	void showFilesForCurrentCommit();
 	void showDiffForCurrentFile();
+	// The two kinds of content the right-hand pane holds; each owns whether the diff highlighting applies
+	void showCommitMessage(const CommitRecord& commit);
 	void setDiffText(const QString& pathLabel, const QString& tag, const QString& text);
 
 private:
@@ -57,6 +60,7 @@ private:
 	CLabelMidElision* _diffPathLabel = nullptr;
 	QLabel* _diffTagLabel = nullptr;
 	QPlainTextEdit* _diffView = nullptr;
+	DiffHighlighter* _diffHighlighter = nullptr;
 
 	QPointer<Git::Job> _logJob;
 	QPointer<Git::Job> _filesJob;

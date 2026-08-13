@@ -132,7 +132,7 @@ void HistoryWindow::buildUi()
 	_diffView->setReadOnly(true);
 	_diffView->setLineWrapMode(QPlainTextEdit::WidgetWidth);
 	_diffView->setFont(monospaceFont());
-	new DiffHighlighter(_diffView->document());
+	_diffHighlighter = new DiffHighlighter(_diffView->document());
 	diffLayout->addWidget(_diffView, 1);
 
 	_detailSplitter = new QSplitter(Qt::Horizontal);
@@ -240,21 +240,24 @@ void HistoryWindow::showFilesForCurrentCommit()
 	}
 
 	const CommitRecord& commit = _logModel.commitAt(current.row());
-	if (commit.parents.size() > 1)
+
+	// Neither the file list nor the pane may outlive the commit they describe, so both are replaced
+	// before the query goes out. The message is what a freshly selected commit shows; picking a file
+	// from the list below swaps it for that file's diff.
+	_filesModel.setEntries({});
+	showCommitMessage(commit);
+
+	const bool isMerge = commit.parents.size() > 1;
+	_fileCountLabel->setToolTip(isMerge
+		? tr("A merge has no diff of its own - what it changed depends on which parent it is compared against.")
+		: QString{});
+	if (isMerge)
 	{
-		_filesModel.setEntries({});
-		_fileCountLabel->setText(tr("merge commit"));
-		setDiffText({}, shortSha(commit.sha),
-			tr("Merge of %1 parents.\n\nA merge has no diff of its own - what it changed depends on which parent it is compared against.")
-				.arg(commit.parents.size()));
+		_fileCountLabel->setText(tr("merge commit")); // git shows no diff for one without --cc
 		return;
 	}
 
-	// Neither the file list nor the diff may outlive the commit they describe, so both go before the query
-	_filesModel.setEntries({});
 	_fileCountLabel->setText(tr("Loading..."));
-	setDiffText({}, shortSha(commit.sha), {});
-
 	const QString sha = commit.sha;
 	_filesJob = _repo.commitFiles(sha, this, [this, sha](const GitResult& result) {
 		if (!result.ok)
@@ -269,8 +272,6 @@ void HistoryWindow::showFilesForCurrentCommit()
 		const int fileCount = int(entries.size());
 		_filesModel.setEntries(std::move(entries));
 		_fileCountLabel->setText(fileCount == 1 ? tr("1 file") : tr("%1 files").arg(fileCount));
-		if (fileCount > 0)
-			_filesView->setCurrentIndex(_filesModel.index(0, CommitFilesModel::StateColumn));
 	});
 }
 
@@ -284,7 +285,7 @@ void HistoryWindow::showDiffForCurrentFile()
 	if (!currentFile.isValid() || currentFile.row() >= _filesModel.rowCount()
 		|| !currentCommit.isValid() || currentCommit.row() >= _logModel.commitCount())
 	{
-		return; // showFilesForCurrentCommit already put the commit-level state in the pane
+		return; // no file picked: the pane keeps the commit message showFilesForCurrentCommit put there
 	}
 
 	const NameStatusEntry entry = _filesModel.entryAt(currentFile.row());
@@ -304,8 +305,17 @@ void HistoryWindow::showDiffForCurrentFile()
 	});
 }
 
+void HistoryWindow::showCommitMessage(const CommitRecord& commit)
+{
+	_diffHighlighter->setEnabled(false);
+	_diffPathLabel->setText({});
+	_diffTagLabel->setText(shortSha(commit.sha));
+	_diffView->setPlainText(commit.message);
+}
+
 void HistoryWindow::setDiffText(const QString& pathLabel, const QString& tag, const QString& text)
 {
+	_diffHighlighter->setEnabled(true);
 	_diffPathLabel->setText(pathLabel);
 	_diffTagLabel->setText(tag);
 	_diffView->setPlainText(text);

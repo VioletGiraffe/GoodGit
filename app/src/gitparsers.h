@@ -56,12 +56,15 @@ struct CommitRecord
 	QString author;
 	QString date;    // ISO 8601 with offset, verbatim from git
 	QString refs;    // "HEAD -> master, origin/master"; empty for most commits
-	QString subject;
+	QString message; // the whole thing: subject line, blank line, body
+
+	[[nodiscard]] QString subject() const { return message.section(QLatin1Char('\n'), 0, 0); }
 };
 
 // The --format parseCommitLog expects, kept beside it so the two cannot drift. Fields are separated
-// by US (0x1f); the subject goes last because it is the one field whose content is unconstrained.
-inline constexpr char CommitLogFormat[] = "%H%x1f%P%x1f%an%x1f%aI%x1f%D%x1f%s";
+// by US (0x1f); the message goes last, being the one field that may contain anything, newlines
+// included - records are separated by NUL, so a multi-line field is no problem there.
+inline constexpr char CommitLogFormat[] = "%H%x1f%P%x1f%an%x1f%aI%x1f%D%x1f%B";
 
 // Input: `log -z --format=<CommitLogFormat>` output - one NUL-terminated record per commit, newest first
 [[nodiscard]] std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput);

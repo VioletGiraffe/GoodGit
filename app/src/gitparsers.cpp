@@ -119,7 +119,8 @@ std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput)
 		commit.author = QString::fromUtf8(fields[2]);
 		commit.date = QString::fromUtf8(fields[3]);
 		commit.refs = QString::fromUtf8(fields[4]);
-		commit.subject = QString::fromUtf8(fields.mid(5).join('\x1f')); // rejoined: a US in the subject must not truncate it
+		// Rejoined: a US in the message must not truncate it. %B carries a trailing newline of its own.
+		commit.message = QString::fromUtf8(fields.mid(5).join('\x1f')).trimmed();
 		commits.push_back(std::move(commit));
 	}
 	return commits;

@@ -6,9 +6,18 @@ DiffHighlighter::DiffHighlighter(QTextDocument* document) :
 {
 }
 
+void DiffHighlighter::setEnabled(bool enabled)
+{
+	if (_enabled == enabled)
+		return;
+
+	_enabled = enabled;
+	rehighlight();
+}
+
 void DiffHighlighter::highlightBlock(const QString& text)
 {
-	if (text.isEmpty())
+	if (!_enabled || text.isEmpty())
 		return;
 
 	const Theme& theme = activeTheme();

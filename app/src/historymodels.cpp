@@ -60,7 +60,8 @@ QString displayedDate(const QString& isoDate)
 
 QString subjectText(const CommitRecord& commit)
 {
-	return commit.refs.isEmpty() ? commit.subject : QStringLiteral("(%1) %2").arg(commit.refs, commit.subject);
+	const QString subject = commit.subject();
+	return commit.refs.isEmpty() ? subject : QStringLiteral("(%1) %2").arg(commit.refs, subject);
 }
 
 QString pathText(const NameStatusEntry& entry)
@@ -121,8 +122,8 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 		return index.column() == SubjectColumn ? QVariant{} : QVariant{ QBrush{ activeTheme().dim } };
 	case Qt::ToolTipRole:
 		return commit.parents.size() > 1
-			? QStringLiteral("%1\n%2\nMerge of %3 parents").arg(commit.sha, commit.subject).arg(commit.parents.size())
-			: QStringLiteral("%1\n%2").arg(commit.sha, commit.subject);
+			? QStringLiteral("%1\n%2\nMerge of %3 parents").arg(commit.sha, commit.subject()).arg(commit.parents.size())
+			: QStringLiteral("%1\n%2").arg(commit.sha, commit.subject());
 	default:
 		return {};
 	}
