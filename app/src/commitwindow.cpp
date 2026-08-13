@@ -32,7 +32,6 @@
 #include <QSet>
 #include <QShortcut>
 #include <QSplitter>
-#include <QTime>
 #include <QTreeView>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -306,7 +305,7 @@ void CommitWindow::buildUi()
 	_pushLogView = new QPlainTextEdit;
 	_pushLogView->setReadOnly(true);
 	_pushLogView->setFont(monospaceFont());
-	_pushLogView->setMaximumBlockCount(500); // entries accumulate for the session; oldest drop out
+	_pushLogView->setMaximumBlockCount(500); // bounds a chatty remote's hook output
 	_pushLogView->setMinimumHeight(70);
 	_pushLogView->setMaximumHeight(170);
 	pushLogLayout->addWidget(_pushLogView);
@@ -623,6 +622,9 @@ void CommitWindow::doCommit(bool pushAfterwards)
 void CommitWindow::doPush(bool setUpstream)
 {
 	_pushButton->setEnabled(false);
+	if (!setUpstream)
+		_pushLogView->clear(); // the set-upstream retry continues the same push - its report joins the failed attempt's
+
 	const auto onDone = [this, setUpstream](const GitResult& result) {
 		_pushButton->setEnabled(true);
 		// A label for the log, not the literal argv: the invocation invariants and --recurse-submodules are noise there
@@ -653,7 +655,7 @@ void CommitWindow::doPush(bool setUpstream)
 
 void CommitWindow::appendPushLog(const QString& commandLabel, const GitResult& result)
 {
-	QStringList entry{ QStringLiteral("[%1] %2").arg(QTime::currentTime().toString(QStringLiteral("HH:mm:ss")), commandLabel) };
+	QStringList entry{ QStringLiteral("> ") + commandLabel };
 	// git push reports everything - updated refs, remote messages, errors - on stderr; stdout is normally empty
 	for (const QByteArray& stream : { result.err, result.out })
 	{
