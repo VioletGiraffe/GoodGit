@@ -75,6 +75,11 @@ a miss is reported against the loaded count rather than as "not found": the comm
 than the limit. Searching diff *content* is the one thing the records cannot answer; that needs the
 pickaxe (`log -S`), a query rather than a filter.
 
+Commits the upstream has not seen are marked in the accent color, from a `rev-list @{upstream}..HEAD`
+run beside the log query. Reachability has to be asked of git: position in a date-ordered list does not
+imply it, and on a diverged branch the upstream ref is not in the list at all. The query failing means
+there is nothing to compare against - no upstream, or a detached HEAD - and marks nothing.
+
 Selecting a commit shows its message and queries its files; selecting a file queries that file's diff -
 one short-lived job each, cancelled when the selection moves on. The diff highlighting is switched off
 for message text, where a leading `-` is a bullet rather than a deletion. A merge is shown as a note instead: `git show` prints no

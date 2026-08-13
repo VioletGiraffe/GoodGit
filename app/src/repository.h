@@ -95,6 +95,9 @@ public:
 	// for one without --cc - so detect merges from the parent count, not from an empty result.
 	Git::Job* commitFiles(const QString& sha, const QObject* context, Git::Callback onDone);
 	Git::Job* commitFileDiff(const QString& sha, const NameStatusEntry& file, const QObject* context, Git::Callback onDone);
+	// The shas HEAD holds that its upstream does not, as parseLineList input. Fails when there is no
+	// upstream to compare against - none configured, or a detached HEAD - which is not an error to report.
+	Git::Job* unpushedCommits(const QObject* context, Git::Callback onDone);
 	// For a moved submodule pointer: the commits being pulled in, as `log --oneline old..HEAD` run inside the submodule
 	void submodulePointerLog(const FileEntry& entry, const QObject* context, Git::Callback onDone);
 

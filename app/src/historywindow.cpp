@@ -218,11 +218,24 @@ void HistoryWindow::closeEvent(QCloseEvent* event)
 	QMainWindow::closeEvent(event);
 }
 
+void HistoryWindow::refreshUnpushedMarks()
+{
+	if (_unpushedJob)
+		_unpushedJob->cancel();
+
+	_unpushedJob = _repo.unpushedCommits(this, [this](const GitResult& result) {
+		// A failure is the ordinary "no upstream to compare against", and marks nothing
+		const QStringList shas = result.ok ? parseLineList(result.out) : QStringList{};
+		_logModel.setUnpushedShas(QSet<QString>{ shas.begin(), shas.end() });
+	});
+}
+
 void HistoryWindow::reload()
 {
 	if (_logJob)
 		_logJob->cancel();
 
+	refreshUnpushedMarks();
 	_countLabel->setText(tr("Loading..."));
 	_logJob = _repo.commitLog(_maxCommits, this, [this](const GitResult& result) {
 		if (!result.ok)

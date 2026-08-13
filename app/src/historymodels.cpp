@@ -110,6 +110,16 @@ void CommitLogModel::setSearchText(const QString& text)
 	endResetModel();
 }
 
+void CommitLogModel::setUnpushedShas(QSet<QString> shas)
+{
+	if (_unpushedShas == shas)
+		return;
+
+	_unpushedShas = std::move(shas);
+	if (!_visible.empty())
+		emit dataChanged(index(0, 0), index(int(_visible.size()) - 1, ColumnCount - 1));
+}
+
 void CommitLogModel::rebuildVisible()
 {
 	_visible.clear();
@@ -137,6 +147,7 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 		return {};
 
 	const CommitRecord& commit = commitAt(index.row());
+	const bool unpushed = _unpushedShas.contains(commit.sha);
 
 	switch (role)
 	{
@@ -150,13 +161,28 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 		}
 		return {};
 	case Qt::FontRole:
-		return index.column() == ShaColumn ? QVariant{ monospaceFont() } : QVariant{};
+	{
+		if (index.column() != ShaColumn)
+			return {};
+		QFont font = monospaceFont();
+		if (unpushed)
+			font.setWeight(QFont::DemiBold);
+		return font;
+	}
 	case Qt::ForegroundRole:
+		// Unpushed commits wear the same accent the commit window's ahead count does
+		if (index.column() == ShaColumn && unpushed)
+			return QBrush{ activeTheme().accent };
 		return index.column() == SubjectColumn ? QVariant{} : QVariant{ QBrush{ activeTheme().dim } };
 	case Qt::ToolTipRole:
-		return commit.parents.size() > 1
-			? QStringLiteral("%1\n%2\nMerge of %3 parents").arg(commit.sha, commit.subject()).arg(commit.parents.size())
-			: QStringLiteral("%1\n%2").arg(commit.sha, commit.subject());
+	{
+		QString tooltip = commit.sha + QLatin1Char('\n') + commit.subject();
+		if (commit.parents.size() > 1)
+			tooltip += QStringLiteral("\nMerge of %1 parents").arg(commit.parents.size());
+		if (unpushed)
+			tooltip += QStringLiteral("\nNot pushed to the upstream yet");
+		return tooltip;
+	}
 	default:
 		return {};
 	}

@@ -3,6 +3,7 @@
 #include "gitparsers.h"
 
 #include <QAbstractTableModel>
+#include <QSet>
 
 #include <vector>
 
@@ -23,6 +24,10 @@ public:
 	// Hides every commit that does not contain `text` in its sha, author, refs, date or message.
 	// Empty text shows all of them again.
 	void setSearchText(const QString& text);
+	// Marks the commits the upstream has not seen. Its query is separate from the log's, so this may
+	// arrive before or after the commits, and it repaints rather than resets - a reset here would drop
+	// a selection the user made while it was in flight.
+	void setUnpushedShas(QSet<QString> shas);
 
 	// Row indexes address what is shown, so they mean the same thing with a search active as without.
 	[[nodiscard]] const CommitRecord& commitAt(int row) const { return _commits[size_t(_visible[size_t(row)])]; }
@@ -40,6 +45,7 @@ private:
 	std::vector<CommitRecord> _commits;
 	std::vector<int> _visible; // indexes into _commits, every one of them while the search is empty
 	QString _searchText;
+	QSet<QString> _unpushedShas;
 };
 
 // The files one commit touched. ChangedFilesModel cannot serve here: its rows carry the state of a

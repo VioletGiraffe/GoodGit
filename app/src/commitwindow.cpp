@@ -637,6 +637,7 @@ void CommitWindow::doPush(bool setUpstream)
 		if (result.ok)
 		{
 			_repo.refresh();
+			emit pushed();
 			return;
 		}
 		if (!setUpstream && QString::fromUtf8(result.err).contains(QLatin1String("no upstream")))
@@ -768,6 +769,7 @@ void CommitWindow::showHistoryWindow()
 	{
 		_historyWindow = new HistoryWindow(_repo.path(), this);
 		connect(this, &CommitWindow::committed, _historyWindow, &HistoryWindow::reload);
+		connect(this, &CommitWindow::pushed, _historyWindow, &HistoryWindow::refreshUnpushedMarks);
 	}
 	_historyWindow->show();
 	_historyWindow->raise();

@@ -22,18 +22,6 @@ QByteArray nulJoined(const QStringList& paths)
 	return data;
 }
 
-QStringList parseLines(const QByteArray& output)
-{
-	QStringList lines;
-	for (const QByteArray& line : output.split('\n'))
-	{
-		const QByteArray trimmed = line.trimmed();
-		if (!trimmed.isEmpty())
-			lines.push_back(QString::fromUtf8(trimmed));
-	}
-	return lines;
-}
-
 } // namespace
 
 struct Repository::RefreshRun
@@ -101,7 +89,7 @@ void Repository::refresh()
 				launch(_rootPath, { QStringLiteral("for-each-ref"), QStringLiteral("--points-at"), QStringLiteral("HEAD"),
 						QStringLiteral("--format=%(refname:short)"), QString::fromLatin1(refRoot) },
 					[this, run, local](const GitResult& r) {
-						QStringList names = parseLines(r.out);
+						QStringList names = parseLineList(r.out);
 						if (!local)
 							names.removeIf([](const QString& n) { return n.endsWith(QLatin1String("/HEAD")); });
 						(local ? _state.localBranchesAtHead : _state.remoteBranchesAtHead) = names;
@@ -122,7 +110,7 @@ void Repository::refresh()
 		{
 			launch(_rootPath, { QStringLiteral("log"), QStringLiteral("--oneline"), QStringLiteral("--no-decorate"),
 					QStringLiteral("-n"), QString::number(MaxUnpushedLogEntries), QStringLiteral("@{upstream}..HEAD") },
-				[this](const GitResult& r) { _state.unpushedSubjects = parseLines(r.out); }, phase3);
+				[this](const GitResult& r) { _state.unpushedSubjects = parseLineList(r.out); }, phase3);
 		}
 
 		if (run->pendingJobs == 0)
@@ -415,6 +403,12 @@ Git::Job* Repository::commitFileDiff(const QString& sha, const NameStatusEntry& 
 	if (!file.oldPath.isEmpty())
 		args.push_back(file.oldPath); // both sides, or the pathspec filters the rename out before -M can pair it up
 	return Git::run(_rootPath, std::move(args), context, std::move(onDone), {}, /*readOnlyQuery=*/true);
+}
+
+Git::Job* Repository::unpushedCommits(const QObject* context, Git::Callback onDone)
+{
+	return Git::run(_rootPath, { QStringLiteral("rev-list"), QStringLiteral("@{upstream}..HEAD") },
+		context, std::move(onDone), {}, /*readOnlyQuery=*/true);
 }
 
 void Repository::submodulePointerLog(const FileEntry& entry, const QObject* context, Git::Callback onDone)

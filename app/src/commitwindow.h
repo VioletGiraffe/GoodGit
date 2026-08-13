@@ -26,6 +26,7 @@ public:
 
 signals:
 	void committed(); // a commit succeeded here; the parent window refreshes its gitlink row off this
+	void pushed();    // a push succeeded here; the history window's unpushed marks are stale until it hears this
 
 protected:
 	bool eventFilter(QObject* watched, QEvent* event) override;

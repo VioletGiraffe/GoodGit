@@ -28,6 +28,9 @@ public:
 
 	// Re-runs the log query from scratch. The commit window calls this after committing here.
 	void reload();
+	// Re-reads which commits are unpushed, leaving the list and the selection alone - a push changes
+	// nothing else, so the commit window calls this rather than reload() after one.
+	void refreshUnpushedMarks();
 
 protected:
 	bool eventFilter(QObject* watched, QEvent* event) override;
@@ -69,6 +72,7 @@ private:
 	DiffHighlighter* _diffHighlighter = nullptr;
 
 	QPointer<Git::Job> _logJob;
+	QPointer<Git::Job> _unpushedJob;
 	QPointer<Git::Job> _filesJob;
 	QPointer<Git::Job> _diffJob;
 };

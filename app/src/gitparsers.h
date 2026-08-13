@@ -37,6 +37,9 @@ struct NameStatusEntry
 // Input: any NUL-separated path list (`ls-files -z` and friends)
 [[nodiscard]] QStringList parseZList(const QByteArray& output);
 
+// Input: any newline-separated list; blank lines and surrounding whitespace are dropped
+[[nodiscard]] QStringList parseLineList(const QByteArray& output);
+
 // Input: `ls-files --stage -z` output. Returns the paths of the gitlink entries - that is, the submodules
 [[nodiscard]] QStringList parseGitlinkPaths(const QByteArray& lsFilesOutput);
 

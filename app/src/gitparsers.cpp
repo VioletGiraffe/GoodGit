@@ -86,6 +86,18 @@ QStringList parseZList(const QByteArray& output)
 	return paths;
 }
 
+QStringList parseLineList(const QByteArray& output)
+{
+	QStringList lines;
+	for (const QByteArray& line : output.split('\n'))
+	{
+		const QByteArray trimmed = line.trimmed();
+		if (!trimmed.isEmpty())
+			lines.push_back(QString::fromUtf8(trimmed));
+	}
+	return lines;
+}
+
 QStringList parseGitlinkPaths(const QByteArray& lsFilesOutput)
 {
 	// Record format: <mode> <sha1> <stage>\t<path>, mode 160000 being a gitlink
