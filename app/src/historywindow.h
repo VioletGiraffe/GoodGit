@@ -25,6 +25,8 @@ class HistoryWindow final : public QMainWindow
 
 public:
 	HistoryWindow(const QString& repoPath, QWidget* parent);
+	// The history of one repo-relative path, traced across renames
+	HistoryWindow(const QString& repoPath, const QString& filePath, QWidget* parent);
 
 	// Re-runs the log query from scratch. The commit window calls this after committing here.
 	void reload();
@@ -42,6 +44,8 @@ private:
 	void applySearch();
 	void updateCountLabel();
 	void showCommitContextMenu(const QPoint& pos);
+	void showFileContextMenu(const QPoint& pos);
+	void openFileHistory(const QString& filePath);
 	void showFilesForCurrentCommit();
 	void showDiffForCurrentFile();
 	// The two kinds of content the right-hand pane holds; each owns whether the diff highlighting applies
@@ -50,6 +54,7 @@ private:
 
 private:
 	Repository _repo;
+	const QString _filePath; // empty for the whole repo; otherwise the one path the log is narrowed to
 	CommitLogModel _logModel;
 	CommitFilesModel _filesModel;
 
@@ -62,6 +67,7 @@ private:
 	QSplitter* _detailSplitter = nullptr; // file list beside the diff
 	QTreeView* _logView = nullptr;
 	QTreeView* _filesView = nullptr;
+	CLabelMidElision* _filePathLabel = nullptr; // shown only in a file history, which is otherwise indistinguishable
 	QLabel* _countLabel = nullptr;
 	QLineEdit* _searchEdit = nullptr;
 	QLabel* _fileCountLabel = nullptr;

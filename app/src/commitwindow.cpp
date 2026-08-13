@@ -836,6 +836,13 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 		window->show();
 	});
 	submoduleHistoryAction->setEnabled(entries.size() == 1 && entries.front().isSubmodule);
+	QAction* fileHistoryAction = menu.addAction(tr("View file history"), this, [this, entry = entries.front()] {
+		auto* window = new HistoryWindow(_repo.path(), entry.path, this);
+		window->show();
+	});
+	// Untracked files have no history to show, and a submodule's is its own repo's, offered above
+	fileHistoryAction->setEnabled(entries.size() == 1 && !entries.front().isSubmodule
+		&& entries.front().type != ChangeType::Untracked);
 	QAction* explorerAction = menu.addAction(tr("Show in Explorer"), this, [this, entry = entries.front()] {
 		const QString nativePath = QDir::toNativeSeparators(absolutePath(entry));
 #ifdef Q_OS_WIN

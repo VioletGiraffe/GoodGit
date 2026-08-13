@@ -385,12 +385,14 @@ Git::Job* Repository::diffAllChanges(const QObject* context, Git::Callback onDon
 	return Git::run(_rootPath, std::move(args), context, std::move(onDone), {}, /*readOnlyQuery=*/true);
 }
 
-Git::Job* Repository::commitLog(int maxCommits, const QObject* context, Git::Callback onDone)
+Git::Job* Repository::commitLog(int maxCommits, const QString& path, const QObject* context, Git::Callback onDone)
 {
-	return Git::run(_rootPath, { QStringLiteral("log"), QStringLiteral("-z"),
+	QStringList args = { QStringLiteral("log"), QStringLiteral("-z"),
 		QStringLiteral("--max-count=%1").arg(maxCommits),
-		QStringLiteral("--format=") + QLatin1String(CommitLogFormat) },
-		context, std::move(onDone), {}, /*readOnlyQuery=*/true);
+		QStringLiteral("--format=") + QLatin1String(CommitLogFormat) };
+	if (!path.isEmpty())
+		args << QStringLiteral("--follow") << QStringLiteral("--") << path; // --follow takes one path, which is all we ever pass
+	return Git::run(_rootPath, std::move(args), context, std::move(onDone), {}, /*readOnlyQuery=*/true);
 }
 
 Git::Job* Repository::commitFiles(const QString& sha, const QObject* context, Git::Callback onDone)

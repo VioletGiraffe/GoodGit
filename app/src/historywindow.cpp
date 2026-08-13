@@ -30,18 +30,28 @@ namespace {
 constexpr int InitialMaxCommits = 20000;
 constexpr qsizetype MaxDiffBytes = 2 * 1024 * 1024;
 constexpr int FileListWidth = 320;
+constexpr int MaxFilePathLabelWidth = 420; // beyond this the path elides rather than crowding the bar
 
 } // namespace
 
 HistoryWindow::HistoryWindow(const QString& repoPath, QWidget* parent) :
+	HistoryWindow(repoPath, {}, parent)
+{
+}
+
+HistoryWindow::HistoryWindow(const QString& repoPath, const QString& filePath, QWidget* parent) :
 	QMainWindow(parent, Qt::Window),
 	_repo{ repoPath },
+	_filePath{ filePath },
 	_maxCommits{ InitialMaxCommits }
 {
 	setAttribute(Qt::WA_DeleteOnClose);
-	setWindowTitle(tr("History - %1 - GoodGit").arg(_repo.name()));
+	setWindowTitle(_filePath.isEmpty()
+		? tr("History - %1 - GoodGit").arg(_repo.name())
+		: tr("History of %1 - %2 - GoodGit").arg(_filePath, _repo.name()));
 	buildUi();
 
+	// One geometry per repo, shared by its file histories: they are the same window in every other respect
 	const QString geometryKey = QStringLiteral("HistoryWindow_")
 		+ QString::fromLatin1(QCryptographicHash::hash(QDir::cleanPath(_repo.path()).toUtf8(), QCryptographicHash::Md5).toHex());
 	installEventFilter(new CPersistenceEnabler(geometryKey, this));
@@ -60,6 +70,12 @@ void HistoryWindow::buildUi()
 	logBar->setObjectName(QStringLiteral("repoBar"));
 	auto* logBarLayout = new QHBoxLayout(logBar);
 	logBarLayout->setContentsMargins(8, 6, 8, 6);
+	_filePathLabel = new CLabelMidElision;
+	_filePathLabel->setFont(monospaceFont());
+	_filePathLabel->setText(_filePath);
+	_filePathLabel->setToolTip(_filePath);
+	_filePathLabel->setMaximumWidth(MaxFilePathLabelWidth);
+	_filePathLabel->setVisible(!_filePath.isEmpty());
 	_countLabel = new QLabel;
 	_searchEdit = new QLineEdit;
 	_searchEdit->setPlaceholderText(tr("Search commits"));
@@ -72,6 +88,7 @@ void HistoryWindow::buildUi()
 	_loadMoreButton->setVisible(false);
 	auto* refreshButton = new QPushButton(tr("Refresh"));
 	refreshButton->setToolTip(QStringLiteral("F5"));
+	logBarLayout->addWidget(_filePathLabel);
 	logBarLayout->addWidget(_countLabel);
 	logBarLayout->addStretch();
 	logBarLayout->addWidget(_searchEdit);
@@ -114,6 +131,7 @@ void HistoryWindow::buildUi()
 	_filesView->setUniformRowHeights(true);
 	_filesView->setAllColumnsShowFocus(true);
 	_filesView->setSelectionBehavior(QAbstractItemView::SelectRows);
+	_filesView->setContextMenuPolicy(Qt::CustomContextMenu);
 	_filesView->header()->hide();
 	_filesView->header()->setSectionResizeMode(CommitFilesModel::StateColumn, QHeaderView::ResizeToContents);
 	_filesView->header()->setSectionResizeMode(CommitFilesModel::PathColumn, QHeaderView::Stretch);
@@ -177,6 +195,7 @@ void HistoryWindow::buildUi()
 	});
 	connect(_searchEdit, &QLineEdit::textChanged, this, &HistoryWindow::applySearch);
 	connect(_logView, &QWidget::customContextMenuRequested, this, &HistoryWindow::showCommitContextMenu);
+	connect(_filesView, &QWidget::customContextMenuRequested, this, &HistoryWindow::showFileContextMenu);
 	connect(_logView->selectionModel(), &QItemSelectionModel::currentChanged, this, &HistoryWindow::showFilesForCurrentCommit);
 	connect(_filesView->selectionModel(), &QItemSelectionModel::currentChanged, this, &HistoryWindow::showDiffForCurrentFile);
 
@@ -237,7 +256,7 @@ void HistoryWindow::reload()
 
 	refreshUnpushedMarks();
 	_countLabel->setText(tr("Loading..."));
-	_logJob = _repo.commitLog(_maxCommits, this, [this](const GitResult& result) {
+	_logJob = _repo.commitLog(_maxCommits, _filePath, this, [this](const GitResult& result) {
 		if (!result.ok)
 		{
 			_logCapped = false;
@@ -294,6 +313,27 @@ void HistoryWindow::showCommitContextMenu(const QPoint& pos)
 	menu.addAction(tr("Copy long hash"), this, [sha] { QApplication::clipboard()->setText(sha); });
 	menu.addAction(tr("Copy short hash"), this, [sha] { QApplication::clipboard()->setText(shortSha(sha)); });
 	menu.exec(_logView->viewport()->mapToGlobal(pos));
+}
+
+void HistoryWindow::showFileContextMenu(const QPoint& pos)
+{
+	const QModelIndex index = _filesView->indexAt(pos);
+	if (!index.isValid() || index.row() >= _filesModel.rowCount())
+		return;
+
+	// Read before exec() spins an event loop, which a completing query could reset the model under
+	const QString path = _filesModel.entryAt(index.row()).path;
+
+	QMenu menu{ this };
+	QAction* action = menu.addAction(tr("View file history"), this, [this, path] { openFileHistory(path); });
+	action->setEnabled(path != _filePath); // this window already is that file's history
+	menu.exec(_filesView->viewport()->mapToGlobal(pos));
+}
+
+void HistoryWindow::openFileHistory(const QString& filePath)
+{
+	auto* window = new HistoryWindow(_repo.path(), filePath, this);
+	window->show();
 }
 
 void HistoryWindow::showFilesForCurrentCommit()
