@@ -120,6 +120,32 @@ void CommitLogModel::setUnpushedShas(QSet<QString> shas)
 		emit dataChanged(index(0, 0), index(int(_visible.size()) - 1, ColumnCount - 1));
 }
 
+void CommitLogModel::setAddingOrRemovingShas(QSet<QString> shas)
+{
+	if (_addingOrRemovingShas == shas)
+		return;
+
+	_addingOrRemovingShas = std::move(shas);
+	if (!_visible.empty())
+		emit dataChanged(index(0, 0), index(int(_visible.size()) - 1, ColumnCount - 1));
+}
+
+int CommitLogModel::addingOrRemovingCount() const
+{
+	int count = 0;
+	for (const int commitIndex : _visible)
+		count += _addingOrRemovingShas.contains(_commits[size_t(commitIndex)].sha) ? 1 : 0;
+	return count;
+}
+
+int CommitLogModel::addingOrRemovingNotListedCount() const
+{
+	int listed = 0;
+	for (const CommitRecord& commit : _commits)
+		listed += _addingOrRemovingShas.contains(commit.sha) ? 1 : 0;
+	return int(_addingOrRemovingShas.size()) - listed;
+}
+
 void CommitLogModel::rebuildVisible()
 {
 	_visible.clear();
@@ -148,6 +174,7 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 
 	const CommitRecord& commit = commitAt(index.row());
 	const bool unpushed = _unpushedShas.contains(commit.sha);
+	const bool addsOrRemoves = _addingOrRemovingShas.contains(commit.sha);
 
 	switch (role)
 	{
@@ -155,13 +182,23 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 		switch (index.column())
 		{
 		case ShaColumn:     return shortSha(commit.sha);
-		case SubjectColumn: return subjectText(commit);
+		// The mark rides the subject because the sha column already carries the unpushed one, and a
+		// commit can be both
+		case SubjectColumn: return addsOrRemoves ? QStringLiteral("± ") + subjectText(commit) : subjectText(commit);
 		case AuthorColumn:  return commit.author;
 		case DateColumn:    return displayedDate(commit.date);
 		}
 		return {};
 	case Qt::FontRole:
 	{
+		if (index.column() == SubjectColumn)
+		{
+			if (!addsOrRemoves)
+				return {};
+			QFont font = QApplication::font();
+			font.setWeight(QFont::DemiBold);
+			return font;
+		}
 		if (index.column() != ShaColumn)
 			return {};
 		QFont font = monospaceFont();
@@ -181,6 +218,9 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 			tooltip += QStringLiteral("\nMerge of %1 parents").arg(commit.parents.size());
 		if (unpushed)
 			tooltip += QStringLiteral("\nNot pushed to the upstream yet");
+		if (!_addingOrRemovingShas.isEmpty())
+			tooltip += addsOrRemoves ? QStringLiteral("\nAdds or removes the search text")
+				: QStringLiteral("\nChanges a line containing the search text");
 		return tooltip;
 	}
 	default:

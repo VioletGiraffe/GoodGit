@@ -29,6 +29,43 @@ QStringList commitLogArgs(int maxCommits)
 		QStringLiteral("--format=") + QLatin1String(CommitLogFormat) };
 }
 
+// -G takes an extended regular expression and has no fixed-string mode - --fixed-strings does not reach
+// it - so a literal search term has to arrive pre-escaped, or `foo(` aborts the whole query. The set is
+// ERE's exactly: escaping beyond it would turn literals into operators under other flavours.
+QString escapedForExtendedRegex(const QString& text)
+{
+	static const QString metacharacters = QStringLiteral(".^$*+?()[]{}|\\");
+
+	QString escaped;
+	escaped.reserve(text.size() * 2);
+	for (const QChar c : text)
+	{
+		if (metacharacters.contains(c))
+			escaped += QLatin1Char('\\');
+		escaped += c;
+	}
+	return escaped;
+}
+
+// -S counts occurrences and takes the term literally; -G matches patch lines and takes a regex
+void appendPickaxe(QStringList& args, const Repository::LogQuery& query, bool countChangesOnly)
+{
+	if (query.pickaxe.isEmpty())
+		return;
+
+	args << (countChangesOnly ? QStringLiteral("-S") + query.pickaxe
+		: QStringLiteral("-G") + escapedForExtendedRegex(query.pickaxe));
+	if (query.ignoreCase)
+		args << QStringLiteral("-i");
+}
+
+// The pathspec closes the argument list, so everything else has to be in place first
+void appendPathLimit(QStringList& args, const Repository::LogQuery& query)
+{
+	if (!query.path.isEmpty())
+		args << QStringLiteral("--follow") << QStringLiteral("--") << query.path; // --follow takes the one path we ever pass
+}
+
 } // namespace
 
 struct Repository::RefreshRun
@@ -398,11 +435,20 @@ Git::Job* Repository::diffAllChanges(const QObject* context, Git::Callback onDon
 	return Git::run(_rootPath, std::move(args), context, std::move(onDone), {}, /*readOnlyQuery=*/true);
 }
 
-Git::Job* Repository::commitLog(int maxCommits, const QString& path, const QObject* context, Git::Callback onDone)
+Git::Job* Repository::commitLog(const LogQuery& query, const QObject* context, Git::Callback onDone)
 {
-	QStringList args = commitLogArgs(maxCommits);
-	if (!path.isEmpty())
-		args << QStringLiteral("--follow") << QStringLiteral("--") << path; // --follow takes one path, which is all we ever pass
+	QStringList args = commitLogArgs(query.maxCommits);
+	appendPickaxe(args, query, /*countChangesOnly=*/false);
+	appendPathLimit(args, query);
+	return Git::run(_rootPath, std::move(args), context, std::move(onDone), {}, /*readOnlyQuery=*/true);
+}
+
+Git::Job* Repository::commitsAddingOrRemovingText(const LogQuery& query, const QObject* context, Git::Callback onDone)
+{
+	QStringList args = { QStringLiteral("log"), QStringLiteral("--max-count=%1").arg(query.maxCommits),
+		QStringLiteral("--format=%H") };
+	appendPickaxe(args, query, /*countChangesOnly=*/true);
+	appendPathLimit(args, query);
 	return Git::run(_rootPath, std::move(args), context, std::move(onDone), {}, /*readOnlyQuery=*/true);
 }
 

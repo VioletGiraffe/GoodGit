@@ -77,8 +77,17 @@ re-run costs. The only alternative is streaming one `log` process, which needs t
 Search runs entirely in memory, over the records already loaded - sha, author, refs, date and message
 are all held there, so no git process is involved and non-matching rows are simply hidden. This is why
 a miss is reported against the loaded count rather than as "not found": the commit may just be older
-than the limit. Searching diff *content* is the one thing the records cannot answer; that needs the
-pickaxe (`log -S`), a query rather than a filter.
+than the limit.
+
+Searching diff *content* is the one thing the records cannot answer, so "Find in contents" is a query,
+not a filter: it re-runs the log and replaces the list. It is one search reported at two strengths.
+`-G` lists every commit that changed a line containing the text; `-S`, run beside it, yields the shas
+where the number of occurrences changed - the text genuinely arriving or leaving rather than being
+edited around - and those rows are marked. `-S` results are otherwise a subset of `-G`'s, except inside
+binary files, which `-G` cannot see for want of patch text; those are counted and disclosed rather than
+silently dropped. **`-G` is always an extended regular expression** and has no fixed-string mode
+(`--fixed-strings` does not reach it), so a literal term is escaped before it goes in - unescaped, `foo(`
+aborts the query outright.
 
 Commits the upstream has not seen are marked in the accent color, from a `rev-list @{upstream}..HEAD`
 run beside the log query. Reachability has to be asked of git: position in a date-ordered list does not

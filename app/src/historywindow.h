@@ -6,6 +6,8 @@
 #include <QMainWindow>
 #include <QPointer>
 
+class QCheckBox;
+class QFrame;
 class QLabel;
 class QLineEdit;
 class QPlainTextEdit;
@@ -43,6 +45,8 @@ private:
 
 	void applySearch();
 	void updateCountLabel();
+	void showPickaxePopup();
+	void runPickaxe(const QString& text, bool ignoreCase);
 	void showCommitContextMenu(const QPoint& pos);
 	void showFileContextMenu(const QPoint& pos);
 	void openFileHistory(const QString& filePath);
@@ -54,14 +58,15 @@ private:
 
 private:
 	Repository _repo;
-	const QString _filePath; // empty for the whole repo; otherwise the one path the log is narrowed to
 	CommitLogModel _logModel;
 	CommitFilesModel _filesModel;
 
-	// Widened by Load more. A date-ordered walk cannot be resumed from a cursor, so widening it
-	// means re-running the whole query - see doc/ARCHITECTURE.md.
-	int _maxCommits;
+	// What this window shows. maxCommits is widened by Load more, which re-runs the whole query: a
+	// date-ordered walk cannot be resumed from a cursor - see doc/ARCHITECTURE.md. The path is fixed
+	// at construction; the pickaxe is not.
+	Repository::LogQuery _query;
 	bool _logCapped = false; // the last query returned its full limit, so older commits exist unread
+	bool _logLoaded = false; // the marks query can land first, and its counts mean nothing until this
 
 	QSplitter* _splitter = nullptr;       // log above, the commit's detail below
 	QSplitter* _detailSplitter = nullptr; // file list beside the diff
@@ -70,6 +75,10 @@ private:
 	CLabelMidElision* _filePathLabel = nullptr; // shown only in a file history, which is otherwise indistinguishable
 	QLabel* _countLabel = nullptr;
 	QLineEdit* _searchEdit = nullptr;
+	QPushButton* _pickaxeButton = nullptr;
+	QFrame* _pickaxePopup = nullptr; // built on first use; Qt::Popup, so a click outside dismisses it
+	QLineEdit* _pickaxeEdit = nullptr;
+	QCheckBox* _pickaxeIgnoreCaseBox = nullptr;
 	QLabel* _fileCountLabel = nullptr;
 	QPushButton* _loadMoreButton = nullptr;
 	CLabelMidElision* _diffPathLabel = nullptr;
@@ -78,6 +87,7 @@ private:
 	DiffHighlighter* _diffHighlighter = nullptr;
 
 	QPointer<Git::Job> _logJob;
+	QPointer<Git::Job> _pickaxeJob;
 	QPointer<Git::Job> _unpushedJob;
 	QPointer<Git::Job> _filesJob;
 	QPointer<Git::Job> _diffJob;

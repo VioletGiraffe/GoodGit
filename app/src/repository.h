@@ -91,10 +91,22 @@ public:
 	// One `-U0` diff of every change at once; feeds the message completion word pool
 	Git::Job* diffAllChanges(const QObject* context, Git::Callback onDone);
 
+	// Everything one history view is showing, and every parameter of the `git log` behind it
+	struct LogQuery
+	{
+		int maxCommits = 0;
+		QString path;    // empty: the whole repo. Otherwise the walk follows this one path across renames
+		QString pickaxe; // empty: no content search. A literal string - never a pattern, whatever it contains
+		bool ignoreCase = true;
+	};
+
 	// At most maxCommits reachable from HEAD, newest first. Widening the window means re-running with
 	// a larger cap: a date-ordered walk has no resumable cursor (doc/ARCHITECTURE.md).
-	// A non-empty path narrows the walk to the commits that touched it, traced across renames.
-	Git::Job* commitLog(int maxCommits, const QString& path, const QObject* context, Git::Callback onDone);
+	// With a pickaxe this lists every commit that changed a line containing the text.
+	Git::Job* commitLog(const LogQuery& query, const QObject* context, Git::Callback onDone);
+	// The narrower half of a pickaxe: commits where the number of occurrences changed, so the text was
+	// genuinely added or removed rather than merely edited around. Shas only, as parseLineList input.
+	Git::Job* commitsAddingOrRemovingText(const LogQuery& query, const QObject* context, Git::Callback onDone);
 	// The files one commit touched, as parseNameStatusZ input. Empty for a merge - git shows no diff
 	// for one without --cc - so detect merges from the parent count, not from an empty result.
 	// What the upstream has and HEAD does not, newest first, as parseCommitLog input. Compares against

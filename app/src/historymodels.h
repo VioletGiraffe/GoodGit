@@ -28,6 +28,14 @@ public:
 	// arrive before or after the commits, and it repaints rather than resets - a reset here would drop
 	// a selection the user made while it was in flight.
 	void setUnpushedShas(QSet<QString> shas);
+	// The pickaxe's narrower half. Applied like the unpushed set - its own query, so it may land either
+	// side of the commits, and it repaints rather than resets.
+	void setAddingOrRemovingShas(QSet<QString> shas);
+
+	[[nodiscard]] int addingOrRemovingCount() const; // of the rows on show
+	// Of the set, the ones the listing does not contain at all: -S reaches inside binary files, where
+	// -G has no patch text to match, so those commits have no row to mark.
+	[[nodiscard]] int addingOrRemovingNotListedCount() const;
 
 	// Row indexes address what is shown, so they mean the same thing with a search active as without.
 	[[nodiscard]] const CommitRecord& commitAt(int row) const { return _commits[size_t(_visible[size_t(row)])]; }
@@ -46,6 +54,7 @@ private:
 	std::vector<int> _visible; // indexes into _commits, every one of them while the search is empty
 	QString _searchText;
 	QSet<QString> _unpushedShas;
+	QSet<QString> _addingOrRemovingShas;
 };
 
 // The files one commit touched. ChangedFilesModel cannot serve here: its rows carry the state of a

@@ -6,8 +6,10 @@
 
 #include "widgets/clabelmidelision.h"
 #include "widgets/cpersistentwindow.h"
+#include "widgets/widgetutils.h"
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QClipboard>
 #include <QCryptographicHash>
 #include <QDir>
@@ -31,6 +33,8 @@ constexpr int InitialMaxCommits = 20000;
 constexpr qsizetype MaxDiffBytes = 2 * 1024 * 1024;
 constexpr int FileListWidth = 320;
 constexpr int MaxFilePathLabelWidth = 420; // beyond this the path elides rather than crowding the bar
+constexpr int PickaxeEditWidth = 320;
+constexpr qsizetype MaxShownPickaxeTerm = 24;
 
 } // namespace
 
@@ -42,13 +46,12 @@ HistoryWindow::HistoryWindow(const QString& repoPath, QWidget* parent) :
 HistoryWindow::HistoryWindow(const QString& repoPath, const QString& filePath, QWidget* parent) :
 	QMainWindow(parent, Qt::Window),
 	_repo{ repoPath },
-	_filePath{ filePath },
-	_maxCommits{ InitialMaxCommits }
+	_query{ .maxCommits = InitialMaxCommits, .path = filePath }
 {
 	setAttribute(Qt::WA_DeleteOnClose);
-	setWindowTitle(_filePath.isEmpty()
+	setWindowTitle(_query.path.isEmpty()
 		? tr("History - %1 - GoodGit").arg(_repo.name())
-		: tr("History of %1 - %2 - GoodGit").arg(_filePath, _repo.name()));
+		: tr("History of %1 - %2 - GoodGit").arg(_query.path, _repo.name()));
 	buildUi();
 
 	// One geometry per repo, shared by its file histories: they are the same window in every other respect
@@ -72,10 +75,10 @@ void HistoryWindow::buildUi()
 	logBarLayout->setContentsMargins(8, 6, 8, 6);
 	_filePathLabel = new CLabelMidElision;
 	_filePathLabel->setFont(monospaceFont());
-	_filePathLabel->setText(_filePath);
-	_filePathLabel->setToolTip(_filePath);
+	_filePathLabel->setText(_query.path);
+	_filePathLabel->setToolTip(_query.path);
 	_filePathLabel->setMaximumWidth(MaxFilePathLabelWidth);
-	_filePathLabel->setVisible(!_filePath.isEmpty());
+	_filePathLabel->setVisible(!_query.path.isEmpty());
 	_countLabel = new QLabel;
 	_searchEdit = new QLineEdit;
 	_searchEdit->setPlaceholderText(tr("Search commits"));
@@ -83,6 +86,8 @@ void HistoryWindow::buildUi()
 	_searchEdit->setClearButtonEnabled(true);
 	_searchEdit->setMinimumWidth(220);
 	_searchEdit->installEventFilter(this);
+	_pickaxeButton = new QPushButton(tr("Find in contents..."));
+	_pickaxeButton->setToolTip(tr("Re-read the log, keeping only the commits whose diff touches the text"));
 	_loadMoreButton = new QPushButton(tr("Load more"));
 	_loadMoreButton->setToolTip(tr("Re-read the log with twice the limit"));
 	_loadMoreButton->setVisible(false);
@@ -92,6 +97,7 @@ void HistoryWindow::buildUi()
 	logBarLayout->addWidget(_countLabel);
 	logBarLayout->addStretch();
 	logBarLayout->addWidget(_searchEdit);
+	logBarLayout->addWidget(_pickaxeButton);
 	logBarLayout->addWidget(_loadMoreButton);
 	logBarLayout->addWidget(refreshButton);
 	logLayout->addWidget(logBar);
@@ -190,10 +196,11 @@ void HistoryWindow::buildUi()
 
 	connect(refreshButton, &QPushButton::clicked, this, &HistoryWindow::reload);
 	connect(_loadMoreButton, &QPushButton::clicked, this, [this] {
-		_maxCommits *= 2;
+		_query.maxCommits *= 2;
 		reload();
 	});
 	connect(_searchEdit, &QLineEdit::textChanged, this, &HistoryWindow::applySearch);
+	connect(_pickaxeButton, &QPushButton::clicked, this, &HistoryWindow::showPickaxePopup);
 	connect(_logView, &QWidget::customContextMenuRequested, this, &HistoryWindow::showCommitContextMenu);
 	connect(_filesView, &QWidget::customContextMenuRequested, this, &HistoryWindow::showFileContextMenu);
 	connect(_logView->selectionModel(), &QItemSelectionModel::currentChanged, this, &HistoryWindow::showFilesForCurrentCommit);
@@ -253,10 +260,26 @@ void HistoryWindow::reload()
 {
 	if (_logJob)
 		_logJob->cancel();
+	if (_pickaxeJob)
+		_pickaxeJob->cancel();
 
 	refreshUnpushedMarks();
+	_logLoaded = false;
 	_countLabel->setText(tr("Loading..."));
-	_logJob = _repo.commitLog(_maxCommits, _filePath, this, [this](const GitResult& result) {
+
+	// The narrower -S half runs beside the listing, marking within it rather than producing a list of
+	// its own; the two are independent walks, so they overlap instead of queueing behind each other
+	_logModel.setAddingOrRemovingShas({});
+	if (!_query.pickaxe.isEmpty())
+	{
+		_pickaxeJob = _repo.commitsAddingOrRemovingText(_query, this, [this](const GitResult& result) {
+			const QStringList shas = result.ok ? parseLineList(result.out) : QStringList{};
+			_logModel.setAddingOrRemovingShas(QSet<QString>{ shas.begin(), shas.end() });
+			updateCountLabel();
+		});
+	}
+
+	_logJob = _repo.commitLog(_query, this, [this](const GitResult& result) {
 		if (!result.ok)
 		{
 			_logCapped = false;
@@ -269,10 +292,11 @@ void HistoryWindow::reload()
 
 		std::vector<CommitRecord> commits = parseCommitLog(result.out);
 		// Exactly the limit means the walk was cut short, not that history ends here
-		_logCapped = int(commits.size()) >= _maxCommits;
+		_logCapped = int(commits.size()) >= _query.maxCommits;
 		_loadMoreButton->setVisible(_logCapped);
 
 		_logModel.setCommits(std::move(commits)); // re-applies the active search to the new records
+		_logLoaded = true;
 		updateCountLabel();
 		if (_logModel.rowCount() > 0)
 			_logView->setCurrentIndex(_logModel.index(0, CommitLogModel::ShaColumn));
@@ -291,12 +315,90 @@ void HistoryWindow::applySearch()
 
 void HistoryWindow::updateCountLabel()
 {
+	if (!_logLoaded)
+		return; // the marks can arrive first, and their counts would be measured against an empty list
+
 	const int shown = _logModel.rowCount();
 	const int total = _logModel.totalCount();
 
-	const QString counts = shown == total ? tr("%1 commits").arg(total) : tr("%1 of %2 commits").arg(shown).arg(total);
+	QString text = shown == total ? tr("%1 commits").arg(total) : tr("%1 of %2 commits").arg(shown).arg(total);
 	// Kept visible during a search too: finding nothing may only mean the commit is older than the limit
-	_countLabel->setText(_logCapped ? tr("%1, more to load").arg(counts) : counts);
+	if (_logCapped)
+		text = tr("%1, more to load").arg(text);
+
+	if (!_query.pickaxe.isEmpty())
+	{
+		text = tr("%1, %2 adding or removing it").arg(text).arg(_logModel.addingOrRemovingCount());
+		// -S reaches into binary files, which -G cannot list for want of patch text to match
+		if (const int unlisted = _logModel.addingOrRemovingNotListedCount(); unlisted > 0)
+			text = tr("%1 (+%2 in binary files, not listed)").arg(text).arg(unlisted);
+	}
+	_countLabel->setText(text);
+}
+
+void HistoryWindow::showPickaxePopup()
+{
+	if (!_pickaxePopup)
+	{
+		_pickaxePopup = new QFrame(this, Qt::Popup);
+		_pickaxePopup->setFrameShape(QFrame::StyledPanel);
+		auto* popupLayout = new QVBoxLayout(_pickaxePopup);
+		popupLayout->setContentsMargins(8, 8, 8, 8);
+		popupLayout->setSpacing(6);
+
+		auto* caption = new QLabel(tr("List the commits whose diff touches this text:"));
+		_pickaxeEdit = new QLineEdit;
+		_pickaxeEdit->setPlaceholderText(tr("Text to find, taken literally"));
+		_pickaxeEdit->setMinimumWidth(PickaxeEditWidth);
+		_pickaxeIgnoreCaseBox = new QCheckBox(tr("Ignore case"));
+		auto* findButton = new QPushButton(tr("Find"));
+		auto* clearButton = new QPushButton(tr("Clear"));
+
+		auto* buttonLayout = new QHBoxLayout;
+		buttonLayout->addWidget(_pickaxeIgnoreCaseBox);
+		buttonLayout->addStretch();
+		buttonLayout->addWidget(clearButton);
+		buttonLayout->addWidget(findButton);
+
+		popupLayout->addWidget(caption);
+		popupLayout->addWidget(_pickaxeEdit);
+		popupLayout->addLayout(buttonLayout);
+
+		const auto find = [this] { runPickaxe(_pickaxeEdit->text(), _pickaxeIgnoreCaseBox->isChecked()); };
+		connect(findButton, &QPushButton::clicked, this, find);
+		connect(_pickaxeEdit, &QLineEdit::returnPressed, this, find);
+		connect(clearButton, &QPushButton::clicked, this, [this] {
+			_pickaxeEdit->clear();
+			runPickaxe({}, _pickaxeIgnoreCaseBox->isChecked()); // clearing the term is not a reason to undo the choice
+		});
+	}
+
+	_pickaxeEdit->setText(_query.pickaxe);
+	_pickaxeIgnoreCaseBox->setChecked(_query.ignoreCase);
+	_pickaxePopup->adjustSize();
+	WidgetUtils::placeCenteredOn(_pickaxePopup, this); // its button is in the top-right corner, too far out to read from
+	_pickaxePopup->show();
+	_pickaxeEdit->setFocus();
+	_pickaxeEdit->selectAll();
+}
+
+void HistoryWindow::runPickaxe(const QString& text, bool ignoreCase)
+{
+	_pickaxePopup->hide();
+	_logView->setFocus(); // the results are what the user turns to next, and the popup restores focus to its button
+
+	if (_query.pickaxe == text && _query.ignoreCase == ignoreCase)
+		return; // re-running the identical walk would cost seconds and change nothing
+
+	_query.pickaxe = text;
+	_query.ignoreCase = ignoreCase;
+
+	// The button doubles as the indicator that a content search is narrowing the list, so it carries the
+	// term - clipped, since a whole pasted line would push the rest of the bar off the window
+	const QString shown = text.size() > MaxShownPickaxeTerm ? text.left(MaxShownPickaxeTerm) + QStringLiteral("...") : text;
+	_pickaxeButton->setText(text.isEmpty() ? tr("Find in contents...") : tr("Contents: %1").arg(shown));
+	_pickaxeButton->setToolTip(text.isEmpty() ? tr("Re-read the log, keeping only the commits whose diff touches the text") : text);
+	reload();
 }
 
 void HistoryWindow::showCommitContextMenu(const QPoint& pos)
@@ -326,7 +428,7 @@ void HistoryWindow::showFileContextMenu(const QPoint& pos)
 
 	QMenu menu{ this };
 	QAction* action = menu.addAction(tr("View file history"), this, [this, path] { openFileHistory(path); });
-	action->setEnabled(path != _filePath); // this window already is that file's history
+	action->setEnabled(path != _query.path); // this window already is that file's history
 	menu.exec(_filesView->viewport()->mapToGlobal(pos));
 }
 

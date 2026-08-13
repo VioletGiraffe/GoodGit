@@ -10,6 +10,7 @@
 #include "dialogs/messagebox.h"
 #include "widgets/clabelmidelision.h"
 #include "widgets/cpersistentwindow.h"
+#include "widgets/widgetutils.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -740,7 +741,7 @@ void CommitWindow::showIncomingCommits(const std::vector<CommitRecord>& commits,
 	else
 		_incomingPopup->resize(IncomingPopupWidth, IncomingPopupHeight);
 
-	_incomingPopup->move(_peekButton->mapToGlobal(QPoint{ 0, _peekButton->height() }));
+	WidgetUtils::placeUnder(_incomingPopup, _peekButton);
 	_incomingPopup->show();
 }
 
