@@ -384,6 +384,12 @@ void Repository::unAdd(const QStringList& paths, Git::Callback onDone)
 		this, std::move(onDone), nulJoined(paths));
 }
 
+void Repository::discardChanges(const QStringList& pathspec, Git::Callback onDone)
+{
+	Git::run(_rootPath, { QStringLiteral("restore"), QStringLiteral("--source=HEAD"), QStringLiteral("--staged"), QStringLiteral("--worktree"),
+		QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") }, this, std::move(onDone), nulJoined(pathspec));
+}
+
 void Repository::checkoutBranch(const QString& branch, Git::Callback onDone)
 {
 	Git::run(_rootPath, { QStringLiteral("checkout"), branch }, this, std::move(onDone));

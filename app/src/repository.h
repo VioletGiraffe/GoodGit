@@ -78,6 +78,12 @@ public:
 	void addToIndex(const QStringList& paths, Git::Callback onDone);
 	void unAdd(const QStringList& paths, Git::Callback onDone);
 
+	// Restores the pathspec (both sides of every rename) to HEAD, in the index and the worktree alike.
+	// Three things the caller must screen for: a path git does not know aborts the whole command, a path
+	// in the index but not in HEAD is deleted outright, and a submodule is checked out to the recorded
+	// commit - overwriting uncommitted changes inside it without a word, and leaving it detached.
+	void discardChanges(const QStringList& pathspec, Git::Callback onDone);
+
 	void checkoutBranch(const QString& branch, Git::Callback onDone);
 	// Creates `localName` tracking `remoteBranch` (e.g. "origin/master") at HEAD, without moving the working tree
 	void createTrackingBranch(const QString& localName, const QString& remoteBranch, Git::Callback onDone);

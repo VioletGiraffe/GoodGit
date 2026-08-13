@@ -52,6 +52,8 @@ std::vector<NameStatusEntry> parseNameStatusZ(const QByteArray& diffOutput)
 		case 'A': entry.type = ChangeType::Added; break;
 		case 'D': entry.type = ChangeType::Deleted; break;
 		case 'T': entry.type = ChangeType::TypeChanged; break;
+		// The refresh never sees U: `diff --name-status HEAD` calls an unmerged path M, so a conflicted
+		// file reaches the list as Modified. Nothing downstream may key off Conflicted to find one.
 		case 'U': entry.type = ChangeType::Conflicted; break;
 		case 'R': case 'C': entry.type = ChangeType::Renamed; break;
 		default:  entry.type = ChangeType::Modified; break;
