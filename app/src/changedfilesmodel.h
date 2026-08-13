@@ -62,5 +62,6 @@ private:
 
 	void applyChecked(const std::function<bool(const FileEntry&)>& shouldCheck);
 
+private:
 	std::vector<Row> _rows;
 };

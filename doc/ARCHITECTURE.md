@@ -91,6 +91,10 @@ hook output is the only thing that makes a rejected commit diagnosable. Push fai
 upstream" (offers `--set-upstream origin HEAD`); non-fast-forward is reported plainly, with no offer to
 pull or force.
 
+Push additionally logs its whole report, success or failure, to a pane under the diff view, hidden until
+the first push of the session. Entries accumulate; each is written when the process exits, not as it runs
+(see the streaming note above).
+
 Delete goes to the OS trash (`QFile::moveToTrash`), never falls back to permanent deletion, and un-adds `A`
 rows first so the index never points at a vanished file. The external difftool is launched via
 `QProcess::startDetached`, bypassing the job queue: difftool blocks git until the tool closes, and a queue

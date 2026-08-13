@@ -24,12 +24,15 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMenu>
+#include <QPlainTextEdit>
 #include <QProcess>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QScrollBar>
 #include <QSet>
 #include <QShortcut>
 #include <QSplitter>
+#include <QTime>
 #include <QTreeView>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -287,6 +290,29 @@ void CommitWindow::buildUi()
 	new DiffHighlighter(_diffView->document());
 	rightLayout->addWidget(_diffView, 1);
 
+	_pushLogPane = new QWidget;
+	auto* pushLogLayout = new QVBoxLayout(_pushLogPane);
+	pushLogLayout->setContentsMargins(0, 0, 0, 0);
+	pushLogLayout->setSpacing(0);
+	auto* pushLogHeader = new QFrame;
+	pushLogHeader->setObjectName(QStringLiteral("pushLogHeader"));
+	auto* pushLogHeaderLayout = new QHBoxLayout(pushLogHeader);
+	pushLogHeaderLayout->setContentsMargins(8, 6, 8, 6);
+	pushLogHeaderLayout->addWidget(new QLabel(tr("Push output")));
+	pushLogHeaderLayout->addStretch();
+	auto* hidePushLogButton = new QPushButton(tr("Hide"));
+	pushLogHeaderLayout->addWidget(hidePushLogButton);
+	pushLogLayout->addWidget(pushLogHeader);
+	_pushLogView = new QPlainTextEdit;
+	_pushLogView->setReadOnly(true);
+	_pushLogView->setFont(monospaceFont());
+	_pushLogView->setMaximumBlockCount(500); // entries accumulate for the session; oldest drop out
+	_pushLogView->setMinimumHeight(70);
+	_pushLogView->setMaximumHeight(170);
+	pushLogLayout->addWidget(_pushLogView);
+	rightLayout->addWidget(_pushLogPane);
+	_pushLogPane->hide();
+
 	_splitter = new QSplitter(Qt::Horizontal);
 	_splitter->setChildrenCollapsible(false);
 	_splitter->setHandleWidth(1);
@@ -302,7 +328,8 @@ void CommitWindow::buildUi()
 	resize(1180, 740);
 
 	connect(_refreshButton, &QPushButton::clicked, &_repo, &Repository::refresh);
-	connect(_pushButton, &QPushButton::clicked, this, &CommitWindow::doPush);
+	connect(_pushButton, &QPushButton::clicked, this, [this] { doPush(/*setUpstream=*/false); });
+	connect(hidePushLogButton, &QPushButton::clicked, _pushLogPane, &QWidget::hide);
 	connect(_commitButton, &QPushButton::clicked, this, [this] { startCommit(false); });
 	connect(_commitPushButton, &QPushButton::clicked, this, [this] { startCommit(true); });
 	connect(_messageEdit, &QPlainTextEdit::textChanged, this, &CommitWindow::updateButtons);
@@ -584,7 +611,7 @@ void CommitWindow::doCommit(bool pushAfterwards)
 		emit committed();
 		_repo.refresh();
 		if (pushAfterwards)
-			doPush();
+			doPush(/*setUpstream=*/false);
 	};
 
 	if (_repo.state().operationInProgress())
@@ -593,37 +620,54 @@ void CommitWindow::doCommit(bool pushAfterwards)
 		_repo.commit(message, pathspec, untracked, onDone);
 }
 
-void CommitWindow::doPush()
+void CommitWindow::doPush(bool setUpstream)
 {
 	_pushButton->setEnabled(false);
-	_repo.push([this](const GitResult& result) {
+	const auto onDone = [this, setUpstream](const GitResult& result) {
 		_pushButton->setEnabled(true);
+		// A label for the log, not the literal argv: the invocation invariants and --recurse-submodules are noise there
+		appendPushLog(setUpstream ? QStringLiteral("git push --set-upstream origin HEAD") : QStringLiteral("git push"), result);
+
 		if (result.ok)
 		{
 			_repo.refresh();
 			return;
 		}
-
-		const QString err = QString::fromUtf8(result.err);
-		if (err.contains(QLatin1String("no upstream")))
+		if (!setUpstream && QString::fromUtf8(result.err).contains(QLatin1String("no upstream")))
 		{
 			const auto answer = MessageBox::question(this, tr("No upstream branch"),
 				tr("The current branch has no upstream configured. Push it to 'origin' and set the upstream?"),
 				{ tr("Push and set upstream") });
-			if (answer != 0)
-				return;
-			_pushButton->setEnabled(false);
-			_repo.pushSetUpstream([this](const GitResult& upstreamResult) {
-				_pushButton->setEnabled(true);
-				if (upstreamResult.ok)
-					_repo.refresh();
-				else
-					showGitError(tr("Push failed"), upstreamResult);
-			});
+			if (answer == 0)
+				doPush(/*setUpstream=*/true);
+			return;
 		}
-		else
-			showGitError(tr("Push failed"), result);
-	});
+		showGitError(tr("Push failed"), result);
+	};
+
+	if (setUpstream)
+		_repo.pushSetUpstream(onDone);
+	else
+		_repo.push(onDone);
+}
+
+void CommitWindow::appendPushLog(const QString& commandLabel, const GitResult& result)
+{
+	QStringList entry{ QStringLiteral("[%1] %2").arg(QTime::currentTime().toString(QStringLiteral("HH:mm:ss")), commandLabel) };
+	// git push reports everything - updated refs, remote messages, errors - on stderr; stdout is normally empty
+	for (const QByteArray& stream : { result.err, result.out })
+	{
+		if (const QString text = QString::fromUtf8(stream).trimmed(); !text.isEmpty())
+			entry << text;
+	}
+	if (entry.size() == 1)
+		entry << (result.launchFailed ? result.errorText() : tr("(no output; exit code %1)").arg(result.exitCode));
+
+	_pushLogPane->show(); // before the append: the scroll below needs a laid-out viewport
+	if (_pushLogView->blockCount() > 1) // blank line between entries; an empty document still has one block
+		_pushLogView->appendPlainText({});
+	_pushLogView->appendPlainText(entry.join(QLatin1Char('\n')));
+	_pushLogView->verticalScrollBar()->setValue(_pushLogView->verticalScrollBar()->maximum());
 }
 
 void CommitWindow::showDiffForCurrentRow()

@@ -27,8 +27,9 @@ QLabel#branchChip { background: @pane@; color: @text@; border: 1px solid @border
 QLabel#aheadLabel { color: @accent@; font-weight: 600; }
 QFrame#counterBar { background: @winBg@; border-bottom: 1px solid @border@; }
 QFrame#diffHeader { background: @winBg@; border-bottom: 1px solid @border@; }
+QFrame#pushLogHeader { background: @winBg@; border-top: 1px solid @border@; border-bottom: 1px solid @border@; }
 QLabel#diffTagLabel { color: @dim@; }
-QWidget#messageHeader QLabel { color: @dim@; }
+QWidget#messageHeader QLabel, QFrame#pushLogHeader QLabel { color: @dim@; }
 
 /* ---------- file list ---------- */
 QTreeView { background: @pane@; border: none; outline: none; }
@@ -53,7 +54,7 @@ QPushButton { background: @btn@; color: @text@; border: 1px solid @btnBorder@; b
 QPushButton:hover { background: @btnHover@; }
 QPushButton:pressed { background: @btnPressed@; }
 QPushButton:disabled { background: @paneAlt@; color: @dim@; }
-QFrame#repoBar QPushButton, QFrame#counterBar QPushButton { padding: 3px 9px; }
+QFrame#repoBar QPushButton, QFrame#counterBar QPushButton, QFrame#pushLogHeader QPushButton { padding: 3px 9px; }
 QPushButton#commitButton, QPushButton#commitPushButton { padding: 8px 14px; }
 QPushButton#commitButton { background: @accent@; color: @accentFg@; border-color: @accent@; font-weight: 600; }
 QPushButton#commitButton:hover { background: @accentHover@; }

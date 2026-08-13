@@ -42,7 +42,8 @@ private:
 	void confirmUntrackedThenCommit(bool pushAfterwards);
 	void reattachHead(std::function<void()> onReattached);
 	void doCommit(bool pushAfterwards);
-	void doPush();
+	void doPush(bool setUpstream);
+	void appendPushLog(const QString& commandLabel, const GitResult& result);
 
 	void showDiffForCurrentRow();
 	void setDiffText(const QString& pathLabel, const QString& tag, const QString& text);
@@ -80,6 +81,8 @@ private:
 	CLabelMidElision* _diffPathLabel = nullptr;
 	QLabel* _diffTagLabel = nullptr;
 	QPlainTextEdit* _diffView = nullptr;
+	QWidget* _pushLogPane = nullptr; // hidden until the first push of the session
+	QPlainTextEdit* _pushLogView = nullptr;
 
 	QPointer<Git::Job> _diffJob;
 	int _diffGeneration = 0; // stale async diff results (incl. the two-step submodule log) are dropped by this
