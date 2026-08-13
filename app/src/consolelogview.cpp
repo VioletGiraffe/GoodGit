@@ -15,13 +15,13 @@ ConsoleLogView::ConsoleLogView(QWidget* parent) :
 void ConsoleLogView::clearLog()
 {
 	clear();
-	resetLineState();
+	resetStreamState();
 	_entryHasOutput = false;
 }
 
 void ConsoleLogView::beginEntry(const QString& label)
 {
-	resetLineState();
+	resetStreamState();
 	_entryHasOutput = false;
 
 	if (blockCount() > 1) // an empty document still has one block
@@ -35,7 +35,7 @@ void ConsoleLogView::appendOutput(const QByteArray& chunk)
 		return;
 	_entryHasOutput = true;
 
-	for (const QChar c : QString::fromUtf8(chunk))
+	for (const QChar c : _decoder(chunk))
 	{
 		if (c == QLatin1Char('\r'))
 		{
@@ -64,12 +64,13 @@ void ConsoleLogView::appendOutput(const QByteArray& chunk)
 
 void ConsoleLogView::appendNote(const QString& text)
 {
-	resetLineState(); // a note is never a rewrite of the line the process left open
+	resetStreamState(); // a note is never a rewrite of the line the process left open
 	appendPlainText(text);
 }
 
-void ConsoleLogView::resetLineState()
+void ConsoleLogView::resetStreamState()
 {
+	_decoder.resetState();
 	_pendingLine.clear();
 	_lineOpen = false;
 	_pendingCr = false;
