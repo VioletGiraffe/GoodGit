@@ -43,7 +43,7 @@ struct Repository::RefreshRun
 	BranchHeader header;
 	std::vector<NameStatusEntry> diffEntries;
 	QStringList untracked;
-	std::vector<SubmoduleStatusEntry> submodules;
+	QStringList submodules; // repo-relative paths of the gitlink entries
 	std::map<QString, WorktreeDirtiness> submoduleDirtiness;
 	QStringList unbornCachedFiles;
 };
@@ -109,12 +109,13 @@ void Repository::refresh()
 			}
 		}
 
-		for (const SubmoduleStatusEntry& sub : run->submodules)
+		for (const QString& subPath : run->submodules)
 		{
-			if (!sub.initialized)
-				continue;
-			launch(_rootPath + QLatin1Char('/') + sub.path, { QStringLiteral("status"), QStringLiteral("--porcelain"), QStringLiteral("-z") },
-				[run, path = sub.path](const GitResult& r) { run->submoduleDirtiness[path] = parsePorcelainDirtiness(r.out); }, phase3);
+			const QString workDir = _rootPath + QLatin1Char('/') + subPath;
+			if (!QFileInfo::exists(workDir + QLatin1String("/.git")))
+				continue; // never initialized: the directory is empty, there is nothing inside to query
+			launch(workDir, { QStringLiteral("status"), QStringLiteral("--porcelain"), QStringLiteral("-z") },
+				[run, subPath](const GitResult& r) { run->submoduleDirtiness[subPath] = parsePorcelainDirtiness(r.out); }, phase3);
 		}
 
 		if (!run->header.upstream.isEmpty() && run->header.ahead > 0)
@@ -145,8 +146,10 @@ void Repository::refresh()
 		[run](const GitResult& r) { if (r.ok) run->diffEntries = parseNameStatusZ(r.out); }, phase2); // fails on unborn HEAD - phase 2 covers that
 	launch(_rootPath, { QStringLiteral("ls-files"), QStringLiteral("--others"), QStringLiteral("--exclude-standard"), QStringLiteral("-z") },
 		[run](const GitResult& r) { run->untracked = parseZList(r.out); }, phase2);
-	launch(_rootPath, { QStringLiteral("submodule"), QStringLiteral("status") },
-		[run](const GitResult& r) { if (r.ok) run->submodules = parseSubmoduleStatus(r.out); }, phase2);
+	// The submodule list is read out of the index, not from `git submodule status`: that one is a shell script in
+	// Git for Windows and costs more than every other refresh query combined
+	launch(_rootPath, { QStringLiteral("ls-files"), QStringLiteral("--stage"), QStringLiteral("-z") },
+		[run](const GitResult& r) { run->submodules = parseGitlinkPaths(r.out); }, phase2);
 }
 
 void Repository::finishRefresh()
@@ -189,8 +192,7 @@ void Repository::finishRefresh()
 		entry.path = diffEntry.path;
 		entry.oldPath = diffEntry.oldPath;
 		entry.type = diffEntry.type;
-		if (const WorktreeDirtiness* dirt = submoduleDirtiness(diffEntry.path); dirt || std::ranges::any_of(run.submodules,
-				[&](const SubmoduleStatusEntry& s) { return s.path == diffEntry.path; }))
+		if (const WorktreeDirtiness* dirt = submoduleDirtiness(diffEntry.path); dirt || run.submodules.contains(diffEntry.path))
 		{
 			entry.isSubmodule = true;
 			entry.pointerMoved = true;
@@ -212,14 +214,14 @@ void Repository::finishRefresh()
 
 	// Submodules with an unmoved pointer but modified tracked files inside: shown so the state is visible
 	// and the row double-clickable. Untracked-only content inside does not earn a row.
-	for (const SubmoduleStatusEntry& sub : run.submodules)
+	for (const QString& subPath : run.submodules)
 	{
-		const WorktreeDirtiness* dirt = submoduleDirtiness(sub.path);
+		const WorktreeDirtiness* dirt = submoduleDirtiness(subPath);
 		if (!dirt || !dirt->dirtyTracked)
 			continue;
-		if (std::ranges::any_of(_files, [&](const FileEntry& f) { return f.isSubmodule && f.path == sub.path; }))
+		if (std::ranges::any_of(_files, [&](const FileEntry& f) { return f.isSubmodule && f.path == subPath; }))
 			continue; // already present as a moved-pointer row
-		_files.push_back({ .path = sub.path, .isSubmodule = true, .dirtyTrackedInside = true, .untrackedInside = dirt->untracked });
+		_files.push_back({ .path = subPath, .isSubmodule = true, .dirtyTrackedInside = true, .untrackedInside = dirt->untracked });
 	}
 
 	_run.reset();

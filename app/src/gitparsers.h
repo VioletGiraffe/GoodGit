@@ -37,14 +37,8 @@ struct NameStatusEntry
 // Input: any NUL-separated path list (`ls-files -z` and friends)
 [[nodiscard]] QStringList parseZList(const QByteArray& output);
 
-struct SubmoduleStatusEntry
-{
-	QString path;
-	bool initialized = false; // '-' prefix in `submodule status` means not initialized
-};
-
-// Input: `submodule status` output (no -z variant exists; paths containing " (" would misparse - accepted)
-[[nodiscard]] std::vector<SubmoduleStatusEntry> parseSubmoduleStatus(const QByteArray& output);
+// Input: `ls-files --stage -z` output. Returns the paths of the gitlink entries - that is, the submodules
+[[nodiscard]] QStringList parseGitlinkPaths(const QByteArray& lsFilesOutput);
 
 struct WorktreeDirtiness
 {

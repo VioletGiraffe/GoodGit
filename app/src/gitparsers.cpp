@@ -86,28 +86,19 @@ QStringList parseZList(const QByteArray& output)
 	return paths;
 }
 
-std::vector<SubmoduleStatusEntry> parseSubmoduleStatus(const QByteArray& output)
+QStringList parseGitlinkPaths(const QByteArray& lsFilesOutput)
 {
-	// Line format: <state char><sha1> <path>( (<describe>))?
-	// where the state char is ' ', '-' (uninitialized), '+' (checked-out sha differs) or 'U' (conflicts)
-	std::vector<SubmoduleStatusEntry> entries;
-	for (const QByteArray& line : output.split('\n'))
+	// Record format: <mode> <sha1> <stage>\t<path>, mode 160000 being a gitlink
+	QStringList paths;
+	for (const QByteArray& record : lsFilesOutput.split('\0'))
 	{
-		if (line.size() < 43) // state char + 40 hex + space + at least one path char
+		if (!record.startsWith("160000"))
 			continue;
-
-		SubmoduleStatusEntry entry;
-		entry.initialized = line[0] != '-';
-
-		QByteArray path = line.mid(42);
-		const int describeStart = path.lastIndexOf(" (");
-		if (describeStart > 0 && path.endsWith(')'))
-			path.truncate(describeStart);
-		entry.path = QString::fromUtf8(path.trimmed());
-		if (!entry.path.isEmpty())
-			entries.push_back(std::move(entry));
+		const int tab = record.indexOf('\t');
+		if (tab > 0)
+			paths.push_back(QString::fromUtf8(record.mid(tab + 1)));
 	}
-	return entries;
+	return paths;
 }
 
 WorktreeDirtiness parsePorcelainDirtiness(const QByteArray& statusOutput)
