@@ -766,7 +766,7 @@ void CommitWindow::showHistoryWindow()
 {
 	if (!_historyWindow)
 	{
-		_historyWindow = new HistoryWindow(_repo, this);
+		_historyWindow = new HistoryWindow(_repo.path(), this);
 		connect(this, &CommitWindow::committed, _historyWindow, &HistoryWindow::reload);
 	}
 	_historyWindow->show();
@@ -828,6 +828,12 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 		QDesktopServices::openUrl(QUrl::fromLocalFile(absolutePath(entry)));
 	});
 	openAction->setEnabled(singleFile);
+	QAction* submoduleHistoryAction = menu.addAction(tr("View commit history"), this, [this, entry = entries.front()] {
+		// Not deduplicated the way this repo's own history window is, matching openSubmoduleWindow
+		auto* window = new HistoryWindow(absolutePath(entry), this);
+		window->show();
+	});
+	submoduleHistoryAction->setEnabled(entries.size() == 1 && entries.front().isSubmodule);
 	QAction* explorerAction = menu.addAction(tr("Show in Explorer"), this, [this, entry = entries.front()] {
 		const QString nativePath = QDir::toNativeSeparators(absolutePath(entry));
 #ifdef Q_OS_WIN

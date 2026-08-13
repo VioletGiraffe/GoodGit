@@ -1,7 +1,7 @@
 #pragma once
 
-#include "gitprocess.h"
 #include "historymodels.h"
+#include "repository.h"
 
 #include <QMainWindow>
 #include <QPointer>
@@ -12,17 +12,17 @@ class QPushButton;
 class QSplitter;
 class QTreeView;
 class CLabelMidElision;
-class Repository;
 
-// The commit history of one repository, read-only. Opened from the CommitWindow that owns the
-// Repository it queries, and every job it starts is scoped to this window, so closing it drops
-// the pending queries instead of leaving them to finish against nothing.
+// The commit history of one repository, read-only. Owns its own Repository - it only ever asks
+// read-only questions, and a submodule's history is opened without a CommitWindow on that submodule
+// to borrow one from. Every job is scoped to this window, so closing it drops the pending queries
+// instead of leaving them to finish against nothing.
 class HistoryWindow final : public QMainWindow
 {
 	Q_OBJECT
 
 public:
-	HistoryWindow(Repository& repo, QWidget* parent);
+	HistoryWindow(const QString& repoPath, QWidget* parent);
 
 	// Re-runs the log query from scratch. The commit window calls this after committing here.
 	void reload();
@@ -38,7 +38,7 @@ private:
 	void setDiffText(const QString& pathLabel, const QString& tag, const QString& text);
 
 private:
-	Repository& _repo;
+	Repository _repo;
 	CommitLogModel _logModel;
 	CommitFilesModel _filesModel;
 

@@ -9,10 +9,53 @@
 
 namespace {
 
+QString countedUnit(int count, const char* unit)
+{
+	QString text = QString::number(count) + QLatin1Char(' ') + QLatin1String(unit);
+	if (count != 1)
+		text += QLatin1Char('s');
+	return text;
+}
+
+// Age at two units of granularity, coarsening as it grows. The calendar parts go through QDate, so
+// "2 months" is two calendar months rather than sixty days. A date ahead of the clock - skew, or a
+// rebased commit keeping its author date - reads as "just now" rather than as a negative count.
+QString ageText(const QDateTime& when, const QDateTime& now)
+{
+	const qint64 minutes = when.secsTo(now) / 60;
+	if (minutes < 1)
+		return QStringLiteral("just now");
+	if (minutes < 60)
+		return countedUnit(int(minutes), "minute") + QStringLiteral(" ago");
+	if (minutes < 60 * 24)
+		return countedUnit(int(minutes / 60), "hour") + QStringLiteral(" ago");
+
+	const QDate from = when.date();
+	const QDate to = now.date();
+	int months = (to.year() - from.year()) * 12 + to.month() - from.month();
+	if (from.addMonths(months) > to)
+		--months; // the day of the month has not come round yet
+
+	if (months < 1)
+		return countedUnit(int(from.daysTo(to)), "day") + QStringLiteral(" ago");
+
+	const bool underAYear = months < 12;
+	const QString lead = underAYear ? countedUnit(months, "month") : countedUnit(months / 12, "year");
+	const int remainder = underAYear ? int(from.addMonths(months).daysTo(to)) : months % 12;
+	if (remainder == 0)
+		return lead + QStringLiteral(" ago");
+	return lead + QStringLiteral(" and ") + countedUnit(remainder, underAYear ? "day" : "month") + QStringLiteral(" ago");
+}
+
 QString displayedDate(const QString& isoDate)
 {
 	const QDateTime dateTime = QDateTime::fromString(isoDate, Qt::ISODate);
-	return dateTime.isValid() ? dateTime.toLocalTime().toString(QStringLiteral("yyyy-MM-dd hh:mm")) : isoDate;
+	if (!dateTime.isValid())
+		return isoDate;
+
+	const QDateTime local = dateTime.toLocalTime();
+	return QStringLiteral("%1 (%2)").arg(local.toString(QStringLiteral("yyyy-MM-dd hh:mm")),
+		ageText(local, QDateTime::currentDateTime()));
 }
 
 QString subjectText(const CommitRecord& commit)

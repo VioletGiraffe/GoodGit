@@ -1,7 +1,6 @@
 #include "historywindow.h"
 #include "diffhighlighter.h"
 #include "filelistdelegate.h"
-#include "repository.h"
 #include "settings.h"
 #include "theme.h"
 
@@ -29,9 +28,9 @@ constexpr int FileListWidth = 320;
 
 } // namespace
 
-HistoryWindow::HistoryWindow(Repository& repo, QWidget* parent) :
+HistoryWindow::HistoryWindow(const QString& repoPath, QWidget* parent) :
 	QMainWindow(parent, Qt::Window),
-	_repo{ repo },
+	_repo{ repoPath },
 	_maxCommits{ InitialMaxCommits }
 {
 	setAttribute(Qt::WA_DeleteOnClose);
@@ -74,6 +73,7 @@ void HistoryWindow::buildUi()
 	_logView->setUniformRowHeights(true);
 	_logView->setAllColumnsShowFocus(true);
 	_logView->setSelectionBehavior(QAbstractItemView::SelectRows);
+	_logView->header()->setStretchLastSection(false); // it would override Date's resize mode, and Subject is the one to grow
 	_logView->header()->setSectionResizeMode(CommitLogModel::ShaColumn, QHeaderView::ResizeToContents);
 	_logView->header()->setSectionResizeMode(CommitLogModel::SubjectColumn, QHeaderView::Stretch);
 	_logView->header()->setSectionResizeMode(CommitLogModel::AuthorColumn, QHeaderView::ResizeToContents);

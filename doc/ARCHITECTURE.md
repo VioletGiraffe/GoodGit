@@ -34,7 +34,7 @@ Consequences that follow from this choice, all deliberate:
 | `filelistdelegate` | Paints the two file-list details item roles cannot express: the recolored deleted strikethrough and the selected-row accent stripe |
 | `theme` | The whole visual style in one place, mirroring the mockup's CSS variables. Applied once at startup; light or dark follows the system theme |
 | `commitwindow` | One window = one repository. Owns a `Repository` and all user flows. Submodule rows open another `CommitWindow` on the submodule, same process; the child's `committed()` signal refreshes the parent |
-| `historywindow`, `historymodels` | The commit history, read-only: log above, the selected commit's file list beside that file's diff. At most one per `CommitWindow`, which owns the `Repository` it borrows |
+| `historywindow`, `historymodels` | The commit history, read-only: log above, the selected commit's file list beside that file's diff. Owns its own `Repository`, so a submodule's history opens without a `CommitWindow` on that submodule |
 | `diffhighlighter`, `messageedit` | Prefix-driven unified-diff highlighting; message editor with the 50-column subject guide and word completion fed by one `diff -U0 HEAD` per refresh |
 | `settings` | Key vocabulary over qtutils `CSettings`. Window geometry is per-repo via qtutils `CPersistenceEnabler` |
 
