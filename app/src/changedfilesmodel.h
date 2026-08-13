@@ -27,7 +27,8 @@ public:
 	explicit ChangedFilesModel(QObject* parent = nullptr);
 
 	// Rebuilds the rows. Check state is re-derived by path: persisting rows keep their state, new rows
-	// default to checked unless untracked. In merge mode all tracked rows are forced on and not
+	// default to checked unless untracked. A row that was not committable counts as new - its unchecked
+	// state was the block, not a choice. In merge mode all tracked rows are forced on and not
 	// user-changeable (B1).
 	void setEntries(const std::vector<FileEntry>& entries, bool mergeMode);
 

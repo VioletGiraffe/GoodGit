@@ -61,7 +61,10 @@ void ChangedFilesModel::setEntries(const std::vector<FileEntry>& entries, bool m
 {
 	std::unordered_map<QString, bool> previousChecks;
 	for (const Row& row : _rows)
-		previousChecks[row.entry.path] = row.checked;
+	{
+		if (row.entry.committable()) // an unchecked non-committable row records the block, not a user choice
+			previousChecks[row.entry.path] = row.checked;
+	}
 
 	beginResetModel();
 	_rows.clear();
