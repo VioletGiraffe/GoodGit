@@ -46,6 +46,10 @@ fails fast instead of hanging on an invisible prompt; Git Credential Manager's o
 --pathspec-file-nul` via stdin - never argv, which Windows caps near 32 KB). The commit message goes through
 a temp file, never `-m` and never stdin: `-F -` and a stdin pathspec cannot share the pipe.
 
+The diff shown in either window carries `--ignore-cr-at-eol`, so a CRLF/LF-only change reads as no change.
+That is a display choice and nothing more: the file still lists as modified and still commits its
+working-tree content byte for byte.
+
 Output is harvested once, on process exit - no streaming, though QProcess drains the pipes as data arrives,
 so a chatty child cannot deadlock. Live progress display would need a `readyRead` path in `gitprocess`.
 

@@ -723,7 +723,7 @@ void CommitWindow::showDiffForCurrentRow()
 		else if (result.out.size() > MaxDiffBytes)
 			setDiffText(entry.path, {}, tr("The diff is too large to display (%1 MB).").arg(result.out.size() / (1024 * 1024)));
 		else if (result.out.isEmpty())
-			setDiffText(entry.path, {}, tr("No content changes (mode-only change, or the file matches HEAD)."));
+			setDiffText(entry.path, {}, tr("No content changes (only the mode or the line endings differ, or the file matches HEAD)."));
 		else
 			setDiffText(entry.path, entry.type == ChangeType::Untracked ? tr("new file") : tr("HEAD %1 working tree").arg(QChar(0x2192)),
 				QString::fromUtf8(result.out));

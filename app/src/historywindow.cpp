@@ -370,7 +370,7 @@ void HistoryWindow::showDiffForCurrentFile()
 		else if (result.out.size() > MaxDiffBytes)
 			setDiffText(entry.path, tag, tr("The diff is too large to display (%1 MB).").arg(result.out.size() / (1024 * 1024)));
 		else if (result.out.isEmpty())
-			setDiffText(entry.path, tag, tr("No content changes (a mode-only change, or a rename with identical content)."));
+			setDiffText(entry.path, tag, tr("No content changes (only the mode or the line endings differ, or a rename with identical content)."));
 		else
 			setDiffText(entry.path, tag, QString::fromUtf8(result.out));
 	});

@@ -370,6 +370,8 @@ Git::Job* Repository::diffFile(const FileEntry& entry, const QObject* context, G
 		if (!entry.oldPath.isEmpty())
 			args.push_back(entry.oldPath);
 	}
+	// Display only - the row still lists as modified and commits its working-tree content verbatim
+	args.insert(1, QStringLiteral("--ignore-cr-at-eol"));
 	return Git::run(_rootPath, std::move(args), context, std::move(onDone), {}, /*readOnlyQuery=*/true);
 }
 
@@ -398,8 +400,8 @@ Git::Job* Repository::commitFiles(const QString& sha, const QObject* context, Gi
 
 Git::Job* Repository::commitFileDiff(const QString& sha, const NameStatusEntry& file, const QObject* context, Git::Callback onDone)
 {
-	QStringList args = { QStringLiteral("show"), QStringLiteral("-M"), QStringLiteral("--format="), sha,
-		QStringLiteral("--"), file.path };
+	QStringList args = { QStringLiteral("show"), QStringLiteral("-M"), QStringLiteral("--ignore-cr-at-eol"),
+		QStringLiteral("--format="), sha, QStringLiteral("--"), file.path };
 	if (!file.oldPath.isEmpty())
 		args.push_back(file.oldPath); // both sides, or the pathspec filters the rename out before -M can pair it up
 	return Git::run(_rootPath, std::move(args), context, std::move(onDone), {}, /*readOnlyQuery=*/true);
