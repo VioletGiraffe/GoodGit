@@ -33,6 +33,7 @@ protected:
 private:
 	void buildUi();
 
+	void showCommitContextMenu(const QPoint& pos);
 	void showFilesForCurrentCommit();
 	void showDiffForCurrentFile();
 	void setDiffText(const QString& pathLabel, const QString& tag, const QString& text);

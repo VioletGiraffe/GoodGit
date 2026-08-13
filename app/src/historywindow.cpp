@@ -7,12 +7,15 @@
 #include "widgets/clabelmidelision.h"
 #include "widgets/cpersistentwindow.h"
 
+#include <QApplication>
+#include <QClipboard>
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QMenu>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QShortcut>
@@ -73,6 +76,7 @@ void HistoryWindow::buildUi()
 	_logView->setUniformRowHeights(true);
 	_logView->setAllColumnsShowFocus(true);
 	_logView->setSelectionBehavior(QAbstractItemView::SelectRows);
+	_logView->setContextMenuPolicy(Qt::CustomContextMenu);
 	_logView->header()->setStretchLastSection(false); // it would override Date's resize mode, and Subject is the one to grow
 	_logView->header()->setSectionResizeMode(CommitLogModel::ShaColumn, QHeaderView::ResizeToContents);
 	_logView->header()->setSectionResizeMode(CommitLogModel::SubjectColumn, QHeaderView::Stretch);
@@ -162,6 +166,7 @@ void HistoryWindow::buildUi()
 		_maxCommits *= 2;
 		reload();
 	});
+	connect(_logView, &QWidget::customContextMenuRequested, this, &HistoryWindow::showCommitContextMenu);
 	connect(_logView->selectionModel(), &QItemSelectionModel::currentChanged, this, &HistoryWindow::showFilesForCurrentCommit);
 	connect(_filesView->selectionModel(), &QItemSelectionModel::currentChanged, this, &HistoryWindow::showDiffForCurrentFile);
 
@@ -202,6 +207,22 @@ void HistoryWindow::reload()
 		if (_logModel.commitCount() > 0)
 			_logView->setCurrentIndex(_logModel.index(0, CommitLogModel::ShaColumn));
 	});
+}
+
+void HistoryWindow::showCommitContextMenu(const QPoint& pos)
+{
+	const QModelIndex index = _logView->indexAt(pos);
+	if (!index.isValid() || index.row() >= _logModel.commitCount())
+		return;
+
+	// Read before exec() spins an event loop: a log query finishing then resets the model, and the
+	// row index would no longer name this commit.
+	const QString sha = _logModel.commitAt(index.row()).sha;
+
+	QMenu menu{ this };
+	menu.addAction(tr("Copy long hash"), this, [sha] { QApplication::clipboard()->setText(sha); });
+	menu.addAction(tr("Copy short hash"), this, [sha] { QApplication::clipboard()->setText(shortSha(sha)); });
+	menu.exec(_logView->viewport()->mapToGlobal(pos));
 }
 
 void HistoryWindow::showFilesForCurrentCommit()
