@@ -12,10 +12,34 @@ namespace {
 
 QColor stateColor(const FileEntry& entry)
 {
+	if (!entry.isSubmodule)
+		return changeTypeColor(entry.type);
+
 	const Theme& t = activeTheme();
-	if (entry.isSubmodule)
-		return entry.dirtyTrackedInside ? t.stDeleted : t.stSubmodule;
-	switch (entry.type)
+	return entry.dirtyTrackedInside ? t.stDeleted : t.stSubmodule;
+}
+
+} // namespace
+
+QString changeTypeText(ChangeType type)
+{
+	switch (type)
+	{
+	case ChangeType::Modified:    return QStringLiteral("Modified");
+	case ChangeType::Added:       return QStringLiteral("Added");
+	case ChangeType::Untracked:   return QStringLiteral("Untracked");
+	case ChangeType::Deleted:     return QStringLiteral("Deleted");
+	case ChangeType::Renamed:     return QStringLiteral("Renamed");
+	case ChangeType::TypeChanged: return QStringLiteral("Type changed");
+	case ChangeType::Conflicted:  return QStringLiteral("Conflicted");
+	}
+	return {};
+}
+
+QColor changeTypeColor(ChangeType type)
+{
+	const Theme& t = activeTheme();
+	switch (type)
 	{
 	case ChangeType::Modified:    return t.stModified;
 	case ChangeType::Added:       return t.stAdded;
@@ -27,8 +51,6 @@ QColor stateColor(const FileEntry& entry)
 	}
 	return {};
 }
-
-} // namespace
 
 ChangedFilesModel::ChangedFilesModel(QObject* parent) :
 	QAbstractTableModel(parent)
@@ -235,17 +257,7 @@ QString ChangedFilesModel::stateText(const FileEntry& entry)
 			return QStringLiteral("Uncommitted inside");
 		return entry.dirtyTrackedInside ? QStringLiteral("Submodule - blocked") : QStringLiteral("Submodule");
 	}
-	switch (entry.type)
-	{
-	case ChangeType::Modified:    return QStringLiteral("Modified");
-	case ChangeType::Added:       return QStringLiteral("Added");
-	case ChangeType::Untracked:   return QStringLiteral("Untracked");
-	case ChangeType::Deleted:     return QStringLiteral("Deleted");
-	case ChangeType::Renamed:     return QStringLiteral("Renamed");
-	case ChangeType::TypeChanged: return QStringLiteral("Type changed");
-	case ChangeType::Conflicted:  return QStringLiteral("Conflicted");
-	}
-	return {};
+	return changeTypeText(entry.type);
 }
 
 QString ChangedFilesModel::pathText(const FileEntry& entry)

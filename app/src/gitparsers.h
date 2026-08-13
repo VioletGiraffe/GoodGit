@@ -48,3 +48,20 @@ struct WorktreeDirtiness
 
 // Input: `status --porcelain -z` output (v1 format)
 [[nodiscard]] WorktreeDirtiness parsePorcelainDirtiness(const QByteArray& statusOutput);
+
+struct CommitRecord
+{
+	QString sha;
+	QStringList parents; // more than one is a merge
+	QString author;
+	QString date;    // ISO 8601 with offset, verbatim from git
+	QString refs;    // "HEAD -> master, origin/master"; empty for most commits
+	QString subject;
+};
+
+// The --format parseCommitLog expects, kept beside it so the two cannot drift. Fields are separated
+// by US (0x1f); the subject goes last because it is the one field whose content is unconstrained.
+inline constexpr char CommitLogFormat[] = "%H%x1f%P%x1f%an%x1f%aI%x1f%D%x1f%s";
+
+// Input: `log -z --format=<CommitLogFormat>` output - one NUL-terminated record per commit, newest first
+[[nodiscard]] std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput);

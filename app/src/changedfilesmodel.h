@@ -3,9 +3,15 @@
 #include "repository.h"
 
 #include <QAbstractTableModel>
+#include <QColor>
 
 #include <functional>
 #include <vector>
+
+// How a change type reads in a file list. Shared with the history window's list so a Modified row
+// looks the same whichever list it is in.
+[[nodiscard]] QString changeTypeText(ChangeType type);
+[[nodiscard]] QColor changeTypeColor(ChangeType type);
 
 // The checkable file list. Columns: 0 = checkbox + icon + state text, 1 = path.
 // Row styling comes from the theme via item data roles (per-state colors, fonts, the folder icon,

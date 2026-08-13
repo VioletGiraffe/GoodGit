@@ -1,10 +1,14 @@
 #include "filelistdelegate.h"
 #include "changedfilesmodel.h"
+#include "historymodels.h"
 #include "theme.h"
 
 #include <QPainter>
 
 #include <algorithm>
+
+static_assert(int(ChangedFilesModel::StateColumn) == int(CommitFilesModel::StateColumn),
+	"the stripe is painted on one column number for both file lists");
 
 void FileListDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const
 {

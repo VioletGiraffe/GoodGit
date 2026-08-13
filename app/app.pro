@@ -39,6 +39,8 @@ HEADERS += \
 	src/filelistdelegate.h \
 	src/gitparsers.h \
 	src/gitprocess.h \
+	src/historymodels.h \
+	src/historywindow.h \
 	src/messageedit.h \
 	src/repository.h \
 	src/settings.h \
@@ -51,6 +53,8 @@ SOURCES += \
 	src/filelistdelegate.cpp \
 	src/gitparsers.cpp \
 	src/gitprocess.cpp \
+	src/historymodels.cpp \
+	src/historywindow.cpp \
 	src/main.cpp \
 	src/messageedit.cpp \
 	src/repository.cpp \

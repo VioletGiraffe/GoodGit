@@ -393,6 +393,30 @@ Git::Job* Repository::diffAllChanges(const QObject* context, Git::Callback onDon
 	return Git::run(_rootPath, std::move(args), context, std::move(onDone), {}, /*readOnlyQuery=*/true);
 }
 
+Git::Job* Repository::commitLog(int maxCommits, const QObject* context, Git::Callback onDone)
+{
+	return Git::run(_rootPath, { QStringLiteral("log"), QStringLiteral("-z"),
+		QStringLiteral("--max-count=%1").arg(maxCommits),
+		QStringLiteral("--format=") + QLatin1String(CommitLogFormat) },
+		context, std::move(onDone), {}, /*readOnlyQuery=*/true);
+}
+
+Git::Job* Repository::commitFiles(const QString& sha, const QObject* context, Git::Callback onDone)
+{
+	return Git::run(_rootPath, { QStringLiteral("show"), QStringLiteral("--name-status"), QStringLiteral("-M"),
+		QStringLiteral("-z"), QStringLiteral("--format="), sha },
+		context, std::move(onDone), {}, /*readOnlyQuery=*/true);
+}
+
+Git::Job* Repository::commitFileDiff(const QString& sha, const NameStatusEntry& file, const QObject* context, Git::Callback onDone)
+{
+	QStringList args = { QStringLiteral("show"), QStringLiteral("-M"), QStringLiteral("--format="), sha,
+		QStringLiteral("--"), file.path };
+	if (!file.oldPath.isEmpty())
+		args.push_back(file.oldPath); // both sides, or the pathspec filters the rename out before -M can pair it up
+	return Git::run(_rootPath, std::move(args), context, std::move(onDone), {}, /*readOnlyQuery=*/true);
+}
+
 void Repository::submodulePointerLog(const FileEntry& entry, const QObject* context, Git::Callback onDone)
 {
 	const QString subPath = _rootPath + QLatin1Char('/') + entry.path;

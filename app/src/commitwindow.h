@@ -14,6 +14,7 @@ class QTreeView;
 class QPlainTextEdit;
 class MessageEdit;
 class CLabelMidElision;
+class HistoryWindow;
 
 // One window = one repository. Submodule rows open another instance of this window.
 class CommitWindow final : public QMainWindow
@@ -45,6 +46,8 @@ private:
 	void doPush(bool setUpstream);
 	void appendPushLog(const QString& commandLabel, const GitResult& result);
 
+	void showHistoryWindow();
+
 	void showDiffForCurrentRow();
 	void setDiffText(const QString& pathLabel, const QString& tag, const QString& text);
 	void onRowActivated(const QModelIndex& index);
@@ -71,6 +74,7 @@ private:
 	QLabel* _aheadLabel = nullptr;
 	QPushButton* _pushButton = nullptr;
 	QPushButton* _refreshButton = nullptr;
+	QPushButton* _historyButton = nullptr;
 	QLabel* _opStrip = nullptr;
 	QLabel* _detachedStrip = nullptr;
 	QCheckBox* _checkAllBox = nullptr;
@@ -84,6 +88,7 @@ private:
 	QWidget* _pushLogPane = nullptr; // hidden until the first push of the session
 	QPlainTextEdit* _pushLogView = nullptr;
 
+	QPointer<HistoryWindow> _historyWindow; // at most one per repo window, raised again on a second click
 	QPointer<Git::Job> _diffJob;
 	int _diffGeneration = 0; // stale async diff results (incl. the two-step submodule log) are dropped by this
 	bool _commitInFlight = false;

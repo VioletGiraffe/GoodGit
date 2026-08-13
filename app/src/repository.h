@@ -87,6 +87,14 @@ public:
 	Git::Job* diffFile(const FileEntry& entry, const QObject* context, Git::Callback onDone);
 	// One `-U0` diff of every change at once; feeds the message completion word pool
 	Git::Job* diffAllChanges(const QObject* context, Git::Callback onDone);
+
+	// At most maxCommits reachable from HEAD, newest first. Widening the window means re-running with
+	// a larger cap: a date-ordered walk has no resumable cursor (doc/ARCHITECTURE.md).
+	Git::Job* commitLog(int maxCommits, const QObject* context, Git::Callback onDone);
+	// The files one commit touched, as parseNameStatusZ input. Empty for a merge - git shows no diff
+	// for one without --cc - so detect merges from the parent count, not from an empty result.
+	Git::Job* commitFiles(const QString& sha, const QObject* context, Git::Callback onDone);
+	Git::Job* commitFileDiff(const QString& sha, const NameStatusEntry& file, const QObject* context, Git::Callback onDone);
 	// For a moved submodule pointer: the commits being pulled in, as `log --oneline old..HEAD` run inside the submodule
 	void submodulePointerLog(const FileEntry& entry, const QObject* context, Git::Callback onDone);
 

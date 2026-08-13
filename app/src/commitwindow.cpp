@@ -1,6 +1,7 @@
 #include "commitwindow.h"
 #include "diffhighlighter.h"
 #include "filelistdelegate.h"
+#include "historywindow.h"
 #include "messageedit.h"
 #include "settings.h"
 #include "theme.h"
@@ -190,12 +191,14 @@ void CommitWindow::buildUi()
 	_pushButton = new QPushButton(tr("Push"));
 	_refreshButton = new QPushButton(tr("Refresh"));
 	_refreshButton->setToolTip(QStringLiteral("F5"));
+	_historyButton = new QPushButton(tr("History"));
 	repoBarLayout->addWidget(_repoNameLabel);
 	repoBarLayout->addWidget(_branchLabel);
 	repoBarLayout->addWidget(_aheadLabel);
 	repoBarLayout->addStretch();
 	repoBarLayout->addWidget(_pushButton);
 	repoBarLayout->addWidget(_refreshButton);
+	repoBarLayout->addWidget(_historyButton);
 	leftLayout->addWidget(repoBar);
 
 	const auto makeStrip = [](const QColor& background, const QColor& text) {
@@ -319,7 +322,7 @@ void CommitWindow::buildUi()
 	_splitter->addWidget(rightPane);
 	_splitter->setStretchFactor(0, 0);
 	_splitter->setStretchFactor(1, 1);
-	if (const QByteArray state = Settings::splitterState(); !state.isEmpty())
+	if (const QByteArray state = Settings::splitterState(QStringLiteral("CommitWindow")); !state.isEmpty())
 		_splitter->restoreState(state);
 	else
 		_splitter->setSizes({ LeftColumnWidth, 750 });
@@ -328,6 +331,7 @@ void CommitWindow::buildUi()
 
 	connect(_refreshButton, &QPushButton::clicked, &_repo, &Repository::refresh);
 	connect(_pushButton, &QPushButton::clicked, this, [this] { doPush(/*setUpstream=*/false); });
+	connect(_historyButton, &QPushButton::clicked, this, &CommitWindow::showHistoryWindow);
 	connect(hidePushLogButton, &QPushButton::clicked, _pushLogPane, &QWidget::hide);
 	connect(_commitButton, &QPushButton::clicked, this, [this] { startCommit(false); });
 	connect(_commitPushButton, &QPushButton::clicked, this, [this] { startCommit(true); });
@@ -361,7 +365,7 @@ void CommitWindow::buildUi()
 
 void CommitWindow::closeEvent(QCloseEvent* event)
 {
-	Settings::setSplitterState(_splitter->saveState());
+	Settings::setSplitterState(QStringLiteral("CommitWindow"), _splitter->saveState());
 	QMainWindow::closeEvent(event);
 }
 
@@ -756,6 +760,18 @@ void CommitWindow::onRowActivated(const QModelIndex& index)
 	QProcess::startDetached(Settings::gitExecutable(),
 		{ QStringLiteral("difftool"), QStringLiteral("-y"), QStringLiteral("HEAD"), QStringLiteral("--"), entry.path },
 		_repo.path());
+}
+
+void CommitWindow::showHistoryWindow()
+{
+	if (!_historyWindow)
+	{
+		_historyWindow = new HistoryWindow(_repo, this);
+		connect(this, &CommitWindow::committed, _historyWindow, &HistoryWindow::reload);
+	}
+	_historyWindow->show();
+	_historyWindow->raise();
+	_historyWindow->activateWindow();
 }
 
 void CommitWindow::openSubmoduleWindow(const FileEntry& entry)

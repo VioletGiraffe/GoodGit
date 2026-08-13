@@ -34,6 +34,7 @@ Consequences that follow from this choice, all deliberate:
 | `filelistdelegate` | Paints the two file-list details item roles cannot express: the recolored deleted strikethrough and the selected-row accent stripe |
 | `theme` | The whole visual style in one place, mirroring the mockup's CSS variables. Applied once at startup; light or dark follows the system theme |
 | `commitwindow` | One window = one repository. Owns a `Repository` and all user flows. Submodule rows open another `CommitWindow` on the submodule, same process; the child's `committed()` signal refreshes the parent |
+| `historywindow`, `historymodels` | The commit history, read-only: log above, the selected commit's file list beside that file's diff. At most one per `CommitWindow`, which owns the `Repository` it borrows |
 | `diffhighlighter`, `messageedit` | Prefix-driven unified-diff highlighting; message editor with the 50-column subject guide and word completion fed by one `diff -U0 HEAD` per refresh |
 | `settings` | Key vocabulary over qtutils `CSettings`. Window geometry is per-repo via qtutils `CPersistenceEnabler` |
 
@@ -58,6 +59,20 @@ errors through the normal failure path, not silent re-scans.
 `Repository::refresh()` runs two phases of parallel queries - the base queries, then the ones their results
 call for - and coalesces re-entry. Check state survives a refresh, re-derived by path: persisting rows keep
 their state, new rows default to checked unless untracked.
+
+## History
+
+Read-only, and bounded rather than paged: one `log --max-count=N` builds the whole list, and "Load more"
+re-runs it with N doubled. **A date-ordered walk has no resumable cursor** - continuing from the last
+sha's ancestors drops every commit that sits on a parallel branch, since those are ancestors of HEAD but
+not of that sha. `--skip` avoids that bug but re-walks the skipped commits anyway, which is what the
+re-run costs. The only alternative is streaming one `log` process, which needs the `readyRead` path
+`gitprocess` does not have.
+
+Selecting a commit queries its files, selecting a file queries that file's diff - one short-lived job
+each, cancelled when the selection moves on. A merge is shown as a note instead: `git show` prints no
+diff for one without `--cc`, so the emptiness is answered from the parent count rather than guessed from
+an empty result.
 
 ## Submodules
 

@@ -101,6 +101,30 @@ QStringList parseGitlinkPaths(const QByteArray& lsFilesOutput)
 	return paths;
 }
 
+std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput)
+{
+	std::vector<CommitRecord> commits;
+	for (const QByteArray& record : logOutput.split('\0'))
+	{
+		if (record.isEmpty())
+			continue; // -z terminates rather than separates, so the last split yields an empty tail
+
+		const QList<QByteArray> fields = record.split('\x1f');
+		if (fields.size() < 6)
+			continue;
+
+		CommitRecord commit;
+		commit.sha = QString::fromUtf8(fields[0]);
+		commit.parents = QString::fromUtf8(fields[1]).split(QLatin1Char(' '), Qt::SkipEmptyParts);
+		commit.author = QString::fromUtf8(fields[2]);
+		commit.date = QString::fromUtf8(fields[3]);
+		commit.refs = QString::fromUtf8(fields[4]);
+		commit.subject = QString::fromUtf8(fields.mid(5).join('\x1f')); // rejoined: a US in the subject must not truncate it
+		commits.push_back(std::move(commit));
+	}
+	return commits;
+}
+
 WorktreeDirtiness parsePorcelainDirtiness(const QByteArray& statusOutput)
 {
 	WorktreeDirtiness result;
