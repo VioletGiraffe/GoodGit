@@ -52,6 +52,39 @@ QString elidedFirstLine(const QString& message)
 	return line;
 }
 
+// Ignore pattern candidates for one untracked file, most specific first. Literal path patterns
+// are anchored to the repo root with a leading '/'.
+QStringList gitIgnorePatterns(const QString& repoRelativePath)
+{
+	// Glob metacharacters in a file name must stay literal; '#' and '!' are special at line start
+	const auto escaped = [](const QString& text) {
+		QString out;
+		out.reserve(text.size());
+		for (const QChar c : text)
+		{
+			if (c == QLatin1Char('\\') || c == QLatin1Char('*') || c == QLatin1Char('?') || c == QLatin1Char('[') || c == QLatin1Char(']'))
+				out += QLatin1Char('\\');
+			out += c;
+		}
+		if (out.startsWith(QLatin1Char('#')) || out.startsWith(QLatin1Char('!')))
+			out.prepend(QLatin1Char('\\'));
+		return out;
+	};
+
+	const qsizetype slash = repoRelativePath.lastIndexOf(QLatin1Char('/'));
+	const QString fileName = repoRelativePath.mid(slash + 1);
+	const qsizetype dot = fileName.lastIndexOf(QLatin1Char('.'));
+
+	QStringList patterns;
+	patterns.push_back(QLatin1Char('/') + escaped(repoRelativePath));
+	if (dot > 0 && dot < fileName.size() - 1)
+		patterns.push_back(QStringLiteral("*.") + escaped(fileName.mid(dot + 1)));
+	patterns.push_back(escaped(fileName));
+	if (slash >= 0)
+		patterns.push_back(QLatin1Char('/') + escaped(repoRelativePath.left(slash)) + QLatin1Char('/'));
+	return patterns;
+}
+
 QString listedPaths(const QStringList& paths)
 {
 	QStringList shown = paths.mid(0, MaxListedPathsInDialog);
@@ -747,6 +780,18 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	addAction->setEnabled(anyUntracked);
 	QAction* unAddAction = menu.addAction(tr("Un-add"), this, &CommitWindow::unAddSelection);
 	unAddAction->setEnabled(anyAdded);
+	QMenu* ignoreMenu = menu.addMenu(tr("Add to .gitignore"));
+	const bool singleUntracked = entries.size() == 1 && !entries.front().isSubmodule && entries.front().type == ChangeType::Untracked;
+	ignoreMenu->setEnabled(singleUntracked);
+	if (singleUntracked)
+	{
+		for (const QString& pattern : gitIgnorePatterns(entries.front().path))
+		{
+			// '&' doubled for display only - QMenu would otherwise eat it as an accelerator marker
+			ignoreMenu->addAction(QString{ pattern }.replace(QLatin1Char('&'), QStringLiteral("&&")),
+				this, [this, pattern] { appendToGitIgnore(pattern); });
+		}
+	}
 	menu.addSeparator();
 	QAction* openAction = menu.addAction(tr("Open"), this, [this, entry = entries.front()] {
 		QDesktopServices::openUrl(QUrl::fromLocalFile(absolutePath(entry)));
@@ -902,6 +947,26 @@ void CommitWindow::unAddSelection()
 			showGitError(tr("Un-add failed"), result);
 		_repo.refresh();
 	});
+}
+
+void CommitWindow::appendToGitIgnore(const QString& pattern)
+{
+	QFile file{ QDir{ _repo.path() }.filePath(QStringLiteral(".gitignore")) };
+	if (!file.open(QIODevice::ReadWrite)) // ReadWrite: the existing contents decide the EOL style and the need for a leading newline
+	{
+		MessageBox::notice(this, tr("Failed to update .gitignore"),
+			tr("Could not open '%1' for writing.").arg(QDir::toNativeSeparators(file.fileName())), {});
+		return;
+	}
+	const QByteArray existing = file.readAll();
+	const QByteArray eol = existing.contains("\r\n") ? QByteArrayLiteral("\r\n") : QByteArrayLiteral("\n");
+	QByteArray addition;
+	if (!existing.isEmpty() && !existing.endsWith('\n'))
+		addition += eol;
+	addition += pattern.toUtf8() + eol;
+	file.write(addition);
+	file.close();
+	_repo.refresh();
 }
 
 void CommitWindow::showGitError(const QString& title, const GitResult& result)

@@ -26,3 +26,4 @@ Makefile.Release
 .qmake.stash
 
 .DS_Store
+/app/gg_resource.rc

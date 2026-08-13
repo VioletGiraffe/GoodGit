@@ -57,6 +57,7 @@ private:
 	void deleteSelection();
 	void addSelectionToIndex();
 	void unAddSelection();
+	void appendToGitIgnore(const QString& pattern);
 
 	void showGitError(const QString& title, const GitResult& result);
 	[[nodiscard]] QString absolutePath(const FileEntry& entry) const;
