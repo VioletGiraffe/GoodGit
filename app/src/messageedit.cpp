@@ -37,6 +37,10 @@ void MessageEdit::setCompletionWords(QStringList words)
 	std::sort(words.begin(), words.end(),
 		[](const QString& l, const QString& r) { return l.compare(r, Qt::CaseInsensitive) < 0; });
 	_completerModel->setStringList(words);
+
+	// A refresh can replace the pool while the popup is up, leaving it visible over an empty
+	// completion model - QCompleter hides the popup only from complete().
+	_completer->popup()->hide();
 }
 
 void MessageEdit::keyPressEvent(QKeyEvent* event)
@@ -96,8 +100,7 @@ QString MessageEdit::wordUnderCursor() const
 
 void MessageEdit::showCompletions(const QString& prefix)
 {
-	if (prefix != _completer->completionPrefix())
-		_completer->setCompletionPrefix(prefix);
+	_completer->setCompletionPrefix(prefix); // unconditional: the pool changes under an unchanged prefix
 
 	const bool nothingToOffer = _completer->completionCount() == 0
 		|| (_completer->completionCount() == 1 && _completer->currentCompletion() == prefix);
