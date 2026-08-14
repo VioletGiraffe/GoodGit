@@ -78,6 +78,14 @@ errors through the normal failure path, not silent re-scans.
 call for - and coalesces re-entry. Check state survives a refresh, re-derived by path: persisting rows keep
 their state, new rows default to checked unless untracked.
 
+Some of those queries the state cannot be established without: the branch header, the gitlink list, the
+gitdir, and whichever tracked-changes diff the born-ness calls for. If one of them does not answer, the run
+is discarded whole rather than half-applied - the previous state and rows stay exactly where they were, a
+strip says why, and committing, discarding and deleting are refused until a refresh succeeds. Reading the
+rows is not: a stale row is still worth opening. **The distinction is between a shorter answer and a wrong
+one** - the queries outside that set cost untracked rows or a tooltip when they fail, never correctness,
+so they stay silent.
+
 ## History
 
 Read-only, and bounded rather than paged: one `log --max-count=N` builds the whole list, and "Load more"

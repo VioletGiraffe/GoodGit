@@ -27,6 +27,11 @@ struct RepoState
 	// Subjects of the commits the upstream has not seen, newest first; capped, `ahead` holds the true count
 	QStringList unpushedSubjects;
 
+	// Why the last refresh could not establish this state - empty when it could. Everything above is then
+	// the last refresh that did, held rather than half-replaced, and nothing may be acted on.
+	QString readFailure;
+
+	[[nodiscard]] bool known() const { return readFailure.isEmpty(); }
 	[[nodiscard]] bool operationInProgress() const { return op != RepoOp::None; }
 };
 
@@ -146,6 +151,9 @@ signals:
 
 private:
 	void finishRefresh();
+	struct RefreshRun;
+	// Takes a completed run's answers as the new state. Only ever called for a run that answered in full.
+	void applyRefreshResults(const RefreshRun& run);
 	// What every diff in this repository is taken against: HEAD, or the empty tree while there is no HEAD
 	[[nodiscard]] QString diffBase() const;
 
@@ -160,6 +168,5 @@ private:
 	bool _refreshing = false;
 	bool _refreshPending = false;
 
-	struct RefreshRun;
 	std::shared_ptr<RefreshRun> _run; // shared with the async callbacks; reset invalidates stragglers
 };

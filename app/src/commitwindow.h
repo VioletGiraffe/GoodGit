@@ -47,6 +47,8 @@ private:
 	// the controls that would otherwise start a second one
 	void beginMutation();
 	void endMutation();
+	// False while a write is in flight, and while the rows are only the last state that could be read
+	[[nodiscard]] bool canActOnList() const;
 
 	void startCommit(bool pushAfterwards);
 	void confirmUntrackedThenCommit(bool pushAfterwards);
@@ -99,6 +101,7 @@ private:
 	QPushButton* _peekButton = nullptr;
 	QPushButton* _refreshButton = nullptr;
 	QPushButton* _historyButton = nullptr;
+	QLabel* _readFailureStrip = nullptr;
 	QLabel* _opStrip = nullptr;
 	QLabel* _detachedStrip = nullptr;
 	QCheckBox* _checkAllBox = nullptr;

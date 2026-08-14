@@ -230,8 +230,11 @@ void CommitWindow::buildUi()
 		strip->setVisible(false);
 		return strip;
 	};
+	// First: the strips below describe a state this one says could not be read
+	_readFailureStrip = makeStrip(activeTheme().errBg, activeTheme().errFg);
 	_opStrip = makeStrip(activeTheme().errBg, activeTheme().errFg);
 	_detachedStrip = makeStrip(activeTheme().warnBg, activeTheme().warnFg);
+	leftLayout->addWidget(_readFailureStrip);
 	leftLayout->addWidget(_opStrip);
 	leftLayout->addWidget(_detachedStrip);
 
@@ -401,7 +404,7 @@ bool CommitWindow::eventFilter(QObject* watched, QEvent* event)
 		}
 		if (keyEvent->key() == Qt::Key_Delete)
 		{
-			if (!_mutationInFlight) // swallowed either way: the key means this and nothing else here
+			if (canActOnList()) // swallowed either way: the key means this and nothing else here
 				deleteSelection();
 			return true;
 		}
@@ -474,6 +477,12 @@ void CommitWindow::updateStrips()
 {
 	const RepoState& state = _repo.state();
 
+	const QString readFailureText = state.known() ? QString{}
+		: tr("Could not read this repository: %1\nEverything below is from the last refresh that could, and "
+			 "nothing can be committed, discarded or deleted until F5 succeeds.").arg(state.readFailure);
+	_readFailureStrip->setText(readFailureText);
+	_readFailureStrip->setVisible(!readFailureText.isEmpty());
+
 	QString opText;
 	switch (state.op)
 	{
@@ -517,7 +526,7 @@ void CommitWindow::updateButtons()
 
 	const bool detachedAndStuck = state.detached && state.localBranchesAtHead.isEmpty() && state.remoteBranchesAtHead.isEmpty();
 	const bool canCommit = checkedCount > 0 && !_messageEdit->toPlainText().trimmed().isEmpty()
-		&& !detachedAndStuck && !_mutationInFlight;
+		&& !detachedAndStuck && canActOnList();
 	_commitButton->setEnabled(canCommit);
 	_commitPushButton->setEnabled(canCommit);
 	_commitButton->setText(state.operationInProgress() ? tr("Commit (%1 files)").arg(checkedCount)
@@ -525,6 +534,11 @@ void CommitWindow::updateButtons()
 
 	// Without an upstream there is no ref for the incoming walk to name
 	_peekButton->setEnabled(!state.upstream.isEmpty() && !_peekInFlight);
+}
+
+bool CommitWindow::canActOnList() const
+{
+	return !_mutationInFlight && _repo.state().known();
 }
 
 void CommitWindow::beginMutation()
@@ -916,7 +930,8 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 		entries.push_back(_filesModel.entryAt(row));
 
 	const bool operationInProgress = _repo.state().operationInProgress();
-	const bool canMutate = !_mutationInFlight; // a second writer would only meet the first at index.lock
+	// The read-only entries below stay available either way - a stale row is still worth inspecting
+	const bool canAct = canActOnList();
 	bool anyUntracked = false, anyAdded = false, anyDeletable = false, anyDiscardable = false;
 	for (const FileEntry& entry : entries)
 	{
@@ -931,12 +946,12 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 
 	QMenu menu{ this };
 	QAction* addAction = menu.addAction(tr("Add to index"), this, &CommitWindow::addSelectionToIndex);
-	addAction->setEnabled(anyUntracked && canMutate);
+	addAction->setEnabled(anyUntracked && canAct);
 	QAction* unAddAction = menu.addAction(tr("Un-add"), this, &CommitWindow::unAddSelection);
-	unAddAction->setEnabled(anyAdded && canMutate);
+	unAddAction->setEnabled(anyAdded && canAct);
 	QMenu* ignoreMenu = menu.addMenu(tr("Add to .gitignore"));
 	const bool singleUntracked = entries.size() == 1 && !entries.front().isSubmodule && entries.front().type == ChangeType::Untracked;
-	ignoreMenu->setEnabled(singleUntracked);
+	ignoreMenu->setEnabled(singleUntracked && canAct); // the pattern comes off the row, so it is as stale as the row
 	if (singleUntracked)
 	{
 		for (const QString& pattern : gitIgnorePatterns(entries.front().path))
@@ -981,9 +996,9 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	});
 	menu.addSeparator();
 	QAction* discardAction = menu.addAction(tr("Discard changes"), this, &CommitWindow::discardSelection);
-	discardAction->setEnabled(anyDiscardable && canMutate);
+	discardAction->setEnabled(anyDiscardable && canAct);
 	QAction* deleteAction = menu.addAction(tr("Delete to Recycle Bin"), this, &CommitWindow::deleteSelection);
-	deleteAction->setEnabled(anyDeletable && canMutate);
+	deleteAction->setEnabled(anyDeletable && canAct);
 	// Display-only: the view's event filter owns the actual Del handling; WidgetShortcut on an action
 	// belonging to no widget never registers globally, so the key cannot trigger twice
 	deleteAction->setShortcut(QKeySequence::Delete);
