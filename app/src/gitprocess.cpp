@@ -1,82 +1,9 @@
 #include "gitprocess.h"
 #include "settings.h"
 
-#include <QPointer>
-#include <QProcessEnvironment>
-
-#include <deque>
-
 namespace {
 
-// Only the last state of a line a progress meter kept rewriting is text; a CRLF ends its line as an LF does
-QString collapseCarriageReturns(QString text)
-{
-	QStringList lines = text.split(QLatin1Char('\n'));
-	for (QString& line : lines)
-	{
-		if (line.endsWith(QLatin1Char('\r')))
-			line.chop(1);
-		line = line.mid(line.lastIndexOf(QLatin1Char('\r')) + 1);
-	}
-	return lines.join(QLatin1Char('\n'));
-}
-
-} // namespace
-
-QString GitResult::errorText() const
-{
-	if (outcome == GitOutcome::LaunchFailed)
-		return QStringLiteral("Failed to launch git. Check that git is installed and on PATH."); // nothing ran, so there is no stderr
-
-	const QString stderrText = collapseCarriageReturns(QString::fromUtf8(err)).trimmed();
-	if (outcome == GitOutcome::Exited)
-		return stderrText.isEmpty() ? QStringLiteral("git exited with code %1").arg(exitCode) : stderrText;
-
-	// Died mid-run: whatever it managed to say still stands, but on its own it would read as the whole story
-	const QString note = outcome == GitOutcome::Crashed
-		? QStringLiteral("git terminated abnormally.")
-		: QStringLiteral("git did not finish within the time allowed and was stopped.");
-	return stderrText.isEmpty() ? note : note + QStringLiteral("\n\n") + stderrText;
-}
-
-namespace Git {
-
-static constexpr int MaxConcurrentProcesses = 8;
-static constexpr int KillWaitMs = 2000; // a killed process should be gone at once; this is only so the wait is bounded
-
-struct JobQueue
-{
-	std::deque<Job*> pending;
-	int running = 0;
-
-	void pump()
-	{
-		while (running < MaxConcurrentProcesses && !pending.empty())
-		{
-			Job* job = pending.front();
-			pending.pop_front();
-
-			if (job->_hasContext && !job->_context)
-			{
-				job->deleteLater(); // nothing left to deliver the result to; starting the process would only hold a slot
-				continue;
-			}
-
-			++running;
-			job->start();
-		}
-	}
-
-	void remove(Job* job)
-	{
-		std::erase(pending, job);
-	}
-};
-
-static JobQueue s_queue;
-
-// The doc/ARCHITECTURE.md invocation invariants, applied to every invocation - async and sync alike
-static void applyInvariants(QStringList& args, bool readOnlyQuery)
+void applyInvariants(QStringList& args, bool readOnlyQuery)
 {
 	if (readOnlyQuery)
 		args.prepend(QStringLiteral("--no-optional-locks"));
@@ -84,151 +11,29 @@ static void applyInvariants(QStringList& args, bool readOnlyQuery)
 	args.prepend(QStringLiteral("-c"));
 }
 
-static QProcessEnvironment gitEnvironment()
+Vcs::Tool gitTool()
 {
-	auto env = QProcessEnvironment::systemEnvironment();
-	env.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
-	return env;
+	auto environment = QProcessEnvironment::systemEnvironment();
+	// A credential miss fails fast instead of hanging on a prompt nothing here would show
+	environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
+	return { Settings::gitExecutable(), QStringLiteral("git"), std::move(environment) };
 }
 
-Job* run(const QString& workDir, QStringList args, const QObject* context, Callback callback, QByteArray stdinData, bool readOnlyQuery)
-{
-	auto* job = new Job;
-	job->_workDir = workDir;
-	job->_args = std::move(args);
-	applyInvariants(job->_args, readOnlyQuery);
-	job->_stdinData = std::move(stdinData);
-	job->_callback = std::move(callback);
-	job->_context = context;
-	job->_hasContext = context != nullptr;
+} // namespace
 
-	s_queue.pending.push_back(job);
-	s_queue.pump();
-	return job;
+namespace Git {
+
+Vcs::Job* run(const QString& workDir, QStringList args, const QObject* context, Vcs::Callback callback,
+	QByteArray stdinData, bool readOnlyQuery)
+{
+	applyInvariants(args, readOnlyQuery);
+	return Vcs::run(gitTool(), workDir, std::move(args), context, std::move(callback), std::move(stdinData));
 }
 
-void Job::cancel()
-{
-	_cancelled = true;
-	if (_process)
-		_process->kill(); // finish() runs from the finished/error signal and self-deletes
-	else
-	{
-		s_queue.remove(this);
-		deleteLater();
-	}
-}
-
-void Job::streamTo(std::function<void(const QByteArray&)> sink)
-{
-	_sink = std::move(sink);
-}
-
-void Job::collect(const QByteArray& chunk, QByteArray& buffer)
-{
-	if (chunk.isEmpty())
-		return;
-
-	buffer += chunk;
-	if (_sink && !_cancelled && (!_hasContext || _context))
-		_sink(chunk);
-}
-
-void Job::start()
-{
-	_process = new QProcess(this);
-	_process->setWorkingDirectory(_workDir);
-	_process->setProcessEnvironment(gitEnvironment());
-
-	QObject::connect(_process, &QProcess::readyReadStandardOutput, this, [this] { collect(_process->readAllStandardOutput(), _out); });
-	QObject::connect(_process, &QProcess::readyReadStandardError, this, [this] { collect(_process->readAllStandardError(), _err); });
-
-	QObject::connect(_process, &QProcess::finished, this, [this](int exitCode, QProcess::ExitStatus status) {
-		collect(_process->readAllStandardOutput(), _out); // whatever exit raced past the last readyRead
-		collect(_process->readAllStandardError(), _err);
-
-		GitResult result;
-		result.out = std::move(_out);
-		result.err = std::move(_err);
-		if (status == QProcess::NormalExit)
-		{
-			result.outcome = GitOutcome::Exited;
-			result.exitCode = exitCode;
-			result.ok = exitCode == 0;
-		}
-		else
-			result.outcome = GitOutcome::Crashed; // the exit code a killed process carries describes the kill, not the command
-		finish(std::move(result));
-	});
-	// Queued: start() emits this synchronously when the OS refuses the launch, and run()'s contract is a
-	// callback from the event loop - callers store the returned Job and count their outstanding ones.
-	QObject::connect(_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
-		if (error != QProcess::FailedToStart)
-			return; // crashes arrive via finished()
-		GitResult result;
-		result.outcome = GitOutcome::LaunchFailed;
-		finish(std::move(result));
-	}, Qt::QueuedConnection);
-
-	_process->start(Settings::gitExecutable(), _args);
-	// Refused synchronously: the write channel is closed, and the queued errorOccurred handler owns the result
-	if (_process->state() == QProcess::NotRunning)
-		return;
-
-	if (!_stdinData.isEmpty())
-		_process->write(_stdinData);
-	_process->closeWriteChannel();
-}
-
-GitResult runSync(const QString& workDir, QStringList args, int timeoutMs)
+ProcessResult runSync(const QString& workDir, QStringList args, int timeoutMs)
 {
 	applyInvariants(args, /*readOnlyQuery=*/true);
-
-	const QString git = Settings::gitExecutable();
-	QProcess process;
-	process.setWorkingDirectory(workDir);
-	process.setProcessEnvironment(gitEnvironment());
-	process.start(git, args);
-	process.closeWriteChannel();
-
-	GitResult result;
-	if (!process.waitForFinished(timeoutMs))
-	{
-		// The wait fails just the same when there was never a process to wait for
-		if (process.error() == QProcess::FailedToStart)
-		{
-			result.outcome = GitOutcome::LaunchFailed;
-			return result;
-		}
-		// Or ~QProcess does it instead, from a destructor and after printing a warning of its own
-		process.kill();
-		process.waitForFinished(KillWaitMs);
-		result.outcome = GitOutcome::TimedOut;
-	}
-	else if (process.exitStatus() == QProcess::NormalExit)
-	{
-		result.outcome = GitOutcome::Exited;
-		result.exitCode = process.exitCode();
-		result.ok = result.exitCode == 0;
-	}
-	else
-		result.outcome = GitOutcome::Crashed;
-
-	// Whatever reached the pipes before it stopped, however it stopped
-	result.out = process.readAllStandardOutput();
-	result.err = process.readAllStandardError();
-	return result;
-}
-
-void Job::finish(GitResult result)
-{
-	--s_queue.running;
-	s_queue.pump();
-
-	if (!_cancelled && _callback && (!_hasContext || _context))
-		_callback(result);
-
-	deleteLater();
+	return Vcs::runSync(gitTool(), workDir, std::move(args), timeoutMs);
 }
 
 } // namespace Git

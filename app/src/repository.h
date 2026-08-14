@@ -1,74 +1,14 @@
 #pragma once
 
-#include "gitparsers.h"
-#include "gitprocess.h"
+#include "vcsprocess.h"
+#include "vcstypes.h"
 
 #include <QObject>
+#include <QSet>
 
+#include <map>
 #include <memory>
-#include <optional>
 #include <vector>
-
-enum class RepoOp : uint8_t { None, Merge, CherryPick, Revert, Rebase };
-
-struct RepoState
-{
-	QString branch;      // empty when detached
-	QString headSha;     // full sha of HEAD; empty when unborn
-	QString headSubject; // subject line of HEAD; empty when unborn
-	QString upstream;    // empty if none configured
-	int ahead = 0;
-	int behind = 0;
-	bool detached = false;
-	bool unborn = false;
-	RepoOp op = RepoOp::None;
-
-	// Filled only when detached: branch tips that equal HEAD, for the reattachment logic
-	QStringList localBranchesAtHead;
-	QStringList remoteBranchesAtHead;
-
-	// Subjects of the commits the upstream has not seen, newest first; capped, `ahead` holds the true count
-	QStringList unpushedSubjects;
-
-	// Why the last refresh could not establish this state - empty when it could. Everything above is then
-	// the last refresh that did, held rather than half-replaced, and nothing may be acted on.
-	QString readFailure;
-
-	[[nodiscard]] bool known() const { return readFailure.isEmpty(); }
-	[[nodiscard]] bool operationInProgress() const { return op != RepoOp::None; }
-};
-
-// What a submodule's own worktree holds, as far as the parent was able to determine
-enum class SubmoduleContent : uint8_t
-{
-	Clean,        // also the never-initialized case: an empty directory has nothing inside to lose
-	Untracked,    // untracked files only - shown on the row, blocks nothing
-	DirtyTracked, // modified tracked files inside
-	Unknown,      // the status query inside failed; it may be dirty, so it counts as dirty
-};
-
-struct FileEntry
-{
-	QString path;    // repo-relative, forward slashes; the new path for renames
-	QString oldPath; // renames only
-	ChangeType type = ChangeType::Modified;
-
-	// Absent where the tracked-changes diff gives no count: an untracked file is not in it, a binary one
-	// it counts as `-`, and a submodule's one-line pointer change is not a line count of anything.
-	std::optional<LineCounts> lineCounts;
-
-	bool isSubmodule = false;
-	bool pointerMoved = false; // the recorded commit differs from HEAD's
-	SubmoduleContent content = SubmoduleContent::Clean;
-
-	// Committing the pointer and discarding it both walk over whatever is inside, so the same content
-	// stops either one
-	[[nodiscard]] bool contentBlocksPointer() const
-	{
-		return content == SubmoduleContent::DirtyTracked || content == SubmoduleContent::Unknown;
-	}
-	[[nodiscard]] bool committable() const { return !isSubmodule || (pointerMoved && !contentBlocksPointer()); }
-};
 
 // One git repository: state queries and actions, all asynchronous via Git::run.
 // The unit of the whole application - a submodule is simply another Repository in another window.
@@ -89,40 +29,45 @@ public:
 
 	// Commits the given pathspec (which must already include both sides of every rename).
 	// untrackedPaths (a subset of the pathspec) is `git add`ed first and un-added again if the commit fails.
-	void commit(const QString& message, const QStringList& pathspec, const QStringList& untrackedPaths, Git::Callback onDone);
+	void commit(const QString& message, const QStringList& pathspec, const QStringList& untrackedPaths, Vcs::Answer<void> onDone);
 
 	// Merge/rebase mode: stages all tracked changes plus the given untracked paths, commits with no pathspec
-	void commitMergeState(const QString& message, const QStringList& untrackedPaths, Git::Callback onDone);
+	void commitMergeState(const QString& message, const QStringList& untrackedPaths, Vcs::Answer<void> onDone);
 
-	// Both return the job, so the caller can stream the output into a log while the push runs. They ask for
-	// --progress because git writes none into a pipe otherwise; the meter arrives as carriage returns.
-	Git::Job* push(Git::Callback onDone);
-	Git::Job* pushSetUpstream(Git::Callback onDone);
+	// The one command reported as a process rather than as an answer: the push log is a console view of
+	// one, and shows the exit code when it had nothing to say for itself. Both return the job, so the
+	// caller can stream the output into that log while the push runs. They ask for --progress because git
+	// writes none into a pipe otherwise; the meter arrives as carriage returns.
+	Vcs::Job* push(Vcs::Callback onDone);
+	Vcs::Job* pushSetUpstream(Vcs::Callback onDone);
 	// Moves the remote-tracking refs. Nothing else in the app does, so state.behind and the incoming
 	// list mean only what the last fetch left behind.
-	void fetch(Git::Callback onDone);
+	void fetch(Vcs::Answer<void> onDone);
 
-	void addToIndex(const QStringList& paths, Git::Callback onDone);
-	void unAdd(const QStringList& paths, Git::Callback onDone);
+	void addToIndex(const QStringList& paths, Vcs::Answer<void> onDone);
+	void unAdd(const QStringList& paths, Vcs::Answer<void> onDone);
 
 	// Restores the pathspec (both sides of every rename) to HEAD, in the index and the worktree alike.
 	// Three things the caller must screen for: a path git does not know aborts the whole command, a path
 	// in the index but not in HEAD is deleted outright, and a submodule is checked out to the recorded
 	// commit - overwriting uncommitted changes inside it without a word, and leaving it detached.
-	void discardChanges(const QStringList& pathspec, Git::Callback onDone);
+	void discardChanges(const QStringList& pathspec, Vcs::Answer<void> onDone);
 
-	void checkoutBranch(const QString& branch, Git::Callback onDone);
+	void checkoutBranch(const QString& branch, Vcs::Answer<void> onDone);
 	// Creates `localName` tracking `remoteBranch` (e.g. "origin/master") at HEAD, without moving the working tree
-	void createTrackingBranch(const QString& localName, const QString& remoteBranch, Git::Callback onDone);
+	void createTrackingBranch(const QString& localName, const QString& remoteBranch, Vcs::Answer<void> onDone);
+	// Not asked as an answer: the query failing is the answer, there being no branch of that name
 	void localBranchExists(const QString& name, const QObject* context, std::function<void(bool)> onDone);
 
-	// Read-only queries. The job dies with `context`, so pass the object that will display the answer -
-	// not the Repository, which outlives any one view of it.
+	// Read-only queries. Each parses what it ran before it answers, so no command output crosses this
+	// line. The query dies with `context`, so pass the object that will display the answer - not the
+	// Repository, which outlives any one view of it.
 
-	// Diff providers for the window. Kill the returned job when the selection moves on.
-	Git::Job* diffFile(const FileEntry& entry, const QObject* context, Git::Callback onDone);
+	// Diff providers for the window; the bytes are the caller's to size up and decode. Cancel the
+	// returned query when the selection moves on.
+	Vcs::Query diffFile(const FileEntry& entry, const QObject* context, Vcs::Answer<QByteArray> onDone);
 	// One `-U0` diff of every change at once; feeds the message completion word pool
-	Git::Job* diffAllChanges(const QObject* context, Git::Callback onDone);
+	Vcs::Query diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone);
 
 	// Everything one history view is showing, and every parameter of the `git log` behind it
 	struct LogQuery
@@ -136,25 +81,26 @@ public:
 	// At most maxCommits reachable from HEAD, newest first. Widening the window means re-running with
 	// a larger cap: a date-ordered walk has no resumable cursor (doc/ARCHITECTURE.md).
 	// With a pickaxe this lists every commit that changed a line containing the text.
-	Git::Job* commitLog(const LogQuery& query, const QObject* context, Git::Callback onDone);
+	Vcs::Query commitLog(const LogQuery& query, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone);
 	// The narrower half of a pickaxe: commits where the number of occurrences changed, so the text was
-	// genuinely added or removed rather than merely edited around. Shas only, as parseLineList input.
-	Git::Job* commitsAddingOrRemovingText(const LogQuery& query, const QObject* context, Git::Callback onDone);
-	// What the upstream has and HEAD does not, newest first, as parseCommitLog input. Compares against
-	// the remote-tracking ref, so it is only as current as the last fetch.
-	Git::Job* incomingCommits(int maxCommits, const QObject* context, Git::Callback onDone);
-	// The files one commit touched, as parseNameStatusZ input. Empty for a merge - git shows no diff
-	// for one without --cc - so detect merges from the parent count, not from an empty result.
-	Git::Job* commitFiles(const QString& sha, const QObject* context, Git::Callback onDone);
-	// The lines behind those same files, as parseNumstatZ input. Its own query, so it may answer either
-	// side of the one above; the list is built from whichever arrives first.
-	Git::Job* commitFileCounts(const QString& sha, const QObject* context, Git::Callback onDone);
-	Git::Job* commitFileDiff(const QString& sha, const NameStatusEntry& file, const QObject* context, Git::Callback onDone);
-	// The shas HEAD holds that its upstream does not, as parseLineList input. Fails when there is no
-	// upstream to compare against - none configured, or a detached HEAD - which is not an error to report.
-	Git::Job* unpushedCommits(const QObject* context, Git::Callback onDone);
-	// For a moved submodule pointer: the commits being pulled in, as `log --oneline old..HEAD` run inside the submodule
-	void submodulePointerLog(const FileEntry& entry, const QObject* context, Git::Callback onDone);
+	// genuinely added or removed rather than merely edited around.
+	Vcs::Query commitsAddingOrRemovingText(const LogQuery& query, const QObject* context, Vcs::Answer<QSet<QString>> onDone);
+	// What the upstream has and HEAD does not, newest first. Compares against the remote-tracking ref,
+	// so it is only as current as the last fetch.
+	Vcs::Query incomingCommits(int maxCommits, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone);
+	// The files one commit touched. Empty for a merge - git shows no diff for one without --cc - so
+	// detect merges from the parent count, not from an empty result.
+	Vcs::Query commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone);
+	// The lines behind those same files, keyed by path. Its own query, so it may answer either side of
+	// the one above; the list is built from whichever arrives first. A file whose lines the backend
+	// cannot count is absent rather than zero.
+	Vcs::Query commitFileCounts(const QString& sha, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone);
+	Vcs::Query commitFileDiff(const QString& sha, const CommitFileChange& file, const QObject* context, Vcs::Answer<QByteArray> onDone);
+	// The shas HEAD holds that its upstream does not. Fails when there is no upstream to compare
+	// against - none configured, or a detached HEAD - which is not an error to report.
+	Vcs::Query unpushedCommits(const QObject* context, Vcs::Answer<QSet<QString>> onDone);
+	// For a moved submodule pointer: the commits being pulled in, one line each
+	Vcs::Query submodulePointerLog(const FileEntry& entry, const QObject* context, Vcs::Answer<QString> onDone);
 
 signals:
 	void refreshed();

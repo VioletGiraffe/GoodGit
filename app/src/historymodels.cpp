@@ -73,7 +73,7 @@ bool matchesSearch(const CommitRecord& commit, const QString& text)
 		|| commit.message.contains(text, Qt::CaseInsensitive);
 }
 
-QString pathText(const NameStatusEntry& entry)
+QString pathText(const CommitFileChange& entry)
 {
 	return entry.oldPath.isEmpty() ? entry.path : QStringLiteral("%1 (was %2)").arg(entry.path, entry.oldPath);
 }
@@ -256,7 +256,7 @@ CommitFilesModel::CommitFilesModel(QObject* parent) :
 {
 }
 
-void CommitFilesModel::setEntries(std::vector<NameStatusEntry> entries)
+void CommitFilesModel::setEntries(std::vector<CommitFileChange> entries)
 {
 	beginResetModel();
 	_entries = std::move(entries);
@@ -299,7 +299,7 @@ QVariant CommitFilesModel::data(const QModelIndex& index, int role) const
 	if (!index.isValid() || index.row() >= int(_entries.size()))
 		return {};
 
-	const NameStatusEntry& entry = _entries[size_t(index.row())];
+	const CommitFileChange& entry = _entries[size_t(index.row())];
 
 	switch (role)
 	{

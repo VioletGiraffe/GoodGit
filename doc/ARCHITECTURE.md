@@ -33,9 +33,11 @@ Consequences that follow from this choice, all deliberate:
 
 | | |
 |---|---|
-| `gitprocess` | `Git::run()` - async `QProcess` jobs, at most 8 concurrent, cancellable, and scoped to a context `QObject` - once it dies the callback is skipped and a still-queued job is discarded unstarted. `Git::runSync()` - blocking variant for the one startup moment before the event loop exists. Both apply the invariants below |
+| `vcstypes` | The vocabulary the windows and models speak and every backend answers in - the repository state, one file's change, one commit's record. Names no version control system |
+| `vcsprocess` | `Vcs::run()` - async `QProcess` jobs, at most 8 concurrent, cancellable, and scoped to a context `QObject` - once it dies the callback is skipped and a still-queued job is discarded unstarted. `Vcs::runSync()` - blocking variant for the one startup moment before the event loop exists. Knows no version control system: it is handed the executable to run and arguments that already carry whatever invariants their backend applies. `Vcs::Query` is what a read-only query is cancelled by, and follows it from one process to the next where a backend answers with several |
+| `gitprocess` | `Git::run()`, `Git::runSync()` - the git executable and the invariants below, over `vcsprocess` |
 | `gitparsers` | Free-function parsers for the git outputs the app consumes. UI- and process-free deliberately: exercisable directly |
-| `repository` | `Repository` - one repo: state, file entries, refresh, and every git action. The unit of the application. Its read-only queries take the object that will show the answer as the job's context, so a query dies with its view rather than with the repo |
+| `repository` | `Repository` - one repo: state, file entries, refresh, and every git action. The unit of the application. Its queries parse what they ran before they answer, so no command output crosses out of it, and each takes the object that will show the answer as its context - a query dies with its view rather than with the repo |
 | `changedfilesmodel` | Checkable table over the entries; row styling comes from the theme as item data roles |
 | `filelistdelegate` | Paints the two file-list details item roles cannot express: the recolored deleted strikethrough and the selected-row accent stripe |
 | `theme` | The whole visual style in one place, mirroring the mockup's CSS variables. Applied once at startup; light or dark follows the system theme |
@@ -64,7 +66,7 @@ sink (`Job::streamTo`), attached before control returns to the event loop or the
 Push is the one command that streams: it carries `--progress`, because into a pipe git prints nothing at all
 until it finishes. The meter arrives as carriage returns rewriting a single line - `ConsoleLogView` renders
 that as a terminal would, and
-`GitResult::errorText()` collapses it so error dialogs read as before. A submodule push announces itself
+`ProcessResult::errorText()` collapses it so error dialogs read as before. A submodule push announces itself
 (`Pushing submodule 'x'`) but does not inherit `--progress`, so its own phases stay silent.
 
 ## Refresh
@@ -94,7 +96,7 @@ re-runs it with N doubled. A file history is that same window with a path append
 sha's ancestors drops every commit that sits on a parallel branch, since those are ancestors of HEAD but
 not of that sha. `--skip` avoids that bug but re-walks the skipped commits anyway, which is what the
 re-run costs. The only alternative is streaming one `log` process, which needs the `readyRead` path
-`gitprocess` does not have.
+`vcsprocess` does not have.
 
 Search runs entirely in memory, over the records already loaded - sha, author, refs, date and message
 are all held there, so no git process is involved and non-matching rows are simply hidden. This is why

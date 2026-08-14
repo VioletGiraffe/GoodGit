@@ -1,0 +1,101 @@
+#pragma once
+
+#include <QString>
+#include <QStringList>
+
+#include <optional>
+#include <stdint.h>
+
+// What the windows and the models speak, and what every backend answers in. Nothing here names a
+// particular version control system, and nothing here is a parse of any one command's output.
+
+enum class ChangeType : uint8_t { Modified, Added, Untracked, Deleted, Renamed, TypeChanged, Conflicted };
+
+struct LineCounts
+{
+	int added = 0;
+	int removed = 0;
+};
+
+// One file as one commit changed it
+struct CommitFileChange
+{
+	ChangeType type = ChangeType::Modified;
+	QString path;    // the new path for renames
+	QString oldPath; // renames only
+};
+
+struct CommitRecord
+{
+	QString sha;
+	QStringList parents; // more than one is a merge
+	QString author;
+	QString date;    // ISO 8601 with offset
+	QString refs;    // "HEAD -> master, origin/master"; empty for most commits
+	QString message; // the whole thing: subject line, blank line, body
+
+	[[nodiscard]] QString subject() const { return message.section(QLatin1Char('\n'), 0, 0); }
+};
+
+enum class RepoOp : uint8_t { None, Merge, CherryPick, Revert, Rebase };
+
+struct RepoState
+{
+	QString branch;      // empty when detached
+	QString headSha;     // full sha of HEAD; empty when unborn
+	QString headSubject; // subject line of HEAD; empty when unborn
+	QString upstream;    // empty if none configured
+	int ahead = 0;
+	int behind = 0;
+	bool detached = false;
+	bool unborn = false;
+	RepoOp op = RepoOp::None;
+
+	// Filled only when detached: branch tips that equal HEAD, for the reattachment logic
+	QStringList localBranchesAtHead;
+	QStringList remoteBranchesAtHead;
+
+	// Subjects of the commits the upstream has not seen, newest first; capped, `ahead` holds the true count
+	QStringList unpushedSubjects;
+
+	// Why the last refresh could not establish this state - empty when it could. Everything above is then
+	// the last refresh that did, held rather than half-replaced, and nothing may be acted on.
+	QString readFailure;
+
+	[[nodiscard]] bool known() const { return readFailure.isEmpty(); }
+	[[nodiscard]] bool operationInProgress() const { return op != RepoOp::None; }
+};
+
+// What a submodule's own worktree holds, as far as the parent was able to determine
+enum class SubmoduleContent : uint8_t
+{
+	Clean,        // also the never-initialized case: an empty directory has nothing inside to lose
+	Untracked,    // untracked files only - shown on the row, blocks nothing
+	DirtyTracked, // modified tracked files inside
+	Unknown,      // the status query inside failed; it may be dirty, so it counts as dirty
+};
+
+// One row of the file list: the working tree's delta from the last commit, one path at a time
+struct FileEntry
+{
+	QString path;    // repo-relative, forward slashes; the new path for renames
+	QString oldPath; // renames only
+	ChangeType type = ChangeType::Modified;
+
+	// Absent wherever the counts are not available for the row: an untracked file is not in the tracked
+	// diff, a binary one has no line count, and a submodule's one-line pointer change is not a count of
+	// anything. A backend that cannot count lines at all leaves every row without them.
+	std::optional<LineCounts> lineCounts;
+
+	bool isSubmodule = false;
+	bool pointerMoved = false; // the recorded commit differs from HEAD's
+	SubmoduleContent content = SubmoduleContent::Clean;
+
+	// Committing the pointer and discarding it both walk over whatever is inside, so the same content
+	// stops either one
+	[[nodiscard]] bool contentBlocksPointer() const
+	{
+		return content == SubmoduleContent::DirtyTracked || content == SubmoduleContent::Unknown;
+	}
+	[[nodiscard]] bool committable() const { return !isSubmodule || (pointerMoved && !contentBlocksPointer()); }
+};

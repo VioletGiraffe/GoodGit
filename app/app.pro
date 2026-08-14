@@ -45,7 +45,9 @@ HEADERS += \
 	src/messageedit.h \
 	src/repository.h \
 	src/settings.h \
-	src/theme.h
+	src/theme.h \
+	src/vcsprocess.h \
+	src/vcstypes.h
 
 SOURCES += \
 	src/changedfilesmodel.cpp \
@@ -61,7 +63,8 @@ SOURCES += \
 	src/messageedit.cpp \
 	src/repository.cpp \
 	src/settings.cpp \
-	src/theme.cpp
+	src/theme.cpp \
+	src/vcsprocess.cpp
 
 RESOURCES += res/theme.qrc
 

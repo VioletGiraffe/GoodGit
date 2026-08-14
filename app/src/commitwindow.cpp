@@ -439,10 +439,9 @@ void CommitWindow::onRefreshed()
 	showDiffForCurrentRow();
 
 	// Or refreshes in quick succession leave the pool built by whichever finished last, not by the newest
-	if (_wordPoolJob)
-		_wordPoolJob->cancel();
-	_wordPoolJob = _repo.diffAllChanges(this, [this](const GitResult& result) {
-		_messageEdit->setCompletionWords(completionWordsFor(_repo.files(), result.ok ? result.out : QByteArray{}));
+	_wordPoolQuery.cancel();
+	_wordPoolQuery = _repo.diffAllChanges(this, [this](std::expected<QByteArray, QString> diff) {
+		_messageEdit->setCompletionWords(completionWordsFor(_repo.files(), std::move(diff).value_or(QByteArray{})));
 	});
 }
 
@@ -612,10 +611,10 @@ void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 	const RepoState& state = _repo.state();
 
 	const auto checkoutAndGo = [this, onDone](const QString& branch) {
-		_repo.checkoutBranch(branch, [this, onDone](const GitResult& result) {
-			if (!result.ok)
-				showGitError(tr("Failed to check out the branch"), result);
-			onDone(result.ok);
+		_repo.checkoutBranch(branch, [this, onDone](std::expected<void, QString> result) {
+			if (!result)
+				showError(tr("Failed to check out the branch"), result.error());
+			onDone(result.has_value());
 		});
 	};
 
@@ -664,10 +663,10 @@ void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 				onDone(false);
 				return;
 			}
-			_repo.createTrackingBranch(localName, remoteBranch, [this, onDone](const GitResult& result) {
-				if (!result.ok)
-					showGitError(tr("Failed to create the branch"), result);
-				onDone(result.ok);
+			_repo.createTrackingBranch(localName, remoteBranch, [this, onDone](std::expected<void, QString> result) {
+				if (!result)
+					showError(tr("Failed to create the branch"), result.error());
+				onDone(result.has_value());
 			});
 		});
 		return;
@@ -687,11 +686,11 @@ void CommitWindow::doCommit(bool pushAfterwards)
 	assert(!message.trimmed().isEmpty() && !pathspec.isEmpty());
 	assert(_mutationInFlight); // startCommit took it, and holds it across the reattach and the dialogs
 
-	const auto onDone = [this, message, pushAfterwards](const GitResult& result) {
+	const auto onDone = [this, message, pushAfterwards](std::expected<void, QString> result) {
 		endMutation();
-		if (!result.ok)
+		if (!result)
 		{
-			showGitError(tr("Commit failed"), result);
+			showError(tr("Commit failed"), result.error());
 			_repo.refresh();
 			return;
 		}
@@ -718,7 +717,7 @@ void CommitWindow::doPush(bool setUpstream)
 	// A label, not the literal argv: the invocation invariants, --recurse-submodules and --progress are noise there
 	_pushLogView->beginEntry(setUpstream ? QStringLiteral("git push --set-upstream origin HEAD") : QStringLiteral("git push"));
 
-	const auto onDone = [this, setUpstream](const GitResult& result) {
+	const auto onDone = [this, setUpstream](const ProcessResult& result) {
 		_pushButton->setEnabled(true);
 		closePushLogEntry(result);
 
@@ -737,10 +736,10 @@ void CommitWindow::doPush(bool setUpstream)
 				doPush(/*setUpstream=*/true);
 			return;
 		}
-		showGitError(tr("Push failed"), result);
+		showError(tr("Push failed"), result.errorText());
 	};
 
-	Git::Job* job = setUpstream ? _repo.pushSetUpstream(onDone) : _repo.push(onDone);
+	Vcs::Job* job = setUpstream ? _repo.pushSetUpstream(onDone) : _repo.push(onDone);
 	// Before the event loop runs again, so the first chunk is not missed
 	job->streamTo([this](const QByteArray& chunk) { _pushLogView->appendOutput(chunk); });
 }
@@ -750,25 +749,24 @@ void CommitWindow::peekIncoming()
 	_peekInFlight = true;
 	updateButtons();
 
-	_repo.fetch([this](const GitResult& fetchResult) {
+	_repo.fetch([this](std::expected<void, QString> fetchResult) {
 		_peekInFlight = false;
 		updateButtons();
 
-		if (!fetchResult.ok)
+		if (!fetchResult)
 		{
-			showGitError(tr("Fetch failed"), fetchResult);
+			showError(tr("Fetch failed"), fetchResult.error());
 			return;
 		}
 		_repo.refresh(); // the fetch moved the remote-tracking ref, so the header's counts are stale
 
-		_repo.incomingCommits(MaxIncomingCommits, this, [this](const GitResult& logResult) {
-			if (!logResult.ok)
+		_repo.incomingCommits(MaxIncomingCommits, this, [this](std::expected<std::vector<CommitRecord>, QString> commits) {
+			if (!commits)
 			{
-				showGitError(tr("Could not list the incoming commits"), logResult);
+				showError(tr("Could not list the incoming commits"), commits.error());
 				return;
 			}
-			const std::vector<CommitRecord> commits = parseCommitLog(logResult.out);
-			showIncomingCommits(commits, int(commits.size()) >= MaxIncomingCommits);
+			showIncomingCommits(*commits, int(commits->size()) >= MaxIncomingCommits);
 		});
 	});
 }
@@ -815,11 +813,11 @@ void CommitWindow::showIncomingCommits(const std::vector<CommitRecord>& commits,
 	_incomingPopup->show();
 }
 
-void CommitWindow::closePushLogEntry(const GitResult& result)
+void CommitWindow::closePushLogEntry(const ProcessResult& result)
 {
 	// Everything the push had to say is already in the log, streamed as it ran. What is left is what the
 	// process could not say for itself.
-	if (result.outcome != GitOutcome::Exited)
+	if (result.outcome != ProcessOutcome::Exited)
 		_pushLogView->appendNote(result.errorText());
 	else if (!_pushLogView->entryHasOutput())
 		_pushLogView->appendNote(tr("(no output; exit code %1)").arg(result.exitCode));
@@ -827,9 +825,7 @@ void CommitWindow::closePushLogEntry(const GitResult& result)
 
 void CommitWindow::showDiffForCurrentRow()
 {
-	const int generation = ++_diffGeneration;
-	if (_diffJob)
-		_diffJob->cancel();
+	_diffQuery.cancel();
 
 	const QModelIndex current = _filesView->currentIndex();
 	if (!current.isValid() || current.row() >= _filesModel.rowCount())
@@ -848,31 +844,24 @@ void CommitWindow::showDiffForCurrentRow()
 			return;
 		}
 		setDiffText(entry.path, tr("new commits"), tr("Loading..."));
-		_repo.submodulePointerLog(entry, this, [this, generation, entry](const GitResult& result) {
-			if (generation != _diffGeneration)
-				return;
-			if (!result.ok)
-				setDiffText(entry.path, tr("new commits"), result.errorText());
-			else
-				setDiffText(entry.path, tr("new commits"), tr("Commits being pulled in:\n\n") + QString::fromUtf8(result.out));
+		_diffQuery = _repo.submodulePointerLog(entry, this, [this, entry](std::expected<QString, QString> log) {
+			setDiffText(entry.path, tr("new commits"), log ? tr("Commits being pulled in:\n\n") + *log : log.error());
 		});
 		return;
 	}
 
 	const QString tag = entry.type == ChangeType::Untracked ? tr("new file") : tr("HEAD %1 working tree").arg(QChar(0x2192));
 	setDiffText(entry.path, tag, tr("Loading..."));
-	_diffJob = _repo.diffFile(entry, this, [this, generation, entry](const GitResult& result) {
-		if (generation != _diffGeneration)
-			return;
-		if (!result.ok)
-			setDiffText(entry.path, {}, result.errorText());
-		else if (result.out.size() > MaxDiffBytes)
-			setDiffText(entry.path, {}, tr("The diff is too large to display (%1 MB).").arg(double(result.out.size()) / (1024 * 1024), 0, 'f', 1));
-		else if (result.out.isEmpty())
+	_diffQuery = _repo.diffFile(entry, this, [this, entry](std::expected<QByteArray, QString> diff) {
+		if (!diff)
+			setDiffText(entry.path, {}, diff.error());
+		else if (diff->size() > MaxDiffBytes)
+			setDiffText(entry.path, {}, tr("The diff is too large to display (%1 MB).").arg(double(diff->size()) / (1024 * 1024), 0, 'f', 1));
+		else if (diff->isEmpty())
 			setDiffText(entry.path, {}, tr("No content changes (only the mode or the line endings differ, or the file matches HEAD)."));
 		else
 			setDiffText(entry.path, entry.type == ChangeType::Untracked ? tr("new file") : tr("HEAD %1 working tree").arg(QChar(0x2192)),
-				QString::fromUtf8(result.out));
+				QString::fromUtf8(*diff));
 	});
 }
 
@@ -1135,11 +1124,11 @@ void CommitWindow::deleteSelection()
 	{
 		// Un-add first: trashing a staged-as-added file would leave the index pointing at a file that no longer exists
 		beginMutation();
-		_repo.unAdd(addedPaths, [this, paths = untrackedPaths + trackedPaths + addedPaths, trashAll](const GitResult& result) {
+		_repo.unAdd(addedPaths, [this, paths = untrackedPaths + trackedPaths + addedPaths, trashAll](std::expected<void, QString> result) {
 			endMutation();
-			if (!result.ok)
+			if (!result)
 			{
-				showGitError(tr("Failed to un-add before deleting"), result);
+				showError(tr("Failed to un-add before deleting"), result.error());
 				return;
 			}
 			trashAll(paths);
@@ -1208,10 +1197,10 @@ void CommitWindow::discardSelection()
 			_repo.refresh();
 			return;
 		}
-		_repo.unAdd(addedPaths, [this](const GitResult& result) {
+		_repo.unAdd(addedPaths, [this](std::expected<void, QString> result) {
 			endMutation();
-			if (!result.ok)
-				showGitError(tr("Un-add failed"), result);
+			if (!result)
+				showError(tr("Un-add failed"), result.error());
 			_repo.refresh();
 		});
 	};
@@ -1223,11 +1212,11 @@ void CommitWindow::discardSelection()
 		return;
 	}
 
-	_repo.discardChanges(pathspec, [this, unAddThenRefresh](const GitResult& result) {
-		if (!result.ok)
+	_repo.discardChanges(pathspec, [this, unAddThenRefresh](std::expected<void, QString> result) {
+		if (!result)
 		{
 			endMutation();
-			showGitError(tr("Discard failed"), result);
+			showError(tr("Discard failed"), result.error());
 			_repo.refresh();
 			return;
 		}
@@ -1247,10 +1236,10 @@ void CommitWindow::addSelectionToIndex()
 	if (paths.isEmpty())
 		return;
 	beginMutation();
-	_repo.addToIndex(paths, [this](const GitResult& result) {
+	_repo.addToIndex(paths, [this](std::expected<void, QString> result) {
 		endMutation();
-		if (!result.ok)
-			showGitError(tr("Add to index failed"), result);
+		if (!result)
+			showError(tr("Add to index failed"), result.error());
 		_repo.refresh();
 	});
 }
@@ -1267,10 +1256,10 @@ void CommitWindow::unAddSelection()
 	if (paths.isEmpty())
 		return;
 	beginMutation();
-	_repo.unAdd(paths, [this](const GitResult& result) {
+	_repo.unAdd(paths, [this](std::expected<void, QString> result) {
 		endMutation();
-		if (!result.ok)
-			showGitError(tr("Un-add failed"), result);
+		if (!result)
+			showError(tr("Un-add failed"), result.error());
 		_repo.refresh();
 	});
 }
@@ -1295,10 +1284,10 @@ void CommitWindow::appendToGitIgnore(const QString& pattern)
 	_repo.refresh();
 }
 
-void CommitWindow::showGitError(const QString& title, const GitResult& result)
+void CommitWindow::showError(const QString& title, const QString& details)
 {
 	// The command's own stderr, verbatim - hook output is the only thing that makes a rejected commit diagnosable
-	MessageBox::notice(this, title, title + QLatin1Char('.'), result.errorText());
+	MessageBox::notice(this, title, title + QLatin1Char('.'), details);
 }
 
 QString CommitWindow::absolutePath(const FileEntry& entry) const

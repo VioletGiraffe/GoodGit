@@ -1,6 +1,6 @@
 #pragma once
 
-#include "repository.h"
+#include "vcstypes.h"
 
 #include <QAbstractTableModel>
 #include <QColor>

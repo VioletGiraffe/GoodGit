@@ -58,7 +58,7 @@ private:
 	void doPush(bool setUpstream);
 	void peekIncoming();
 	void showIncomingCommits(const std::vector<CommitRecord>& commits, bool capped);
-	void closePushLogEntry(const GitResult& result);
+	void closePushLogEntry(const ProcessResult& result);
 
 	void showHistoryWindow();
 
@@ -86,7 +86,7 @@ private:
 	void unAddSelection();
 	void appendToGitIgnore(const QString& pattern);
 
-	void showGitError(const QString& title, const GitResult& result);
+	void showError(const QString& title, const QString& details);
 	[[nodiscard]] QString absolutePath(const FileEntry& entry) const;
 
 private:
@@ -121,9 +121,8 @@ private:
 	QPlainTextEdit* _incomingView = nullptr;
 
 	QPointer<HistoryWindow> _historyWindow; // at most one per repo window, raised again on a second click
-	QPointer<Git::Job> _diffJob;
-	QPointer<Git::Job> _wordPoolJob;
-	int _diffGeneration = 0; // stale async diff results (incl. the two-step submodule log) are dropped by this
+	Vcs::Query _diffQuery; // whatever fills the diff pane: a file's diff, or a submodule's incoming commits
+	Vcs::Query _wordPoolQuery;
 	// Held for a whole writing flow, dialogs and the asynchronous reattach included - not just while a git
 	// process runs. Two of them would meet at index.lock, and the second would commit a pathspec the first
 	// has already taken.

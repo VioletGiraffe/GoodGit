@@ -250,22 +250,17 @@ void HistoryWindow::closeEvent(QCloseEvent* event)
 
 void HistoryWindow::refreshUnpushedMarks()
 {
-	if (_unpushedJob)
-		_unpushedJob->cancel();
-
-	_unpushedJob = _repo.unpushedCommits(this, [this](const GitResult& result) {
+	_unpushedQuery.cancel();
+	_unpushedQuery = _repo.unpushedCommits(this, [this](std::expected<QSet<QString>, QString> shas) {
 		// A failure is the ordinary "no upstream to compare against", and marks nothing
-		const QStringList shas = result.ok ? parseLineList(result.out) : QStringList{};
-		_logModel.setUnpushedShas(QSet<QString>{ shas.begin(), shas.end() });
+		_logModel.setUnpushedShas(std::move(shas).value_or(QSet<QString>{}));
 	});
 }
 
 void HistoryWindow::reload()
 {
-	if (_logJob)
-		_logJob->cancel();
-	if (_pickaxeJob)
-		_pickaxeJob->cancel();
+	_logQuery.cancel();
+	_pickaxeQuery.cancel();
 
 	refreshUnpushedMarks();
 	_logLoaded = false;
@@ -276,25 +271,24 @@ void HistoryWindow::reload()
 	_logModel.setAddingOrRemovingShas({});
 	if (!_query.pickaxe.isEmpty())
 	{
-		_pickaxeJob = _repo.commitsAddingOrRemovingText(_query, this, [this](const GitResult& result) {
-			const QStringList shas = result.ok ? parseLineList(result.out) : QStringList{};
-			_logModel.setAddingOrRemovingShas(QSet<QString>{ shas.begin(), shas.end() });
+		_pickaxeQuery = _repo.commitsAddingOrRemovingText(_query, this, [this](std::expected<QSet<QString>, QString> shas) {
+			_logModel.setAddingOrRemovingShas(std::move(shas).value_or(QSet<QString>{}));
 			updateCountLabel();
 		});
 	}
 
-	_logJob = _repo.commitLog(_query, this, [this](const GitResult& result) {
-		if (!result.ok)
+	_logQuery = _repo.commitLog(_query, this, [this](std::expected<std::vector<CommitRecord>, QString> result) {
+		if (!result)
 		{
 			_logCapped = false;
 			_logModel.setCommits({}); // resetting the model clears the panes below through currentChanged
 			_countLabel->clear();
 			_loadMoreButton->setVisible(false);
-			setDiffText({}, {}, result.errorText());
+			setDiffText({}, {}, result.error());
 			return;
 		}
 
-		std::vector<CommitRecord> commits = parseCommitLog(result.out);
+		std::vector<CommitRecord> commits = *std::move(result);
 		// Exactly the limit means the walk was cut short, not that history ends here
 		_logCapped = int(commits.size()) >= _query.maxCommits;
 		_loadMoreButton->setVisible(_logCapped);
@@ -444,10 +438,8 @@ void HistoryWindow::openFileHistory(const QString& filePath)
 
 void HistoryWindow::showFilesForCurrentCommit()
 {
-	if (_filesJob)
-		_filesJob->cancel();
-	if (_fileCountsJob)
-		_fileCountsJob->cancel();
+	_filesQuery.cancel();
+	_fileCountsQuery.cancel();
 
 	const QModelIndex current = _logView->currentIndex();
 	if (!current.isValid() || current.row() >= _logModel.rowCount())
@@ -478,30 +470,28 @@ void HistoryWindow::showFilesForCurrentCommit()
 
 	_fileCountLabel->setText(tr("Loading..."));
 	const QString sha = commit.sha;
-	_filesJob = _repo.commitFiles(sha, this, [this, sha](const GitResult& result) {
-		if (!result.ok)
+	_filesQuery = _repo.commitFiles(sha, this, [this, sha](std::expected<std::vector<CommitFileChange>, QString> result) {
+		if (!result)
 		{
 			_filesModel.clear();
 			_fileCountLabel->clear();
-			setDiffText({}, shortSha(sha), result.errorText());
+			setDiffText({}, shortSha(sha), result.error());
 			return;
 		}
 
-		std::vector<NameStatusEntry> entries = parseNameStatusZ(result.out);
-		const int fileCount = int(entries.size());
-		_filesModel.setEntries(std::move(entries));
+		const int fileCount = int(result->size());
+		_filesModel.setEntries(*std::move(result));
 		_fileCountLabel->setText(fileCount == 1 ? tr("1 file") : tr("%1 files").arg(fileCount));
 	});
 	// Its own query, so the rows may appear before their counts do; failing costs the counts and nothing else
-	_fileCountsJob = _repo.commitFileCounts(sha, this, [this](const GitResult& result) {
-		_filesModel.setLineCounts(parseNumstatZ(result.out));
+	_fileCountsQuery = _repo.commitFileCounts(sha, this, [this](std::expected<std::map<QString, LineCounts>, QString> counts) {
+		_filesModel.setLineCounts(std::move(counts).value_or(std::map<QString, LineCounts>{}));
 	});
 }
 
 void HistoryWindow::showDiffForCurrentFile()
 {
-	if (_diffJob)
-		_diffJob->cancel();
+	_diffQuery.cancel();
 
 	const QModelIndex currentFile = _filesView->currentIndex();
 	const QModelIndex currentCommit = _logView->currentIndex();
@@ -511,20 +501,20 @@ void HistoryWindow::showDiffForCurrentFile()
 		return; // no file picked: the pane keeps the commit message showFilesForCurrentCommit put there
 	}
 
-	const NameStatusEntry entry = _filesModel.entryAt(currentFile.row());
+	const CommitFileChange entry = _filesModel.entryAt(currentFile.row());
 	const QString sha = _logModel.commitAt(currentCommit.row()).sha;
 	const QString tag = shortSha(sha);
 
 	setDiffText(entry.path, tag, tr("Loading..."));
-	_diffJob = _repo.commitFileDiff(sha, entry, this, [this, entry, tag](const GitResult& result) {
-		if (!result.ok)
-			setDiffText(entry.path, tag, result.errorText());
-		else if (result.out.size() > MaxDiffBytes)
-			setDiffText(entry.path, tag, tr("The diff is too large to display (%1 MB).").arg(double(result.out.size()) / (1024 * 1024), 0, 'f', 1));
-		else if (result.out.isEmpty())
+	_diffQuery = _repo.commitFileDiff(sha, entry, this, [this, entry, tag](std::expected<QByteArray, QString> diff) {
+		if (!diff)
+			setDiffText(entry.path, tag, diff.error());
+		else if (diff->size() > MaxDiffBytes)
+			setDiffText(entry.path, tag, tr("The diff is too large to display (%1 MB).").arg(double(diff->size()) / (1024 * 1024), 0, 'f', 1));
+		else if (diff->isEmpty())
 			setDiffText(entry.path, tag, tr("No content changes (only the mode or the line endings differ, or a rename with identical content)."));
 		else
-			setDiffText(entry.path, tag, QString::fromUtf8(result.out));
+			setDiffText(entry.path, tag, QString::fromUtf8(*diff));
 	});
 }
 

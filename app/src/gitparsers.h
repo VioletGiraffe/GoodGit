@@ -1,17 +1,16 @@
 #pragma once
 
+#include "vcstypes.h"
+
 #include <QByteArray>
 #include <QString>
 #include <QStringList>
 
 #include <map>
-#include <stdint.h>
 #include <vector>
 
 // Free-function parsers for the git outputs the app consumes, kept UI- and process-free
 // so they can be exercised directly.
-
-enum class ChangeType : uint8_t { Modified, Added, Untracked, Deleted, Renamed, TypeChanged, Conflicted };
 
 struct BranchHeader
 {
@@ -25,21 +24,8 @@ struct BranchHeader
 // Input: `status --porcelain=v2 --branch --untracked-files=no -z` output
 [[nodiscard]] BranchHeader parseBranchHeader(const QByteArray& statusOutput);
 
-struct NameStatusEntry
-{
-	ChangeType type = ChangeType::Modified;
-	QString path;    // the new path for renames
-	QString oldPath; // renames only
-};
-
 // Input: `diff --name-status -M -z HEAD` output
-[[nodiscard]] std::vector<NameStatusEntry> parseNameStatusZ(const QByteArray& diffOutput);
-
-struct LineCounts
-{
-	int added = 0;
-	int removed = 0;
-};
+[[nodiscard]] std::vector<CommitFileChange> parseNameStatusZ(const QByteArray& diffOutput);
 
 // Input: `diff --numstat -M -z` output. Keyed by path - the new one for a rename, as parseNameStatusZ
 // names its entries. A binary file, which git counts as `-`, is absent rather than zero.
@@ -62,18 +48,6 @@ struct WorktreeDirtiness
 
 // Input: `status --porcelain -z` output (v1 format)
 [[nodiscard]] WorktreeDirtiness parsePorcelainDirtiness(const QByteArray& statusOutput);
-
-struct CommitRecord
-{
-	QString sha;
-	QStringList parents; // more than one is a merge
-	QString author;
-	QString date;    // ISO 8601 with offset, verbatim from git
-	QString refs;    // "HEAD -> master, origin/master"; empty for most commits
-	QString message; // the whole thing: subject line, blank line, body
-
-	[[nodiscard]] QString subject() const { return message.section(QLatin1Char('\n'), 0, 0); }
-};
 
 // The --format parseCommitLog expects, kept beside it so the two cannot drift. Fields are separated
 // by US (0x1f); the message goes last, being the one field that may contain anything, newlines

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gitparsers.h"
+#include "vcstypes.h"
 
 #include <QAbstractTableModel>
 #include <QSet>
@@ -74,11 +74,11 @@ public:
 
 	// The counts come from a query of their own and may land either side of the entries, so neither
 	// setter disturbs what the other put there; clear() is what drops both between commits.
-	void setEntries(std::vector<NameStatusEntry> entries);
+	void setEntries(std::vector<CommitFileChange> entries);
 	void setLineCounts(std::map<QString, LineCounts> counts);
 	void clear();
 
-	[[nodiscard]] const NameStatusEntry& entryAt(int row) const { return _entries[size_t(row)]; }
+	[[nodiscard]] const CommitFileChange& entryAt(int row) const { return _entries[size_t(row)]; }
 
 	int rowCount(const QModelIndex& parent = {}) const override;
 	int columnCount(const QModelIndex& parent = {}) const override;
@@ -88,6 +88,6 @@ private:
 	[[nodiscard]] std::optional<LineCounts> countsAt(int row) const;
 
 private:
-	std::vector<NameStatusEntry> _entries;
+	std::vector<CommitFileChange> _entries;
 	std::map<QString, LineCounts> _lineCounts; // by path; a file the query did not answer for has none
 };

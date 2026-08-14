@@ -4,7 +4,6 @@
 #include "repository.h"
 
 #include <QMainWindow>
-#include <QPointer>
 
 class QCheckBox;
 class QFrame;
@@ -86,10 +85,10 @@ private:
 	QPlainTextEdit* _diffView = nullptr;
 	DiffHighlighter* _diffHighlighter = nullptr;
 
-	QPointer<Git::Job> _logJob;
-	QPointer<Git::Job> _pickaxeJob;
-	QPointer<Git::Job> _unpushedJob;
-	QPointer<Git::Job> _filesJob;
-	QPointer<Git::Job> _fileCountsJob;
-	QPointer<Git::Job> _diffJob;
+	Vcs::Query _logQuery;
+	Vcs::Query _pickaxeQuery;
+	Vcs::Query _unpushedQuery;
+	Vcs::Query _filesQuery;
+	Vcs::Query _fileCountsQuery;
+	Vcs::Query _diffQuery;
 };

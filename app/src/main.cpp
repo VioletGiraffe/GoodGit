@@ -17,7 +17,7 @@ int main(int argc, char* argv[])
 	const QStringList arguments = QApplication::arguments();
 	const QString startPath = arguments.size() > 1 ? arguments[1] : QDir::currentPath();
 
-	const GitResult repoRootResult = Git::runSync(startPath, { QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel") });
+	const ProcessResult repoRootResult = Git::runSync(startPath, { QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel") });
 	if (!repoRootResult.ok)
 	{
 		QMessageBox::critical(nullptr, QStringLiteral("GoodGit"),

@@ -34,9 +34,9 @@ BranchHeader parseBranchHeader(const QByteArray& statusOutput)
 	return header;
 }
 
-std::vector<NameStatusEntry> parseNameStatusZ(const QByteArray& diffOutput)
+std::vector<CommitFileChange> parseNameStatusZ(const QByteArray& diffOutput)
 {
-	std::vector<NameStatusEntry> entries;
+	std::vector<CommitFileChange> entries;
 	const auto tokens = diffOutput.split('\0');
 
 	// Layout: <letter>\0<path>\0 for most, <R|C><score>\0<old>\0<new>\0 for renames/copies
@@ -46,7 +46,7 @@ std::vector<NameStatusEntry> parseNameStatusZ(const QByteArray& diffOutput)
 		if (status.isEmpty())
 			break;
 
-		NameStatusEntry entry;
+		CommitFileChange entry;
 		switch (status[0])
 		{
 		case 'A': entry.type = ChangeType::Added; break;
