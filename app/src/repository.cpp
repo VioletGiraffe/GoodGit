@@ -32,7 +32,8 @@ std::shared_ptr<QTemporaryFile> openMessageFile(const QString& message, QObject*
 	if (!file->open())
 	{
 		QMetaObject::invokeMethod(context, [onDone] {
-			// Not launchFailed: that flag would make errorText() report a missing git installation instead
+			// The default outcome is Exited, which is what makes errorText() report this err rather than
+			// a process failure the app never had
 			onDone(GitResult{ .err = "Failed to create the commit message temp file" });
 		}, Qt::QueuedConnection);
 		return nullptr;
@@ -450,7 +451,7 @@ void Repository::localBranchExists(const QString& name, const QObject* context, 
 {
 	Git::run(_rootPath, { QStringLiteral("show-ref"), QStringLiteral("--verify"), QStringLiteral("--quiet"),
 		QStringLiteral("refs/heads/") + name }, context,
-		[onDone = std::move(onDone)](const GitResult& result) { onDone(result.exitCode == 0); }, {}, /*readOnlyQuery=*/true);
+		[onDone = std::move(onDone)](const GitResult& result) { onDone(result.ok); }, {}, /*readOnlyQuery=*/true);
 }
 
 QString Repository::diffBase() const
@@ -468,7 +469,7 @@ Git::Job* Repository::diffFile(const FileEntry& entry, const QObject* context, G
 		args = { QStringLiteral("diff"), QStringLiteral("--no-index"), QStringLiteral("--"), QStringLiteral("/dev/null"), entry.path };
 		onDone = [onDone = std::move(onDone)](const GitResult& result) {
 			GitResult corrected = result;
-			corrected.ok = !result.launchFailed && result.exitCode <= 1; // --no-index exits 1 on a difference, which is the point
+			corrected.ok = result.outcome == GitOutcome::Exited && result.exitCode <= 1; // --no-index exits 1 on a difference, which is the point
 			onDone(corrected);
 		};
 	}

@@ -149,7 +149,9 @@ submodules.
 ## Failure reporting
 
 Any failed git command surfaces its own stderr verbatim (qtutils `MessageBox::notice`, scrollable details) -
-hook output is the only thing that makes a rejected commit diagnosable. Push failures special-case "no
+hook output is the only thing that makes a rejected commit diagnosable. A command that never launched,
+died mid-run, or outran its timeout says which, since its own stderr cannot account for an exit that
+never happened. Push failures special-case "no
 upstream" (offers `--set-upstream origin HEAD`); non-fast-forward is reported plainly, with no offer to
 pull or force.
 

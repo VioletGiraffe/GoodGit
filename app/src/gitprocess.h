@@ -8,19 +8,30 @@
 #include <QStringList>
 
 #include <functional>
+#include <stdint.h>
+
+// How the git process ended. Only the first of these leaves an exit code behind to be read.
+enum class GitOutcome : uint8_t
+{
+	Exited,       // ran to completion, whatever it then reported - also a result the app synthesises itself
+	LaunchFailed, // the OS refused to start it: no git on PATH, or a working directory that is gone
+	Crashed,      // started, then died without exiting - killed from outside, or a genuine crash
+	TimedOut,     // runSync gave up waiting and stopped it
+};
 
 struct GitResult
 {
-	int exitCode = -1;
+	int exitCode = -1; // meaningful only when `outcome` is Exited
 	QByteArray out;
 	QByteArray err;
-	bool launchFailed = false;
+	GitOutcome outcome = GitOutcome::Exited;
 	// The command succeeded. Set here from exit code 0, but whoever ran a command that reports success
 	// otherwise (`diff --no-index` exits 1 when the files differ) corrects it before the result travels on,
 	// so that every reader can treat this as the answer.
 	bool ok = false;
 
-	// stderr as text, or a human-readable launch failure message
+	// stderr as text; a process that did not exit normally says so first, since its stderr cannot
+	// account for the output that never came
 	[[nodiscard]] QString errorText() const;
 };
 

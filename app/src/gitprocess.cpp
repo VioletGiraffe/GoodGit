@@ -25,18 +25,24 @@ QString collapseCarriageReturns(QString text)
 
 QString GitResult::errorText() const
 {
-	if (launchFailed)
-		return QStringLiteral("Failed to launch git. Check that git is installed and on PATH.");
+	if (outcome == GitOutcome::LaunchFailed)
+		return QStringLiteral("Failed to launch git. Check that git is installed and on PATH."); // nothing ran, so there is no stderr
 
-	QString text = collapseCarriageReturns(QString::fromUtf8(err)).trimmed();
-	if (text.isEmpty())
-		text = QStringLiteral("git exited with code %1").arg(exitCode);
-	return text;
+	const QString stderrText = collapseCarriageReturns(QString::fromUtf8(err)).trimmed();
+	if (outcome == GitOutcome::Exited)
+		return stderrText.isEmpty() ? QStringLiteral("git exited with code %1").arg(exitCode) : stderrText;
+
+	// Died mid-run: whatever it managed to say still stands, but on its own it would read as the whole story
+	const QString note = outcome == GitOutcome::Crashed
+		? QStringLiteral("git terminated abnormally.")
+		: QStringLiteral("git did not finish within the time allowed and was stopped.");
+	return stderrText.isEmpty() ? note : note + QStringLiteral("\n\n") + stderrText;
 }
 
 namespace Git {
 
 static constexpr int MaxConcurrentProcesses = 8;
+static constexpr int KillWaitMs = 2000; // a killed process should be gone at once; this is only so the wait is bounded
 
 struct JobQueue
 {
@@ -142,11 +148,16 @@ void Job::start()
 		collect(_process->readAllStandardError(), _err);
 
 		GitResult result;
-		result.exitCode = exitCode;
 		result.out = std::move(_out);
 		result.err = std::move(_err);
-		result.launchFailed = status != QProcess::NormalExit;
-		result.ok = !result.launchFailed && exitCode == 0;
+		if (status == QProcess::NormalExit)
+		{
+			result.outcome = GitOutcome::Exited;
+			result.exitCode = exitCode;
+			result.ok = exitCode == 0;
+		}
+		else
+			result.outcome = GitOutcome::Crashed; // the exit code a killed process carries describes the kill, not the command
 		finish(std::move(result));
 	});
 	// Queued: start() emits this synchronously when the OS refuses the launch, and run()'s contract is a
@@ -155,7 +166,7 @@ void Job::start()
 		if (error != QProcess::FailedToStart)
 			return; // crashes arrive via finished()
 		GitResult result;
-		result.launchFailed = true;
+		result.outcome = GitOutcome::LaunchFailed;
 		finish(std::move(result));
 	}, Qt::QueuedConnection);
 
@@ -183,15 +194,29 @@ GitResult runSync(const QString& workDir, QStringList args, int timeoutMs)
 	GitResult result;
 	if (!process.waitForFinished(timeoutMs))
 	{
-		result.launchFailed = true;
-		result.err = process.readAllStandardError();
-		return result;
+		// The wait fails just the same when there was never a process to wait for
+		if (process.error() == QProcess::FailedToStart)
+		{
+			result.outcome = GitOutcome::LaunchFailed;
+			return result;
+		}
+		// Or ~QProcess does it instead, from a destructor and after printing a warning of its own
+		process.kill();
+		process.waitForFinished(KillWaitMs);
+		result.outcome = GitOutcome::TimedOut;
 	}
-	result.exitCode = process.exitCode();
+	else if (process.exitStatus() == QProcess::NormalExit)
+	{
+		result.outcome = GitOutcome::Exited;
+		result.exitCode = process.exitCode();
+		result.ok = result.exitCode == 0;
+	}
+	else
+		result.outcome = GitOutcome::Crashed;
+
+	// Whatever reached the pipes before it stopped, however it stopped
 	result.out = process.readAllStandardOutput();
 	result.err = process.readAllStandardError();
-	result.launchFailed = process.exitStatus() != QProcess::NormalExit;
-	result.ok = !result.launchFailed && result.exitCode == 0;
 	return result;
 }
 

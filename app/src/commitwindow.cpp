@@ -760,7 +760,7 @@ void CommitWindow::closePushLogEntry(const GitResult& result)
 {
 	// Everything the push had to say is already in the log, streamed as it ran. What is left is what the
 	// process could not say for itself.
-	if (result.launchFailed)
+	if (result.outcome != GitOutcome::Exited)
 		_pushLogView->appendNote(result.errorText());
 	else if (!_pushLogView->entryHasOutput())
 		_pushLogView->appendNote(tr("(no output; exit code %1)").arg(result.exitCode));
