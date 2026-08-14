@@ -9,7 +9,7 @@
 #include "theme.h"
 
 #include "dialogs/messagebox.h"
-#include "widgets/clabelmidelision.h"
+#include "widgets/clabelelided.h"
 #include "widgets/cpersistentwindow.h"
 #include "widgets/widgetutils.h"
 
@@ -272,7 +272,8 @@ void CommitWindow::buildUi()
 	auto* messageHeaderLayout = new QHBoxLayout(messageHeader);
 	messageHeaderLayout->setContentsMargins(8, 6, 8, 4);
 	messageHeaderLayout->addWidget(new QLabel(tr("Commit message")));
-	_lastCommitLabel = new CLabelMidElision;
+	_lastCommitLabel = new CLabelElided;
+	_lastCommitLabel->setElideMode(Qt::ElideRight); // a subject reads from its start, unlike the paths elsewhere
 	_lastCommitLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 	// This column's width is the repo header row's to set, so a long subject elides instead of adding to it
 	_lastCommitLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
@@ -307,8 +308,10 @@ void CommitWindow::buildUi()
 	diffHeader->setObjectName(QStringLiteral("diffHeader"));
 	auto* diffHeaderLayout = new QHBoxLayout(diffHeader);
 	diffHeaderLayout->setContentsMargins(8, 6, 8, 6);
-	_diffPathLabel = new CLabelMidElision;
+	_diffPathLabel = new CLabelElided;
 	_diffPathLabel->setFont(monospaceFont());
+	// Eliding does not shrink a QLabel's minimum width, which would otherwise set the pane's
+	_diffPathLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 	_diffTagLabel = new QLabel;
 	_diffTagLabel->setObjectName(QStringLiteral("diffTagLabel"));
 	diffHeaderLayout->addWidget(_diffPathLabel, 1);

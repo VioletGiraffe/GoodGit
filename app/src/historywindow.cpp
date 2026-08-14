@@ -4,7 +4,7 @@
 #include "settings.h"
 #include "theme.h"
 
-#include "widgets/clabelmidelision.h"
+#include "widgets/clabelelided.h"
 #include "widgets/cpersistentwindow.h"
 #include "widgets/widgetutils.h"
 
@@ -73,7 +73,7 @@ void HistoryWindow::buildUi()
 	logBar->setObjectName(QStringLiteral("repoBar"));
 	auto* logBarLayout = new QHBoxLayout(logBar);
 	logBarLayout->setContentsMargins(8, 6, 8, 6);
-	_filePathLabel = new CLabelMidElision;
+	_filePathLabel = new CLabelElided;
 	_filePathLabel->setFont(monospaceFont());
 	_filePathLabel->setText(_query.path);
 	_filePathLabel->setToolTip(_query.path);
@@ -154,8 +154,10 @@ void HistoryWindow::buildUi()
 	diffHeader->setObjectName(QStringLiteral("diffHeader"));
 	auto* diffHeaderLayout = new QHBoxLayout(diffHeader);
 	diffHeaderLayout->setContentsMargins(8, 6, 8, 6);
-	_diffPathLabel = new CLabelMidElision;
+	_diffPathLabel = new CLabelElided;
 	_diffPathLabel->setFont(monospaceFont());
+	// Eliding does not shrink a QLabel's minimum width, which would otherwise set the pane's
+	_diffPathLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 	_diffTagLabel = new QLabel;
 	_diffTagLabel->setObjectName(QStringLiteral("diffTagLabel"));
 	diffHeaderLayout->addWidget(_diffPathLabel, 1);

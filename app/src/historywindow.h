@@ -14,7 +14,7 @@ class QPlainTextEdit;
 class QPushButton;
 class QSplitter;
 class QTreeView;
-class CLabelMidElision;
+class CLabelElided;
 class DiffHighlighter;
 
 // The commit history of one repository, read-only. Owns its own Repository - it only ever asks
@@ -72,7 +72,7 @@ private:
 	QSplitter* _detailSplitter = nullptr; // file list beside the diff
 	QTreeView* _logView = nullptr;
 	QTreeView* _filesView = nullptr;
-	CLabelMidElision* _filePathLabel = nullptr; // shown only in a file history, which is otherwise indistinguishable
+	CLabelElided* _filePathLabel = nullptr; // shown only in a file history, which is otherwise indistinguishable
 	QLabel* _countLabel = nullptr;
 	QLineEdit* _searchEdit = nullptr;
 	QPushButton* _pickaxeButton = nullptr;
@@ -81,7 +81,7 @@ private:
 	QCheckBox* _pickaxeIgnoreCaseBox = nullptr;
 	QLabel* _fileCountLabel = nullptr;
 	QPushButton* _loadMoreButton = nullptr;
-	CLabelMidElision* _diffPathLabel = nullptr;
+	CLabelElided* _diffPathLabel = nullptr;
 	QLabel* _diffTagLabel = nullptr;
 	QPlainTextEdit* _diffView = nullptr;
 	DiffHighlighter* _diffHighlighter = nullptr;

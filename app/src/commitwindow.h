@@ -16,7 +16,7 @@ class QTreeView;
 class QPlainTextEdit;
 class ConsoleLogView;
 class MessageEdit;
-class CLabelMidElision;
+class CLabelElided;
 class HistoryWindow;
 
 // One window = one repository. Submodule rows open another instance of this window.
@@ -106,11 +106,11 @@ private:
 	QLabel* _detachedStrip = nullptr;
 	QCheckBox* _checkAllBox = nullptr;
 	QTreeView* _filesView = nullptr;
-	CLabelMidElision* _lastCommitLabel = nullptr;
+	CLabelElided* _lastCommitLabel = nullptr;
 	MessageEdit* _messageEdit = nullptr;
 	QPushButton* _commitButton = nullptr;
 	QPushButton* _commitPushButton = nullptr;
-	CLabelMidElision* _diffPathLabel = nullptr;
+	CLabelElided* _diffPathLabel = nullptr;
 	QLabel* _diffTagLabel = nullptr;
 	QPlainTextEdit* _diffView = nullptr;
 	QWidget* _pushLogPane = nullptr; // hidden until the first push of the session
