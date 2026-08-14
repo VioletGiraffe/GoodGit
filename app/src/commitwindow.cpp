@@ -272,6 +272,11 @@ void CommitWindow::buildUi()
 	auto* messageHeaderLayout = new QHBoxLayout(messageHeader);
 	messageHeaderLayout->setContentsMargins(8, 6, 8, 4);
 	messageHeaderLayout->addWidget(new QLabel(tr("Commit message")));
+	_lastCommitLabel = new CLabelMidElision;
+	_lastCommitLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+	// This column's width is the repo header row's to set, so a long subject elides instead of adding to it
+	_lastCommitLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+	messageHeaderLayout->addWidget(_lastCommitLabel, 1);
 	leftLayout->addWidget(messageHeader);
 
 	auto* messageArea = new QWidget;
@@ -471,6 +476,10 @@ void CommitWindow::updateHeader()
 	}
 	_pushButton->setToolTip(unpushedTooltip);
 	_aheadLabel->setToolTip(unpushedTooltip);
+
+	_lastCommitLabel->setText(state.headSubject.isEmpty() ? QString{} : tr("Previous commit: %1").arg(state.headSubject));
+	_lastCommitLabel->setToolTip(state.headSubject.isEmpty() ? QString{}
+		: QStringLiteral("%1 %2").arg(state.headSha.left(7), state.headSubject));
 
 	setWindowTitle(QStringLiteral("%1 [%2] - GoodGit").arg(_repo.name(), state.detached ? QStringLiteral("detached") : state.branch));
 }

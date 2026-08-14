@@ -106,6 +106,7 @@ private:
 	QLabel* _detachedStrip = nullptr;
 	QCheckBox* _checkAllBox = nullptr;
 	QTreeView* _filesView = nullptr;
+	CLabelMidElision* _lastCommitLabel = nullptr;
 	MessageEdit* _messageEdit = nullptr;
 	QPushButton* _commitButton = nullptr;
 	QPushButton* _commitPushButton = nullptr;

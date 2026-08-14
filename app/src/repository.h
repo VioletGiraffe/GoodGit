@@ -15,6 +15,7 @@ struct RepoState
 {
 	QString branch;      // empty when detached
 	QString headSha;     // full sha of HEAD; empty when unborn
+	QString headSubject; // subject line of HEAD; empty when unborn
 	QString upstream;    // empty if none configured
 	int ahead = 0;
 	int behind = 0;

@@ -190,6 +190,7 @@ private:
 struct Repository::RefreshRun
 {
 	BranchHeader header;
+	QString headSubject;
 	std::vector<NameStatusEntry> diffEntries;
 	std::map<QString, LineCounts> changeCounts; // by path; only the tracked changes have one
 	QStringList untracked;
@@ -234,7 +235,7 @@ void Repository::refresh()
 	auto run = std::make_shared<RefreshRun>();
 	_run = run;
 
-	// The four independent base queries, plus the one-time per-repository resolutions. Whatever their
+	// The independent base queries, plus the one-time per-repository resolutions. Whatever their
 	// answers call for is asked once they are all in.
 	QueryRound round{ this, [self = QPointer<Repository>{ this }, run] {
 		if (self)
@@ -268,6 +269,9 @@ void Repository::refresh()
 			else
 				run->noteFailure(r); // an unread header parses as "on a branch, born", the two things nothing may assume
 		});
+	// Names HEAD in the message header. An unborn branch has no commit to name, and fails here by design
+	round.launch(_rootPath, { QStringLiteral("log"), QStringLiteral("-1"), QStringLiteral("--format=%s") },
+		[run](const GitResult& r) { run->headSubject = QString::fromUtf8(r.out.trimmed()); });
 	round.launch(_rootPath, trackedChangesArgs(QStringLiteral("HEAD")),
 		[run](const GitResult& r) {
 			if (r.ok)
@@ -384,6 +388,7 @@ void Repository::applyRefreshResults(const RefreshRun& run)
 {
 	_state.unborn = run.header.oid == QLatin1String("(initial)");
 	_state.headSha = _state.unborn ? QString{} : run.header.oid;
+	_state.headSubject = run.headSubject;
 	_state.detached = run.header.head == QLatin1String("(detached)");
 	_state.branch = _state.detached ? QString{} : run.header.head;
 	_state.upstream = run.header.upstream;
