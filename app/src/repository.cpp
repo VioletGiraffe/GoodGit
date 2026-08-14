@@ -73,6 +73,14 @@ SubmoduleContent contentFromStatus(const GitResult& statusResult)
 	return dirtiness.untracked ? SubmoduleContent::Untracked : SubmoduleContent::Clean;
 }
 
+// The tracked half of the file list. Identical whatever it is taken against, so an unborn HEAD changes
+// the baseline and nothing else.
+QStringList trackedChangesArgs(const QString& base)
+{
+	return { QStringLiteral("diff"), QStringLiteral("--name-status"), QStringLiteral("-M"),
+		QStringLiteral("--ignore-submodules=dirty"), QStringLiteral("-z"), base };
+}
+
 // The base of every commit-listing query; the walk itself is whatever the caller appends
 QStringList commitLogArgs(int maxCommits)
 {
@@ -128,7 +136,6 @@ struct Repository::RefreshRun
 	QStringList untracked;
 	QStringList submodules; // repo-relative paths of the gitlink entries
 	std::map<QString, SubmoduleContent> submoduleContent; // only the submodules that were queried at all
-	QStringList unbornCachedFiles;
 };
 
 Repository::Repository(QString rootPath, QObject* parent) :
@@ -170,10 +177,12 @@ void Repository::refresh()
 	// Phase 2: queries that depend on phase 1 results - unborn fallback, detached-HEAD branch tips,
 	// per-submodule dirtiness. All independent of each other.
 	const auto phase2 = [this, run, launch, phase3] {
-		if (run->header.oid == QLatin1String("(initial)"))
+		// Phase 1's query needed a HEAD to compare against. Re-run it against the empty tree, which is
+		// what an unborn branch will commit on top of anyway.
+		if (run->header.oid == QLatin1String("(initial)") && !_emptyTreeSha.isEmpty())
 		{
-			launch(_rootPath, { QStringLiteral("ls-files"), QStringLiteral("--cached"), QStringLiteral("-z") },
-				[run](const GitResult& r) { run->unbornCachedFiles = parseZList(r.out); }, phase3);
+			launch(_rootPath, trackedChangesArgs(_emptyTreeSha),
+				[run](const GitResult& r) { if (r.ok) run->diffEntries = parseNameStatusZ(r.out); }, phase3);
 		}
 
 		if (run->header.head == QLatin1String("(detached)"))
@@ -217,18 +226,25 @@ void Repository::refresh()
 	_state.remoteBranchesAtHead.clear();
 	_state.unpushedSubjects.clear();
 
-	// Phase 1: the four independent base queries, plus one-time gitdir resolution
+	// Phase 1: the four independent base queries, plus the one-time per-repository resolutions
 	if (_gitDir.isEmpty())
 	{
 		launch(_rootPath, { QStringLiteral("rev-parse"), QStringLiteral("--absolute-git-dir") },
 			[this](const GitResult& r) { _gitDir = QString::fromUtf8(r.out.trimmed()); }, phase2);
+	}
+	if (_emptyTreeSha.isEmpty())
+	{
+		// Stands in for HEAD where there is none. Its name follows from the repository's hash algorithm
+		// alone, and git keeps the object itself resolvable everywhere, so nothing has to be written.
+		launch(_rootPath, { QStringLiteral("hash-object"), QStringLiteral("-t"), QStringLiteral("tree"), QStringLiteral("--stdin") },
+			[this](const GitResult& r) { _emptyTreeSha = QString::fromUtf8(r.out.trimmed()); }, phase2);
 	}
 	// Only the branch header is parsed out of this, so the flags keep git from scanning the working tree and
 	// recursing into submodules to produce entries nobody reads
 	launch(_rootPath, { QStringLiteral("status"), QStringLiteral("--porcelain=v2"), QStringLiteral("--branch"),
 			QStringLiteral("--untracked-files=no"), QStringLiteral("--ignore-submodules=all"), QStringLiteral("-z") },
 		[run](const GitResult& r) { run->header = parseBranchHeader(r.out); }, phase2);
-	launch(_rootPath, { QStringLiteral("diff"), QStringLiteral("--name-status"), QStringLiteral("-M"), QStringLiteral("--ignore-submodules=dirty"), QStringLiteral("-z"), QStringLiteral("HEAD") },
+	launch(_rootPath, trackedChangesArgs(QStringLiteral("HEAD")),
 		[run](const GitResult& r) { if (r.ok) run->diffEntries = parseNameStatusZ(r.out); }, phase2); // fails on unborn HEAD - phase 2 covers that
 	launch(_rootPath, { QStringLiteral("ls-files"), QStringLiteral("--others"), QStringLiteral("--exclude-standard"), QStringLiteral("-z") },
 		[run](const GitResult& r) { run->untracked = parseZList(r.out); }, phase2);
@@ -287,10 +303,6 @@ void Repository::finishRefresh()
 		}
 		_files.push_back(std::move(entry));
 	}
-
-	// Unborn HEAD: everything staged shows as Added
-	for (const QString& path : run.unbornCachedFiles)
-		_files.push_back({ .path = path, .type = ChangeType::Added });
 
 	for (const QString& path : run.untracked)
 		_files.push_back({ .path = path, .type = ChangeType::Untracked });
@@ -441,21 +453,28 @@ void Repository::localBranchExists(const QString& name, const QObject* context, 
 		[onDone = std::move(onDone)](const GitResult& result) { onDone(result.exitCode == 0); }, {}, /*readOnlyQuery=*/true);
 }
 
+QString Repository::diffBase() const
+{
+	return _state.unborn ? _emptyTreeSha : QStringLiteral("HEAD");
+}
+
 Git::Job* Repository::diffFile(const FileEntry& entry, const QObject* context, Git::Callback onDone)
 {
 	QStringList args;
 	if (entry.type == ChangeType::Untracked)
 	{
-		// No HEAD side exists; --no-index against the null device exits 1 when there is a diff - that is success here
+		// The file is in neither the base nor the index, so there is no pair for git to diff - the null
+		// device supplies the missing side
 		args = { QStringLiteral("diff"), QStringLiteral("--no-index"), QStringLiteral("--"), QStringLiteral("/dev/null"), entry.path };
-	}
-	else if (_state.unborn)
-	{
-		args = { QStringLiteral("diff"), QStringLiteral("--cached"), QStringLiteral("-M"), QStringLiteral("--"), entry.path };
+		onDone = [onDone = std::move(onDone)](const GitResult& result) {
+			GitResult corrected = result;
+			corrected.ok = !result.launchFailed && result.exitCode <= 1; // --no-index exits 1 on a difference, which is the point
+			onDone(corrected);
+		};
 	}
 	else
 	{
-		args = { QStringLiteral("diff"), QStringLiteral("-M"), QStringLiteral("HEAD"), QStringLiteral("--"), entry.path };
+		args = { QStringLiteral("diff"), QStringLiteral("-M"), diffBase(), QStringLiteral("--"), entry.path };
 		if (!entry.oldPath.isEmpty())
 			args.push_back(entry.oldPath);
 	}
@@ -466,11 +485,9 @@ Git::Job* Repository::diffFile(const FileEntry& entry, const QObject* context, G
 
 Git::Job* Repository::diffAllChanges(const QObject* context, Git::Callback onDone)
 {
-	QStringList args = _state.unborn
-		? QStringList{ QStringLiteral("diff"), QStringLiteral("--cached"), QStringLiteral("-U0") }
-		: QStringList{ QStringLiteral("diff"), QStringLiteral("-U0"), QStringLiteral("--ignore-submodules"), QStringLiteral("HEAD") };
-	// Or a wholesale line-ending conversion floods the word pool with every line of the file
-	args.insert(1, QStringLiteral("--ignore-cr-at-eol"));
+	// --ignore-cr-at-eol, or a wholesale line-ending conversion floods the word pool with every line of the file
+	QStringList args = { QStringLiteral("diff"), QStringLiteral("--ignore-cr-at-eol"), QStringLiteral("-U0"),
+		QStringLiteral("--ignore-submodules"), diffBase() };
 	return Git::run(_rootPath, std::move(args), context, std::move(onDone), {}, /*readOnlyQuery=*/true);
 }
 

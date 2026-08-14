@@ -10,7 +10,9 @@ The user-facing model has no concept of staging. The file list is the **HEAD-to-
 (`git diff --name-status HEAD` plus `git ls-files --others`), and committing is **path-limited**
 (`git commit -- <checked paths>`): git builds the commit from HEAD's tree with the checked paths replaced by
 their working-tree content, leaving the index untouched. The list and the commit are definitionally the same
-delta, and anything staged by other tools is never clobbered.
+delta, and anything staged by other tools is never clobbered. A repository with no commits yet is not a mode
+of its own: the empty tree stands in for HEAD, and the same two queries and the same path-limited commit
+carry the equivalence over unchanged.
 
 Consequences that follow from this choice, all deliberate:
 

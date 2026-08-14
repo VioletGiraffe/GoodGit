@@ -15,7 +15,10 @@ struct GitResult
 	QByteArray out;
 	QByteArray err;
 	bool launchFailed = false;
-	bool ok = false; // launched, exited normally, exit code 0
+	// The command succeeded. Set here from exit code 0, but whoever ran a command that reports success
+	// otherwise (`diff --no-index` exits 1 when the files differ) corrects it before the result travels on,
+	// so that every reader can treat this as the answer.
+	bool ok = false;
 
 	// stderr as text, or a human-readable launch failure message
 	[[nodiscard]] QString errorText() const;

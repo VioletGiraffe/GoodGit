@@ -805,9 +805,7 @@ void CommitWindow::showDiffForCurrentRow()
 	_diffJob = _repo.diffFile(entry, this, [this, generation, entry](const GitResult& result) {
 		if (generation != _diffGeneration)
 			return;
-		// --no-index exits 1 when the files differ; that is the expected outcome, not an error
-		const bool failed = result.launchFailed || (result.exitCode != 0 && entry.type != ChangeType::Untracked) || result.exitCode > 1;
-		if (failed)
+		if (!result.ok)
 			setDiffText(entry.path, {}, result.errorText());
 		else if (result.out.size() > MaxDiffBytes)
 			setDiffText(entry.path, {}, tr("The diff is too large to display (%1 MB).").arg(result.out.size() / (1024 * 1024)));

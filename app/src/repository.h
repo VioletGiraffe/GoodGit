@@ -147,10 +147,13 @@ signals:
 
 private:
 	void finishRefresh();
+	// What every diff in this repository is taken against: HEAD, or the empty tree while there is no HEAD
+	[[nodiscard]] QString diffBase() const;
 
 private:
 	const QString _rootPath;
 	QString _gitDir; // absolute; resolved on first refresh. In a submodule .git is a file pointing here.
+	QString _emptyTreeSha; // resolved on first refresh; empty only if that one query failed
 
 	RepoState _state;
 	std::vector<FileEntry> _files;
