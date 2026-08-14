@@ -5,6 +5,7 @@
 
 #include <QObject>
 
+#include <memory>
 #include <vector>
 
 enum class RepoOp : uint8_t { None, Merge, CherryPick, Revert, Rebase };
@@ -150,8 +151,10 @@ signals:
 	void refreshed();
 
 private:
-	void finishRefresh();
 	struct RefreshRun;
+	// The refresh's second round: the queries the base ones' answers call for. Runs once they have all answered.
+	void startDependentQueries(const std::shared_ptr<RefreshRun>& run);
+	void finishRefresh();
 	// Takes a completed run's answers as the new state. Only ever called for a run that answered in full.
 	void applyRefreshResults(const RefreshRun& run);
 	// What every diff in this repository is taken against: HEAD, or the empty tree while there is no HEAD

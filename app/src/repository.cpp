@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QPointer>
 #include <QTemporaryFile>
 
 #include <algorithm>
@@ -126,12 +127,45 @@ void appendPathLimit(QStringList& args, const Repository::LogQuery& query)
 		args << QStringLiteral("--follow") << QStringLiteral("--") << query.path; // --follow takes the one path we ever pass
 }
 
+// A set of queries launched together, and what happens once the last of them has answered. Every query
+// holds a reference to the round's end, and the launching scope holds one of its own - so a round that
+// launched nothing ends as that scope does, and one that launched anything ends from the final callback.
+// A skipped callback is still a destroyed one, so `then` also runs when the context dies mid-round and
+// has to check for that.
+class QueryRound
+{
+	struct End
+	{
+		explicit End(std::function<void()> then) : then(std::move(then)) {}
+		~End() { then(); }
+
+		std::function<void()> then;
+	};
+
+public:
+	QueryRound(const QObject* context, std::function<void()> then) :
+		_context(context),
+		_end(std::make_shared<End>(std::move(then)))
+	{}
+
+	void launch(const QString& workDir, QStringList args, Git::Callback onResult)
+	{
+		Git::run(workDir, std::move(args), _context,
+			[end = _end, onResult = std::move(onResult)](const GitResult& result) mutable {
+				onResult(result);
+				end.reset(); // a delivered result is done with the round here, not at the job's later deletion
+			}, {}, /*readOnlyQuery=*/true);
+	}
+
+private:
+	const QObject* const _context;
+	const std::shared_ptr<End> _end;
+};
+
 } // namespace
 
 struct Repository::RefreshRun
 {
-	int pendingJobs = 0;
-
 	BranchHeader header;
 	std::vector<NameStatusEntry> diffEntries;
 	QStringList untracked;
@@ -142,7 +176,7 @@ struct Repository::RefreshRun
 	QStringList unpushedSubjects;
 
 	// Why this run cannot become the state. The tracked-changes query keeps its own slot: on an unborn HEAD
-	// its phase 1 attempt is meant to fail, and phase 2 answers the same question in its place.
+	// its attempt against HEAD is meant to fail, and the re-run against the empty tree answers in its place.
 	QString failure;
 	QString trackedError;
 
@@ -176,131 +210,127 @@ void Repository::refresh()
 	auto run = std::make_shared<RefreshRun>();
 	_run = run;
 
-	// Launches one query; onResult fills its slice of RefreshRun. When the phase drains, whenDrained is called
-	// (each phase passes the next one).
-	const auto launch = [this, run](const QString& workDir, QStringList args, auto onResult, auto whenDrained) {
-		++run->pendingJobs;
-		Git::run(workDir, std::move(args), this, [run, onResult, whenDrained](const GitResult& result) {
-			onResult(result);
-			if (--run->pendingJobs == 0)
-				whenDrained();
-		}, {}, /*readOnlyQuery=*/true);
-	};
+	// The four independent base queries, plus the one-time per-repository resolutions. Whatever their
+	// answers call for is asked once they are all in.
+	QueryRound round{ this, [self = QPointer<Repository>{ this }, run] {
+		if (self)
+			self->startDependentQueries(run);
+	} };
 
-	const auto phase3 = [this] { finishRefresh(); };
-
-	// Phase 2: queries that depend on phase 1 results - unborn fallback, detached-HEAD branch tips,
-	// per-submodule dirtiness. All independent of each other.
-	const auto phase2 = [this, run, launch, phase3] {
-		// Phase 1's query needed a HEAD to compare against. Re-run it against the empty tree, which is
-		// what an unborn branch will commit on top of anyway.
-		if (run->header.oid == QLatin1String("(initial)"))
-		{
-			if (_emptyTreeSha.isEmpty())
-				run->trackedError = QStringLiteral("The empty tree could not be resolved, leaving nothing to list an unborn repository's changes against.");
-			else
-				launch(_rootPath, trackedChangesArgs(_emptyTreeSha),
-					[run](const GitResult& r) {
-						if (!r.ok)
-						{
-							run->trackedError = r.errorText();
-							return;
-						}
-						run->diffEntries = parseNameStatusZ(r.out);
-						run->trackedError.clear(); // phase 1 only failed for want of a HEAD, and this answered instead
-					}, phase3);
-		}
-
-		if (run->header.head == QLatin1String("(detached)"))
-		{
-			for (const char* refRoot : { "refs/heads", "refs/remotes" })
-			{
-				const bool local = qstrcmp(refRoot, "refs/heads") == 0;
-				launch(_rootPath, { QStringLiteral("for-each-ref"), QStringLiteral("--points-at"), QStringLiteral("HEAD"),
-						QStringLiteral("--format=%(refname:short)"), QString::fromLatin1(refRoot) },
-					[run, local](const GitResult& r) {
-						QStringList names = parseLineList(r.out);
-						if (!local)
-							names.removeIf([](const QString& n) { return n.endsWith(QLatin1String("/HEAD")); });
-						(local ? run->localBranchesAtHead : run->remoteBranchesAtHead) = names;
-					}, phase3);
-			}
-		}
-
-		for (const QString& subPath : run->submodules)
-		{
-			const QString workDir = _rootPath + QLatin1Char('/') + subPath;
-			if (!QFileInfo::exists(workDir + QLatin1String("/.git")))
-				continue; // never initialized: the directory is empty, there is nothing inside to query
-			launch(workDir, { QStringLiteral("status"), QStringLiteral("--porcelain"), QStringLiteral("-z") },
-				[run, subPath](const GitResult& r) { run->submoduleContent[subPath] = contentFromStatus(r); }, phase3);
-		}
-
-		if (!run->header.upstream.isEmpty() && run->header.ahead > 0)
-		{
-			launch(_rootPath, { QStringLiteral("log"), QStringLiteral("--oneline"), QStringLiteral("--no-decorate"),
-					QStringLiteral("-n"), QString::number(MaxUnpushedLogEntries), QStringLiteral("@{upstream}..HEAD") },
-				[run](const GitResult& r) { run->unpushedSubjects = parseLineList(r.out); }, phase3);
-		}
-
-		if (run->pendingJobs == 0)
-			phase3();
-	};
-
-	// Phase 1: the four independent base queries, plus the one-time per-repository resolutions
 	if (_gitDir.isEmpty())
 	{
-		launch(_rootPath, { QStringLiteral("rev-parse"), QStringLiteral("--absolute-git-dir") },
+		round.launch(_rootPath, { QStringLiteral("rev-parse"), QStringLiteral("--absolute-git-dir") },
 			[this, run](const GitResult& r) {
 				if (r.ok)
 					_gitDir = QString::fromUtf8(r.out.trimmed());
 				else
 					run->noteFailure(r); // without it a merge in progress is indistinguishable from none
-			}, phase2);
+			});
 	}
 	if (_emptyTreeSha.isEmpty())
 	{
 		// Stands in for HEAD where there is none. Its name follows from the repository's hash algorithm
 		// alone, and git keeps the object itself resolvable everywhere, so nothing has to be written.
-		launch(_rootPath, { QStringLiteral("hash-object"), QStringLiteral("-t"), QStringLiteral("tree"), QStringLiteral("--stdin") },
-			[this](const GitResult& r) { _emptyTreeSha = QString::fromUtf8(r.out.trimmed()); }, phase2);
+		round.launch(_rootPath, { QStringLiteral("hash-object"), QStringLiteral("-t"), QStringLiteral("tree"), QStringLiteral("--stdin") },
+			[this](const GitResult& r) { _emptyTreeSha = QString::fromUtf8(r.out.trimmed()); });
 	}
 	// Only the branch header is parsed out of this, so the flags keep git from scanning the working tree and
 	// recursing into submodules to produce entries nobody reads
-	launch(_rootPath, { QStringLiteral("status"), QStringLiteral("--porcelain=v2"), QStringLiteral("--branch"),
+	round.launch(_rootPath, { QStringLiteral("status"), QStringLiteral("--porcelain=v2"), QStringLiteral("--branch"),
 			QStringLiteral("--untracked-files=no"), QStringLiteral("--ignore-submodules=all"), QStringLiteral("-z") },
 		[run](const GitResult& r) {
 			if (r.ok)
 				run->header = parseBranchHeader(r.out);
 			else
 				run->noteFailure(r); // an unread header parses as "on a branch, born", the two things nothing may assume
-		}, phase2);
-	launch(_rootPath, trackedChangesArgs(QStringLiteral("HEAD")),
+		});
+	round.launch(_rootPath, trackedChangesArgs(QStringLiteral("HEAD")),
 		[run](const GitResult& r) {
 			if (r.ok)
 				run->diffEntries = parseNameStatusZ(r.out);
 			else
-				run->trackedError = r.errorText(); // an unborn HEAD fails here by design; phase 2 asks again
-		}, phase2);
+				run->trackedError = r.errorText(); // an unborn HEAD fails here by design; the empty-tree re-run asks again
+		});
 	// Losing these costs untracked rows, which is a shorter list rather than a wrong one
-	launch(_rootPath, { QStringLiteral("ls-files"), QStringLiteral("--others"), QStringLiteral("--exclude-standard"), QStringLiteral("-z") },
-		[run](const GitResult& r) { run->untracked = parseZList(r.out); }, phase2);
+	round.launch(_rootPath, { QStringLiteral("ls-files"), QStringLiteral("--others"), QStringLiteral("--exclude-standard"), QStringLiteral("-z") },
+		[run](const GitResult& r) { run->untracked = parseZList(r.out); });
 	// The submodule list is read out of the index, not from `git submodule status`: that one is a shell script in
 	// Git for Windows and costs more than every other refresh query combined
-	launch(_rootPath, { QStringLiteral("ls-files"), QStringLiteral("--stage"), QStringLiteral("-z") },
+	round.launch(_rootPath, { QStringLiteral("ls-files"), QStringLiteral("--stage"), QStringLiteral("-z") },
 		[run](const GitResult& r) {
 			if (r.ok)
 				run->submodules = parseGitlinkPaths(r.out);
 			else
 				run->noteFailure(r); // unread, every gitlink demotes to an ordinary file that discarding may overwrite
-		}, phase2);
+		});
+}
+
+// The queries the base ones' answers call for - the unborn fallback, the detached-HEAD branch tips,
+// per-submodule dirtiness, the unpushed subjects. All independent of each other.
+void Repository::startDependentQueries(const std::shared_ptr<RefreshRun>& run)
+{
+	QueryRound round{ this, [self = QPointer<Repository>{ this }] {
+		if (self)
+			self->finishRefresh();
+	} };
+
+	// The base query needed a HEAD to compare against. Re-run it against the empty tree, which is
+	// what an unborn branch will commit on top of anyway.
+	if (run->header.oid == QLatin1String("(initial)"))
+	{
+		if (_emptyTreeSha.isEmpty())
+			run->trackedError = QStringLiteral("The empty tree could not be resolved, leaving nothing to list an unborn repository's changes against.");
+		else
+			round.launch(_rootPath, trackedChangesArgs(_emptyTreeSha),
+				[run](const GitResult& r) {
+					if (!r.ok)
+					{
+						run->trackedError = r.errorText();
+						return;
+					}
+					run->diffEntries = parseNameStatusZ(r.out);
+					run->trackedError.clear(); // the earlier attempt only failed for want of a HEAD, and this answered instead
+				});
+	}
+
+	if (run->header.head == QLatin1String("(detached)"))
+	{
+		for (const char* refRoot : { "refs/heads", "refs/remotes" })
+		{
+			const bool local = qstrcmp(refRoot, "refs/heads") == 0;
+			round.launch(_rootPath, { QStringLiteral("for-each-ref"), QStringLiteral("--points-at"), QStringLiteral("HEAD"),
+					QStringLiteral("--format=%(refname:short)"), QString::fromLatin1(refRoot) },
+				[run, local](const GitResult& r) {
+					QStringList names = parseLineList(r.out);
+					if (!local)
+						names.removeIf([](const QString& n) { return n.endsWith(QLatin1String("/HEAD")); });
+					(local ? run->localBranchesAtHead : run->remoteBranchesAtHead) = names;
+				});
+		}
+	}
+
+	for (const QString& subPath : run->submodules)
+	{
+		const QString workDir = _rootPath + QLatin1Char('/') + subPath;
+		if (!QFileInfo::exists(workDir + QLatin1String("/.git")))
+			continue; // never initialized: the directory is empty, there is nothing inside to query
+		round.launch(workDir, { QStringLiteral("status"), QStringLiteral("--porcelain"), QStringLiteral("-z") },
+			[run, subPath](const GitResult& r) { run->submoduleContent[subPath] = contentFromStatus(r); });
+	}
+
+	if (!run->header.upstream.isEmpty() && run->header.ahead > 0)
+	{
+		round.launch(_rootPath, { QStringLiteral("log"), QStringLiteral("--oneline"), QStringLiteral("--no-decorate"),
+				QStringLiteral("-n"), QString::number(MaxUnpushedLogEntries), QStringLiteral("@{upstream}..HEAD") },
+			[run](const GitResult& r) { run->unpushedSubjects = parseLineList(r.out); });
+	}
 }
 
 void Repository::finishRefresh()
 {
 	const RefreshRun& run = *_run;
 
-	// Only the tracked-changes slot can still hold a failure phase 2 was the one to answer
+	// Only the tracked-changes slot can still hold a failure the second round was the one to answer
 	_state.readFailure = !run.failure.isEmpty() ? run.failure : run.trackedError;
 
 	// A half-read repository is not written over the last fully-read one: rows assembled from some of the
@@ -348,7 +378,7 @@ void Repository::applyRefreshResults(const RefreshRun& run)
 
 	_files.clear();
 
-	// A submodule phase 2 never queried was never initialized, and an empty directory holds nothing
+	// A submodule the second round never queried was never initialized, and an empty directory holds nothing
 	const auto contentOf = [&run](const QString& path) {
 		const auto it = run.submoduleContent.find(path);
 		return it != run.submoduleContent.end() ? it->second : SubmoduleContent::Clean;
