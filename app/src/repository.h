@@ -4,7 +4,6 @@
 #include "gitprocess.h"
 
 #include <QObject>
-#include <QPointer>
 
 #include <vector>
 

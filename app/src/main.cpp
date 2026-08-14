@@ -13,7 +13,9 @@ int main(int argc, char* argv[])
 	QApplication::setApplicationName(QStringLiteral("GoodGit"));
 	applyTheme(app);
 
-	const QString startPath = argc > 1 ? QString::fromLocal8Bit(argv[1]) : QDir::currentPath();
+	// Not argv, which on Windows arrives in the local codepage and mangles anything outside it
+	const QStringList arguments = QApplication::arguments();
+	const QString startPath = arguments.size() > 1 ? arguments[1] : QDir::currentPath();
 
 	const GitResult repoRootResult = Git::runSync(startPath, { QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel") });
 	if (!repoRootResult.ok)

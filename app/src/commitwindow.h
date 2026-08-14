@@ -43,9 +43,15 @@ private:
 	void updateStrips();
 	void updateButtons();
 
+	// Every flow that writes to the index or the working tree brackets itself with these, and they drive
+	// the controls that would otherwise start a second one
+	void beginMutation();
+	void endMutation();
+
 	void startCommit(bool pushAfterwards);
 	void confirmUntrackedThenCommit(bool pushAfterwards);
-	void reattachHead(std::function<void()> onReattached);
+	// Always reports back, refusal included: the caller is mid-commit and has to end its flow either way
+	void reattachHead(std::function<void(bool reattached)> onDone);
 	void doCommit(bool pushAfterwards);
 	void doPush(bool setUpstream);
 	void peekIncoming();
@@ -112,7 +118,11 @@ private:
 
 	QPointer<HistoryWindow> _historyWindow; // at most one per repo window, raised again on a second click
 	QPointer<Git::Job> _diffJob;
+	QPointer<Git::Job> _wordPoolJob;
 	int _diffGeneration = 0; // stale async diff results (incl. the two-step submodule log) are dropped by this
-	bool _commitInFlight = false;
+	// Held for a whole writing flow, dialogs and the asynchronous reattach included - not just while a git
+	// process runs. Two of them would meet at index.lock, and the second would commit a pathspec the first
+	// has already taken.
+	bool _mutationInFlight = false;
 	bool _peekInFlight = false; // a fetch is slow, and a refresh landing meanwhile must not re-enable the button
 };

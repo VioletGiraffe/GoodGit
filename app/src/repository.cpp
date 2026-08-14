@@ -541,10 +541,9 @@ Git::Job* Repository::unpushedCommits(const QObject* context, Git::Callback onDo
 void Repository::submodulePointerLog(const FileEntry& entry, const QObject* context, Git::Callback onDone)
 {
 	const QString subPath = _rootPath + QLatin1Char('/') + entry.path;
+	// A callback only runs while its context lives, so this one can hand the same context to the second query
 	Git::run(_rootPath, { QStringLiteral("rev-parse"), QStringLiteral("HEAD:") + entry.path }, context,
-		[subPath, context = QPointer<const QObject>(context), onDone](const GitResult& revResult) {
-			if (!context)
-				return; // the context died; a null context pointer would mean "no context" to Git::run
+		[subPath, context, onDone](const GitResult& revResult) {
 			if (!revResult.ok)
 			{
 				onDone(revResult);

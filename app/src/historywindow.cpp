@@ -510,7 +510,7 @@ void HistoryWindow::showDiffForCurrentFile()
 		if (!result.ok)
 			setDiffText(entry.path, tag, result.errorText());
 		else if (result.out.size() > MaxDiffBytes)
-			setDiffText(entry.path, tag, tr("The diff is too large to display (%1 MB).").arg(result.out.size() / (1024 * 1024)));
+			setDiffText(entry.path, tag, tr("The diff is too large to display (%1 MB).").arg(double(result.out.size()) / (1024 * 1024), 0, 'f', 1));
 		else if (result.out.isEmpty())
 			setDiffText(entry.path, tag, tr("No content changes (only the mode or the line endings differ, or a rename with identical content)."));
 		else

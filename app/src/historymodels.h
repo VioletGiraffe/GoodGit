@@ -38,7 +38,7 @@ public:
 	[[nodiscard]] int addingOrRemovingNotListedCount() const;
 
 	// Row indexes address what is shown, so they mean the same thing with a search active as without.
-	[[nodiscard]] const CommitRecord& commitAt(int row) const { return _commits[size_t(_visible[size_t(row)])]; }
+	[[nodiscard]] const CommitRecord& commitAt(int row) const { return _commits[size_t(commitIndexAt(row))]; }
 	[[nodiscard]] int totalCount() const { return int(_commits.size()); } // rowCount() is the shown count
 
 	int rowCount(const QModelIndex& parent = {}) const override;
@@ -48,9 +48,11 @@ public:
 
 private:
 	void rebuildVisible();
+	[[nodiscard]] int commitIndexAt(int row) const { return _visible[size_t(row)]; }
 
 private:
 	std::vector<CommitRecord> _commits;
+	std::vector<QString> _displayedDates; // parallel to _commits; the age each shows is as of the load
 	std::vector<int> _visible; // indexes into _commits, every one of them while the search is empty
 	QString _searchText;
 	QSet<QString> _unpushedShas;

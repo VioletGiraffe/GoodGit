@@ -47,15 +47,14 @@ QString ageText(const QDateTime& when, const QDateTime& now)
 	return lead + QStringLiteral(" and ") + countedUnit(remainder, underAYear ? "day" : "month") + QStringLiteral(" ago");
 }
 
-QString displayedDate(const QString& isoDate)
+QString displayedDate(const QString& isoDate, const QDateTime& now)
 {
 	const QDateTime dateTime = QDateTime::fromString(isoDate, Qt::ISODate);
 	if (!dateTime.isValid())
 		return isoDate;
 
 	const QDateTime local = dateTime.toLocalTime();
-	return QStringLiteral("%1 (%2)").arg(local.toString(QStringLiteral("yyyy-MM-dd hh:mm")),
-		ageText(local, QDateTime::currentDateTime()));
+	return QStringLiteral("%1 (%2)").arg(local.toString(QStringLiteral("yyyy-MM-dd hh:mm")), ageText(local, now));
 }
 
 QString subjectText(const CommitRecord& commit)
@@ -95,6 +94,15 @@ void CommitLogModel::setCommits(std::vector<CommitRecord> commits)
 {
 	beginResetModel();
 	_commits = std::move(commits);
+
+	// Formatted once, against one clock reading: parsing the date per paint costs more than the whole
+	// list is worth, and rows sharing an instant is what makes their ages comparable
+	const QDateTime now = QDateTime::currentDateTime();
+	_displayedDates.clear();
+	_displayedDates.reserve(_commits.size());
+	for (const CommitRecord& commit : _commits)
+		_displayedDates.push_back(displayedDate(commit.date, now));
+
 	rebuildVisible();
 	endResetModel();
 }
@@ -186,7 +194,7 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 		// commit can be both
 		case SubjectColumn: return addsOrRemoves ? QStringLiteral("± ") + subjectText(commit) : subjectText(commit);
 		case AuthorColumn:  return commit.author;
-		case DateColumn:    return displayedDate(commit.date);
+		case DateColumn:    return _displayedDates[size_t(commitIndexAt(index.row()))];
 		}
 		return {};
 	case Qt::FontRole:

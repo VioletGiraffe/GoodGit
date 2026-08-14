@@ -401,7 +401,8 @@ bool CommitWindow::eventFilter(QObject* watched, QEvent* event)
 		}
 		if (keyEvent->key() == Qt::Key_Delete)
 		{
-			deleteSelection();
+			if (!_mutationInFlight) // swallowed either way: the key means this and nothing else here
+				deleteSelection();
 			return true;
 		}
 	}
@@ -424,7 +425,10 @@ void CommitWindow::onRefreshed()
 	// and content that changed under a selection that did not move has to be re-read anyway
 	showDiffForCurrentRow();
 
-	_repo.diffAllChanges(this, [this](const GitResult& result) {
+	// Or refreshes in quick succession leave the pool built by whichever finished last, not by the newest
+	if (_wordPoolJob)
+		_wordPoolJob->cancel();
+	_wordPoolJob = _repo.diffAllChanges(this, [this](const GitResult& result) {
 		_messageEdit->setCompletionWords(completionWordsFor(_repo.files(), result.ok ? result.out : QByteArray{}));
 	});
 }
@@ -513,7 +517,7 @@ void CommitWindow::updateButtons()
 
 	const bool detachedAndStuck = state.detached && state.localBranchesAtHead.isEmpty() && state.remoteBranchesAtHead.isEmpty();
 	const bool canCommit = checkedCount > 0 && !_messageEdit->toPlainText().trimmed().isEmpty()
-		&& !detachedAndStuck && !_commitInFlight;
+		&& !detachedAndStuck && !_mutationInFlight;
 	_commitButton->setEnabled(canCommit);
 	_commitPushButton->setEnabled(canCommit);
 	_commitButton->setText(state.operationInProgress() ? tr("Commit (%1 files)").arg(checkedCount)
@@ -523,15 +527,36 @@ void CommitWindow::updateButtons()
 	_peekButton->setEnabled(!state.upstream.isEmpty() && !_peekInFlight);
 }
 
+void CommitWindow::beginMutation()
+{
+	assert(!_mutationInFlight);
+	_mutationInFlight = true;
+	updateButtons();
+}
+
+void CommitWindow::endMutation()
+{
+	_mutationInFlight = false;
+	updateButtons();
+}
+
 void CommitWindow::startCommit(bool pushAfterwards)
 {
-	if (_commitInFlight)
+	if (_mutationInFlight)
 		return;
 
-	if (_repo.state().detached)
-		reattachHead([this, pushAfterwards] { confirmUntrackedThenCommit(pushAfterwards); });
-	else
+	beginMutation();
+	if (!_repo.state().detached)
+	{
 		confirmUntrackedThenCommit(pushAfterwards);
+		return;
+	}
+	reattachHead([this, pushAfterwards](bool reattached) {
+		if (reattached)
+			confirmUntrackedThenCommit(pushAfterwards);
+		else
+			endMutation();
+	});
 }
 
 void CommitWindow::confirmUntrackedThenCommit(bool pushAfterwards)
@@ -544,23 +569,25 @@ void CommitWindow::confirmUntrackedThenCommit(bool pushAfterwards)
 				.arg(untracked.size()).arg(listedPaths(untracked)),
 			{ tr("Track and commit") });
 		if (answer != 0)
+		{
+			endMutation();
 			return;
+		}
 	}
 	doCommit(pushAfterwards);
 }
 
 // Reattachment rule (doc/ARCHITECTURE.md): only ever attach to a branch whose tip is exactly HEAD,
 // so the working tree never moves. Anything else refuses.
-void CommitWindow::reattachHead(std::function<void()> onReattached)
+void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 {
 	const RepoState& state = _repo.state();
 
-	const auto checkoutAndGo = [this, onReattached](const QString& branch) {
-		_repo.checkoutBranch(branch, [this, onReattached](const GitResult& result) {
-			if (result.ok)
-				onReattached();
-			else
+	const auto checkoutAndGo = [this, onDone](const QString& branch) {
+		_repo.checkoutBranch(branch, [this, onDone](const GitResult& result) {
+			if (!result.ok)
 				showGitError(tr("Failed to check out the branch"), result);
+			onDone(result.ok);
 		});
 	};
 
@@ -577,6 +604,8 @@ void CommitWindow::reattachHead(std::function<void()> onReattached)
 			state.localBranchesAtHead);
 		if (answer)
 			checkoutAndGo(state.localBranchesAtHead[*answer]);
+		else
+			onDone(false);
 		return;
 	}
 
@@ -589,25 +618,28 @@ void CommitWindow::reattachHead(std::function<void()> onReattached)
 				tr("HEAD matches several remote branches. Create a local branch tracking which one?"),
 				state.remoteBranchesAtHead);
 			if (!answer)
+			{
+				onDone(false);
 				return;
+			}
 			remoteBranch = state.remoteBranchesAtHead[*answer];
 		}
 
 		const QString localName = remoteBranch.mid(remoteBranch.indexOf(QLatin1Char('/')) + 1);
-		_repo.localBranchExists(localName, this, [this, localName, remoteBranch, onReattached](bool exists) {
+		_repo.localBranchExists(localName, this, [this, localName, remoteBranch, onDone](bool exists) {
 			if (exists)
 			{
 				// Taking the name would move the working tree - that disqualifies it
 				MessageBox::notice(this, tr("Cannot reattach"),
 					tr("HEAD matches %1, but the local branch '%2' already exists and points elsewhere.\n"
 					   "Committing is blocked - resolve the branch state first.").arg(remoteBranch, localName), {});
+				onDone(false);
 				return;
 			}
-			_repo.createTrackingBranch(localName, remoteBranch, [this, onReattached](const GitResult& result) {
-				if (result.ok)
-					onReattached();
-				else
+			_repo.createTrackingBranch(localName, remoteBranch, [this, onDone](const GitResult& result) {
+				if (!result.ok)
 					showGitError(tr("Failed to create the branch"), result);
+				onDone(result.ok);
 			});
 		});
 		return;
@@ -616,6 +648,7 @@ void CommitWindow::reattachHead(std::function<void()> onReattached)
 	MessageBox::notice(this, tr("Cannot commit"),
 		tr("Not on a branch, and no branch points at this commit.\n"
 		   "A commit made here could not be pushed. Check out a branch first."), {});
+	onDone(false);
 }
 
 void CommitWindow::doCommit(bool pushAfterwards)
@@ -624,12 +657,10 @@ void CommitWindow::doCommit(bool pushAfterwards)
 	const QStringList pathspec = _filesModel.checkedPathspec();
 	const QStringList untracked = _filesModel.checkedUntrackedPaths();
 	assert(!message.trimmed().isEmpty() && !pathspec.isEmpty());
-
-	_commitInFlight = true;
-	updateButtons();
+	assert(_mutationInFlight); // startCommit took it, and holds it across the reattach and the dialogs
 
 	const auto onDone = [this, message, pushAfterwards](const GitResult& result) {
-		_commitInFlight = false;
+		endMutation();
 		if (!result.ok)
 		{
 			showGitError(tr("Commit failed"), result);
@@ -808,7 +839,7 @@ void CommitWindow::showDiffForCurrentRow()
 		if (!result.ok)
 			setDiffText(entry.path, {}, result.errorText());
 		else if (result.out.size() > MaxDiffBytes)
-			setDiffText(entry.path, {}, tr("The diff is too large to display (%1 MB).").arg(result.out.size() / (1024 * 1024)));
+			setDiffText(entry.path, {}, tr("The diff is too large to display (%1 MB).").arg(double(result.out.size()) / (1024 * 1024), 0, 'f', 1));
 		else if (result.out.isEmpty())
 			setDiffText(entry.path, {}, tr("No content changes (only the mode or the line endings differ, or the file matches HEAD)."));
 		else
@@ -885,6 +916,7 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 		entries.push_back(_filesModel.entryAt(row));
 
 	const bool operationInProgress = _repo.state().operationInProgress();
+	const bool canMutate = !_mutationInFlight; // a second writer would only meet the first at index.lock
 	bool anyUntracked = false, anyAdded = false, anyDeletable = false, anyDiscardable = false;
 	for (const FileEntry& entry : entries)
 	{
@@ -899,9 +931,9 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 
 	QMenu menu{ this };
 	QAction* addAction = menu.addAction(tr("Add to index"), this, &CommitWindow::addSelectionToIndex);
-	addAction->setEnabled(anyUntracked);
+	addAction->setEnabled(anyUntracked && canMutate);
 	QAction* unAddAction = menu.addAction(tr("Un-add"), this, &CommitWindow::unAddSelection);
-	unAddAction->setEnabled(anyAdded);
+	unAddAction->setEnabled(anyAdded && canMutate);
 	QMenu* ignoreMenu = menu.addMenu(tr("Add to .gitignore"));
 	const bool singleUntracked = entries.size() == 1 && !entries.front().isSubmodule && entries.front().type == ChangeType::Untracked;
 	ignoreMenu->setEnabled(singleUntracked);
@@ -949,9 +981,9 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	});
 	menu.addSeparator();
 	QAction* discardAction = menu.addAction(tr("Discard changes"), this, &CommitWindow::discardSelection);
-	discardAction->setEnabled(anyDiscardable);
+	discardAction->setEnabled(anyDiscardable && canMutate);
 	QAction* deleteAction = menu.addAction(tr("Delete to Recycle Bin"), this, &CommitWindow::deleteSelection);
-	deleteAction->setEnabled(anyDeletable);
+	deleteAction->setEnabled(anyDeletable && canMutate);
 	// Display-only: the view's event filter owns the actual Del handling; WidgetShortcut on an action
 	// belonging to no widget never registers globally, so the key cannot trigger twice
 	deleteAction->setShortcut(QKeySequence::Delete);
@@ -1073,7 +1105,9 @@ void CommitWindow::deleteSelection()
 	if (!addedPaths.isEmpty())
 	{
 		// Un-add first: trashing a staged-as-added file would leave the index pointing at a file that no longer exists
+		beginMutation();
 		_repo.unAdd(addedPaths, [this, paths = untrackedPaths + trackedPaths + addedPaths, trashAll](const GitResult& result) {
+			endMutation();
 			if (!result.ok)
 			{
 				showGitError(tr("Failed to un-add before deleting"), result);
@@ -1141,16 +1175,19 @@ void CommitWindow::discardSelection()
 	const auto unAddThenRefresh = [this, addedPaths] {
 		if (addedPaths.isEmpty())
 		{
+			endMutation();
 			_repo.refresh();
 			return;
 		}
 		_repo.unAdd(addedPaths, [this](const GitResult& result) {
+			endMutation();
 			if (!result.ok)
 				showGitError(tr("Un-add failed"), result);
 			_repo.refresh();
 		});
 	};
 
+	beginMutation();
 	if (pathspec.isEmpty())
 	{
 		unAddThenRefresh();
@@ -1160,6 +1197,7 @@ void CommitWindow::discardSelection()
 	_repo.discardChanges(pathspec, [this, unAddThenRefresh](const GitResult& result) {
 		if (!result.ok)
 		{
+			endMutation();
 			showGitError(tr("Discard failed"), result);
 			_repo.refresh();
 			return;
@@ -1179,7 +1217,9 @@ void CommitWindow::addSelectionToIndex()
 	}
 	if (paths.isEmpty())
 		return;
+	beginMutation();
 	_repo.addToIndex(paths, [this](const GitResult& result) {
+		endMutation();
 		if (!result.ok)
 			showGitError(tr("Add to index failed"), result);
 		_repo.refresh();
@@ -1197,7 +1237,9 @@ void CommitWindow::unAddSelection()
 	}
 	if (paths.isEmpty())
 		return;
+	beginMutation();
 	_repo.unAdd(paths, [this](const GitResult& result) {
+		endMutation();
 		if (!result.ok)
 			showGitError(tr("Un-add failed"), result);
 		_repo.refresh();
