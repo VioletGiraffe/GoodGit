@@ -53,17 +53,19 @@ body {
 	font: 14px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
 	padding-bottom: 60px;
 }
-.wrap { max-width: 1380px; margin: 0 auto; padding: 0 24px; }
+.wrap { max-width: 1500px; margin: 0 auto; padding: 0 24px; }
 .masthead { padding: 30px 0 18px; }
 .masthead h1 { margin: 0 0 6px; font-size: 26px; font-weight: 650; letter-spacing: -0.01em; }
 .masthead p { margin: 0 0 8px; color: var(--page-dim); max-width: 92ch; }
+.sec { padding: 30px 0 14px; }
+.sec h2 { margin: 0 0 6px; font-size: 20px; font-weight: 640; }
+.sec p { margin: 0; color: var(--page-dim); max-width: 92ch; }
 code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: .92em; }
-ul.notes { margin: 22px 0 0; padding-left: 20px; color: var(--page-dim); max-width: 100ch; line-height: 1.75; }
-ul.notes b { color: var(--page-fg); font-weight: 600; }
 
 /* ---------- window shell ---------- */
 .win {
-	width: 1180px; max-width: 100%; height: 740px;
+	position: relative; /* the content-search popup centers on it */
+	width: 1400px; max-width: 100%; height: 780px;
 	background: var(--win-bg); border: 1px solid var(--border); border-radius: 8px;
 	box-shadow: 0 10px 30px var(--shadow), 0 2px 6px rgba(0,0,0,.07);
 	overflow: hidden; display: flex; flex-direction: column;
@@ -78,7 +80,7 @@ ul.notes b { color: var(--page-fg); font-weight: 600; }
 .titlebar .wbtns { margin-left: auto; display: flex; }
 .titlebar .wbtns i { width: 44px; height: 32px; display: grid; place-items: center; font-style: normal; font-size: 11px; color: var(--dim); }
 
-.repobar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--pane-alt); border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+.repobar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--pane-alt); border-bottom: 1px solid var(--border); flex: 0 0 auto; white-space: nowrap; }
 .repobar .repo { font-weight: 650; }
 .repobar .branch { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; background: var(--pane); border: 1px solid var(--border); border-radius: 4px; padding: 1px 7px; }
 .repobar .ab { color: var(--accent); font-size: 12px; font-weight: 600; }
@@ -108,7 +110,12 @@ ul.notes b { color: var(--page-fg); font-weight: 600; }
 .frow.sel { background: var(--sel); box-shadow: inset 2px 0 0 var(--accent); }
 .frow .nocb { width: 14px; flex: 0 0 14px; text-align: center; color: var(--dim); opacity: .55; font-size: 11px; }
 .frow .state { flex: 0 0 auto; font-size: 11.5px; font-weight: 600; min-width: 78px; }
-.frow .path { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+/* Two columns, not one cell: each is colored by an item data role, which one string could not be. */
+.frow .plus, .frow .minus { flex: 0 0 auto; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; text-align: right; }
+.frow .plus { min-width: 32px; color: var(--st-add); }
+.frow .minus { min-width: 34px; color: var(--st-del); }
+/* min-width:0, or the flex item refuses to shrink below its text and the ellipsis never takes effect */
+.frow .path { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .frow .ico { flex: 0 0 14px; font-size: 12px; }
 .frow.del .path { text-decoration: line-through; text-decoration-color: var(--st-del); text-decoration-thickness: 1px; }
 .frow.disabled { opacity: .8; }
@@ -135,6 +142,41 @@ ul.notes b { color: var(--page-fg); font-weight: 600; }
 .diff pre .a { background: var(--diff-add-bg); color: var(--diff-add-fg); }
 .diff pre .d { background: var(--diff-del-bg); color: var(--diff-del-fg); }
 
+/* ---------- commit log ---------- */
+.log { display: flex; flex-direction: column; min-height: 0; background: var(--pane); }
+/* Inside the scroller, so the vertical scrollbar insets header and rows alike and the columns stay lined up */
+.log .lhead { position: sticky; top: 0; z-index: 1; display: flex; gap: 10px; padding: 5px 10px; background: var(--win-bg); border-bottom: 1px solid var(--border); color: var(--dim); font-size: 12px; white-space: nowrap; }
+.log .lhead span { font-family: inherit; color: inherit; font-weight: inherit; }
+.log .rows { flex: 1; min-height: 0; overflow: auto; }
+.lrow { display: flex; gap: 10px; padding: 4px 10px; border-bottom: 1px solid var(--border-soft); font-size: 12.5px; white-space: nowrap; }
+.lrow.sel { background: var(--sel); }
+/* Sha, author and date are dim; the subject is not, being the one the eye scans for. An unpushed
+   commit takes the accent on its sha - the same mark the commit window's ahead count wears. */
+.c-sha { flex: 0 0 72px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; color: var(--dim); }
+.c-sha.unpushed { color: var(--accent); font-weight: 600; }
+.c-subj { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.c-auth { flex: 0 0 96px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
+.c-date { flex: 0 0 232px; color: var(--dim); }
+
+/* ---------- search field ---------- */
+.field { background: var(--pane); border: 1px solid var(--btn-border); border-radius: 4px; padding: 4px 8px; color: var(--dim); font-size: 12.5px; }
+
+/* ---------- content-search popup ---------- */
+/* Centered on the window rather than dropped under its button, which sits too far out in the corner to
+   read a caption from. */
+.popup { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5; width: 350px;
+	display: flex; flex-direction: column; gap: 6px; padding: 8px;
+	background: var(--win-bg); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 24px var(--shadow); }
+.popup .cap { font-size: 12.5px; }
+.popup .prow { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+
+/* ---------- push log ---------- */
+/* Open only while a push runs. A ConsoleLogView, so the progress meter's carriage returns rewrite one
+   line instead of filling the log. */
+.plog { flex: 0 0 auto; border-top: 1px solid var(--border); background: var(--pane); }
+.plog .phead { display: flex; align-items: center; gap: 9px; padding: 6px 10px; background: var(--win-bg); border-bottom: 1px solid var(--border); font-size: 12px; }
+.plog pre { margin: 0; max-height: 170px; overflow: auto; padding: 6px 10px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; line-height: 1.5; color: var(--dim); }
+
 /* ---------- buttons ---------- */
 .btn { font: inherit; font-size: 12.5px; padding: 5px 14px; background: var(--btn); color: var(--text); border: 1px solid var(--btn-border); border-radius: 4px; white-space: nowrap; }
 .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; }
@@ -144,13 +186,15 @@ ul.notes b { color: var(--page-fg); font-weight: 600; }
 
 /* ============================ sample content ============================ */
 
-/* One row per state the list can show, so the styling of each is visible at once. */
+/* One row per state the list can show, so the styling of each is visible at once. `add`/`del` absent is
+   a row the diff gives no count for: untracked files are not in it, and a submodule pointer's one-line
+   change is not a line count. A pure rename is genuinely 0 and 0. */
 const FILES = [
-	{ chk: 1,    st: 'Modified',  cls: 'mod', path: 'app/src/commitwindow.cpp' },
-	{ chk: 1,    st: 'Modified',  cls: 'mod', path: 'app/src/main.cpp' },
-	{ chk: 1,    st: 'Added',     cls: 'add', path: 'app/src/repository.h' },
-	{ chk: 1,    st: 'Renamed',   cls: 'ren', path: 'app/src/gitprocess.cpp' },
-	{ chk: 1,    st: 'Deleted',   cls: 'del', path: 'app/src/old_widget.cpp' },
+	{ chk: 1,    st: 'Modified',  cls: 'mod', path: 'app/src/commitwindow.cpp', add: 42, del: 17 },
+	{ chk: 1,    st: 'Modified',  cls: 'mod', path: 'app/src/main.cpp', add: 3, del: 1 },
+	{ chk: 1,    st: 'Added',     cls: 'add', path: 'app/src/repository.h', add: 96, del: 0 },
+	{ chk: 1,    st: 'Renamed',   cls: 'ren', path: 'app/src/gitprocess.cpp', add: 0, del: 0 },
+	{ chk: 1,    st: 'Deleted',   cls: 'del', path: 'app/src/old_widget.cpp', add: 0, del: 128 },
 	{ chk: 0,    st: 'Untracked', cls: 'unt', path: 'app/src/diffview.cpp' },
 	{ chk: 0,    st: 'Untracked', cls: 'unt', path: 'build/moc_commitwindow.o' },
 	{ chk: 1,    st: 'Submodule', cls: 'sub', path: 'cpputils', ico: 1 },
@@ -197,6 +241,73 @@ const DIFF = [
 
 const MSG_SUBJECT = 'Commit checked files without disturbing the index';
 
+const PUSH_LOG = [
+	'Enumerating objects: 27, done.',
+	'Counting objects: 100% (27/27), done.',
+	'Compressing objects: 100% (14/14), done.',
+	'Writing objects: 100% (15/15), 2.14 KiB | 2.14 MiB/s, done.',
+	'Total 15 (delta 11), reused 0 (delta 0), pack-reused 0',
+	'remote: Resolving deltas: 100% (11/11), completed with 11 local objects.',
+	'To github.com:VioletGiraffe/GoodGit.git',
+	'   c218660..a3f19e2  master -> master',
+];
+
+/* History window sample. `up` is a commit the upstream has not seen. Refs ride the subject, as git's
+   %D hands them over. */
+const COMMITS = [
+	{ sha: '98087db9', up: 1, subj: '(HEAD -> master) +/- lines counts', date: '2026-08-14 15:49 (18 minutes ago)' },
+	{ sha: 'c218660a', up: 1, subj: 'Refactor', date: '2026-08-14 14:03 (2 hours ago)' },
+	{ sha: 'd7f0181b', up: 1, subj: 'Bugfixes', date: '2026-08-14 12:28 (3 hours ago)' },
+	{ sha: '27044055', subj: 'Bugfixes', date: '2026-08-14 04:09 (11 hours ago)' },
+	{ sha: '61e2f70c', subj: 'Bugfix', date: '2026-08-14 03:55 (12 hours ago)' },
+	{ sha: 'dc4b7b53', subj: 'Bugfix', date: '2026-08-14 03:45 (12 hours ago)' },
+	{ sha: '57fd149d', subj: 'merge/cherry-pick/revert/rebase commit that fails after its checked untracked files were staged leaves them staged', date: '2026-08-14 03:33 (12 hours ago)' },
+	{ sha: '30cc56c5', subj: 'Bugfix', date: '2026-08-14 03:26 (12 hours ago)' },
+	{ sha: 'b3dde3ed', subj: 'Bugfix: job completion callback must be async', date: '2026-08-14 03:18 (12 hours ago)' },
+	{ sha: 'a97c41e0', subj: 'Discard changes to the selected files', date: '2026-08-13 22:04 (17 hours ago)' },
+	{ sha: '4f0b2d18', subj: 'Peek at what the upstream has', date: '2026-08-13 20:41 (19 hours ago)' },
+];
+
+/* One commit's files. No checkboxes here - a commit already made has nothing to check. */
+const COMMIT_FILES = [
+	{ st: 'Modified', cls: 'mod', add: 29, del: 2, path: 'app/src/changedfilesmodel.cpp' },
+	{ st: 'Modified', cls: 'mod', add: 9, del: 2, path: 'app/src/changedfilesmodel.h' },
+	{ st: 'Modified', cls: 'mod', add: 2, del: 0, path: 'app/src/commitwindow.cpp' },
+	{ st: 'Modified', cls: 'mod', add: 33, del: 0, path: 'app/src/gitparsers.cpp' },
+	{ st: 'Modified', cls: 'mod', add: 11, del: 0, path: 'app/src/gitparsers.h' },
+	{ st: 'Modified', cls: 'mod', add: 37, del: 2, path: 'app/src/historymodels.cpp' },
+	{ st: 'Modified', cls: 'mod', add: 11, del: 1, path: 'app/src/historymodels.h' },
+	{ st: 'Modified', cls: 'mod', add: 12, del: 4, path: 'app/src/historywindow.cpp' },
+	{ st: 'Modified', cls: 'mod', add: 1, del: 0, path: 'app/src/historywindow.h' },
+	{ st: 'Modified', cls: 'mod', add: 45, del: 6, path: 'app/src/repository.cpp' },
+	{ st: 'Modified', cls: 'mod', add: 10, del: 2, path: 'app/src/repository.h' },
+	{ st: 'Modified', cls: 'mod', add: 8, del: 7, path: 'doc/ARCHITECTURE.md' },
+];
+
+const COMMIT_DIFF = [
+	['h', '@@ -52,6 +52,19 @@ QColor changeTypeColor(ChangeType type)'],
+	['c', '\treturn {};'],
+	['c', '}'],
+	['c', ''],
+	['a', '+QString lineCountText(const std::optional<LineCounts>& counts, bool added)'],
+	['a', '+{'],
+	['a', '+\tif (!counts)'],
+	['a', '+\t\treturn {};'],
+	['a', '+\treturn added ? QStringLiteral("+%1").arg(counts->added) : QStringLiteral("-%1").arg(counts->removed);'],
+	['a', '+}'],
+	['a', '+'],
+	['a', '+QColor lineCountColor(bool added)'],
+	['a', '+{'],
+	['a', '+\tconst Theme& t = activeTheme();'],
+	['a', '+\treturn added ? t.stAdded : t.stDeleted;'],
+	['a', '+}'],
+	['a', '+'],
+	['c', 'ChangedFilesModel::ChangedFilesModel(QObject* parent) :'],
+	['c', '\tQAbstractTableModel(parent)'],
+	['c', '{'],
+	['c', '}'],
+];
+
 const esc = s => String(s).replace(/&(?!\w+;)/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /* ============================ markup ============================ */
@@ -208,38 +319,52 @@ const cb = state => state === null
 const frow = (f, selected) => {
 	const cls = ['frow', selected ? 'sel' : '', f.cls === 'del' ? 'del' : '',
 		f.blocked ? 'disabled blocked' : ''].filter(Boolean).join(' ');
-	return `<div class="${cls}">${cb(f.chk)}${f.ico ? '<span class="ico">&#128193;</span>' : ''}
-				<span class="state s-${f.cls}">${f.st}</span>
+	const counts = f.add === undefined
+		? '<span class="plus"></span><span class="minus"></span>'
+		: `<span class="plus">+${f.add}</span><span class="minus">-${f.del}</span>`;
+	const check = f.chk === undefined ? '' : cb(f.chk); // a commit already made has nothing to check
+	return `<div class="${cls}">${check}${f.ico ? '<span class="ico">&#128193;</span>' : ''}
+				<span class="state s-${f.cls}">${f.st}</span>${counts}
 				<span class="path">${esc(f.path)}</span></div>`;
 };
 
 const filelist = () => {
 	const checked = FILES.filter(f => f.chk === 1).length;
 	return `<div class="files col" style="flex:1">
-			<div class="bar">${cb('tri')}<span>${checked} of ${FILES.length} checked</span></div>
+			<div class="bar">${cb('tri')}<span>${checked} of ${FILES.length} checked</span>
+				<button class="btn small">Modified only</button><span class="grow"></span></div>
 			<div class="rows">
 				${FILES.map((f, i) => frow(f, i === 0)).join('\n\t\t\t\t')}
 			</div>
 		</div>`;
 };
 
-const diffpane = () => `<div class="diff col" style="flex:1">
-			<div class="dhead"><span>app/src/commitwindow.cpp</span><span class="grow"></span>
-				<span class="tag">HEAD &rarr; working tree</span></div>
-			<pre>${DIFF.map(([t, s]) => `<span class="l ${t === 'c' ? '' : t}">${esc(s) || '&nbsp;'}</span>`).join('')}</pre>
+const diffpane = (path, tag, lines) => `<div class="diff col" style="flex:1">
+			<div class="dhead"><span>${esc(path)}</span><span class="grow"></span>
+				<span class="tag">${tag}</span></div>
+			<pre>${lines.map(([t, s]) => `<span class="l ${t === 'c' ? '' : t}">${esc(s) || '&nbsp;'}</span>`).join('')}</pre>
 		</div>`;
 
-/* Left column is 430px because that is what the 50-column subject guide needs: at this width the
-   editor holds just over 50 monospace characters. Narrower and the guide falls outside the box. */
+const pushlog = () => `<div class="plog">
+			<div class="phead"><span>Push output</span><span class="grow"></span>
+				<button class="btn small">Hide</button></div>
+			<pre>${PUSH_LOG.map(l => esc(l)).join('\n')}</pre>
+		</div>`;
+
+/* Left column width is set by the repo header row, the widest thing in the column: repo name, branch
+   chip, the upstream phrase and four buttons, none of which shrink. The 50-column subject guide needs
+   only 430px of it. */
 const window_ = () => `<div class="win">
 	<div class="titlebar"><span class="tt">GoodGit [master] - GoodGit</span>
 		<span class="wbtns"><i>&#8210;</i><i>&#9633;</i><i>&#10005;</i></span></div>
 	<div class="row">
-		<div class="col" style="flex:0 0 430px;border-right:1px solid var(--border)">
+		<div class="col" style="flex:0 0 600px;border-right:1px solid var(--border)">
 			<div class="repobar">
-				<span class="repo">GoodGit</span><span class="branch">master</span><span class="ab">&uarr;3</span>
+				<span class="repo">GoodGit</span><span class="branch">master</span>
+				<span class="ab">3 to push to origin/master</span>
 				<span class="grow"></span>
-				<button class="btn small">Push (3)</button><button class="btn small">Refresh</button>
+				<button class="btn small">Push</button><button class="btn small">Peek</button>
+				<button class="btn small">Refresh</button><button class="btn small">History</button>
 			</div>
 			${filelist()}
 			<div style="border-top:1px solid var(--border)">
@@ -249,46 +374,96 @@ const window_ = () => `<div class="win">
 						<div>${esc(MSG_SUBJECT)}<span class="caret"></span></div></div>
 				</div>
 				<div style="padding:0 12px 12px;display:flex;flex-direction:column;gap:6px">
-					<button class="btn primary big">Commit 6 files to master</button>
+					<button class="btn primary big">Commit 6 file(s)</button>
 					<button class="btn big">Commit &amp; Push</button>
 				</div>
 			</div>
 		</div>
-		${diffpane()}
+		<div class="col" style="flex:1">${diffpane('app/src/commitwindow.cpp', 'HEAD &rarr; working tree', DIFF)}${pushlog()}</div>
 	</div>
 </div>`;
 
-const NOTES = [
-	'Left column 430&#8239;px, set by the subject guide: the editor holds just over 50 monospace characters at this width.',
-	'<b>50-column subject marker, not 72.</b> The body-wrap convention does not fit in this column and is dropped; the subject one does, and is the one that matters.',
-	'<b>Push and Refresh live in the repo header row</b>, not stacked under the primary button, which puts Push next to the ahead-count that justifies it.',
-	'Single path column; renames render as <code>new/path (was old/path)</code> where width allows. Check-all is the tri-state box in the counter line above the list.',
-	'Submodule rows carry the folder icon. The two conditions that cannot be committed &mdash; pointer moved but dirty inside, and dirty with the pointer unmoved &mdash; take a warning tint as well as their state wording.',
-	'Not drawn: the merge-mode and detached-HEAD strips, which appear directly beneath the repo header row and change how the whole window behaves.',
-];
+const AUTHOR = 'Violet Giraffe';
+
+const logrow = (c, selected) => `<div class="lrow${selected ? ' sel' : ''}">
+					<span class="c-sha${c.up ? ' unpushed' : ''}">${c.sha}</span>
+					<span class="c-subj">${esc(c.subj)}</span>
+					<span class="c-auth">${AUTHOR}</span>
+					<span class="c-date">${c.date}</span></div>`;
+
+/* Open over the log, its edit holding whatever term is in force - empty here, so the placeholder shows. */
+const pickaxePopup = () => `<div class="popup">
+		<div class="cap">List the commits whose diff touches this text:</div>
+		<div class="field">Text to find, taken literally</div>
+		<div class="prow"><span class="cb on"></span><span>Ignore case</span><span class="grow"></span>
+			<button class="btn small">Clear</button><button class="btn small">Find</button></div>
+	</div>`;
+
+/* Load more shows only once the log has hit its 20 000-commit cap, which is also what puts "more to
+   load" in the count. */
+const historyWindow_ = () => `<div class="win">
+	<div class="titlebar"><span class="tt">History - GoodGit - GoodGit</span>
+		<span class="wbtns"><i>&#8210;</i><i>&#9633;</i><i>&#10005;</i></span></div>
+	<div class="repobar">
+		<span>20000 commits, more to load</span>
+		<span class="grow"></span>
+		<span class="field" style="flex:0 0 220px">Search commits</span>
+		<button class="btn small">Find in contents...</button>
+		<button class="btn small">Load more</button>
+		<button class="btn small">Refresh</button>
+	</div>
+	<div class="log" style="flex:0 0 307px">
+		<div class="rows">
+			<div class="lhead"><span class="c-sha">Commit</span><span class="c-subj">Subject</span>
+				<span class="c-auth">Author</span><span class="c-date">Date</span></div>
+				${COMMITS.map((c, i) => logrow(c, i === 0)).join('\n\t\t\t\t')}
+		</div>
+	</div>
+	<div class="row" style="border-top:1px solid var(--border)">
+		<div class="col" style="flex:0 0 320px;border-right:1px solid var(--border)">
+			<div class="files col" style="flex:1">
+				<div class="bar"><span>${COMMIT_FILES.length} files</span><span class="grow"></span></div>
+				<div class="rows">
+					${COMMIT_FILES.map((f, i) => frow(f, i === 0)).join('\n\t\t\t\t\t')}
+				</div>
+			</div>
+		</div>
+		<div class="col" style="flex:1">${diffpane('app/src/changedfilesmodel.cpp', '98087db9', COMMIT_DIFF)}</div>
+	</div>
+	${pickaxePopup()}
+</div>`;
+
+const section = (title, intro) => `<div class="sec">
+		<h2>${title}</h2>
+		<p>${intro}</p>
+	</div>`;
 
 const html = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GoodGit &mdash; commit window mockup</title>
+<title>GoodGit &mdash; window layouts</title>
 <!-- Generated by mockup.gen.js. Edit that file, not this one. -->
 <style>${CSS}</style>
 </head>
 <body>
 <div class="wrap">
 	<div class="masthead">
-		<h1>GoodGit &mdash; commit window</h1>
-		<p>The file list occupies the top of a fixed left column, the message and the primary action sit beneath it,
-		   and the diff takes the full height of the remaining width. Sample content only; every row state is
-		   populated at once so the styling of each is visible.</p>
-		<p>Behaviour and the reasoning behind the design live in <code>doc/ARCHITECTURE.md</code>.</p>
+		<h1>GoodGit &mdash; window layouts</h1>
+		<p>Sample content only. Behaviour and the reasoning behind the design live in <code>doc/ARCHITECTURE.md</code>.</p>
 	</div>
+	${section('Commit window',
+		`The file list occupies the top of the left column, the message and the primary action sit beneath it,
+		 and the diff takes the remaining width, with the push log opening below it while a push runs.
+		 Every row state is populated at once so the styling of each is visible.`)}
 	${window_()}
-	<ul class="notes">
-		${NOTES.map(n => `<li>${n}</li>`).join('\n\t\t')}
-	</ul>
+	${section('History window',
+		`The log fills the top half; below it the selected commit's files sit beside the selected file's diff,
+		 and the content-search popup is drawn open over both. Read-only throughout - no checkboxes, no
+		 primary action. The same window narrowed to one path is a file history, which adds that path to the
+		 header row and changes nothing else.`)}
+	${historyWindow_()}
 </div>
 </body>
 </html>`;
