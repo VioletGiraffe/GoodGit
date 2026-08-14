@@ -43,6 +43,23 @@ std::shared_ptr<QTemporaryFile> openMessageFile(const QString& message, QObject*
 	return file;
 }
 
+// A commit that failed after its untracked paths were added leaves them staged, and the rows would then
+// read Added rather than Untracked. The reported result stays the commit's: the reset's says nothing about
+// why the commit was refused.
+void rollBackAddThenReport(const QString& workDir, const QObject* context, const QStringList& untrackedPaths,
+	const GitResult& commitResult, const Git::Callback& onDone)
+{
+	if (commitResult.ok || untrackedPaths.isEmpty())
+	{
+		onDone(commitResult);
+		return;
+	}
+
+	Git::run(workDir, { QStringLiteral("reset"), QStringLiteral("-q"), QStringLiteral("--pathspec-from-file=-"),
+		QStringLiteral("--pathspec-file-nul") }, context,
+		[onDone, commitResult](const GitResult&) { onDone(commitResult); }, nulJoined(untrackedPaths));
+}
+
 // A status that could not be run answers nothing about the worktree it was pointed at, and the parent
 // may not act on the pointer without that answer - so it is the dirty case, not the clean one.
 SubmoduleContent contentFromStatus(const GitResult& statusResult)
@@ -311,16 +328,7 @@ void Repository::commit(const QString& message, const QStringList& pathspec, con
 		Git::run(_rootPath, { QStringLiteral("commit"), QStringLiteral("-F"), messageFile->fileName(),
 				QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") }, this,
 			[this, messageFile, untrackedPaths, onDone](const GitResult& result) {
-				if (result.ok || untrackedPaths.isEmpty())
-				{
-					onDone(result);
-					return;
-				}
-				// The commit failed after the untracked files were added - undo the add so the visible
-				// Untracked state stays truthful
-				Git::run(_rootPath, { QStringLiteral("reset"), QStringLiteral("-q"),
-						QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") }, this,
-					[onDone, result](const GitResult&) { onDone(result); }, nulJoined(untrackedPaths));
+				rollBackAddThenReport(_rootPath, this, untrackedPaths, result, onDone);
 			}, nulJoined(pathspec));
 	};
 
@@ -344,10 +352,14 @@ void Repository::commitMergeState(const QString& message, const QStringList& unt
 	if (!messageFile)
 		return;
 
-	const auto runCommit = [this, messageFile, onDone] {
+	const auto runCommit = [this, messageFile, untrackedPaths, onDone] {
 		// No pathspec: the index already holds the merge result, and staging conflicted files marks them resolved
 		Git::run(_rootPath, { QStringLiteral("commit"), QStringLiteral("-F"), messageFile->fileName() }, this,
-			[messageFile, onDone](const GitResult& result) { onDone(result); });
+			[this, messageFile, untrackedPaths, onDone](const GitResult& result) {
+				// Only the untracked add is rolled back: `add -u` marked conflicted paths resolved, and
+				// resetting one of those would drop the resolution the user just made
+				rollBackAddThenReport(_rootPath, this, untrackedPaths, result, onDone);
+			});
 	};
 
 	const auto addUntracked = [this, untrackedPaths, runCommit, onDone] {
