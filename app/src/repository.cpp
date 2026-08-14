@@ -43,6 +43,19 @@ std::shared_ptr<QTemporaryFile> openMessageFile(const QString& message, QObject*
 	return file;
 }
 
+// A status that could not be run answers nothing about the worktree it was pointed at, and the parent
+// may not act on the pointer without that answer - so it is the dirty case, not the clean one.
+SubmoduleContent contentFromStatus(const GitResult& statusResult)
+{
+	if (!statusResult.ok)
+		return SubmoduleContent::Unknown;
+
+	const WorktreeDirtiness dirtiness = parsePorcelainDirtiness(statusResult.out);
+	if (dirtiness.dirtyTracked)
+		return SubmoduleContent::DirtyTracked;
+	return dirtiness.untracked ? SubmoduleContent::Untracked : SubmoduleContent::Clean;
+}
+
 // The base of every commit-listing query; the walk itself is whatever the caller appends
 QStringList commitLogArgs(int maxCommits)
 {
@@ -97,7 +110,7 @@ struct Repository::RefreshRun
 	std::vector<NameStatusEntry> diffEntries;
 	QStringList untracked;
 	QStringList submodules; // repo-relative paths of the gitlink entries
-	std::map<QString, WorktreeDirtiness> submoduleDirtiness;
+	std::map<QString, SubmoduleContent> submoduleContent; // only the submodules that were queried at all
 	QStringList unbornCachedFiles;
 };
 
@@ -168,7 +181,7 @@ void Repository::refresh()
 			if (!QFileInfo::exists(workDir + QLatin1String("/.git")))
 				continue; // never initialized: the directory is empty, there is nothing inside to query
 			launch(workDir, { QStringLiteral("status"), QStringLiteral("--porcelain"), QStringLiteral("-z") },
-				[run, subPath](const GitResult& r) { run->submoduleDirtiness[subPath] = parsePorcelainDirtiness(r.out); }, phase3);
+				[run, subPath](const GitResult& r) { run->submoduleContent[subPath] = contentFromStatus(r); }, phase3);
 		}
 
 		if (!run->header.upstream.isEmpty() && run->header.ahead > 0)
@@ -236,9 +249,10 @@ void Repository::finishRefresh()
 
 	_files.clear();
 
-	const auto submoduleDirtiness = [&run](const QString& path) -> const WorktreeDirtiness* {
-		const auto it = run.submoduleDirtiness.find(path);
-		return it != run.submoduleDirtiness.end() ? &it->second : nullptr;
+	// A submodule phase 2 never queried was never initialized, and an empty directory holds nothing
+	const auto contentOf = [&run](const QString& path) {
+		const auto it = run.submoduleContent.find(path);
+		return it != run.submoduleContent.end() ? it->second : SubmoduleContent::Clean;
 	};
 
 	// Tracked changes; a diff row whose path is a submodule becomes a moved-pointer submodule row
@@ -248,15 +262,11 @@ void Repository::finishRefresh()
 		entry.path = diffEntry.path;
 		entry.oldPath = diffEntry.oldPath;
 		entry.type = diffEntry.type;
-		if (const WorktreeDirtiness* dirt = submoduleDirtiness(diffEntry.path); dirt || run.submodules.contains(diffEntry.path))
+		if (run.submodules.contains(diffEntry.path))
 		{
 			entry.isSubmodule = true;
 			entry.pointerMoved = true;
-			if (dirt)
-			{
-				entry.dirtyTrackedInside = dirt->dirtyTracked;
-				entry.untrackedInside = dirt->untracked;
-			}
+			entry.content = contentOf(diffEntry.path);
 		}
 		_files.push_back(std::move(entry));
 	}
@@ -268,16 +278,16 @@ void Repository::finishRefresh()
 	for (const QString& path : run.untracked)
 		_files.push_back({ .path = path, .type = ChangeType::Untracked });
 
-	// Submodules with an unmoved pointer but modified tracked files inside: shown so the state is visible
-	// and the row double-clickable. Untracked-only content inside does not earn a row.
+	// Submodules whose pointer has not moved but whose content would stop it moving: shown so the state
+	// is visible and the row double-clickable. Untracked-only content inside does not earn a row.
 	for (const QString& subPath : run.submodules)
 	{
-		const WorktreeDirtiness* dirt = submoduleDirtiness(subPath);
-		if (!dirt || !dirt->dirtyTracked)
+		FileEntry entry{ .path = subPath, .isSubmodule = true, .content = contentOf(subPath) };
+		if (!entry.contentBlocksPointer())
 			continue;
 		if (std::ranges::any_of(_files, [&](const FileEntry& f) { return f.isSubmodule && f.path == subPath; }))
 			continue; // already present as a moved-pointer row
-		_files.push_back({ .path = subPath, .isSubmodule = true, .dirtyTrackedInside = true, .untrackedInside = dirt->untracked });
+		_files.push_back(std::move(entry));
 	}
 
 	_run.reset();

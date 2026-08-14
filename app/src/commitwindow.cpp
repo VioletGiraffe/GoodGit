@@ -1132,8 +1132,8 @@ void CommitWindow::discardSelection()
 		if (!addedPaths.isEmpty())
 			text += tr("\n\n%1 added file(s) will be un-added and left on disk.").arg(addedPaths.size());
 		if (skippedRows > 0)
-			text += tr("\n\n%1 other selected row(s) stay as they are: untracked files and submodules with changes inside "
-					   "cannot be discarded.").arg(skippedRows);
+			text += tr("\n\n%1 other selected row(s) stay as they are: untracked files, and submodules whose content is "
+					   "modified or could not be read, cannot be discarded.").arg(skippedRows);
 
 		const auto answer = MessageBox::question(this, tr("Discard changes?"), text, { tr("Discard") });
 		if (answer != 0)

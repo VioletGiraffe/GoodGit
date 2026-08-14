@@ -116,7 +116,9 @@ an empty result.
 
 A submodule is just another `Repository` shown in another window. In the parent's list a submodule row
 exists when the pointer moved or tracked files inside are modified; modified tracked content inside blocks
-committing the pointer, untracked content inside neither blocks nor earns a row by itself. The parent's diff
+committing the pointer, untracked content inside neither blocks nor earns a row by itself. A status query
+that fails inside a submodule counts as dirty rather than clean - it may be - so it blocks and earns a row;
+a submodule that was never initialized is not that case, its directory being empty. The parent's diff
 query uses `--ignore-submodules=dirty` so a merely-dirty submodule does not masquerade as a committable
 pointer change. Discarding a submodule row checks the recorded commit out inside it, which leaves it on a
 detached HEAD; the same dirtiness that blocks committing the pointer also blocks discarding it, because that

@@ -16,7 +16,7 @@ QColor stateColor(const FileEntry& entry)
 		return changeTypeColor(entry.type);
 
 	const Theme& t = activeTheme();
-	return entry.dirtyTrackedInside ? t.stDeleted : t.stSubmodule;
+	return entry.contentBlocksPointer() ? t.stDeleted : t.stSubmodule;
 }
 
 } // namespace
@@ -222,15 +222,18 @@ QVariant ChangedFilesModel::data(const QModelIndex& index, int role) const
 			return font;
 		}
 	case Qt::BackgroundRole:
-		if (entry.isSubmodule && entry.dirtyTrackedInside)
+		if (entry.isSubmodule && entry.contentBlocksPointer())
 			return QBrush{ activeTheme().blockedRowTint() };
 		return {};
 	case Qt::ToolTipRole:
-		if (entry.isSubmodule)
-			return entry.dirtyTrackedInside
-				? QStringLiteral("Commit or discard the changes inside this submodule first. Double-click to open it.")
-				: QStringLiteral("Double-click to open this submodule.");
-		return pathText(entry);
+		if (!entry.isSubmodule)
+			return pathText(entry);
+		if (entry.content == SubmoduleContent::Unknown)
+			return QStringLiteral("Could not read what is inside this submodule, so its pointer cannot be committed "
+				"or discarded. Double-click to open it.");
+		return entry.content == SubmoduleContent::DirtyTracked
+			? QStringLiteral("Commit or discard the changes inside this submodule first. Double-click to open it.")
+			: QStringLiteral("Double-click to open this submodule.");
 	default:
 		return {};
 	}
@@ -254,13 +257,14 @@ Qt::ItemFlags ChangedFilesModel::flags(const QModelIndex& index) const
 
 QString ChangedFilesModel::stateText(const FileEntry& entry)
 {
-	if (entry.isSubmodule)
-	{
-		if (!entry.pointerMoved)
-			return QStringLiteral("Uncommitted inside");
-		return entry.dirtyTrackedInside ? QStringLiteral("Submodule - blocked") : QStringLiteral("Submodule");
-	}
-	return changeTypeText(entry.type);
+	if (!entry.isSubmodule)
+		return changeTypeText(entry.type);
+
+	if (entry.content == SubmoduleContent::Unknown)
+		return QStringLiteral("Submodule - unreadable");
+	if (!entry.pointerMoved)
+		return QStringLiteral("Uncommitted inside");
+	return entry.content == SubmoduleContent::DirtyTracked ? QStringLiteral("Submodule - blocked") : QStringLiteral("Submodule");
 }
 
 QString ChangedFilesModel::pathText(const FileEntry& entry)
@@ -268,7 +272,7 @@ QString ChangedFilesModel::pathText(const FileEntry& entry)
 	QString text = entry.path;
 	if (!entry.oldPath.isEmpty())
 		text += QStringLiteral(" (was %1)").arg(entry.oldPath);
-	if (entry.isSubmodule && entry.untrackedInside && !entry.dirtyTrackedInside)
+	if (entry.isSubmodule && entry.content == SubmoduleContent::Untracked)
 		text += QStringLiteral(" (untracked files inside)");
 	return text;
 }

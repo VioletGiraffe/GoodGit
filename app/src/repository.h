@@ -31,6 +31,15 @@ struct RepoState
 	[[nodiscard]] bool operationInProgress() const { return op != RepoOp::None; }
 };
 
+// What a submodule's own worktree holds, as far as the parent was able to determine
+enum class SubmoduleContent : uint8_t
+{
+	Clean,        // also the never-initialized case: an empty directory has nothing inside to lose
+	Untracked,    // untracked files only - shown on the row, blocks nothing
+	DirtyTracked, // modified tracked files inside
+	Unknown,      // the status query inside failed; it may be dirty, so it counts as dirty
+};
+
 struct FileEntry
 {
 	QString path;    // repo-relative, forward slashes; the new path for renames
@@ -38,11 +47,16 @@ struct FileEntry
 	ChangeType type = ChangeType::Modified;
 
 	bool isSubmodule = false;
-	bool pointerMoved = false;       // the recorded commit differs from HEAD's
-	bool dirtyTrackedInside = false; // modified tracked files inside - blocks committing the pointer
-	bool untrackedInside = false;    // indicated on the row, does not block
+	bool pointerMoved = false; // the recorded commit differs from HEAD's
+	SubmoduleContent content = SubmoduleContent::Clean;
 
-	[[nodiscard]] bool committable() const { return !isSubmodule || (pointerMoved && !dirtyTrackedInside); }
+	// Committing the pointer and discarding it both walk over whatever is inside, so the same content
+	// stops either one
+	[[nodiscard]] bool contentBlocksPointer() const
+	{
+		return content == SubmoduleContent::DirtyTracked || content == SubmoduleContent::Unknown;
+	}
+	[[nodiscard]] bool committable() const { return !isSubmodule || (pointerMoved && !contentBlocksPointer()); }
 };
 
 // One git repository: state queries and actions, all asynchronous via Git::run.
