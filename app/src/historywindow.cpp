@@ -140,6 +140,8 @@ void HistoryWindow::buildUi()
 	_filesView->setContextMenuPolicy(Qt::CustomContextMenu);
 	_filesView->header()->hide();
 	_filesView->header()->setSectionResizeMode(CommitFilesModel::StateColumn, QHeaderView::ResizeToContents);
+	_filesView->header()->setSectionResizeMode(CommitFilesModel::AddedColumn, QHeaderView::ResizeToContents);
+	_filesView->header()->setSectionResizeMode(CommitFilesModel::RemovedColumn, QHeaderView::ResizeToContents);
 	_filesView->header()->setSectionResizeMode(CommitFilesModel::PathColumn, QHeaderView::Stretch);
 	filesLayout->addWidget(_filesView, 1);
 
@@ -442,11 +444,13 @@ void HistoryWindow::showFilesForCurrentCommit()
 {
 	if (_filesJob)
 		_filesJob->cancel();
+	if (_fileCountsJob)
+		_fileCountsJob->cancel();
 
 	const QModelIndex current = _logView->currentIndex();
 	if (!current.isValid() || current.row() >= _logModel.rowCount())
 	{
-		_filesModel.setEntries({});
+		_filesModel.clear();
 		_fileCountLabel->clear();
 		setDiffText({}, {}, {});
 		return;
@@ -455,9 +459,9 @@ void HistoryWindow::showFilesForCurrentCommit()
 	const CommitRecord& commit = _logModel.commitAt(current.row());
 
 	// Neither the file list nor the pane may outlive the commit they describe, so both are replaced
-	// before the query goes out. The message is what a freshly selected commit shows; picking a file
+	// before the queries go out. The message is what a freshly selected commit shows; picking a file
 	// from the list below swaps it for that file's diff.
-	_filesModel.setEntries({});
+	_filesModel.clear();
 	showCommitMessage(commit);
 
 	const bool isMerge = commit.parents.size() > 1;
@@ -475,7 +479,7 @@ void HistoryWindow::showFilesForCurrentCommit()
 	_filesJob = _repo.commitFiles(sha, this, [this, sha](const GitResult& result) {
 		if (!result.ok)
 		{
-			_filesModel.setEntries({});
+			_filesModel.clear();
 			_fileCountLabel->clear();
 			setDiffText({}, shortSha(sha), result.errorText());
 			return;
@@ -485,6 +489,10 @@ void HistoryWindow::showFilesForCurrentCommit()
 		const int fileCount = int(entries.size());
 		_filesModel.setEntries(std::move(entries));
 		_fileCountLabel->setText(fileCount == 1 ? tr("1 file") : tr("%1 files").arg(fileCount));
+	});
+	// Its own query, so the rows may appear before their counts do; failing costs the counts and nothing else
+	_fileCountsJob = _repo.commitFileCounts(sha, this, [this](const GitResult& result) {
+		_filesModel.setLineCounts(parseNumstatZ(result.out));
 	});
 }
 

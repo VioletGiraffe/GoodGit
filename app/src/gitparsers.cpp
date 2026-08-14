@@ -77,6 +77,39 @@ std::vector<NameStatusEntry> parseNameStatusZ(const QByteArray& diffOutput)
 	return entries;
 }
 
+std::map<QString, LineCounts> parseNumstatZ(const QByteArray& diffOutput)
+{
+	std::map<QString, LineCounts> counts;
+	const auto tokens = diffOutput.split('\0');
+
+	// Layout: <added>\t<removed>\t<path>\0, and <added>\t<removed>\t\0<old>\0<new>\0 for renames - the
+	// path field spent on nothing, the two names following as records of their own
+	for (qsizetype i = 0; i < tokens.size(); ++i)
+	{
+		const QByteArray& record = tokens[i];
+		const qsizetype firstTab = record.indexOf('\t');
+		const qsizetype secondTab = firstTab < 0 ? -1 : record.indexOf('\t', firstTab + 1);
+		if (secondTab < 0)
+			continue;
+
+		QString path = QString::fromUtf8(record.mid(secondTab + 1));
+		if (path.isEmpty())
+		{
+			if (i + 2 >= tokens.size())
+				break;
+			path = QString::fromUtf8(tokens[i + 2]); // the new name, the one the file list knows the row by
+			i += 2;
+		}
+
+		bool addedRead = false, removedRead = false;
+		const int added = record.left(firstTab).toInt(&addedRead);
+		const int removed = record.mid(firstTab + 1, secondTab - firstTab - 1).toInt(&removedRead);
+		if (addedRead && removedRead) // git counts a binary file `-` and `-`: no count, rather than a count of none
+			counts[path] = { .added = added, .removed = removed };
+	}
+	return counts;
+}
+
 QStringList parseZList(const QByteArray& output)
 {
 	QStringList paths;

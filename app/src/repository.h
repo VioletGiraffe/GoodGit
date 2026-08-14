@@ -6,6 +6,7 @@
 #include <QObject>
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 enum class RepoOp : uint8_t { None, Merge, CherryPick, Revert, Rebase };
@@ -50,6 +51,10 @@ struct FileEntry
 	QString path;    // repo-relative, forward slashes; the new path for renames
 	QString oldPath; // renames only
 	ChangeType type = ChangeType::Modified;
+
+	// Absent where the tracked-changes diff gives no count: an untracked file is not in it, a binary one
+	// it counts as `-`, and a submodule's one-line pointer change is not a line count of anything.
+	std::optional<LineCounts> lineCounts;
 
 	bool isSubmodule = false;
 	bool pointerMoved = false; // the recorded commit differs from HEAD's
@@ -134,12 +139,15 @@ public:
 	// The narrower half of a pickaxe: commits where the number of occurrences changed, so the text was
 	// genuinely added or removed rather than merely edited around. Shas only, as parseLineList input.
 	Git::Job* commitsAddingOrRemovingText(const LogQuery& query, const QObject* context, Git::Callback onDone);
-	// The files one commit touched, as parseNameStatusZ input. Empty for a merge - git shows no diff
-	// for one without --cc - so detect merges from the parent count, not from an empty result.
 	// What the upstream has and HEAD does not, newest first, as parseCommitLog input. Compares against
 	// the remote-tracking ref, so it is only as current as the last fetch.
 	Git::Job* incomingCommits(int maxCommits, const QObject* context, Git::Callback onDone);
+	// The files one commit touched, as parseNameStatusZ input. Empty for a merge - git shows no diff
+	// for one without --cc - so detect merges from the parent count, not from an empty result.
 	Git::Job* commitFiles(const QString& sha, const QObject* context, Git::Callback onDone);
+	// The lines behind those same files, as parseNumstatZ input. Its own query, so it may answer either
+	// side of the one above; the list is built from whichever arrives first.
+	Git::Job* commitFileCounts(const QString& sha, const QObject* context, Git::Callback onDone);
 	Git::Job* commitFileDiff(const QString& sha, const NameStatusEntry& file, const QObject* context, Git::Callback onDone);
 	// The shas HEAD holds that its upstream does not, as parseLineList input. Fails when there is no
 	// upstream to compare against - none configured, or a detached HEAD - which is not an error to report.

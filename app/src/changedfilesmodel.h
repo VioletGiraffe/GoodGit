@@ -13,7 +13,14 @@
 [[nodiscard]] QString changeTypeText(ChangeType type);
 [[nodiscard]] QColor changeTypeColor(ChangeType type);
 
-// The checkable file list. Columns: 0 = checkbox + icon + state text, 1 = path.
+// The same for the two line-count columns, `added` picking which one: a file with no counts to show
+// leaves an empty cell rather than claiming a zero.
+[[nodiscard]] QString lineCountText(const std::optional<LineCounts>& counts, bool added);
+[[nodiscard]] QColor lineCountColor(bool added);
+
+// The checkable file list. Columns: checkbox + icon + state text, the lines added and removed, the path.
+// The counts take a column each so that a data role can color them; one "+12 -3" cell would need the
+// delegate to paint two colors into one string.
 // Row styling comes from the theme via item data roles (per-state colors, fonts, the folder icon,
 // the blocked-row tint); FileListDelegate paints what roles cannot express - the red recolor of the
 // deleted strikethrough and the selected-row accent stripe.
@@ -22,7 +29,7 @@ class ChangedFilesModel final : public QAbstractTableModel
 	Q_OBJECT
 
 public:
-	enum Column { StateColumn = 0, PathColumn = 1, ColumnCount };
+	enum Column { StateColumn = 0, AddedColumn, RemovedColumn, PathColumn, ColumnCount };
 
 	explicit ChangedFilesModel(QObject* parent = nullptr);
 

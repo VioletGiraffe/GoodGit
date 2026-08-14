@@ -4,6 +4,7 @@
 #include <QString>
 #include <QStringList>
 
+#include <map>
 #include <stdint.h>
 #include <vector>
 
@@ -33,6 +34,16 @@ struct NameStatusEntry
 
 // Input: `diff --name-status -M -z HEAD` output
 [[nodiscard]] std::vector<NameStatusEntry> parseNameStatusZ(const QByteArray& diffOutput);
+
+struct LineCounts
+{
+	int added = 0;
+	int removed = 0;
+};
+
+// Input: `diff --numstat -M -z` output. Keyed by path - the new one for a rename, as parseNameStatusZ
+// names its entries. A binary file, which git counts as `-`, is absent rather than zero.
+[[nodiscard]] std::map<QString, LineCounts> parseNumstatZ(const QByteArray& diffOutput);
 
 // Input: any NUL-separated path list (`ls-files -z` and friends)
 [[nodiscard]] QStringList parseZList(const QByteArray& output);

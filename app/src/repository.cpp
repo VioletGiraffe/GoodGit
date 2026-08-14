@@ -75,12 +75,35 @@ SubmoduleContent contentFromStatus(const GitResult& statusResult)
 	return dirtiness.untracked ? SubmoduleContent::Untracked : SubmoduleContent::Clean;
 }
 
-// The tracked half of the file list. Identical whatever it is taken against, so an unborn HEAD changes
-// the baseline and nothing else.
+// The tracked half of the file list, read out two ways: the names, and the lines behind them. The pairing
+// and the baseline are shared, or a count would answer for a row that is not in the list. Identical
+// whatever it is taken against, so an unborn HEAD changes the baseline and nothing else.
+QStringList trackedDiffArgs(const QString& base, const QString& outputFormat)
+{
+	return { QStringLiteral("diff"), outputFormat, QStringLiteral("-M"),
+		QStringLiteral("--ignore-submodules=dirty"), QStringLiteral("-z"), base };
+}
+
 QStringList trackedChangesArgs(const QString& base)
 {
-	return { QStringLiteral("diff"), QStringLiteral("--name-status"), QStringLiteral("-M"),
-		QStringLiteral("--ignore-submodules=dirty"), QStringLiteral("-z"), base };
+	return trackedDiffArgs(base, QStringLiteral("--name-status"));
+}
+
+// --ignore-cr-at-eol, so the counts are the ones the diff a row opens shows: that carries the flag too,
+// and a line-endings-only change reads as no change there.
+QStringList trackedChangeCountsArgs(const QString& base)
+{
+	QStringList args = trackedDiffArgs(base, QStringLiteral("--numstat"));
+	args.insert(1, QStringLiteral("--ignore-cr-at-eol"));
+	return args;
+}
+
+// One commit's files, read out two ways as the file list's own delta is: the names, and the lines behind
+// them. The rename detection is shared, or a count would answer for a row that is not in the list.
+QStringList commitFilesArgs(const QString& sha, const QString& outputFormat)
+{
+	return { QStringLiteral("show"), outputFormat, QStringLiteral("-M"), QStringLiteral("-z"),
+		QStringLiteral("--format="), sha };
 }
 
 // The base of every commit-listing query; the walk itself is whatever the caller appends
@@ -168,6 +191,7 @@ struct Repository::RefreshRun
 {
 	BranchHeader header;
 	std::vector<NameStatusEntry> diffEntries;
+	std::map<QString, LineCounts> changeCounts; // by path; only the tracked changes have one
 	QStringList untracked;
 	QStringList submodules; // repo-relative paths of the gitlink entries
 	std::map<QString, SubmoduleContent> submoduleContent; // only the submodules that were queried at all
@@ -251,6 +275,9 @@ void Repository::refresh()
 			else
 				run->trackedError = r.errorText(); // an unborn HEAD fails here by design; the empty-tree re-run asks again
 		});
+	// Losing this costs the rows their counts, which is a shorter answer rather than a wrong one
+	round.launch(_rootPath, trackedChangeCountsArgs(QStringLiteral("HEAD")),
+		[run](const GitResult& r) { run->changeCounts = parseNumstatZ(r.out); });
 	// Losing these costs untracked rows, which is a shorter list rather than a wrong one
 	round.launch(_rootPath, { QStringLiteral("ls-files"), QStringLiteral("--others"), QStringLiteral("--exclude-standard"), QStringLiteral("-z") },
 		[run](const GitResult& r) { run->untracked = parseZList(r.out); });
@@ -281,6 +308,7 @@ void Repository::startDependentQueries(const std::shared_ptr<RefreshRun>& run)
 		if (_emptyTreeSha.isEmpty())
 			run->trackedError = QStringLiteral("The empty tree could not be resolved, leaving nothing to list an unborn repository's changes against.");
 		else
+		{
 			round.launch(_rootPath, trackedChangesArgs(_emptyTreeSha),
 				[run](const GitResult& r) {
 					if (!r.ok)
@@ -291,6 +319,9 @@ void Repository::startDependentQueries(const std::shared_ptr<RefreshRun>& run)
 					run->diffEntries = parseNameStatusZ(r.out);
 					run->trackedError.clear(); // the earlier attempt only failed for want of a HEAD, and this answered instead
 				});
+			round.launch(_rootPath, trackedChangeCountsArgs(_emptyTreeSha),
+				[run](const GitResult& r) { run->changeCounts = parseNumstatZ(r.out); });
+		}
 	}
 
 	if (run->header.head == QLatin1String("(detached)"))
@@ -397,6 +428,8 @@ void Repository::applyRefreshResults(const RefreshRun& run)
 			entry.pointerMoved = true;
 			entry.content = contentOf(diffEntry.path);
 		}
+		else if (const auto it = run.changeCounts.find(diffEntry.path); it != run.changeCounts.end())
+			entry.lineCounts = it->second;
 		_files.push_back(std::move(entry));
 	}
 
@@ -603,9 +636,15 @@ Git::Job* Repository::incomingCommits(int maxCommits, const QObject* context, Gi
 
 Git::Job* Repository::commitFiles(const QString& sha, const QObject* context, Git::Callback onDone)
 {
-	return Git::run(_rootPath, { QStringLiteral("show"), QStringLiteral("--name-status"), QStringLiteral("-M"),
-		QStringLiteral("-z"), QStringLiteral("--format="), sha },
+	return Git::run(_rootPath, commitFilesArgs(sha, QStringLiteral("--name-status")),
 		context, std::move(onDone), {}, /*readOnlyQuery=*/true);
+}
+
+Git::Job* Repository::commitFileCounts(const QString& sha, const QObject* context, Git::Callback onDone)
+{
+	QStringList args = commitFilesArgs(sha, QStringLiteral("--numstat"));
+	args.insert(1, QStringLiteral("--ignore-cr-at-eol")); // as commitFileDiff carries it: a row's counts are the ones its own diff shows
+	return Git::run(_rootPath, std::move(args), context, std::move(onDone), {}, /*readOnlyQuery=*/true);
 }
 
 Git::Job* Repository::commitFileDiff(const QString& sha, const NameStatusEntry& file, const QObject* context, Git::Callback onDone)

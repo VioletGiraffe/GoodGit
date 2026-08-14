@@ -53,9 +53,9 @@ fails fast instead of hanging on an invisible prompt; Git Credential Manager's o
 --pathspec-file-nul` via stdin - never argv, which Windows caps near 32 KB). The commit message goes through
 a temp file, never `-m` and never stdin: `-F -` and a stdin pathspec cannot share the pipe.
 
-The diff shown in either window carries `--ignore-cr-at-eol`, so a CRLF/LF-only change reads as no change.
-That is a display choice and nothing more: the file still lists as modified and still commits its
-working-tree content byte for byte.
+The diff shown in either window carries `--ignore-cr-at-eol`, and so do the file list's line counts, so a
+CRLF/LF-only change reads as no change and counts as no lines. That is a display choice and nothing more:
+the file still lists as modified and still commits its working-tree content byte for byte.
 
 Output accumulates as it arrives, so a chatty child cannot fill a pipe and stall, and reaches the result
 callback whole - every parser still runs on a finished result. A job may additionally stream each chunk to a
@@ -83,8 +83,8 @@ gitdir, and whichever tracked-changes diff the born-ness calls for. If one of th
 is discarded whole rather than half-applied - the previous state and rows stay exactly where they were, a
 strip says why, and committing, discarding and deleting are refused until a refresh succeeds. Reading the
 rows is not: a stale row is still worth opening. **The distinction is between a shorter answer and a wrong
-one** - the queries outside that set cost untracked rows or a tooltip when they fail, never correctness,
-so they stay silent.
+one** - the queries outside that set cost untracked rows, line counts or a tooltip when they fail, never
+correctness, so they stay silent.
 
 ## History
 
@@ -116,8 +116,9 @@ run beside the log query. Reachability has to be asked of git: position in a dat
 imply it, and on a diverged branch the upstream ref is not in the list at all. The query failing means
 there is nothing to compare against - no upstream, or a detached HEAD - and marks nothing.
 
-Selecting a commit shows its message and queries its files; selecting a file queries that file's diff -
-one short-lived job each, cancelled when the selection moves on. The diff highlighting is switched off
+Selecting a commit shows its message and queries its files - their names and their line counts, a job
+each, so the rows may appear before their counts do; selecting a file queries that file's diff. All are
+short-lived and cancelled when the selection moves on. The diff highlighting is switched off
 for message text, where a leading `-` is a bullet rather than a deletion. A merge is shown as a note instead: `git show` prints no
 diff for one without `--cc`, so the emptiness is answered from the parent count rather than guessed from
 an empty result.

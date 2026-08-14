@@ -5,6 +5,8 @@
 #include <QAbstractTableModel>
 #include <QSet>
 
+#include <map>
+#include <optional>
 #include <vector>
 
 // The abbreviation every history view shows a sha as
@@ -66,11 +68,15 @@ class CommitFilesModel final : public QAbstractTableModel
 	Q_OBJECT
 
 public:
-	enum Column { StateColumn = 0, PathColumn, ColumnCount };
+	enum Column { StateColumn = 0, AddedColumn, RemovedColumn, PathColumn, ColumnCount };
 
 	explicit CommitFilesModel(QObject* parent = nullptr);
 
+	// The counts come from a query of their own and may land either side of the entries, so neither
+	// setter disturbs what the other put there; clear() is what drops both between commits.
 	void setEntries(std::vector<NameStatusEntry> entries);
+	void setLineCounts(std::map<QString, LineCounts> counts);
+	void clear();
 
 	[[nodiscard]] const NameStatusEntry& entryAt(int row) const { return _entries[size_t(row)]; }
 
@@ -79,5 +85,9 @@ public:
 	QVariant data(const QModelIndex& index, int role) const override;
 
 private:
+	[[nodiscard]] std::optional<LineCounts> countsAt(int row) const;
+
+private:
 	std::vector<NameStatusEntry> _entries;
+	std::map<QString, LineCounts> _lineCounts; // by path; a file the query did not answer for has none
 };

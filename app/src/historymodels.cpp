@@ -263,6 +263,27 @@ void CommitFilesModel::setEntries(std::vector<NameStatusEntry> entries)
 	endResetModel();
 }
 
+void CommitFilesModel::setLineCounts(std::map<QString, LineCounts> counts)
+{
+	_lineCounts = std::move(counts);
+	if (!_entries.empty()) // repaint rather than reset: a reset here would drop the file the user picked
+		emit dataChanged(index(0, AddedColumn), index(int(_entries.size()) - 1, RemovedColumn), { Qt::DisplayRole });
+}
+
+void CommitFilesModel::clear()
+{
+	beginResetModel();
+	_entries.clear();
+	_lineCounts.clear();
+	endResetModel();
+}
+
+std::optional<LineCounts> CommitFilesModel::countsAt(int row) const
+{
+	const auto it = _lineCounts.find(_entries[size_t(row)].path);
+	return it != _lineCounts.end() ? std::optional{ it->second } : std::nullopt;
+}
+
 int CommitFilesModel::rowCount(const QModelIndex& parent) const
 {
 	return parent.isValid() ? 0 : int(_entries.size());
@@ -283,10 +304,23 @@ QVariant CommitFilesModel::data(const QModelIndex& index, int role) const
 	switch (role)
 	{
 	case Qt::DisplayRole:
-		return index.column() == StateColumn ? changeTypeText(entry.type) : pathText(entry);
+		switch (index.column())
+		{
+		case StateColumn:   return changeTypeText(entry.type);
+		case AddedColumn:   return lineCountText(countsAt(index.row()), /*added=*/true);
+		case RemovedColumn: return lineCountText(countsAt(index.row()), /*added=*/false);
+		case PathColumn:    return pathText(entry);
+		}
+		return {};
+	case Qt::TextAlignmentRole:
+		if (index.column() == AddedColumn || index.column() == RemovedColumn)
+			return int(Qt::AlignRight | Qt::AlignVCenter);
+		return {};
 	case Qt::ForegroundRole:
 		if (index.column() == StateColumn)
 			return QBrush{ changeTypeColor(entry.type) };
+		if (index.column() == AddedColumn || index.column() == RemovedColumn)
+			return QBrush{ lineCountColor(index.column() == AddedColumn) };
 		return {};
 	case Qt::FontRole:
 		if (index.column() == StateColumn)
@@ -295,12 +329,13 @@ QVariant CommitFilesModel::data(const QModelIndex& index, int role) const
 			font.setWeight(QFont::DemiBold);
 			return font;
 		}
-		else
+		else if (index.column() == PathColumn)
 		{
 			QFont font = monospaceFont();
 			font.setStrikeOut(entry.type == ChangeType::Deleted);
 			return font;
 		}
+		return monospaceFont(); // the counts, where digits of one width line up down the column
 	case Qt::ToolTipRole:
 		return pathText(entry);
 	default:

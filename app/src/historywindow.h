@@ -90,5 +90,6 @@ private:
 	QPointer<Git::Job> _pickaxeJob;
 	QPointer<Git::Job> _unpushedJob;
 	QPointer<Git::Job> _filesJob;
+	QPointer<Git::Job> _fileCountsJob;
 	QPointer<Git::Job> _diffJob;
 };

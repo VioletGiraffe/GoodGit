@@ -52,6 +52,19 @@ QColor changeTypeColor(ChangeType type)
 	return {};
 }
 
+QString lineCountText(const std::optional<LineCounts>& counts, bool added)
+{
+	if (!counts)
+		return {};
+	return added ? QStringLiteral("+%1").arg(counts->added) : QStringLiteral("-%1").arg(counts->removed);
+}
+
+QColor lineCountColor(bool added)
+{
+	const Theme& t = activeTheme();
+	return added ? t.stAdded : t.stDeleted;
+}
+
 ChangedFilesModel::ChangedFilesModel(QObject* parent) :
 	QAbstractTableModel(parent)
 {
@@ -195,7 +208,18 @@ QVariant ChangedFilesModel::data(const QModelIndex& index, int role) const
 	switch (role)
 	{
 	case Qt::DisplayRole:
-		return index.column() == StateColumn ? stateText(entry) : pathText(entry);
+		switch (index.column())
+		{
+		case StateColumn:   return stateText(entry);
+		case AddedColumn:   return lineCountText(entry.lineCounts, /*added=*/true);
+		case RemovedColumn: return lineCountText(entry.lineCounts, /*added=*/false);
+		case PathColumn:    return pathText(entry);
+		}
+		return {};
+	case Qt::TextAlignmentRole:
+		if (index.column() == AddedColumn || index.column() == RemovedColumn)
+			return int(Qt::AlignRight | Qt::AlignVCenter);
+		return {};
 	case Qt::CheckStateRole:
 		if (index.column() == StateColumn && (row.forced || entry.committable()))
 			return row.checked ? Qt::Checked : Qt::Unchecked;
@@ -207,6 +231,8 @@ QVariant ChangedFilesModel::data(const QModelIndex& index, int role) const
 	case Qt::ForegroundRole:
 		if (index.column() == StateColumn)
 			return QBrush{ stateColor(entry) };
+		if (index.column() == AddedColumn || index.column() == RemovedColumn)
+			return QBrush{ lineCountColor(index.column() == AddedColumn) };
 		return {};
 	case Qt::FontRole:
 		if (index.column() == StateColumn)
@@ -215,12 +241,13 @@ QVariant ChangedFilesModel::data(const QModelIndex& index, int role) const
 			font.setWeight(QFont::DemiBold);
 			return font;
 		}
-		else // the path: monospace, struck through when deleted (FileListDelegate recolors the strike)
+		else if (index.column() == PathColumn) // monospace, struck through when deleted (FileListDelegate recolors the strike)
 		{
 			QFont font = monospaceFont();
 			font.setStrikeOut(entry.type == ChangeType::Deleted);
 			return font;
 		}
+		return monospaceFont(); // the counts, where digits of one width line up down the column
 	case Qt::BackgroundRole:
 		if (entry.isSubmodule && entry.contentBlocksPointer())
 			return QBrush{ activeTheme().blockedRowTint() };

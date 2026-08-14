@@ -261,6 +261,8 @@ void CommitWindow::buildUi()
 	_filesView->setContextMenuPolicy(Qt::CustomContextMenu);
 	_filesView->header()->hide();
 	_filesView->header()->setSectionResizeMode(ChangedFilesModel::StateColumn, QHeaderView::ResizeToContents);
+	_filesView->header()->setSectionResizeMode(ChangedFilesModel::AddedColumn, QHeaderView::ResizeToContents);
+	_filesView->header()->setSectionResizeMode(ChangedFilesModel::RemovedColumn, QHeaderView::ResizeToContents);
 	_filesView->header()->setSectionResizeMode(ChangedFilesModel::PathColumn, QHeaderView::Stretch);
 	_filesView->installEventFilter(this);
 	leftLayout->addWidget(_filesView, 1);
