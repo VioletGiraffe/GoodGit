@@ -149,15 +149,21 @@ void Job::start()
 		result.ok = !result.launchFailed && exitCode == 0;
 		finish(std::move(result));
 	});
+	// Queued: start() emits this synchronously when the OS refuses the launch, and run()'s contract is a
+	// callback from the event loop - callers store the returned Job and count their outstanding ones.
 	QObject::connect(_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
 		if (error != QProcess::FailedToStart)
 			return; // crashes arrive via finished()
 		GitResult result;
 		result.launchFailed = true;
 		finish(std::move(result));
-	});
+	}, Qt::QueuedConnection);
 
 	_process->start(Settings::gitExecutable(), _args);
+	// Refused synchronously: the write channel is closed, and the queued errorOccurred handler owns the result
+	if (_process->state() == QProcess::NotRunning)
+		return;
+
 	if (!_stdinData.isEmpty())
 		_process->write(_stdinData);
 	_process->closeWriteChannel();

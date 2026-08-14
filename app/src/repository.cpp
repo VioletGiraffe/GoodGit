@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
 
 namespace {
 
@@ -20,6 +21,26 @@ QByteArray nulJoined(const QStringList& paths)
 		data += '\0';
 	}
 	return data;
+}
+
+// The commit message travels in a temp file - `-F -` and a stdin pathspec cannot share the pipe.
+// Null if the file cannot be created, the failure already on its way to onDone: like every Git::run
+// callback, it has to reach the caller from the event loop rather than from inside this call.
+std::shared_ptr<QTemporaryFile> openMessageFile(const QString& message, QObject* context, const Git::Callback& onDone)
+{
+	auto file = std::make_shared<QTemporaryFile>();
+	if (!file->open())
+	{
+		QMetaObject::invokeMethod(context, [onDone] {
+			// Not launchFailed: that flag would make errorText() report a missing git installation instead
+			onDone(GitResult{ .err = "Failed to create the commit message temp file" });
+		}, Qt::QueuedConnection);
+		return nullptr;
+	}
+
+	file->write(message.toUtf8());
+	file->close(); // release the handle for git; the file is removed when the last owner drops it
+	return file;
 }
 
 // The base of every commit-listing query; the walk itself is whatever the caller appends
@@ -272,15 +293,9 @@ void Repository::finishRefresh()
 
 void Repository::commit(const QString& message, const QStringList& pathspec, const QStringList& untrackedPaths, Git::Callback onDone)
 {
-	auto messageFile = std::make_shared<QTemporaryFile>();
-	if (!messageFile->open())
-	{
-		// Not launchFailed: that flag would make errorText() report a missing git installation instead
-		onDone(GitResult{ .err = "Failed to create the commit message temp file" });
+	const auto messageFile = openMessageFile(message, this, onDone);
+	if (!messageFile)
 		return;
-	}
-	messageFile->write(message.toUtf8());
-	messageFile->close(); // release the handle for git; the file is removed when messageFile dies
 
 	const auto runCommit = [this, messageFile, pathspec, untrackedPaths, onDone] {
 		Git::run(_rootPath, { QStringLiteral("commit"), QStringLiteral("-F"), messageFile->fileName(),
@@ -315,15 +330,9 @@ void Repository::commit(const QString& message, const QStringList& pathspec, con
 
 void Repository::commitMergeState(const QString& message, const QStringList& untrackedPaths, Git::Callback onDone)
 {
-	auto messageFile = std::make_shared<QTemporaryFile>();
-	if (!messageFile->open())
-	{
-		// Not launchFailed: that flag would make errorText() report a missing git installation instead
-		onDone(GitResult{ .err = "Failed to create the commit message temp file" });
+	const auto messageFile = openMessageFile(message, this, onDone);
+	if (!messageFile)
 		return;
-	}
-	messageFile->write(message.toUtf8());
-	messageFile->close();
 
 	const auto runCommit = [this, messageFile, onDone] {
 		// No pathspec: the index already holds the merge result, and staging conflicted files marks them resolved
