@@ -177,7 +177,7 @@ void CommitWindow::buildUi()
 	_aheadLabel->setObjectName(QStringLiteral("aheadLabel"));
 	_pushButton = new QPushButton(tr("Push"));
 	_peekButton = new QPushButton(tr("Peek"));
-	_peekButton->setToolTip(tr("Fetch, then list what the upstream has and this branch does not"));
+	_peekButton->setToolTip(tr("Ask the upstream what it has that this branch does not"));
 	_refreshButton = new QPushButton(tr("Refresh"));
 	_refreshButton->setToolTip(QStringLiteral("F5"));
 	_historyButton = new QPushButton(tr("History"));
@@ -951,7 +951,7 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	const bool singleFile = entries.size() == 1 && !entries.front().isSubmodule && entries.front().type != ChangeType::Deleted;
 
 	QMenu menu{ this };
-	QAction* addAction = menu.addAction(tr("Add to index"), this, &CommitWindow::addSelectionToIndex);
+	QAction* addAction = menu.addAction(tr("Add"), this, &CommitWindow::addSelectionToIndex);
 	addAction->setEnabled(anyUntracked && canAct);
 	QAction* unAddAction = menu.addAction(tr("Un-add"), this, &CommitWindow::unAddSelection);
 	unAddAction->setEnabled(anyAdded && canAct);
@@ -1245,7 +1245,7 @@ void CommitWindow::addSelectionToIndex()
 	_repo->addToIndex(paths, [this](std::expected<void, QString> result) {
 		endMutation();
 		if (!result)
-			showError(tr("Add to index failed"), result.error());
+			showError(tr("Add failed"), result.error());
 		_repo->refresh();
 	});
 }
