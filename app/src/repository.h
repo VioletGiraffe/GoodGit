@@ -10,7 +10,7 @@
 #include <vector>
 
 // The version control systems the app can drive
-enum class VcsKind : uint8_t { Git };
+enum class VcsKind : uint8_t { Git, Mercurial };
 
 // A repository named the way a window is opened on one: what it is, and where it is
 struct RepositoryLocation

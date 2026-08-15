@@ -28,25 +28,10 @@ QByteArray nulJoined(const QStringList& paths)
 	return data;
 }
 
-// The commit message travels in a temp file - `-F -` and a stdin pathspec cannot share the pipe.
-// Null if the file cannot be created, the failure already on its way to onDone: like every Git::run
-// callback, it has to reach the caller from the event loop rather than from inside this call.
+// The commit message travels in a temp file - `-F -` and a stdin pathspec cannot share the pipe
 std::shared_ptr<QTemporaryFile> openMessageFile(const QString& message, QObject* context, const Vcs::Callback& onDone)
 {
-	auto file = std::make_shared<QTemporaryFile>();
-	if (!file->open())
-	{
-		QMetaObject::invokeMethod(context, [onDone] {
-			// The default outcome is Exited, which is what makes errorText() report this err rather than
-			// a process failure the app never had
-			onDone(ProcessResult{ .err = "Failed to create the commit message temp file" });
-		}, Qt::QueuedConnection);
-		return nullptr;
-	}
-
-	file->write(message.toUtf8());
-	file->close(); // release the handle for git; the file is removed when the last owner drops it
-	return file;
+	return Vcs::openTempFile(message.toUtf8(), QStringLiteral("commit message"), context, onDone);
 }
 
 // A commit that failed after its untracked paths were added leaves them staged, and the rows would then

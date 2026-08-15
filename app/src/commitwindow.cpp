@@ -561,7 +561,7 @@ void CommitWindow::confirmUntrackedThenCommit(bool pushAfterwards)
 	if (!untracked.isEmpty())
 	{
 		const auto answer = MessageBox::question(this, tr("Start tracking new files?"),
-			tr("%1 checked file(s) are not tracked by git yet. Committing will add them to the repository:\n\n%2")
+			tr("%1 checked file(s) are not tracked yet. Committing will add them to the repository:\n\n%2")
 				.arg(untracked.size()).arg(listedPaths(untracked)),
 			{ tr("Track and commit") });
 		if (answer != 0)

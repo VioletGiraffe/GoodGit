@@ -1,6 +1,7 @@
 #include "vcsprocess.h"
 
 #include <QPointer>
+#include <QTemporaryFile>
 
 #include <deque>
 
@@ -198,6 +199,25 @@ ProcessResult runSync(const Tool& tool, const QString& workDir, QStringList args
 	result.out = process.readAllStandardOutput();
 	result.err = process.readAllStandardError();
 	return result;
+}
+
+std::shared_ptr<QTemporaryFile> openTempFile(const QByteArray& contents, const QString& description,
+	QObject* context, const Callback& onFailure)
+{
+	auto file = std::make_shared<QTemporaryFile>();
+	if (!file->open())
+	{
+		QMetaObject::invokeMethod(context, [onFailure, description] {
+			// The default outcome is Exited, which is what makes errorText() report this err rather than
+			// a process failure the app never had
+			onFailure(ProcessResult{ .err = QStringLiteral("Failed to create the %1 temp file").arg(description).toUtf8() });
+		}, Qt::QueuedConnection);
+		return nullptr;
+	}
+
+	file->write(contents);
+	file->close(); // release the handle for the tool; the file lives as long as this pointer does
+	return file;
 }
 
 void Job::finish(ProcessResult result)

@@ -13,6 +13,8 @@
 #include <memory>
 #include <stdint.h>
 
+class QTemporaryFile;
+
 // How the process ended. Only the first of these leaves an exit code behind to be read.
 enum class ProcessOutcome : uint8_t
 {
@@ -114,6 +116,14 @@ private:
 	// Shared, so the handle its asker holds follows the query into its next process
 	std::shared_ptr<QPointer<Job>> _current = std::make_shared<QPointer<Job>>();
 };
+
+// A temp file holding `contents`, for a command that takes its input by file name rather than on stdin -
+// a message to commit, a pathspec too long for a command line. Null if the file could not be created, the
+// failure already on its way to `onFailure`: like every run() callback, it has to reach the caller from the
+// event loop rather than from inside this call. `description` names the file in that failure. The file is
+// removed when the last owner drops it, so hold the pointer until the command has run.
+std::shared_ptr<QTemporaryFile> openTempFile(const QByteArray& contents, const QString& description,
+	QObject* context, const Callback& onFailure);
 
 // Runs `tool` in workDir with the given arguments, capping how many processes may run at once - excess
 // is queued. Output is accumulated as it arrives, so a chatty child cannot fill a pipe and stall.

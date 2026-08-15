@@ -41,6 +41,9 @@ HEADERS += \
 	src/gitparsers.h \
 	src/gitprocess.h \
 	src/gitrepository.h \
+	src/hgparsers.h \
+	src/hgprocess.h \
+	src/hgrepository.h \
 	src/historymodels.h \
 	src/historywindow.h \
 	src/messageedit.h \
@@ -61,6 +64,9 @@ SOURCES += \
 	src/gitparsers.cpp \
 	src/gitprocess.cpp \
 	src/gitrepository.cpp \
+	src/hgparsers.cpp \
+	src/hgprocess.cpp \
+	src/hgrepository.cpp \
 	src/historymodels.cpp \
 	src/historywindow.cpp \
 	src/main.cpp \

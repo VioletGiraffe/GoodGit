@@ -18,6 +18,11 @@ QString gitExecutable()
 	return CSettings{}.value(QStringLiteral("GitExecutable"), QStringLiteral("git")).toString();
 }
 
+QString hgExecutable()
+{
+	return CSettings{}.value(QStringLiteral("HgExecutable"), QStringLiteral("hg")).toString();
+}
+
 QByteArray splitterState(const QString& name)
 {
 	return CSettings{}.value(splitterKey(name)).toByteArray();
