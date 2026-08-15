@@ -1,5 +1,7 @@
 #include "gitparsers.h"
 
+namespace Git {
+
 BranchHeader parseBranchHeader(const QByteArray& statusOutput)
 {
 	BranchHeader header;
@@ -218,3 +220,5 @@ WorktreeDirtiness parsePorcelainDirtiness(const QByteArray& statusOutput)
 	}
 	return result;
 }
+
+} // namespace Git

@@ -11,6 +11,7 @@
 
 // Free-function parsers for the git outputs the app consumes, kept UI- and process-free
 // so they can be exercised directly.
+namespace Git {
 
 struct BranchHeader
 {
@@ -61,3 +62,5 @@ inline constexpr char CommitLogFormat[] = "%H%x1f%P%x1f%an%x1f%aI%x1f%D%x1f%B";
 
 // Input: `log -z --format=<CommitLogFormat>` output - one NUL-terminated record per commit, newest first
 [[nodiscard]] std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput);
+
+} // namespace Git

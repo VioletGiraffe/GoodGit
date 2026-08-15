@@ -47,7 +47,7 @@ SubmoduleContent contentFromStatus(const ProcessResult& statusResult)
 	if (!statusResult.ok)
 		return SubmoduleContent::Unknown;
 
-	const WorktreeDirtiness dirtiness = parsePorcelainDirtiness(statusResult.out);
+	const Git::WorktreeDirtiness dirtiness = Git::parsePorcelainDirtiness(statusResult.out);
 	if (dirtiness.dirtyTracked)
 		return SubmoduleContent::DirtyTracked;
 	return dirtiness.untracked ? SubmoduleContent::Untracked : SubmoduleContent::Clean;
@@ -88,7 +88,7 @@ QStringList commitFilesArgs(const QString& sha, const QString& outputFormat)
 QStringList commitLogArgs(int maxCommits)
 {
 	return { QStringLiteral("log"), QStringLiteral("-z"), QStringLiteral("--max-count=%1").arg(maxCommits),
-		QStringLiteral("--format=") + QLatin1String(CommitLogFormat) };
+		QStringLiteral("--format=") + QLatin1String(Git::CommitLogFormat) };
 }
 
 // -S counts occurrences and takes the term literally; -G matches patch lines and takes a regex, which
@@ -114,7 +114,7 @@ void appendPathLimit(QStringList& args, const Repository::LogQuery& query)
 // The shas a listing command printed, as the set the log view marks its rows from
 QSet<QString> shaSet(const QByteArray& output)
 {
-	const QStringList shas = parseLineList(output);
+	const QStringList shas = Git::parseLineList(output);
 	return QSet<QString>{ shas.begin(), shas.end() };
 }
 
@@ -156,7 +156,7 @@ QString escapedForGitIgnore(const QString& text)
 
 struct GitRepository::RefreshRun
 {
-	BranchHeader header;
+	Git::BranchHeader header;
 	QString headSubject;
 	std::vector<CommitFileChange> diffEntries;
 	std::map<QString, LineCounts> changeCounts; // by path; only the tracked changes have one
@@ -221,8 +221,8 @@ void GitRepository::startRefresh()
 		[run](const ProcessResult& r) {
 			if (r.ok)
 			{
-				run->header = parseBranchHeader(r.out);
-				run->conflicted = parseUnmergedPaths(r.out);
+				run->header = Git::parseBranchHeader(r.out);
+				run->conflicted = Git::parseUnmergedPaths(r.out);
 			}
 			else
 				run->noteFailure(r); // an unread header parses as "on a branch, born", the two things nothing may assume
@@ -233,22 +233,22 @@ void GitRepository::startRefresh()
 	round.launch(path(), trackedChangesArgs(QStringLiteral("HEAD")),
 		[run](const ProcessResult& r) {
 			if (r.ok)
-				run->diffEntries = parseNameStatusZ(r.out);
+				run->diffEntries = Git::parseNameStatusZ(r.out);
 			else
 				run->trackedError = r.errorText(); // an unborn HEAD fails here by design; the empty-tree re-run asks again
 		});
 	// Losing this costs the rows their counts, which is a shorter answer rather than a wrong one
 	round.launch(path(), trackedChangeCountsArgs(QStringLiteral("HEAD")),
-		[run](const ProcessResult& r) { run->changeCounts = parseNumstatZ(r.out); });
+		[run](const ProcessResult& r) { run->changeCounts = Git::parseNumstatZ(r.out); });
 	// Losing these costs untracked rows, which is a shorter list rather than a wrong one
 	round.launch(path(), { QStringLiteral("ls-files"), QStringLiteral("--others"), QStringLiteral("--exclude-standard"), QStringLiteral("-z") },
-		[run](const ProcessResult& r) { run->untracked = parseZList(r.out); });
+		[run](const ProcessResult& r) { run->untracked = Git::parseZList(r.out); });
 	// The submodule list is read out of the index, not from `git submodule status`: that one is a shell script in
 	// Git for Windows and costs more than every other refresh query combined
 	round.launch(path(), { QStringLiteral("ls-files"), QStringLiteral("--stage"), QStringLiteral("-z") },
 		[run](const ProcessResult& r) {
 			if (r.ok)
-				run->submodules = parseGitlinkPaths(r.out);
+				run->submodules = Git::parseGitlinkPaths(r.out);
 			else
 				run->noteFailure(r); // unread, every gitlink demotes to an ordinary file that discarding may overwrite
 		});
@@ -278,11 +278,11 @@ void GitRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run
 						run->trackedError = r.errorText();
 						return;
 					}
-					run->diffEntries = parseNameStatusZ(r.out);
+					run->diffEntries = Git::parseNameStatusZ(r.out);
 					run->trackedError.clear(); // the earlier attempt only failed for want of a HEAD, and this answered instead
 				});
 			round.launch(path(), trackedChangeCountsArgs(_emptyTreeSha),
-				[run](const ProcessResult& r) { run->changeCounts = parseNumstatZ(r.out); });
+				[run](const ProcessResult& r) { run->changeCounts = Git::parseNumstatZ(r.out); });
 		}
 	}
 
@@ -294,7 +294,7 @@ void GitRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run
 			round.launch(path(), { QStringLiteral("for-each-ref"), QStringLiteral("--points-at"), QStringLiteral("HEAD"),
 					QStringLiteral("--format=%(refname:short)"), QString::fromLatin1(refRoot) },
 				[run, local](const ProcessResult& r) {
-					QStringList names = parseLineList(r.out);
+					QStringList names = Git::parseLineList(r.out);
 					if (!local)
 						names.removeIf([](const QString& n) { return n.endsWith(QLatin1String("/HEAD")); });
 					(local ? run->localBranchesAtHead : run->remoteBranchesAtHead) = names;
@@ -315,7 +315,7 @@ void GitRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run
 	{
 		round.launch(path(), { QStringLiteral("log"), QStringLiteral("--oneline"), QStringLiteral("--no-decorate"),
 				QStringLiteral("-n"), QString::number(MaxUnpushedLogEntries), QStringLiteral("@{upstream}..HEAD") },
-			[run](const ProcessResult& r) { run->unpushedSubjects = parseLineList(r.out); });
+			[run](const ProcessResult& r) { run->unpushedSubjects = Git::parseLineList(r.out); });
 	}
 }
 
@@ -581,7 +581,7 @@ Vcs::Query GitRepository::commitLog(const LogQuery& query, const QObject* contex
 	QStringList args = commitLogArgs(query.maxCommits);
 	appendPickaxe(args, query, /*countChangesOnly=*/false);
 	appendPathLimit(args, query);
-	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), parseCommitLog));
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Git::parseCommitLog));
 }
 
 Vcs::Query GitRepository::commitsAddingOrRemovingText(const LogQuery& query, const QObject* context, Vcs::Answer<QSet<QString>> onDone)
@@ -597,20 +597,20 @@ Vcs::Query GitRepository::incomingCommits(int maxCommits, const QObject* context
 {
 	QStringList args = commitLogArgs(maxCommits);
 	args << QStringLiteral("HEAD..@{upstream}");
-	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), parseCommitLog));
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Git::parseCommitLog));
 }
 
 Vcs::Query GitRepository::commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone)
 {
 	return runQuery(path(), commitFilesArgs(sha, QStringLiteral("--name-status")),
-		context, Vcs::answering(std::move(onDone), parseNameStatusZ));
+		context, Vcs::answering(std::move(onDone), Git::parseNameStatusZ));
 }
 
 Vcs::Query GitRepository::commitFileCounts(const QString& sha, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone)
 {
 	QStringList args = commitFilesArgs(sha, QStringLiteral("--numstat"));
 	args.insert(1, QStringLiteral("--ignore-cr-at-eol")); // as commitFileDiff carries it: a row's counts are the ones its own diff shows
-	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), parseNumstatZ));
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Git::parseNumstatZ));
 }
 
 Vcs::Query GitRepository::commitFileDiff(const QString& sha, const CommitFileChange& file, const QObject* context, Vcs::Answer<QByteArray> onDone)
