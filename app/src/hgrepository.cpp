@@ -284,6 +284,7 @@ RepoState HgRepository::stateFromRun(const RefreshRun& run) const
 	state.unborn = head.sha.isEmpty() || head.sha == QLatin1String(Hg::NullNode);
 	state.headSha = state.unborn ? QString{} : head.sha;
 	state.headSubject = state.unborn ? QString{} : head.subject();
+	state.headParentCount = int(head.parents.size()); // the null parent of a root changeset is already out
 	// Mercurial has no nameless state for a branch to be in, and no bookmarks are read: this is the named
 	// branch, `default` unless another was created
 	state.branch = run.workingDir.branch;
@@ -448,6 +449,17 @@ void HgRepository::commitMergeState(const QString& message, const QStringList& u
 			else
 				report(result);
 		});
+}
+
+void HgRepository::undoLastCommit(Vcs::Answer<void> onDone)
+{
+	// `uncommit` ships with hg but is off until a repository asks for it, so this one command asks for
+	// itself - narrower than `rollback`, which undoes the last transaction whatever it happened to be, and
+	// guarded in its own right: it refuses a public or a merge changeset. --allow-dirty-working-copy because
+	// everything the commit did not take is still modified here, which is this window's ordinary state.
+	Hg::run(path(), { QStringLiteral("--config"), QStringLiteral("extensions.uncommit="),
+		QStringLiteral("uncommit"), QStringLiteral("--allow-dirty-working-copy") },
+		this, Vcs::reporting(std::move(onDone)));
 }
 
 Vcs::Job* HgRepository::push(Vcs::Callback onDone)

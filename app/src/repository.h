@@ -58,6 +58,11 @@ public:
 	// the backends that have an in-progress operation at all forbid a path-limited commit during one.
 	virtual void commitMergeState(const QString& message, const QStringList& untrackedPaths, Vcs::Answer<void> onDone) = 0;
 
+	// Undoes the last commit, leaving what it took exactly where it was before it - listed here again as
+	// uncommitted changes. Asked only when RepoState::lastCommitUndoable() allows it, which is where the
+	// refusals are decided; a backend that refuses more of its own accord reports that like any failure.
+	virtual void undoLastCommit(Vcs::Answer<void> onDone) = 0;
+
 	// The one command reported as a process rather than as an answer: the push log is a console view of
 	// one, and shows the exit code when it had nothing to say for itself. Both return the job, so the
 	// caller can stream the output into that log while the push runs.

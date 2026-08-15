@@ -61,6 +61,9 @@ struct RepoState
 	QString branch;      // empty when detached
 	QString headSha;     // full sha of HEAD; empty when unborn
 	QString headSubject; // subject line of HEAD; empty when unborn
+	// HEAD's own shape, for the one action that cares what undoing it would leave behind: none means a root
+	// commit with nothing to move back to, more than one means a merge.
+	int headParentCount = 0;
 	QString upstream;    // empty if none configured
 	int ahead = 0; // commits one push would send, so what the push button offers to do
 	int behind = 0;
@@ -81,6 +84,17 @@ struct RepoState
 
 	[[nodiscard]] bool known() const { return readFailure.isEmpty(); }
 	[[nodiscard]] bool operationInProgress() const { return op != RepoOp::None; }
+
+	// Whether undoing the last commit is offered at all. Every refusal is here rather than in a backend:
+	// a commit the upstream already has would be rewritten out from under it; a merge would be left half
+	// taken apart, and a root commit has nothing to move back to; an operation in progress owns HEAD until
+	// it finishes; and a detached HEAD has no upstream to tell pushed from unpushed. No upstream at all
+	// means nothing can have been pushed.
+	[[nodiscard]] bool lastCommitUndoable() const
+	{
+		return !unborn && !detached && !operationInProgress() && headParentCount == 1
+			&& (upstream.isEmpty() || ahead > 0);
+	}
 };
 
 // What a submodule's own worktree holds, as far as the parent was able to determine

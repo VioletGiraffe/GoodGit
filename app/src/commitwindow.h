@@ -64,6 +64,7 @@ private:
 	void closePushLogEntry(const ProcessResult& result);
 
 	void showHistoryWindow();
+	void undoLastCommit();
 
 	void showDiffForCurrentRow();
 	// An untracked file is nothing's modification, so the pane shows what it holds, unhighlighted
@@ -106,6 +107,7 @@ private:
 	QPushButton* _peekButton = nullptr;
 	QPushButton* _refreshButton = nullptr;
 	QPushButton* _historyButton = nullptr;
+	QPushButton* _uncommitButton = nullptr;
 	QLabel* _readFailureStrip = nullptr;
 	QLabel* _opStrip = nullptr;
 	QLabel* _detachedStrip = nullptr;

@@ -167,6 +167,7 @@ struct GitRepository::RefreshRun
 	QStringList remoteBranchesAtHead;
 	QStringList unpushedSubjects;
 	QStringList conflicted; // paths with unmerged index entries
+	int headParentCount = 0;
 
 	// Why this run cannot become the state. The tracked-changes query keeps its own slot: on an unborn HEAD
 	// its attempt against HEAD is meant to fail, and the re-run against the empty tree answers in its place.
@@ -227,9 +228,19 @@ void GitRepository::startRefresh()
 			else
 				run->noteFailure(r); // an unread header parses as "on a branch, born", the two things nothing may assume
 		});
-	// Names HEAD in the message header. An unborn branch has no commit to name, and fails here by design
-	round.launch(path(), { QStringLiteral("log"), QStringLiteral("-1"), QStringLiteral("--format=%s") },
-		[run](const ProcessResult& r) { run->headSubject = QString::fromUtf8(r.out.trimmed()); });
+	// Names HEAD in the message header, and counts its parents for the undo action. An unborn branch has no
+	// commit to name, and fails here by design. The parents come first because %s is a single line and this
+	// one is not: a root commit's empty %P would otherwise be indistinguishable from a missing subject.
+	round.launch(path(), { QStringLiteral("log"), QStringLiteral("-1"), QStringLiteral("--format=%P%n%s") },
+		[run](const ProcessResult& r) {
+			const QList<QByteArray> lines = r.out.split('\n');
+			if (lines.size() < 2)
+				return;
+
+			const QByteArray parents = lines[0].simplified();
+			run->headParentCount = parents.isEmpty() ? 0 : int(parents.count(' ')) + 1;
+			run->headSubject = QString::fromUtf8(lines[1]).trimmed();
+		});
 	round.launch(path(), trackedChangesArgs(QStringLiteral("HEAD")),
 		[run](const ProcessResult& r) {
 			if (r.ok)
@@ -345,6 +356,7 @@ RepoState GitRepository::stateFromRun(const RefreshRun& run) const
 	state.unborn = run.header.oid == QLatin1String("(initial)");
 	state.headSha = state.unborn ? QString{} : run.header.oid;
 	state.headSubject = run.headSubject;
+	state.headParentCount = run.headParentCount;
 	state.detached = run.header.head == QLatin1String("(detached)");
 	state.branch = state.detached ? QString{} : run.header.head;
 	state.upstream = run.header.upstream;
@@ -490,6 +502,15 @@ void GitRepository::commitMergeState(const QString& message, const QStringList& 
 			else
 				report(result);
 		});
+}
+
+void GitRepository::undoLastCommit(Vcs::Answer<void> onDone)
+{
+	// --soft rather than git's default --mixed: a path-limited commit never used the index, so leaving it
+	// alone restores exactly the state the commit was made from - and does not discard what another tool
+	// staged, which this app promises never to touch.
+	Git::run(path(), { QStringLiteral("reset"), QStringLiteral("--soft"), QStringLiteral("HEAD~1") },
+		this, Vcs::reporting(std::move(onDone)));
 }
 
 Vcs::Job* GitRepository::push(Vcs::Callback onDone)

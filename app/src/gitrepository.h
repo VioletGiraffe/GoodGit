@@ -22,6 +22,8 @@ public:
 	// arrives as carriage returns rewriting a single line. Both also carry
 	// --recurse-submodules=on-demand, passed explicitly because machine config varies: a superproject
 	// commit referencing an unpushed submodule commit is unfetchable, so those go first.
+	void undoLastCommit(Vcs::Answer<void> onDone) override;
+
 	Vcs::Job* push(Vcs::Callback onDone) override;
 	Vcs::Job* pushSetUpstream(Vcs::Callback onDone) override;
 	[[nodiscard]] QString pushCommandLabel(bool setUpstream) const override;

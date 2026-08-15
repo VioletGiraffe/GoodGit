@@ -32,6 +32,20 @@ Consequences that follow from this choice, all deliberate:
   path-limited commit then: the commit runs with no pathspec, and discarding is refused - restoring a path
   to HEAD mid-operation would silently drop that operation's result for it.
 
+## Undoing the last commit
+
+`RepoState::lastCommitUndoable()` decides whether the window offers it, and every refusal lives there
+rather than in a backend: a commit the upstream already has, a merge, a root commit, an operation in
+progress, or a detached HEAD, where pushed cannot be told from unpushed. Both backends then leave the
+changes in the working tree, where the list shows them as uncommitted again.
+
+Git's is `reset --soft`, not the usual `--mixed`, and that follows from the model above: a path-limited
+commit never used the index, so leaving it alone both restores the pre-commit state exactly and spares
+another tool's staging. Mercurial's is `uncommit`, not `rollback` - rollback undoes the last *transaction*,
+which after a pull is the pull. It ships with hg but is off by default, so that one command switches it on
+for itself, and passes `--allow-dirty-working-copy` because a partial commit leaves the rest of the list
+modified by design.
+
 ## Components (app/src/)
 
 | | |

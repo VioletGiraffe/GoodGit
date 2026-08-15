@@ -178,6 +178,9 @@ void CommitWindow::buildUi()
 	_refreshButton = new QPushButton(tr("Refresh"));
 	_refreshButton->setToolTip(QStringLiteral("F5"));
 	_historyButton = new QPushButton(tr("History"));
+	_uncommitButton = new QPushButton(tr("Uncommit"));
+	_uncommitButton->setToolTip(tr("Undo the last commit, keeping its changes here as uncommitted ones. "
+		"Offered only for a commit that has not been pushed, is not a merge, and is not the first one."));
 	repoBarLayout->addWidget(_repoNameLabel);
 	repoBarLayout->addWidget(_branchLabel);
 	repoBarLayout->addWidget(_aheadLabel);
@@ -186,6 +189,7 @@ void CommitWindow::buildUi()
 	repoBarLayout->addWidget(_peekButton);
 	repoBarLayout->addWidget(_refreshButton);
 	repoBarLayout->addWidget(_historyButton);
+	repoBarLayout->addWidget(_uncommitButton);
 	leftLayout->addWidget(repoBar);
 
 	const auto makeStrip = [](const QColor& background, const QColor& text) {
@@ -334,6 +338,7 @@ void CommitWindow::buildUi()
 	connect(_pushButton, &QPushButton::clicked, this, [this] { doPush(/*setUpstream=*/false); });
 	connect(_peekButton, &QPushButton::clicked, this, &CommitWindow::peekIncoming);
 	connect(_historyButton, &QPushButton::clicked, this, &CommitWindow::showHistoryWindow);
+	connect(_uncommitButton, &QPushButton::clicked, this, &CommitWindow::undoLastCommit);
 	connect(hidePushLogButton, &QPushButton::clicked, _pushLogPane, &QWidget::hide);
 	connect(_commitButton, &QPushButton::clicked, this, [this] { startCommit(false); });
 	connect(_commitPushButton, &QPushButton::clicked, this, [this] { startCommit(true); });
@@ -526,6 +531,7 @@ void CommitWindow::updateButtons()
 
 	// Without an upstream there is no ref for the incoming walk to name
 	_peekButton->setEnabled(!state.upstream.isEmpty() && !_peekInFlight);
+	_uncommitButton->setEnabled(state.lastCommitUndoable() && canActOnList());
 }
 
 bool CommitWindow::canActOnList() const
@@ -1237,6 +1243,28 @@ void CommitWindow::discardSelection()
 			return;
 		}
 		unAddThenRefresh();
+	});
+}
+
+void CommitWindow::undoLastCommit()
+{
+	if (_mutationInFlight)
+		return;
+
+	const RepoState& state = _repo->state();
+	const auto answer = MessageBox::question(this, tr("Undo the last commit?"),
+		tr("'%1' will be undone. Everything it took comes back to this list as uncommitted changes; nothing "
+			"in the working tree changes.").arg(state.headSubject),
+		{ tr("Undo commit") });
+	if (answer != 0)
+		return;
+
+	beginMutation();
+	_repo->undoLastCommit([this](std::expected<void, QString> result) {
+		endMutation();
+		if (!result)
+			showError(tr("Undo failed"), result.error());
+		_repo->refresh();
 	});
 }
 

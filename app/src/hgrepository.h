@@ -26,6 +26,8 @@ public:
 	void commitMergeState(const QString& message, const QStringList& untrackedPaths, Vcs::Answer<void> onDone) override;
 
 	// `-r .` is the current changeset and its ancestors, which still recurses into subrepos
+	void undoLastCommit(Vcs::Answer<void> onDone) override;
+
 	Vcs::Job* push(Vcs::Callback onDone) override;
 	// Mercurial has no per-branch upstream to set, so this is the same push. The window offers it only after
 	// a failure message that is git's, so it is never reached here.
