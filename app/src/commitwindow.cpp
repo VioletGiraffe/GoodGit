@@ -979,12 +979,15 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	});
 	submoduleHistoryAction->setEnabled(entries.size() == 1 && entries.front().isSubmodule);
 	QAction* fileHistoryAction = menu.addAction(tr("View file history"), this, [this, entry = entries.front()] {
-		auto* window = new HistoryWindow(_repo->location(), entry.path, this);
+		// Nothing is committed at a rename's new path yet: the history is under the name the commits know
+		const QString& path = entry.oldPath.isEmpty() ? entry.path : entry.oldPath;
+		auto* window = new HistoryWindow(_repo->location(), path, this);
 		window->show();
 	});
-	// Untracked files have no history to show, and a submodule's is its own repo's, offered above
+	// A submodule's history is its own repo's, offered above; an untracked or newly added file is in no
+	// commit under any name
 	fileHistoryAction->setEnabled(entries.size() == 1 && !entries.front().isSubmodule
-		&& entries.front().type != ChangeType::Untracked);
+		&& entries.front().type != ChangeType::Untracked && entries.front().type != ChangeType::Added);
 	QAction* explorerAction = menu.addAction(tr("Show in Explorer"), this, [this, entry = entries.front()] {
 		const QString nativePath = QDir::toNativeSeparators(absolutePath(entry));
 #ifdef Q_OS_WIN
