@@ -5,6 +5,8 @@
 
 #include <QMainWindow>
 
+#include <memory>
+
 class QCheckBox;
 class QFrame;
 class QLabel;
@@ -25,9 +27,9 @@ class HistoryWindow final : public QMainWindow
 	Q_OBJECT
 
 public:
-	HistoryWindow(const QString& repoPath, QWidget* parent);
+	HistoryWindow(const RepositoryLocation& location, QWidget* parent);
 	// The history of one repo-relative path, traced across renames
-	HistoryWindow(const QString& repoPath, const QString& filePath, QWidget* parent);
+	HistoryWindow(const RepositoryLocation& location, const QString& filePath, QWidget* parent);
 
 	// Re-runs the log query from scratch. The commit window calls this after committing here.
 	void reload();
@@ -56,7 +58,7 @@ private:
 	void setDiffText(const QString& pathLabel, const QString& tag, const QString& text);
 
 private:
-	Repository _repo;
+	const std::unique_ptr<Repository> _repo;
 	CommitLogModel _logModel;
 	CommitFilesModel _filesModel;
 

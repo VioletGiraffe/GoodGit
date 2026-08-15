@@ -7,6 +7,8 @@
 #include <QPointer>
 #include <QSet>
 
+#include <memory>
+
 class QCheckBox;
 class QFrame;
 class QLabel;
@@ -25,7 +27,7 @@ class CommitWindow final : public QMainWindow
 	Q_OBJECT
 
 public:
-	explicit CommitWindow(const QString& repoPath);
+	explicit CommitWindow(const RepositoryLocation& location);
 
 signals:
 	void committed(); // a commit succeeded here; the parent window refreshes its gitlink row off this
@@ -84,13 +86,13 @@ private:
 	void discardSelection();
 	void addSelectionToIndex();
 	void unAddSelection();
-	void appendToGitIgnore(const QString& pattern);
+	void appendToIgnoreFile(const QString& pattern);
 
 	void showError(const QString& title, const QString& details);
 	[[nodiscard]] QString absolutePath(const FileEntry& entry) const;
 
 private:
-	Repository _repo;
+	const std::unique_ptr<Repository> _repo;
 	ChangedFilesModel _filesModel;
 
 	QSplitter* _splitter = nullptr;

@@ -5,6 +5,7 @@
 #include "historymodels.h"
 #include "historywindow.h"
 #include "messageedit.h"
+#include "repositoryfactory.h"
 #include "settings.h"
 #include "theme.h"
 
@@ -51,39 +52,6 @@ constexpr int MaxListedPathsInDialog = 20;
 constexpr int MaxIncomingCommits = 200; // a peek, not a history window - that is what History is for
 constexpr int IncomingPopupWidth = 560;
 constexpr int IncomingPopupHeight = 320;
-
-// Ignore pattern candidates for one untracked file, most specific first. Literal path patterns
-// are anchored to the repo root with a leading '/'.
-QStringList gitIgnorePatterns(const QString& repoRelativePath)
-{
-	// Glob metacharacters in a file name must stay literal; '#' and '!' are special at line start
-	const auto escaped = [](const QString& text) {
-		QString out;
-		out.reserve(text.size());
-		for (const QChar c : text)
-		{
-			if (c == QLatin1Char('\\') || c == QLatin1Char('*') || c == QLatin1Char('?') || c == QLatin1Char('[') || c == QLatin1Char(']'))
-				out += QLatin1Char('\\');
-			out += c;
-		}
-		if (out.startsWith(QLatin1Char('#')) || out.startsWith(QLatin1Char('!')))
-			out.prepend(QLatin1Char('\\'));
-		return out;
-	};
-
-	const qsizetype slash = repoRelativePath.lastIndexOf(QLatin1Char('/'));
-	const QString fileName = repoRelativePath.mid(slash + 1);
-	const qsizetype dot = fileName.lastIndexOf(QLatin1Char('.'));
-
-	QStringList patterns;
-	patterns.push_back(QLatin1Char('/') + escaped(repoRelativePath));
-	if (dot > 0 && dot < fileName.size() - 1)
-		patterns.push_back(QStringLiteral("*.") + escaped(fileName.mid(dot + 1)));
-	patterns.push_back(escaped(fileName));
-	if (slash >= 0)
-		patterns.push_back(QLatin1Char('/') + escaped(repoRelativePath.left(slash)) + QLatin1Char('/'));
-	return patterns;
-}
 
 // What discarding can act on. Untracked files are not git's to restore, and a submodule with changes inside
 // would be checked out over. Mid-operation nothing is: restoring a path to HEAD there would silently
@@ -168,19 +136,19 @@ QStringList completionWordsFor(const std::vector<FileEntry>& files, QByteArray d
 
 } // namespace
 
-CommitWindow::CommitWindow(const QString& repoPath) :
-	_repo{ repoPath }
+CommitWindow::CommitWindow(const RepositoryLocation& location) :
+	_repo{ openRepository(location) }
 {
 	setAttribute(Qt::WA_DeleteOnClose);
 	buildUi();
 
 	// Per-repo geometry, so a submodule window does not inherit or clobber the parent's placement
 	const QString geometryKey = QStringLiteral("CommitWindow_")
-		+ QString::fromLatin1(QCryptographicHash::hash(QDir::cleanPath(repoPath).toUtf8(), QCryptographicHash::Md5).toHex());
+		+ QString::fromLatin1(QCryptographicHash::hash(QDir::cleanPath(location.root).toUtf8(), QCryptographicHash::Md5).toHex());
 	installEventFilter(new CPersistenceEnabler(geometryKey, this));
 
-	connect(&_repo, &Repository::refreshed, this, &CommitWindow::onRefreshed);
-	_repo.refresh();
+	connect(_repo.get(), &Repository::refreshed, this, &CommitWindow::onRefreshed);
+	_repo->refresh();
 }
 
 void CommitWindow::buildUi()
@@ -360,7 +328,7 @@ void CommitWindow::buildUi()
 	setCentralWidget(_splitter);
 	resize(1180, 740);
 
-	connect(_refreshButton, &QPushButton::clicked, &_repo, &Repository::refresh);
+	connect(_refreshButton, &QPushButton::clicked, _repo.get(), &Repository::refresh);
 	connect(_pushButton, &QPushButton::clicked, this, [this] { doPush(/*setUpstream=*/false); });
 	connect(_peekButton, &QPushButton::clicked, this, &CommitWindow::peekIncoming);
 	connect(_historyButton, &QPushButton::clicked, this, &CommitWindow::showHistoryWindow);
@@ -377,7 +345,7 @@ void CommitWindow::buildUi()
 	connect(_filesView, &QWidget::customContextMenuRequested, this, &CommitWindow::showContextMenu);
 	connect(_filesView->selectionModel(), &QItemSelectionModel::currentChanged, this, &CommitWindow::showDiffForCurrentRow);
 
-	new QShortcut(QKeySequence(Qt::Key_F5), this, [this] { _repo.refresh(); });
+	new QShortcut(QKeySequence(Qt::Key_F5), this, [this] { _repo->refresh(); });
 	new QShortcut(QKeySequence(Qt::Key_Escape), this, [this] { close(); });
 	const auto commitShortcut = [this] {
 		if (_commitButton->isEnabled())
@@ -426,8 +394,8 @@ void CommitWindow::onRefreshed()
 {
 	const SelectionByPath selection = captureSelectionByPath();
 
-	const RepoState& state = _repo.state();
-	_filesModel.setEntries(_repo.files(), state.operationInProgress());
+	const RepoState& state = _repo->state();
+	_filesModel.setEntries(_repo->files(), state.operationInProgress());
 
 	updateHeader();
 	updateStrips();
@@ -440,16 +408,16 @@ void CommitWindow::onRefreshed()
 
 	// Or refreshes in quick succession leave the pool built by whichever finished last, not by the newest
 	_wordPoolQuery.cancel();
-	_wordPoolQuery = _repo.diffAllChanges(this, [this](std::expected<QByteArray, QString> diff) {
-		_messageEdit->setCompletionWords(completionWordsFor(_repo.files(), std::move(diff).value_or(QByteArray{})));
+	_wordPoolQuery = _repo->diffAllChanges(this, [this](std::expected<QByteArray, QString> diff) {
+		_messageEdit->setCompletionWords(completionWordsFor(_repo->files(), std::move(diff).value_or(QByteArray{})));
 	});
 }
 
 void CommitWindow::updateHeader()
 {
-	const RepoState& state = _repo.state();
+	const RepoState& state = _repo->state();
 
-	_repoNameLabel->setText(_repo.name());
+	_repoNameLabel->setText(_repo->name());
 	const QString branchText = state.detached ? tr("detached HEAD at %1").arg(state.headSha.left(7))
 		: state.unborn ? state.branch + tr(" (no commits yet)")
 		: state.branch;
@@ -483,12 +451,12 @@ void CommitWindow::updateHeader()
 	_lastCommitLabel->setToolTip(state.headSubject.isEmpty() ? QString{}
 		: QStringLiteral("%1 %2").arg(state.headSha.left(7), state.headSubject));
 
-	setWindowTitle(QStringLiteral("%1 [%2] - GoodGit").arg(_repo.name(), state.detached ? QStringLiteral("detached") : state.branch));
+	setWindowTitle(QStringLiteral("%1 [%2] - GoodGit").arg(_repo->name(), state.detached ? QStringLiteral("detached") : state.branch));
 }
 
 void CommitWindow::updateStrips()
 {
-	const RepoState& state = _repo.state();
+	const RepoState& state = _repo->state();
 
 	const QString readFailureText = state.known() ? QString{}
 		: tr("Could not read this repository: %1\nEverything below is from the last refresh that could, and "
@@ -526,7 +494,7 @@ void CommitWindow::updateStrips()
 
 void CommitWindow::updateButtons()
 {
-	const RepoState& state = _repo.state();
+	const RepoState& state = _repo->state();
 	const int checkedCount = _filesModel.checkedCount();
 	const int checkableCount = _filesModel.checkableCount();
 
@@ -551,7 +519,7 @@ void CommitWindow::updateButtons()
 
 bool CommitWindow::canActOnList() const
 {
-	return !_mutationInFlight && _repo.state().known();
+	return !_mutationInFlight && _repo->state().known();
 }
 
 void CommitWindow::beginMutation()
@@ -573,7 +541,7 @@ void CommitWindow::startCommit(bool pushAfterwards)
 		return;
 
 	beginMutation();
-	if (!_repo.state().detached)
+	if (!_repo->state().detached)
 	{
 		confirmUntrackedThenCommit(pushAfterwards);
 		return;
@@ -608,10 +576,10 @@ void CommitWindow::confirmUntrackedThenCommit(bool pushAfterwards)
 // so the working tree never moves. Anything else refuses.
 void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 {
-	const RepoState& state = _repo.state();
+	const RepoState& state = _repo->state();
 
 	const auto checkoutAndGo = [this, onDone](const QString& branch) {
-		_repo.checkoutBranch(branch, [this, onDone](std::expected<void, QString> result) {
+		_repo->checkoutBranch(branch, [this, onDone](std::expected<void, QString> result) {
 			if (!result)
 				showError(tr("Failed to check out the branch"), result.error());
 			onDone(result.has_value());
@@ -653,7 +621,7 @@ void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 		}
 
 		const QString localName = remoteBranch.mid(remoteBranch.indexOf(QLatin1Char('/')) + 1);
-		_repo.localBranchExists(localName, this, [this, localName, remoteBranch, onDone](bool exists) {
+		_repo->localBranchExists(localName, this, [this, localName, remoteBranch, onDone](bool exists) {
 			if (exists)
 			{
 				// Taking the name would move the working tree - that disqualifies it
@@ -663,7 +631,7 @@ void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 				onDone(false);
 				return;
 			}
-			_repo.createTrackingBranch(localName, remoteBranch, [this, onDone](std::expected<void, QString> result) {
+			_repo->createTrackingBranch(localName, remoteBranch, [this, onDone](std::expected<void, QString> result) {
 				if (!result)
 					showError(tr("Failed to create the branch"), result.error());
 				onDone(result.has_value());
@@ -691,20 +659,20 @@ void CommitWindow::doCommit(bool pushAfterwards)
 		if (!result)
 		{
 			showError(tr("Commit failed"), result.error());
-			_repo.refresh();
+			_repo->refresh();
 			return;
 		}
 		_messageEdit->clear();
 		emit committed();
-		_repo.refresh();
+		_repo->refresh();
 		if (pushAfterwards)
 			doPush(/*setUpstream=*/false);
 	};
 
-	if (_repo.state().operationInProgress())
-		_repo.commitMergeState(message, untracked, onDone);
+	if (_repo->state().operationInProgress())
+		_repo->commitMergeState(message, untracked, onDone);
 	else
-		_repo.commit(message, pathspec, untracked, onDone);
+		_repo->commit(message, pathspec, untracked, onDone);
 }
 
 void CommitWindow::doPush(bool setUpstream)
@@ -714,8 +682,7 @@ void CommitWindow::doPush(bool setUpstream)
 		_pushLogView->clearLog(); // the set-upstream retry continues the same push - its report joins the failed attempt's
 
 	_pushLogPane->show(); // before the entry: the log's scrolling needs a laid-out viewport
-	// A label, not the literal argv: the invocation invariants, --recurse-submodules and --progress are noise there
-	_pushLogView->beginEntry(setUpstream ? QStringLiteral("git push --set-upstream origin HEAD") : QStringLiteral("git push"));
+	_pushLogView->beginEntry(_repo->pushCommandLabel(setUpstream));
 
 	const auto onDone = [this, setUpstream](const ProcessResult& result) {
 		_pushButton->setEnabled(true);
@@ -723,7 +690,7 @@ void CommitWindow::doPush(bool setUpstream)
 
 		if (result.ok)
 		{
-			_repo.refresh();
+			_repo->refresh();
 			emit pushed();
 			return;
 		}
@@ -739,7 +706,7 @@ void CommitWindow::doPush(bool setUpstream)
 		showError(tr("Push failed"), result.errorText());
 	};
 
-	Vcs::Job* job = setUpstream ? _repo.pushSetUpstream(onDone) : _repo.push(onDone);
+	Vcs::Job* job = setUpstream ? _repo->pushSetUpstream(onDone) : _repo->push(onDone);
 	// Before the event loop runs again, so the first chunk is not missed
 	job->streamTo([this](const QByteArray& chunk) { _pushLogView->appendOutput(chunk); });
 }
@@ -749,7 +716,7 @@ void CommitWindow::peekIncoming()
 	_peekInFlight = true;
 	updateButtons();
 
-	_repo.fetch([this](std::expected<void, QString> fetchResult) {
+	_repo->fetch([this](std::expected<void, QString> fetchResult) {
 		_peekInFlight = false;
 		updateButtons();
 
@@ -758,9 +725,9 @@ void CommitWindow::peekIncoming()
 			showError(tr("Fetch failed"), fetchResult.error());
 			return;
 		}
-		_repo.refresh(); // the fetch moved the remote-tracking ref, so the header's counts are stale
+		_repo->refresh(); // the fetch moved the remote-tracking ref, so the header's counts are stale
 
-		_repo.incomingCommits(MaxIncomingCommits, this, [this](std::expected<std::vector<CommitRecord>, QString> commits) {
+		_repo->incomingCommits(MaxIncomingCommits, this, [this](std::expected<std::vector<CommitRecord>, QString> commits) {
 			if (!commits)
 			{
 				showError(tr("Could not list the incoming commits"), commits.error());
@@ -789,7 +756,7 @@ void CommitWindow::showIncomingCommits(const std::vector<CommitRecord>& commits,
 		popupLayout->addWidget(_incomingView, 1);
 	}
 
-	const QString upstream = _repo.state().upstream;
+	const QString upstream = _repo->state().upstream;
 	_incomingHeaderLabel->setText(commits.empty()
 		? tr("Nothing to pull from %1").arg(upstream)
 		: tr("%1 commit(s) waiting in %2").arg(int(commits.size())).arg(upstream));
@@ -844,7 +811,7 @@ void CommitWindow::showDiffForCurrentRow()
 			return;
 		}
 		setDiffText(entry.path, tr("new commits"), tr("Loading..."));
-		_diffQuery = _repo.submodulePointerLog(entry, this, [this, entry](std::expected<QString, QString> log) {
+		_diffQuery = _repo->submodulePointerLog(entry, this, [this, entry](std::expected<QString, QString> log) {
 			setDiffText(entry.path, tr("new commits"), log ? tr("Commits being pulled in:\n\n") + *log : log.error());
 		});
 		return;
@@ -852,7 +819,7 @@ void CommitWindow::showDiffForCurrentRow()
 
 	const QString tag = entry.type == ChangeType::Untracked ? tr("new file") : tr("HEAD %1 working tree").arg(QChar(0x2192));
 	setDiffText(entry.path, tag, tr("Loading..."));
-	_diffQuery = _repo.diffFile(entry, this, [this, entry](std::expected<QByteArray, QString> diff) {
+	_diffQuery = _repo->diffFile(entry, this, [this, entry](std::expected<QByteArray, QString> diff) {
 		if (!diff)
 			setDiffText(entry.path, {}, diff.error());
 		else if (diff->size() > MaxDiffBytes)
@@ -891,18 +858,14 @@ void CommitWindow::onRowActivated(const QModelIndex& index)
 	if (entry.type == ChangeType::Deleted)
 		return;
 
-	// External difftool, detached from the process queue: the tool blocks git until closed,
-	// and a queue slot held for minutes would starve refreshes
-	QProcess::startDetached(Settings::gitExecutable(),
-		{ QStringLiteral("difftool"), QStringLiteral("-y"), QStringLiteral("HEAD"), QStringLiteral("--"), entry.path },
-		_repo.path());
+	_repo->launchExternalDiffTool(entry.path);
 }
 
 void CommitWindow::showHistoryWindow()
 {
 	if (!_historyWindow)
 	{
-		_historyWindow = new HistoryWindow(_repo.path(), this);
+		_historyWindow = new HistoryWindow(_repo->location(), this);
 		connect(this, &CommitWindow::committed, _historyWindow, &HistoryWindow::reload);
 		connect(this, &CommitWindow::pushed, _historyWindow, &HistoryWindow::refreshUnpushedMarks);
 	}
@@ -913,8 +876,8 @@ void CommitWindow::showHistoryWindow()
 
 void CommitWindow::openSubmoduleWindow(const FileEntry& entry)
 {
-	auto* window = new CommitWindow(absolutePath(entry));
-	connect(window, &CommitWindow::committed, &_repo, &Repository::refresh);
+	auto* window = new CommitWindow(_repo->submoduleLocation(entry));
+	connect(window, &CommitWindow::committed, _repo.get(), &Repository::refresh);
 	window->show();
 }
 
@@ -932,7 +895,7 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	for (const int row : rows)
 		entries.push_back(_filesModel.entryAt(row));
 
-	const bool operationInProgress = _repo.state().operationInProgress();
+	const bool operationInProgress = _repo->state().operationInProgress();
 	// The read-only entries below stay available either way - a stale row is still worth inspecting
 	const bool canAct = canActOnList();
 	bool anyUntracked = false, anyAdded = false, anyDeletable = false, anyDiscardable = false;
@@ -952,16 +915,16 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	addAction->setEnabled(anyUntracked && canAct);
 	QAction* unAddAction = menu.addAction(tr("Un-add"), this, &CommitWindow::unAddSelection);
 	unAddAction->setEnabled(anyAdded && canAct);
-	QMenu* ignoreMenu = menu.addMenu(tr("Add to .gitignore"));
+	QMenu* ignoreMenu = menu.addMenu(tr("Add to %1").arg(_repo->ignoreFileName()));
 	const bool singleUntracked = entries.size() == 1 && !entries.front().isSubmodule && entries.front().type == ChangeType::Untracked;
 	ignoreMenu->setEnabled(singleUntracked && canAct); // the pattern comes off the row, so it is as stale as the row
 	if (singleUntracked)
 	{
-		for (const QString& pattern : gitIgnorePatterns(entries.front().path))
+		for (const QString& pattern : _repo->ignorePatternsFor(entries.front().path))
 		{
 			// '&' doubled for display only - QMenu would otherwise eat it as an accelerator marker
 			ignoreMenu->addAction(QString{ pattern }.replace(QLatin1Char('&'), QStringLiteral("&&")),
-				this, [this, pattern] { appendToGitIgnore(pattern); });
+				this, [this, pattern] { appendToIgnoreFile(pattern); });
 		}
 	}
 	menu.addSeparator();
@@ -971,12 +934,12 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	openAction->setEnabled(singleFile);
 	QAction* submoduleHistoryAction = menu.addAction(tr("View commit history"), this, [this, entry = entries.front()] {
 		// Not deduplicated the way this repo's own history window is, matching openSubmoduleWindow
-		auto* window = new HistoryWindow(absolutePath(entry), this);
+		auto* window = new HistoryWindow(_repo->submoduleLocation(entry), this);
 		window->show();
 	});
 	submoduleHistoryAction->setEnabled(entries.size() == 1 && entries.front().isSubmodule);
 	QAction* fileHistoryAction = menu.addAction(tr("View file history"), this, [this, entry = entries.front()] {
-		auto* window = new HistoryWindow(_repo.path(), entry.path, this);
+		auto* window = new HistoryWindow(_repo->location(), entry.path, this);
 		window->show();
 	});
 	// Untracked files have no history to show, and a submodule's is its own repo's, offered above
@@ -1110,7 +1073,7 @@ void CommitWindow::deleteSelection()
 	const auto trashAll = [this](const QStringList& paths) {
 		for (const QString& path : paths)
 		{
-			if (QFile::moveToTrash(QDir(_repo.path()).filePath(path)))
+			if (QFile::moveToTrash(QDir(_repo->path()).filePath(path)))
 				continue;
 			// Never fall back to a permanent delete
 			MessageBox::notice(this, tr("Delete failed"),
@@ -1124,7 +1087,7 @@ void CommitWindow::deleteSelection()
 	{
 		// Un-add first: trashing a staged-as-added file would leave the index pointing at a file that no longer exists
 		beginMutation();
-		_repo.unAdd(addedPaths, [this, paths = untrackedPaths + trackedPaths + addedPaths, trashAll](std::expected<void, QString> result) {
+		_repo->unAdd(addedPaths, [this, paths = untrackedPaths + trackedPaths + addedPaths, trashAll](std::expected<void, QString> result) {
 			endMutation();
 			if (!result)
 			{
@@ -1132,18 +1095,18 @@ void CommitWindow::deleteSelection()
 				return;
 			}
 			trashAll(paths);
-			_repo.refresh();
+			_repo->refresh();
 		});
 		return;
 	}
 
 	trashAll(untrackedPaths + trackedPaths);
-	_repo.refresh();
+	_repo->refresh();
 }
 
 void CommitWindow::discardSelection()
 {
-	const bool operationInProgress = _repo.state().operationInProgress();
+	const bool operationInProgress = _repo->state().operationInProgress();
 
 	// Added rows are un-added rather than restored: `git restore` deletes such a file outright, and nothing
 	// in this window destroys content that was never committed. Everything the rest of this needs is read
@@ -1194,14 +1157,14 @@ void CommitWindow::discardSelection()
 		if (addedPaths.isEmpty())
 		{
 			endMutation();
-			_repo.refresh();
+			_repo->refresh();
 			return;
 		}
-		_repo.unAdd(addedPaths, [this](std::expected<void, QString> result) {
+		_repo->unAdd(addedPaths, [this](std::expected<void, QString> result) {
 			endMutation();
 			if (!result)
 				showError(tr("Un-add failed"), result.error());
-			_repo.refresh();
+			_repo->refresh();
 		});
 	};
 
@@ -1212,12 +1175,12 @@ void CommitWindow::discardSelection()
 		return;
 	}
 
-	_repo.discardChanges(pathspec, [this, unAddThenRefresh](std::expected<void, QString> result) {
+	_repo->discardChanges(pathspec, [this, unAddThenRefresh](std::expected<void, QString> result) {
 		if (!result)
 		{
 			endMutation();
 			showError(tr("Discard failed"), result.error());
-			_repo.refresh();
+			_repo->refresh();
 			return;
 		}
 		unAddThenRefresh();
@@ -1236,11 +1199,11 @@ void CommitWindow::addSelectionToIndex()
 	if (paths.isEmpty())
 		return;
 	beginMutation();
-	_repo.addToIndex(paths, [this](std::expected<void, QString> result) {
+	_repo->addToIndex(paths, [this](std::expected<void, QString> result) {
 		endMutation();
 		if (!result)
 			showError(tr("Add to index failed"), result.error());
-		_repo.refresh();
+		_repo->refresh();
 	});
 }
 
@@ -1256,20 +1219,20 @@ void CommitWindow::unAddSelection()
 	if (paths.isEmpty())
 		return;
 	beginMutation();
-	_repo.unAdd(paths, [this](std::expected<void, QString> result) {
+	_repo->unAdd(paths, [this](std::expected<void, QString> result) {
 		endMutation();
 		if (!result)
 			showError(tr("Un-add failed"), result.error());
-		_repo.refresh();
+		_repo->refresh();
 	});
 }
 
-void CommitWindow::appendToGitIgnore(const QString& pattern)
+void CommitWindow::appendToIgnoreFile(const QString& pattern)
 {
-	QFile file{ QDir{ _repo.path() }.filePath(QStringLiteral(".gitignore")) };
+	QFile file{ QDir{ _repo->path() }.filePath(_repo->ignoreFileName()) };
 	if (!file.open(QIODevice::ReadWrite)) // ReadWrite: the existing contents decide the EOL style and the need for a leading newline
 	{
-		MessageBox::notice(this, tr("Failed to update .gitignore"),
+		MessageBox::notice(this, tr("Failed to update %1").arg(_repo->ignoreFileName()),
 			tr("Could not open '%1' for writing.").arg(QDir::toNativeSeparators(file.fileName())), {});
 		return;
 	}
@@ -1281,7 +1244,7 @@ void CommitWindow::appendToGitIgnore(const QString& pattern)
 	addition += pattern.toUtf8() + eol;
 	file.write(addition);
 	file.close();
-	_repo.refresh();
+	_repo->refresh();
 }
 
 void CommitWindow::showError(const QString& title, const QString& details)
@@ -1292,5 +1255,5 @@ void CommitWindow::showError(const QString& title, const QString& details)
 
 QString CommitWindow::absolutePath(const FileEntry& entry) const
 {
-	return QDir{ _repo.path() }.filePath(entry.path);
+	return QDir{ _repo->path() }.filePath(entry.path);
 }

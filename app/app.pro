@@ -40,10 +40,13 @@ HEADERS += \
 	src/filelistdelegate.h \
 	src/gitparsers.h \
 	src/gitprocess.h \
+	src/gitrepository.h \
 	src/historymodels.h \
 	src/historywindow.h \
 	src/messageedit.h \
+	src/queryround.h \
 	src/repository.h \
+	src/repositoryfactory.h \
 	src/settings.h \
 	src/theme.h \
 	src/vcsprocess.h \
@@ -57,11 +60,13 @@ SOURCES += \
 	src/filelistdelegate.cpp \
 	src/gitparsers.cpp \
 	src/gitprocess.cpp \
+	src/gitrepository.cpp \
 	src/historymodels.cpp \
 	src/historywindow.cpp \
 	src/main.cpp \
 	src/messageedit.cpp \
 	src/repository.cpp \
+	src/repositoryfactory.cpp \
 	src/settings.cpp \
 	src/theme.cpp \
 	src/vcsprocess.cpp

@@ -1,5 +1,5 @@
 #include "commitwindow.h"
-#include "gitprocess.h"
+#include "repositoryfactory.h"
 #include "theme.h"
 
 #include <QApplication>
@@ -17,17 +17,16 @@ int main(int argc, char* argv[])
 	const QStringList arguments = QApplication::arguments();
 	const QString startPath = arguments.size() > 1 ? arguments[1] : QDir::currentPath();
 
-	const ProcessResult repoRootResult = Git::runSync(startPath, { QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel") });
-	if (!repoRootResult.ok)
+	const std::expected<RepositoryLocation, QString> location = findRepository(startPath);
+	if (!location)
 	{
 		QMessageBox::critical(nullptr, QStringLiteral("GoodGit"),
-			QStringLiteral("'%1' is not inside a git repository.\n\n%2")
-				.arg(QDir::toNativeSeparators(startPath), repoRootResult.errorText()));
+			QStringLiteral("'%1' is not inside a repository.\n\n%2")
+				.arg(QDir::toNativeSeparators(startPath), location.error()));
 		return 1;
 	}
-	const QString repoRoot = QString::fromUtf8(repoRootResult.out.trimmed());
 
-	auto* window = new CommitWindow{ repoRoot };
+	auto* window = new CommitWindow{ *location };
 	window->show();
 
 	return QApplication::exec();

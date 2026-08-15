@@ -1,6 +1,7 @@
 #include "historywindow.h"
 #include "diffhighlighter.h"
 #include "filelistdelegate.h"
+#include "repositoryfactory.h"
 #include "settings.h"
 #include "theme.h"
 
@@ -38,25 +39,25 @@ constexpr qsizetype MaxShownPickaxeTerm = 24;
 
 } // namespace
 
-HistoryWindow::HistoryWindow(const QString& repoPath, QWidget* parent) :
-	HistoryWindow(repoPath, {}, parent)
+HistoryWindow::HistoryWindow(const RepositoryLocation& location, QWidget* parent) :
+	HistoryWindow(location, {}, parent)
 {
 }
 
-HistoryWindow::HistoryWindow(const QString& repoPath, const QString& filePath, QWidget* parent) :
+HistoryWindow::HistoryWindow(const RepositoryLocation& location, const QString& filePath, QWidget* parent) :
 	QMainWindow(parent, Qt::Window),
-	_repo{ repoPath },
+	_repo{ openRepository(location) },
 	_query{ .maxCommits = InitialMaxCommits, .path = filePath }
 {
 	setAttribute(Qt::WA_DeleteOnClose);
 	setWindowTitle(_query.path.isEmpty()
-		? tr("History - %1 - GoodGit").arg(_repo.name())
-		: tr("History of %1 - %2 - GoodGit").arg(_query.path, _repo.name()));
+		? tr("History - %1 - GoodGit").arg(_repo->name())
+		: tr("History of %1 - %2 - GoodGit").arg(_query.path, _repo->name()));
 	buildUi();
 
 	// One geometry per repo, shared by its file histories: they are the same window in every other respect
 	const QString geometryKey = QStringLiteral("HistoryWindow_")
-		+ QString::fromLatin1(QCryptographicHash::hash(QDir::cleanPath(_repo.path()).toUtf8(), QCryptographicHash::Md5).toHex());
+		+ QString::fromLatin1(QCryptographicHash::hash(QDir::cleanPath(_repo->path()).toUtf8(), QCryptographicHash::Md5).toHex());
 	installEventFilter(new CPersistenceEnabler(geometryKey, this));
 
 	reload();
@@ -251,7 +252,7 @@ void HistoryWindow::closeEvent(QCloseEvent* event)
 void HistoryWindow::refreshUnpushedMarks()
 {
 	_unpushedQuery.cancel();
-	_unpushedQuery = _repo.unpushedCommits(this, [this](std::expected<QSet<QString>, QString> shas) {
+	_unpushedQuery = _repo->unpushedCommits(this, [this](std::expected<QSet<QString>, QString> shas) {
 		// A failure is the ordinary "no upstream to compare against", and marks nothing
 		_logModel.setUnpushedShas(std::move(shas).value_or(QSet<QString>{}));
 	});
@@ -269,15 +270,15 @@ void HistoryWindow::reload()
 	// The narrower -S half runs beside the listing, marking within it rather than producing a list of
 	// its own; the two are independent walks, so they overlap instead of queueing behind each other
 	_logModel.setAddingOrRemovingShas({});
-	if (!_query.pickaxe.isEmpty())
+	if (!_query.contentSearch.isEmpty())
 	{
-		_pickaxeQuery = _repo.commitsAddingOrRemovingText(_query, this, [this](std::expected<QSet<QString>, QString> shas) {
+		_pickaxeQuery = _repo->commitsAddingOrRemovingText(_query, this, [this](std::expected<QSet<QString>, QString> shas) {
 			_logModel.setAddingOrRemovingShas(std::move(shas).value_or(QSet<QString>{}));
 			updateCountLabel();
 		});
 	}
 
-	_logQuery = _repo.commitLog(_query, this, [this](std::expected<std::vector<CommitRecord>, QString> result) {
+	_logQuery = _repo->commitLog(_query, this, [this](std::expected<std::vector<CommitRecord>, QString> result) {
 		if (!result)
 		{
 			_logCapped = false;
@@ -324,7 +325,7 @@ void HistoryWindow::updateCountLabel()
 	if (_logCapped)
 		text = tr("%1, more to load").arg(text);
 
-	if (!_query.pickaxe.isEmpty())
+	if (!_query.contentSearch.isEmpty())
 	{
 		text = tr("%1, %2 adding or removing it").arg(text).arg(_logModel.addingOrRemovingCount());
 		// -S reaches into binary files, which -G cannot list for want of patch text to match
@@ -371,7 +372,7 @@ void HistoryWindow::showPickaxePopup()
 		});
 	}
 
-	_pickaxeEdit->setText(_query.pickaxe);
+	_pickaxeEdit->setText(_query.contentSearch);
 	_pickaxeIgnoreCaseBox->setChecked(_query.ignoreCase);
 	_pickaxePopup->adjustSize();
 	WidgetUtils::placeCenteredOn(_pickaxePopup, this); // its button is in the top-right corner, too far out to read from
@@ -385,10 +386,10 @@ void HistoryWindow::runPickaxe(const QString& text, bool ignoreCase)
 	_pickaxePopup->hide();
 	_logView->setFocus(); // the results are what the user turns to next, and the popup restores focus to its button
 
-	if (_query.pickaxe == text && _query.ignoreCase == ignoreCase)
+	if (_query.contentSearch == text && _query.ignoreCase == ignoreCase)
 		return; // re-running the identical walk would cost seconds and change nothing
 
-	_query.pickaxe = text;
+	_query.contentSearch = text;
 	_query.ignoreCase = ignoreCase;
 
 	// The button doubles as the indicator that a content search is narrowing the list, so it carries the
@@ -432,7 +433,7 @@ void HistoryWindow::showFileContextMenu(const QPoint& pos)
 
 void HistoryWindow::openFileHistory(const QString& filePath)
 {
-	auto* window = new HistoryWindow(_repo.path(), filePath, this);
+	auto* window = new HistoryWindow(_repo->location(), filePath, this);
 	window->show();
 }
 
@@ -470,7 +471,7 @@ void HistoryWindow::showFilesForCurrentCommit()
 
 	_fileCountLabel->setText(tr("Loading..."));
 	const QString sha = commit.sha;
-	_filesQuery = _repo.commitFiles(sha, this, [this, sha](std::expected<std::vector<CommitFileChange>, QString> result) {
+	_filesQuery = _repo->commitFiles(sha, this, [this, sha](std::expected<std::vector<CommitFileChange>, QString> result) {
 		if (!result)
 		{
 			_filesModel.clear();
@@ -484,7 +485,7 @@ void HistoryWindow::showFilesForCurrentCommit()
 		_fileCountLabel->setText(fileCount == 1 ? tr("1 file") : tr("%1 files").arg(fileCount));
 	});
 	// Its own query, so the rows may appear before their counts do; failing costs the counts and nothing else
-	_fileCountsQuery = _repo.commitFileCounts(sha, this, [this](std::expected<std::map<QString, LineCounts>, QString> counts) {
+	_fileCountsQuery = _repo->commitFileCounts(sha, this, [this](std::expected<std::map<QString, LineCounts>, QString> counts) {
 		_filesModel.setLineCounts(std::move(counts).value_or(std::map<QString, LineCounts>{}));
 	});
 }
@@ -506,7 +507,7 @@ void HistoryWindow::showDiffForCurrentFile()
 	const QString tag = shortSha(sha);
 
 	setDiffText(entry.path, tag, tr("Loading..."));
-	_diffQuery = _repo.commitFileDiff(sha, entry, this, [this, entry, tag](std::expected<QByteArray, QString> diff) {
+	_diffQuery = _repo->commitFileDiff(sha, entry, this, [this, entry, tag](std::expected<QByteArray, QString> diff) {
 		if (!diff)
 			setDiffText(entry.path, tag, diff.error());
 		else if (diff->size() > MaxDiffBytes)
