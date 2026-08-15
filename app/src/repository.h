@@ -129,8 +129,9 @@ public:
 	// cannot count is absent rather than zero, and a backend that cannot count at all answers empty.
 	virtual Vcs::Query commitFileCounts(const QString& sha, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone) = 0;
 	virtual Vcs::Query commitFileDiff(const QString& sha, const CommitFileChange& file, const QObject* context, Vcs::Answer<QByteArray> onDone) = 0;
-	// The shas HEAD holds that its upstream does not. Fails when there is no upstream to compare
-	// against - none configured, or a detached HEAD - which is not an error to report.
+	// The shas the upstream has not seen. A backend names as many as it can cheaply - git only those along
+	// HEAD's line - so an unlisted commit is not thereby a pushed one. Fails when there is no upstream to
+	// compare against - none configured, or a detached HEAD - which is not an error to report.
 	virtual Vcs::Query unpushedCommits(const QObject* context, Vcs::Answer<QSet<QString>> onDone) = 0;
 	// For a moved submodule pointer: the commits being pulled in, one line each
 	virtual Vcs::Query submodulePointerLog(const FileEntry& entry, const QObject* context, Vcs::Answer<QString> onDone) = 0;

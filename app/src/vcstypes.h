@@ -62,7 +62,7 @@ struct RepoState
 	QString headSha;     // full sha of HEAD; empty when unborn
 	QString headSubject; // subject line of HEAD; empty when unborn
 	QString upstream;    // empty if none configured
-	int ahead = 0;
+	int ahead = 0; // commits one push would send, so what the push button offers to do
 	int behind = 0;
 	bool detached = false;
 	bool unborn = false;

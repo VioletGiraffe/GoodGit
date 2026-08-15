@@ -128,7 +128,7 @@ struct HgRepository::RefreshRun
 	std::vector<CommitRecord> head; // `.`, which is the null changeset in an unborn repository
 	Hg::WorkingDirectory workingDir;
 	bool hasDefaultPath = false;
-	std::vector<CommitRecord> drafts;
+	std::vector<CommitRecord> unpushed; // the drafts `push -r .` would send
 	std::map<QString, QString> subrepoNodes; // the changeset each subrepo is actually on; absent if unread
 
 	QString failure;
@@ -202,12 +202,14 @@ void HgRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run)
 			self->finishRefresh();
 	} };
 
-	// Draft is every changeset the remote has not seen. Without a remote every changeset is one, so the
-	// question is only asked where its answer means something.
+	// A draft changeset is one no remote has seen, limited here to the ancestors of the parent because that
+	// is what `push -r .` sends and this count stands next to that button. Without a remote every changeset
+	// is draft, so the question is only asked where its answer means something.
 	if (run->hasDefaultPath)
 	{
-		round.launch(path(), { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("draft()"), QStringLiteral("-T"), QStringLiteral("json") },
-			[run](const ProcessResult& r) { run->drafts = Hg::parseCommitLog(r.out); });
+		round.launch(path(), { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("draft() and ::."),
+				QStringLiteral("-T"), QStringLiteral("json") },
+			[run](const ProcessResult& r) { run->unpushed = Hg::parseCommitLog(r.out); });
 	}
 
 	for (const auto& subrepo : _subrepoNodes)
@@ -266,14 +268,14 @@ RepoState HgRepository::stateFromRun(const RefreshRun& run) const
 	// One name for the whole remote, which is as far as hg's own vocabulary goes - there is no per-branch
 	// upstream, and `default` is what a push contacts
 	state.upstream = run.hasDefaultPath ? QStringLiteral("default") : QString{};
-	state.ahead = int(run.drafts.size());
+	state.ahead = int(run.unpushed.size());
 	state.behind = _behind;
 
-	for (const CommitRecord& draft : run.drafts)
+	for (const CommitRecord& commit : run.unpushed)
 	{
 		if (state.unpushedSubjects.size() >= MaxUnpushedLogEntries)
 			break;
-		state.unpushedSubjects << draft.subject();
+		state.unpushedSubjects << commit.subject();
 	}
 
 	// An uncommitted merge is the working directory having two parents. Rebase, graft and histedit leave
@@ -607,7 +609,8 @@ Vcs::Query HgRepository::commitFileDiff(const QString& sha, const CommitFileChan
 
 Vcs::Query HgRepository::unpushedCommits(const QObject* context, Vcs::Answer<QSet<QString>> onDone)
 {
-	// Local and free: a draft changeset is one no remote has seen. This is the same set the header counts.
+	// Local and free: a draft changeset is one no remote has seen. Every draft, wherever it sits - unlike the
+	// header's count, which is what one push would send.
 	const auto nodes = [](const QByteArray& output) {
 		QSet<QString> shas;
 		for (const CommitRecord& commit : Hg::parseCommitLog(output))
