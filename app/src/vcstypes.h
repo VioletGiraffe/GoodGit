@@ -11,6 +11,23 @@
 
 enum class ChangeType : uint8_t { Modified, Added, Untracked, Deleted, Renamed, TypeChanged, Conflicted };
 
+// What ignoring a path would mean. Each backend renders one of these into its own syntax, and knows
+// where in its own ignore file that syntax belongs.
+enum class IgnoreScope : uint8_t
+{
+	ExactPath, // this one file, at this one place in the tree
+	Extension, // any file with this extension, anywhere
+	Name,      // any file with this name, anywhere
+	Directory, // this directory and everything under it
+};
+
+// One offered way to exclude a path: what the menu shows and what gets written, and what it means
+struct IgnorePattern
+{
+	QString text;
+	IgnoreScope scope = IgnoreScope::ExactPath;
+};
+
 struct LineCounts
 {
 	int added = 0;

@@ -51,7 +51,8 @@ public:
 	[[nodiscard]] RepositoryLocation submoduleLocation(const FileEntry& entry) const override;
 
 	[[nodiscard]] QString ignoreFileName() const override;
-	[[nodiscard]] QStringList ignorePatternsFor(const QString& repoRelativePath) const override;
+	[[nodiscard]] std::vector<IgnorePattern> ignorePatternsFor(const QString& repoRelativePath) const override;
+	[[nodiscard]] QByteArray ignoreFileWithPatternAdded(QByteArray content, const IgnorePattern& pattern) const override;
 
 	void launchExternalDiffTool(const QString& repoRelativePath) const override;
 

@@ -48,6 +48,7 @@ namespace {
 
 constexpr int LeftColumnWidth = 430; // sized so the 50-column subject guide fits the message editor
 constexpr qsizetype MaxDiffBytes = 2 * 1024 * 1024;
+constexpr qsizetype BinarySniffBytes = 8000; // git's own threshold: a NUL this early means the file is not text
 constexpr int MaxListedPathsInDialog = 20;
 constexpr int MaxIncomingCommits = 200; // a peek, not a history window - that is what History is for
 constexpr int IncomingPopupWidth = 560;
@@ -291,7 +292,7 @@ void CommitWindow::buildUi()
 	_diffView->setReadOnly(true);
 	_diffView->setLineWrapMode(QPlainTextEdit::WidgetWidth);
 	_diffView->setFont(monospaceFont());
-	new DiffHighlighter(_diffView->document());
+	_diffHighlighter = new DiffHighlighter(_diffView->document());
 	rightLayout->addWidget(_diffView, 1);
 
 	_pushLogPane = new QWidget;
@@ -817,9 +818,15 @@ void CommitWindow::showDiffForCurrentRow()
 		return;
 	}
 
-	const QString tag = entry.type == ChangeType::Untracked ? tr("new file") : tr("HEAD %1 working tree").arg(QChar(0x2192));
+	if (entry.type == ChangeType::Untracked)
+	{
+		showFileContents(entry);
+		return;
+	}
+
+	const QString tag = tr("HEAD %1 working tree").arg(QChar(0x2192));
 	setDiffText(entry.path, tag, tr("Loading..."));
-	_diffQuery = _repo->diffFile(entry, this, [this, entry](std::expected<QByteArray, QString> diff) {
+	_diffQuery = _repo->diffFile(entry, this, [this, entry, tag](std::expected<QByteArray, QString> diff) {
 		if (!diff)
 			setDiffText(entry.path, {}, diff.error());
 		else if (diff->size() > MaxDiffBytes)
@@ -827,13 +834,46 @@ void CommitWindow::showDiffForCurrentRow()
 		else if (diff->isEmpty())
 			setDiffText(entry.path, {}, tr("No content changes (only the mode or the line endings differ, or the file matches HEAD)."));
 		else
-			setDiffText(entry.path, entry.type == ChangeType::Untracked ? tr("new file") : tr("HEAD %1 working tree").arg(QChar(0x2192)),
-				QString::fromUtf8(*diff));
+			setDiffText(entry.path, tag, QString::fromUtf8(*diff));
 	});
+}
+
+void CommitWindow::showFileContents(const FileEntry& entry)
+{
+	const QString tag = tr("new file");
+	QFile file{ absolutePath(entry) };
+	if (file.size() > MaxDiffBytes)
+	{
+		setDiffText(entry.path, tag, tr("The file is too large to display (%1 MB).").arg(double(file.size()) / (1024 * 1024), 0, 'f', 1));
+		return;
+	}
+	if (!file.open(QIODevice::ReadOnly))
+	{
+		setDiffText(entry.path, tag, tr("Could not read '%1'.").arg(QDir::toNativeSeparators(file.fileName())));
+		return;
+	}
+	const QByteArray contents = file.readAll();
+	if (contents.isEmpty())
+	{
+		setDiffText(entry.path, tag, tr("The file is empty."));
+		return;
+	}
+	if (contents.left(BinarySniffBytes).contains('\0'))
+	{
+		setDiffText(entry.path, tag, tr("Binary file (%1 bytes).").arg(contents.size()));
+		return;
+	}
+
+	// The file's own lines: a leading '-' is not a deletion here
+	_diffHighlighter->setEnabled(false);
+	_diffPathLabel->setText(entry.path);
+	_diffTagLabel->setText(tag);
+	_diffView->setPlainText(QString::fromUtf8(contents));
 }
 
 void CommitWindow::setDiffText(const QString& pathLabel, const QString& tag, const QString& text)
 {
+	_diffHighlighter->setEnabled(true);
 	_diffPathLabel->setText(pathLabel);
 	_diffTagLabel->setText(tag);
 	_diffView->setPlainText(text);
@@ -920,11 +960,11 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	ignoreMenu->setEnabled(singleUntracked && canAct); // the pattern comes off the row, so it is as stale as the row
 	if (singleUntracked)
 	{
-		for (const QString& pattern : _repo->ignorePatternsFor(entries.front().path))
+		for (const IgnorePattern& pattern : _repo->ignorePatternsFor(entries.front().path))
 		{
 			// '&' doubled for display only - QMenu would otherwise eat it as an accelerator marker
-			ignoreMenu->addAction(QString{ pattern }.replace(QLatin1Char('&'), QStringLiteral("&&")),
-				this, [this, pattern] { appendToIgnoreFile(pattern); });
+			ignoreMenu->addAction(QString{ pattern.text }.replace(QLatin1Char('&'), QStringLiteral("&&")),
+				this, [this, pattern] { addPatternToIgnoreFile(pattern); });
 		}
 	}
 	menu.addSeparator();
@@ -1227,22 +1267,19 @@ void CommitWindow::unAddSelection()
 	});
 }
 
-void CommitWindow::appendToIgnoreFile(const QString& pattern)
+void CommitWindow::addPatternToIgnoreFile(const IgnorePattern& pattern)
 {
 	QFile file{ QDir{ _repo->path() }.filePath(_repo->ignoreFileName()) };
-	if (!file.open(QIODevice::ReadWrite)) // ReadWrite: the existing contents decide the EOL style and the need for a leading newline
+	if (!file.open(QIODevice::ReadWrite)) // the backend places the pattern by what the file already holds
 	{
 		MessageBox::notice(this, tr("Failed to update %1").arg(_repo->ignoreFileName()),
 			tr("Could not open '%1' for writing.").arg(QDir::toNativeSeparators(file.fileName())), {});
 		return;
 	}
-	const QByteArray existing = file.readAll();
-	const QByteArray eol = existing.contains("\r\n") ? QByteArrayLiteral("\r\n") : QByteArrayLiteral("\n");
-	QByteArray addition;
-	if (!existing.isEmpty() && !existing.endsWith('\n'))
-		addition += eol;
-	addition += pattern.toUtf8() + eol;
-	file.write(addition);
+	const QByteArray updated = _repo->ignoreFileWithPatternAdded(file.readAll(), pattern);
+	file.seek(0);
+	file.write(updated);
+	file.resize(updated.size());
 	file.close();
 	_repo->refresh();
 }

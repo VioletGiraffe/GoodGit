@@ -617,28 +617,13 @@ QString GitRepository::diffBase() const
 
 Vcs::Query GitRepository::diffFile(const FileEntry& entry, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
-	QStringList args;
-	Vcs::Callback callback = answering(std::move(onDone), std::identity{});
-	if (entry.type == ChangeType::Untracked)
-	{
-		// The file is in neither the base nor the index, so there is no pair for git to diff - the null
-		// device supplies the missing side
-		args = { QStringLiteral("diff"), QStringLiteral("--no-index"), QStringLiteral("--"), QStringLiteral("/dev/null"), entry.path };
-		callback = [callback = std::move(callback)](const ProcessResult& result) {
-			ProcessResult corrected = result;
-			corrected.ok = result.outcome == ProcessOutcome::Exited && result.exitCode <= 1; // --no-index exits 1 on a difference, which is the point
-			callback(corrected);
-		};
-	}
-	else
-	{
-		args = { QStringLiteral("diff"), QStringLiteral("-M"), diffBase(), QStringLiteral("--"), entry.path };
-		if (!entry.oldPath.isEmpty())
-			args.push_back(entry.oldPath);
-	}
-	// Display only - the row still lists as modified and commits its working-tree content verbatim
-	args.insert(1, QStringLiteral("--ignore-cr-at-eol"));
-	return runQuery(path(), std::move(args), context, std::move(callback));
+	// --ignore-cr-at-eol is display only - the row still lists as modified and commits its working-tree
+	// content verbatim
+	QStringList args = { QStringLiteral("diff"), QStringLiteral("--ignore-cr-at-eol"), QStringLiteral("-M"),
+		diffBase(), QStringLiteral("--"), entry.path };
+	if (!entry.oldPath.isEmpty())
+		args.push_back(entry.oldPath);
+	return runQuery(path(), std::move(args), context, answering(std::move(onDone), std::identity{}));
 }
 
 Vcs::Query GitRepository::diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone)
@@ -731,20 +716,29 @@ QString GitRepository::ignoreFileName() const
 }
 
 // Literal path patterns are anchored to the repo root with a leading '/'
-QStringList GitRepository::ignorePatternsFor(const QString& repoRelativePath) const
+std::vector<IgnorePattern> GitRepository::ignorePatternsFor(const QString& repoRelativePath) const
 {
 	const qsizetype slash = repoRelativePath.lastIndexOf(QLatin1Char('/'));
 	const QString fileName = repoRelativePath.mid(slash + 1);
 	const qsizetype dot = fileName.lastIndexOf(QLatin1Char('.'));
 
-	QStringList patterns;
-	patterns.push_back(QLatin1Char('/') + escapedForGitIgnore(repoRelativePath));
+	std::vector<IgnorePattern> patterns;
+	patterns.push_back({ QLatin1Char('/') + escapedForGitIgnore(repoRelativePath), IgnoreScope::ExactPath });
 	if (dot > 0 && dot < fileName.size() - 1)
-		patterns.push_back(QStringLiteral("*.") + escapedForGitIgnore(fileName.mid(dot + 1)));
-	patterns.push_back(escapedForGitIgnore(fileName));
+		patterns.push_back({ QStringLiteral("*.") + escapedForGitIgnore(fileName.mid(dot + 1)), IgnoreScope::Extension });
+	patterns.push_back({ escapedForGitIgnore(fileName), IgnoreScope::Name });
 	if (slash >= 0)
-		patterns.push_back(QLatin1Char('/') + escapedForGitIgnore(repoRelativePath.left(slash)) + QLatin1Char('/'));
+		patterns.push_back({ QLatin1Char('/') + escapedForGitIgnore(repoRelativePath.left(slash)) + QLatin1Char('/'), IgnoreScope::Directory });
 	return patterns;
+}
+
+// Every pattern is legal on any line of a .gitignore, so the scope decides nothing about where it goes
+QByteArray GitRepository::ignoreFileWithPatternAdded(QByteArray content, const IgnorePattern& pattern) const
+{
+	const QByteArray eol = content.contains("\r\n") ? QByteArrayLiteral("\r\n") : QByteArrayLiteral("\n");
+	if (!content.isEmpty() && !content.endsWith('\n'))
+		content += eol;
+	return content + pattern.text.toUtf8() + eol;
 }
 
 void GitRepository::launchExternalDiffTool(const QString& repoRelativePath) const

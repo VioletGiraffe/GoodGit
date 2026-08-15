@@ -90,6 +90,9 @@ public:
 
 	// Diff providers for the window; the bytes are the caller's to size up and decode. Cancel the
 	// returned query when the selection moves on.
+
+	// One tracked change against the last commit. An untracked file has no other side to diff against and
+	// is not asked of the backend at all: the window reads it and shows what it holds.
 	virtual Vcs::Query diffFile(const FileEntry& entry, const QObject* context, Vcs::Answer<QByteArray> onDone) = 0;
 	// One diff of every change at once, with no context lines; feeds the message completion word pool
 	virtual Vcs::Query diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone) = 0;
@@ -134,7 +137,11 @@ public:
 	// The ignore file this repository's kind reads, at the repository root, and the patterns that would
 	// exclude `repoRelativePath` from it - most specific first, in that file's own syntax.
 	[[nodiscard]] virtual QString ignoreFileName() const = 0;
-	[[nodiscard]] virtual QStringList ignorePatternsFor(const QString& repoRelativePath) const = 0;
+	[[nodiscard]] virtual std::vector<IgnorePattern> ignorePatternsFor(const QString& repoRelativePath) const = 0;
+	// `content` with `pattern` added where its scope belongs, creating that section if the file has none.
+	// Empty `content` is a file that does not exist yet. The caller reads and writes it; only the placement
+	// is the backend's to decide.
+	[[nodiscard]] virtual QByteArray ignoreFileWithPatternAdded(QByteArray content, const IgnorePattern& pattern) const = 0;
 
 	// Opens the user's configured external diff tool on one path, detached from the job queue: the tool
 	// blocks the process that launched it until it closes, and a queue slot held for minutes would

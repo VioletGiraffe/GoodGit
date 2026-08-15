@@ -29,8 +29,8 @@ struct ProcessResult
 	QByteArray err;
 	ProcessOutcome outcome = ProcessOutcome::Exited;
 	// The command succeeded. Set here from exit code 0, but whoever ran a command that reports success
-	// otherwise (`git diff --no-index` exits 1 when the files differ) corrects it before the result travels on,
-	// so that every reader can treat this as the answer.
+	// otherwise (exit 1 for "nothing to report", say) corrects it before the result travels on, so that
+	// every reader can treat this as the answer.
 	bool ok = false;
 	// Names the program in the sentences errorText() composes itself. Every result a process produced
 	// carries it; a synthesised one carries stderr of its own instead, which is what errorText then returns.

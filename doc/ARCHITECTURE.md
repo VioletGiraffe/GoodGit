@@ -57,9 +57,10 @@ Consequences that follow from this choice, all deliberate:
 which system answered; below it a backend turns each operation into subprocesses and parses what they
 print. A backend supplies three things: every pure virtual - the actions, the read-only queries, and
 `startRefresh()`, which runs whatever queries its kind needs and calls `completeRefresh()` once; its own
-knowledge of itself - the ignore file and the patterns that would exclude a path from it, the label the
-push log shows, where a submodule row's own repository is and of what kind, how the external diff tool is
-launched; and a line in `repositoryfactory`, which is the only place that names every kind.
+knowledge of itself - the ignore file, the patterns that would exclude a path from it and where in it they
+belong, the label the push log shows, where a submodule row's own repository is and of what kind, how the
+external diff tool is launched; and a line in `repositoryfactory`, which is the only place that names every
+kind.
 
 The refresh policy is not the backend's: re-entry is coalesced and a run is applied whole or not at all,
 once, in the base.
@@ -86,6 +87,10 @@ a temp file, never `-m` and never stdin: `-F -` and a stdin pathspec cannot shar
 The diff shown in either window carries `--ignore-cr-at-eol`, and so do the file list's line counts, so a
 CRLF/LF-only change reads as no change and counts as no lines. That is a display choice and nothing more:
 the file still lists as modified and still commits its working-tree content byte for byte.
+
+An untracked file is not a modification of anything, so no backend is asked to diff one: the window reads
+the file and shows what it holds, with the highlighting switched off - a leading `-` there is the file's
+own line.
 
 Output accumulates as it arrives, so a chatty child cannot fill a pipe and stall, and reaches the result
 callback whole - every parser still runs on a finished result. A job may additionally stream each chunk to a
