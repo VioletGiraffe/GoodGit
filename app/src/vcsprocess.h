@@ -103,6 +103,10 @@ using Answer = std::function<void(std::expected<T, QString>)>;
 class Query
 {
 public:
+	Query() = default;
+	// The query as the job first answering it names it
+	explicit Query(Job* job) { attach(job); }
+
 	void cancel()
 	{
 		if (*_current)
@@ -116,6 +120,33 @@ private:
 	// Shared, so the handle its asker holds follows the query into its next process
 	std::shared_ptr<QPointer<Job>> _current = std::make_shared<QPointer<Job>>();
 };
+
+// One process's result as the answer a query promised: `parse` of its output, or the error text instead
+template <typename T, typename Parse>
+[[nodiscard]] Callback answering(Answer<T> onDone, Parse parse)
+{
+	return [onDone = std::move(onDone), parse = std::move(parse)](const ProcessResult& result) {
+		if (result.ok)
+			onDone(parse(result.out));
+		else
+			onDone(std::unexpected(result.errorText()));
+	};
+}
+
+// The same for a command run for its effect alone: that it worked, or why it did not
+[[nodiscard]] inline Callback reporting(Answer<void> onDone)
+{
+	return [onDone = std::move(onDone)](const ProcessResult& result) {
+		if (result.ok)
+			onDone({});
+		else
+			onDone(std::unexpected(result.errorText()));
+	};
+}
+
+// A path list as a tool takes one where a path may hold anything a text separator could - on stdin, or in
+// a file named as an argument
+[[nodiscard]] QByteArray nulJoined(const QStringList& paths);
 
 // A temp file holding `contents`, for a command that takes its input by file name rather than on stdin -
 // a message to commit, a pathspec too long for a command line. Null if the file could not be created, the

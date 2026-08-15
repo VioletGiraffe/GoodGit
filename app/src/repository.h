@@ -12,6 +12,11 @@
 // The version control systems the app can drive
 enum class VcsKind : uint8_t { Git, Mercurial };
 
+// A literal made safe for a backend's content search. LogQuery::contentSearch is a literal string whatever
+// it contains, and every backend's search takes a pattern, so each has to escape it before it goes near
+// one. Extended and Python regular expressions share a metacharacter set, which is the one escaped here.
+[[nodiscard]] QString escapedForRegex(const QString& literal);
+
 // A repository named the way a window is opened on one: what it is, and where it is
 struct RepositoryLocation
 {

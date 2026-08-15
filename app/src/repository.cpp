@@ -4,6 +4,21 @@
 
 #include <utility>
 
+QString escapedForRegex(const QString& literal)
+{
+	static const QString metacharacters = QStringLiteral(".^$*+?()[]{}|\\");
+
+	QString escaped;
+	escaped.reserve(literal.size() * 2);
+	for (const QChar c : literal)
+	{
+		if (metacharacters.contains(c))
+			escaped += QLatin1Char('\\');
+		escaped += c;
+	}
+	return escaped;
+}
+
 Repository::Repository(QString rootPath, QObject* parent) :
 	QObject(parent),
 	_rootPath{ std::move(rootPath) }

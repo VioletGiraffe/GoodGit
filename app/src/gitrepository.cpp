@@ -17,17 +17,6 @@ namespace {
 
 constexpr int MaxUnpushedLogEntries = 30; // tooltip fodder; state.ahead carries the true count
 
-QByteArray nulJoined(const QStringList& paths)
-{
-	QByteArray data;
-	for (const QString& path : paths)
-	{
-		data += path.toUtf8();
-		data += '\0';
-	}
-	return data;
-}
-
 // The commit message travels in a temp file - `-F -` and a stdin pathspec cannot share the pipe
 std::shared_ptr<QTemporaryFile> openMessageFile(const QString& message, QObject* context, const Vcs::Callback& onDone)
 {
@@ -48,7 +37,7 @@ void rollBackAddThenReport(const QString& workDir, const QObject* context, const
 
 	Git::run(workDir, { QStringLiteral("reset"), QStringLiteral("-q"), QStringLiteral("--pathspec-from-file=-"),
 		QStringLiteral("--pathspec-file-nul") }, context,
-		[onDone, commitResult](const ProcessResult&) { onDone(commitResult); }, nulJoined(untrackedPaths));
+		[onDone, commitResult](const ProcessResult&) { onDone(commitResult); }, Vcs::nulJoined(untrackedPaths));
 }
 
 // A status that could not be run answers nothing about the worktree it was pointed at, and the parent
@@ -102,32 +91,15 @@ QStringList commitLogArgs(int maxCommits)
 		QStringLiteral("--format=") + QLatin1String(CommitLogFormat) };
 }
 
-// -G takes an extended regular expression and has no fixed-string mode - --fixed-strings does not reach
-// it - so a literal search term has to arrive pre-escaped, or `foo(` aborts the whole query. The set is
-// ERE's exactly: escaping beyond it would turn literals into operators under other flavours.
-QString escapedForExtendedRegex(const QString& text)
-{
-	static const QString metacharacters = QStringLiteral(".^$*+?()[]{}|\\");
-
-	QString escaped;
-	escaped.reserve(text.size() * 2);
-	for (const QChar c : text)
-	{
-		if (metacharacters.contains(c))
-			escaped += QLatin1Char('\\');
-		escaped += c;
-	}
-	return escaped;
-}
-
-// -S counts occurrences and takes the term literally; -G matches patch lines and takes a regex
+// -S counts occurrences and takes the term literally; -G matches patch lines and takes a regex, which
+// --fixed-strings does not reach, so `foo(` would abort the whole query unescaped
 void appendPickaxe(QStringList& args, const Repository::LogQuery& query, bool countChangesOnly)
 {
 	if (query.contentSearch.isEmpty())
 		return;
 
 	args << (countChangesOnly ? QStringLiteral("-S") + query.contentSearch
-		: QStringLiteral("-G") + escapedForExtendedRegex(query.contentSearch));
+		: QStringLiteral("-G") + escapedForRegex(query.contentSearch));
 	if (query.ignoreCase)
 		args << QStringLiteral("-i");
 }
@@ -151,34 +123,9 @@ QString outputAsText(const QByteArray& output)
 	return QString::fromUtf8(output);
 }
 
-// One process's result as the answer a query promised: `parse` of its output, or the error text instead
-template <typename T, typename Parse>
-Vcs::Callback answering(Vcs::Answer<T> onDone, Parse parse)
-{
-	return [onDone = std::move(onDone), parse = std::move(parse)](const ProcessResult& result) {
-		if (result.ok)
-			onDone(parse(result.out));
-		else
-			onDone(std::unexpected(result.errorText()));
-	};
-}
-
-// The same for a command run for its effect alone: that it worked, or why it did not
-Vcs::Callback reporting(Vcs::Answer<void> onDone)
-{
-	return [onDone = std::move(onDone)](const ProcessResult& result) {
-		if (result.ok)
-			onDone({});
-		else
-			onDone(std::unexpected(result.errorText()));
-	};
-}
-
 Vcs::Query runQuery(const QString& workDir, QStringList args, const QObject* context, Vcs::Callback callback)
 {
-	Vcs::Query query;
-	query.attach(Git::run(workDir, std::move(args), context, std::move(callback), {}, /*readOnlyQuery=*/true));
-	return query;
+	return Vcs::Query{ Git::run(workDir, std::move(args), context, std::move(callback), {}, /*readOnlyQuery=*/true) };
 }
 
 // Every refresh query: read-only, and scoped to the repository that asked
@@ -467,7 +414,7 @@ void GitRepository::commit(const QString& message, const QStringList& pathspec, 
 {
 	// Converted once, here: the steps below pass process results between them, the rollback reporting
 	// the commit's rather than its own
-	const Vcs::Callback report = reporting(std::move(onDone));
+	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
 	const auto messageFile = openMessageFile(message, this, report);
 	if (!messageFile)
 		return;
@@ -477,7 +424,7 @@ void GitRepository::commit(const QString& message, const QStringList& pathspec, 
 				QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") }, this,
 			[this, messageFile, untrackedPaths, report](const ProcessResult& result) {
 				rollBackAddThenReport(path(), this, untrackedPaths, result, report);
-			}, nulJoined(pathspec));
+			}, Vcs::nulJoined(pathspec));
 	};
 
 	if (untrackedPaths.isEmpty())
@@ -491,12 +438,12 @@ void GitRepository::commit(const QString& message, const QStringList& pathspec, 
 				runCommit();
 			else
 				report(result);
-		}, nulJoined(untrackedPaths));
+		}, Vcs::nulJoined(untrackedPaths));
 }
 
 void GitRepository::commitMergeState(const QString& message, const QStringList& untrackedPaths, Vcs::Answer<void> onDone)
 {
-	const Vcs::Callback report = reporting(std::move(onDone));
+	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
 	const auto messageFile = openMessageFile(message, this, report);
 	if (!messageFile)
 		return;
@@ -523,7 +470,7 @@ void GitRepository::commitMergeState(const QString& message, const QStringList& 
 					runCommit();
 				else
 					report(result);
-			}, nulJoined(untrackedPaths));
+			}, Vcs::nulJoined(untrackedPaths));
 	};
 
 	Git::run(path(), { QStringLiteral("add"), QStringLiteral("-u") }, this,
@@ -556,36 +503,36 @@ QString GitRepository::pushCommandLabel(bool setUpstream) const
 void GitRepository::fetch(Vcs::Answer<void> onDone)
 {
 	// Not a read-only query despite reading from the network: it writes the remote-tracking refs
-	Git::run(path(), { QStringLiteral("fetch") }, this, reporting(std::move(onDone)));
+	Git::run(path(), { QStringLiteral("fetch") }, this, Vcs::reporting(std::move(onDone)));
 }
 
 void GitRepository::addToIndex(const QStringList& paths, Vcs::Answer<void> onDone)
 {
 	Git::run(path(), { QStringLiteral("add"), QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") },
-		this, reporting(std::move(onDone)), nulJoined(paths));
+		this, Vcs::reporting(std::move(onDone)), Vcs::nulJoined(paths));
 }
 
 void GitRepository::unAdd(const QStringList& paths, Vcs::Answer<void> onDone)
 {
 	Git::run(path(), { QStringLiteral("reset"), QStringLiteral("-q"), QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") },
-		this, reporting(std::move(onDone)), nulJoined(paths));
+		this, Vcs::reporting(std::move(onDone)), Vcs::nulJoined(paths));
 }
 
 void GitRepository::discardChanges(const QStringList& pathspec, Vcs::Answer<void> onDone)
 {
 	Git::run(path(), { QStringLiteral("restore"), QStringLiteral("--source=HEAD"), QStringLiteral("--staged"), QStringLiteral("--worktree"),
-		QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") }, this, reporting(std::move(onDone)), nulJoined(pathspec));
+		QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") }, this, Vcs::reporting(std::move(onDone)), Vcs::nulJoined(pathspec));
 }
 
 void GitRepository::checkoutBranch(const QString& branch, Vcs::Answer<void> onDone)
 {
-	Git::run(path(), { QStringLiteral("checkout"), branch }, this, reporting(std::move(onDone)));
+	Git::run(path(), { QStringLiteral("checkout"), branch }, this, Vcs::reporting(std::move(onDone)));
 }
 
 void GitRepository::createTrackingBranch(const QString& localName, const QString& remoteBranch, Vcs::Answer<void> onDone)
 {
 	Git::run(path(), { QStringLiteral("checkout"), QStringLiteral("-b"), localName, QStringLiteral("--track"), remoteBranch },
-		this, reporting(std::move(onDone)));
+		this, Vcs::reporting(std::move(onDone)));
 }
 
 void GitRepository::localBranchExists(const QString& name, const QObject* context, std::function<void(bool)> onDone)
@@ -608,7 +555,7 @@ Vcs::Query GitRepository::diffFile(const FileEntry& entry, const QObject* contex
 		diffBase(), QStringLiteral("--"), entry.path };
 	if (!entry.oldPath.isEmpty())
 		args.push_back(entry.oldPath);
-	return runQuery(path(), std::move(args), context, answering(std::move(onDone), std::identity{}));
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
 }
 
 Vcs::Query GitRepository::diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone)
@@ -616,7 +563,7 @@ Vcs::Query GitRepository::diffAllChanges(const QObject* context, Vcs::Answer<QBy
 	// --ignore-cr-at-eol, or a wholesale line-ending conversion floods the word pool with every line of the file
 	QStringList args = { QStringLiteral("diff"), QStringLiteral("--ignore-cr-at-eol"), QStringLiteral("-U0"),
 		QStringLiteral("--ignore-submodules"), diffBase() };
-	return runQuery(path(), std::move(args), context, answering(std::move(onDone), std::identity{}));
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
 }
 
 Vcs::Query GitRepository::commitLog(const LogQuery& query, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone)
@@ -624,7 +571,7 @@ Vcs::Query GitRepository::commitLog(const LogQuery& query, const QObject* contex
 	QStringList args = commitLogArgs(query.maxCommits);
 	appendPickaxe(args, query, /*countChangesOnly=*/false);
 	appendPathLimit(args, query);
-	return runQuery(path(), std::move(args), context, answering(std::move(onDone), parseCommitLog));
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), parseCommitLog));
 }
 
 Vcs::Query GitRepository::commitsAddingOrRemovingText(const LogQuery& query, const QObject* context, Vcs::Answer<QSet<QString>> onDone)
@@ -633,27 +580,27 @@ Vcs::Query GitRepository::commitsAddingOrRemovingText(const LogQuery& query, con
 		QStringLiteral("--format=%H") };
 	appendPickaxe(args, query, /*countChangesOnly=*/true);
 	appendPathLimit(args, query);
-	return runQuery(path(), std::move(args), context, answering(std::move(onDone), shaSet));
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), shaSet));
 }
 
 Vcs::Query GitRepository::incomingCommits(int maxCommits, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone)
 {
 	QStringList args = commitLogArgs(maxCommits);
 	args << QStringLiteral("HEAD..@{upstream}");
-	return runQuery(path(), std::move(args), context, answering(std::move(onDone), parseCommitLog));
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), parseCommitLog));
 }
 
 Vcs::Query GitRepository::commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone)
 {
 	return runQuery(path(), commitFilesArgs(sha, QStringLiteral("--name-status")),
-		context, answering(std::move(onDone), parseNameStatusZ));
+		context, Vcs::answering(std::move(onDone), parseNameStatusZ));
 }
 
 Vcs::Query GitRepository::commitFileCounts(const QString& sha, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone)
 {
 	QStringList args = commitFilesArgs(sha, QStringLiteral("--numstat"));
 	args.insert(1, QStringLiteral("--ignore-cr-at-eol")); // as commitFileDiff carries it: a row's counts are the ones its own diff shows
-	return runQuery(path(), std::move(args), context, answering(std::move(onDone), parseNumstatZ));
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), parseNumstatZ));
 }
 
 Vcs::Query GitRepository::commitFileDiff(const QString& sha, const CommitFileChange& file, const QObject* context, Vcs::Answer<QByteArray> onDone)
@@ -662,13 +609,13 @@ Vcs::Query GitRepository::commitFileDiff(const QString& sha, const CommitFileCha
 		QStringLiteral("--format="), sha, QStringLiteral("--"), file.path };
 	if (!file.oldPath.isEmpty())
 		args.push_back(file.oldPath); // both sides, or the pathspec filters the rename out before -M can pair it up
-	return runQuery(path(), std::move(args), context, answering(std::move(onDone), std::identity{}));
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
 }
 
 Vcs::Query GitRepository::unpushedCommits(const QObject* context, Vcs::Answer<QSet<QString>> onDone)
 {
 	return runQuery(path(), { QStringLiteral("rev-list"), QStringLiteral("@{upstream}..HEAD") },
-		context, answering(std::move(onDone), shaSet));
+		context, Vcs::answering(std::move(onDone), shaSet));
 }
 
 Vcs::Query GitRepository::submodulePointerLog(const FileEntry& entry, const QObject* context, Vcs::Answer<QString> onDone)
@@ -685,7 +632,7 @@ Vcs::Query GitRepository::submodulePointerLog(const FileEntry& entry, const QObj
 			}
 			const QString oldSha = QString::fromUtf8(revResult.out.trimmed());
 			query.attach(Git::run(subPath, { QStringLiteral("log"), QStringLiteral("--oneline"), QStringLiteral("--no-decorate"),
-				oldSha + QStringLiteral("..HEAD") }, context, answering(std::move(onDone), outputAsText), {}, /*readOnlyQuery=*/true));
+				oldSha + QStringLiteral("..HEAD") }, context, Vcs::answering(std::move(onDone), outputAsText), {}, /*readOnlyQuery=*/true));
 		}, {}, /*readOnlyQuery=*/true));
 	return query;
 }

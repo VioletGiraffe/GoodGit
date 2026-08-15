@@ -21,17 +21,6 @@ namespace {
 constexpr int MaxUnpushedLogEntries = 30; // tooltip fodder; state.ahead carries the true count
 constexpr char GitSubrepoPrefix[] = "[git]";
 
-QByteArray nulJoined(const QStringList& paths)
-{
-	QByteArray data;
-	for (const QString& path : paths)
-	{
-		data += path.toUtf8();
-		data += '\0';
-	}
-	return data;
-}
-
 QByteArray fileContents(const QString& path)
 {
 	QFile file{ path };
@@ -62,47 +51,6 @@ QString escapedForHgIgnore(const QString& text)
 	return out;
 }
 
-// `hg grep` takes a Python regular expression and has no fixed-string mode, so a literal search term has
-// to arrive pre-escaped or `foo(` aborts the whole query. The metacharacter set is an extended regular
-// expression's exactly.
-QString escapedForPythonRegex(const QString& text)
-{
-	static const QString metacharacters = QStringLiteral(".^$*+?()[]{}|\\");
-
-	QString escaped;
-	escaped.reserve(text.size() * 2);
-	for (const QChar c : text)
-	{
-		if (metacharacters.contains(c))
-			escaped += QLatin1Char('\\');
-		escaped += c;
-	}
-	return escaped;
-}
-
-// One process's result as the answer a query promised: `parse` of its output, or the error text instead
-template <typename T, typename Parse>
-Vcs::Callback answering(Vcs::Answer<T> onDone, Parse parse)
-{
-	return [onDone = std::move(onDone), parse = std::move(parse)](const ProcessResult& result) {
-		if (result.ok)
-			onDone(parse(result.out));
-		else
-			onDone(std::unexpected(result.errorText()));
-	};
-}
-
-// The same for a command run for its effect alone: that it worked, or why it did not
-Vcs::Callback reporting(Vcs::Answer<void> onDone)
-{
-	return [onDone = std::move(onDone)](const ProcessResult& result) {
-		if (result.ok)
-			onDone({});
-		else
-			onDone(std::unexpected(result.errorText()));
-	};
-}
-
 // hg says "nothing to report" with exit code 1: no incoming changesets, none outgoing, no search hits,
 // nothing to push. Left uncorrected, the ordinary empty answer would reach the user as a failure.
 Vcs::Callback tolerantOfEmptyResult(Vcs::Callback callback)
@@ -121,9 +69,7 @@ QString outputAsText(const QByteArray& output)
 
 Vcs::Query runQuery(const QString& workDir, QStringList args, const QObject* context, Vcs::Callback callback)
 {
-	Vcs::Query query;
-	query.attach(Hg::run(workDir, std::move(args), context, std::move(callback)));
-	return query;
+	return Vcs::Query{ Hg::run(workDir, std::move(args), context, std::move(callback)) };
 }
 
 // The base of every commit-listing query; the walk itself is whatever the caller appends
@@ -140,12 +86,13 @@ void appendPathLimit(QStringList& args, const Repository::LogQuery& query)
 		args << QStringLiteral("-f") << QStringLiteral("--") << query.path;
 }
 
+// `hg grep` has no fixed-string mode, so the search term reaches it as a pattern whatever it holds
 QStringList grepArgs(const Repository::LogQuery& query)
 {
 	QStringList args = { QStringLiteral("grep"), QStringLiteral("--diff"), QStringLiteral("-T"), QStringLiteral("json") };
 	if (query.ignoreCase)
 		args << QStringLiteral("-i");
-	args << escapedForPythonRegex(query.contentSearch);
+	args << escapedForRegex(query.contentSearch);
 	if (!query.path.isEmpty())
 		args << QStringLiteral("--") << query.path;
 	return args;
@@ -412,12 +359,12 @@ QueryRound::Launcher HgRepository::refreshQueries()
 
 std::shared_ptr<QTemporaryFile> HgRepository::openPathspecFile(const QStringList& paths, const Vcs::Callback& onFailure)
 {
-	return Vcs::openTempFile(nulJoined(paths), QStringLiteral("pathspec"), this, onFailure);
+	return Vcs::openTempFile(Vcs::nulJoined(paths), QStringLiteral("pathspec"), this, onFailure);
 }
 
 void HgRepository::commit(const QString& message, const QStringList& pathspec, const QStringList& /*untrackedPaths*/, Vcs::Answer<void> onDone)
 {
-	const Vcs::Callback report = reporting(std::move(onDone));
+	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
 	const auto messageFile = Vcs::openTempFile(message.toUtf8(), QStringLiteral("commit message"), this, report);
 	if (!messageFile)
 		return;
@@ -436,7 +383,7 @@ void HgRepository::commit(const QString& message, const QStringList& pathspec, c
 
 void HgRepository::commitMergeState(const QString& message, const QStringList& untrackedPaths, Vcs::Answer<void> onDone)
 {
-	const Vcs::Callback report = reporting(std::move(onDone));
+	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
 	const auto messageFile = Vcs::openTempFile(message.toUtf8(), QStringLiteral("commit message"), this, report);
 	if (!messageFile)
 		return;
@@ -501,7 +448,7 @@ void HgRepository::fetch(Vcs::Answer<void> onDone)
 
 void HgRepository::addToIndex(const QStringList& paths, Vcs::Answer<void> onDone)
 {
-	const Vcs::Callback report = reporting(std::move(onDone));
+	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
 	const auto pathspecFile = openPathspecFile(paths, report);
 	if (!pathspecFile)
 		return;
@@ -512,7 +459,7 @@ void HgRepository::addToIndex(const QStringList& paths, Vcs::Answer<void> onDone
 
 void HgRepository::unAdd(const QStringList& paths, Vcs::Answer<void> onDone)
 {
-	const Vcs::Callback report = reporting(std::move(onDone));
+	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
 	const auto pathspecFile = openPathspecFile(paths, report);
 	if (!pathspecFile)
 		return;
@@ -523,7 +470,7 @@ void HgRepository::unAdd(const QStringList& paths, Vcs::Answer<void> onDone)
 
 void HgRepository::discardChanges(const QStringList& pathspec, Vcs::Answer<void> onDone)
 {
-	const Vcs::Callback report = reporting(std::move(onDone));
+	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
 	const auto pathspecFile = openPathspecFile(pathspec, report);
 	if (!pathspecFile)
 		return;
@@ -536,7 +483,7 @@ void HgRepository::discardChanges(const QStringList& pathspec, Vcs::Answer<void>
 
 void HgRepository::checkoutBranch(const QString& branch, Vcs::Answer<void> onDone)
 {
-	Hg::run(path(), { QStringLiteral("update"), branch }, this, reporting(std::move(onDone)));
+	Hg::run(path(), { QStringLiteral("update"), branch }, this, Vcs::reporting(std::move(onDone)));
 }
 
 void HgRepository::createTrackingBranch(const QString& /*localName*/, const QString& /*remoteBranch*/, Vcs::Answer<void> onDone)
@@ -560,7 +507,7 @@ Vcs::Query HgRepository::diffFile(const FileEntry& entry, const QObject* context
 	// old path from what it already knows
 	QStringList args = diffArgs();
 	args << QStringLiteral("--") << entry.path;
-	return runQuery(path(), std::move(args), context, answering(std::move(onDone), std::identity{}));
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
 }
 
 Vcs::Query HgRepository::diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone)
@@ -568,7 +515,7 @@ Vcs::Query HgRepository::diffAllChanges(const QObject* context, Vcs::Answer<QByt
 	// -Z, or a wholesale line-ending conversion floods the word pool with every line of the file
 	QStringList args = diffArgs();
 	args << QStringLiteral("-U") << QStringLiteral("0");
-	return runQuery(path(), std::move(args), context, answering(std::move(onDone), std::identity{}));
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
 }
 
 Vcs::Query HgRepository::commitLog(const LogQuery& query, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone)
@@ -577,7 +524,7 @@ Vcs::Query HgRepository::commitLog(const LogQuery& query, const QObject* context
 	{
 		QStringList args = commitLogArgs(query.maxCommits);
 		appendPathLimit(args, query);
-		return runQuery(path(), std::move(args), context, answering(std::move(onDone), Hg::parseCommitLog));
+		return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Hg::parseCommitLog));
 	}
 
 	// A search names changesets and nothing else - what the listing shows of each one is a second query
@@ -599,7 +546,7 @@ Vcs::Query HgRepository::commitLog(const LogQuery& query, const QObject* context
 				return;
 			}
 			query2.attach(Hg::run(path(), { QStringLiteral("log"), QStringLiteral("-r"), revsetOf(matches, maxCommits),
-				QStringLiteral("-T"), QStringLiteral("json") }, context, answering(std::move(onDone), Hg::parseCommitLog)));
+				QStringLiteral("-T"), QStringLiteral("json") }, context, Vcs::answering(std::move(onDone), Hg::parseCommitLog)));
 		})));
 	return query2;
 }
@@ -620,7 +567,7 @@ Vcs::Query HgRepository::commitsAddingOrRemovingText(const LogQuery& query, cons
 		return nodes;
 	};
 	return runQuery(path(), grepArgs(query), context,
-		tolerantOfEmptyResult(answering(std::move(onDone), changedOccurrences)));
+		tolerantOfEmptyResult(Vcs::answering(std::move(onDone), changedOccurrences)));
 }
 
 Vcs::Query HgRepository::incomingCommits(int maxCommits, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone)
@@ -634,13 +581,13 @@ Vcs::Query HgRepository::incomingCommits(int maxCommits, const QObject* context,
 	};
 	return runQuery(path(), { QStringLiteral("incoming"), QStringLiteral("-l"), QString::number(maxCommits),
 		QStringLiteral("-T"), QStringLiteral("json") }, context,
-		tolerantOfEmptyResult(answering(std::move(onDone), record)));
+		tolerantOfEmptyResult(Vcs::answering(std::move(onDone), record)));
 }
 
 Vcs::Query HgRepository::commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone)
 {
 	return runQuery(path(), { QStringLiteral("status"), QStringLiteral("--change"), sha, QStringLiteral("-C"),
-		QStringLiteral("-T"), QStringLiteral("json") }, context, answering(std::move(onDone), Hg::parseStatus));
+		QStringLiteral("-T"), QStringLiteral("json") }, context, Vcs::answering(std::move(onDone), Hg::parseStatus));
 }
 
 Vcs::Query HgRepository::commitFileCounts(const QString& /*sha*/, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone)
@@ -655,7 +602,7 @@ Vcs::Query HgRepository::commitFileDiff(const QString& sha, const CommitFileChan
 {
 	QStringList args = diffArgs();
 	args << QStringLiteral("-c") << sha << QStringLiteral("--") << file.path;
-	return runQuery(path(), std::move(args), context, answering(std::move(onDone), std::identity{}));
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
 }
 
 Vcs::Query HgRepository::unpushedCommits(const QObject* context, Vcs::Answer<QSet<QString>> onDone)
@@ -668,7 +615,7 @@ Vcs::Query HgRepository::unpushedCommits(const QObject* context, Vcs::Answer<QSe
 		return shas;
 	};
 	return runQuery(path(), { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("draft()"),
-		QStringLiteral("-T"), QStringLiteral("json") }, context, answering(std::move(onDone), nodes));
+		QStringLiteral("-T"), QStringLiteral("json") }, context, Vcs::answering(std::move(onDone), nodes));
 }
 
 Vcs::Query HgRepository::submodulePointerLog(const FileEntry& entry, const QObject* context, Vcs::Answer<QString> onDone)
@@ -683,21 +630,18 @@ Vcs::Query HgRepository::submodulePointerLog(const FileEntry& entry, const QObje
 	}
 
 	const QString workDir = QDir{ path() }.filePath(entry.path);
-	Vcs::Query query;
 	if (isGitSubrepo(entry.path))
 	{
 		// A subrepo of an hg repository may be a git one, and the commits its pointer pulls in are then
 		// git's to list
-		query.attach(Git::run(workDir, { QStringLiteral("log"), QStringLiteral("--oneline"), QStringLiteral("--no-decorate"),
-			recorded->second + QStringLiteral("..HEAD") }, context, answering(std::move(onDone), outputAsText), {}, /*readOnlyQuery=*/true));
-		return query;
+		return Vcs::Query{ Git::run(workDir, { QStringLiteral("log"), QStringLiteral("--oneline"), QStringLiteral("--no-decorate"),
+			recorded->second + QStringLiteral("..HEAD") }, context, Vcs::answering(std::move(onDone), outputAsText), {}, /*readOnlyQuery=*/true) };
 	}
 
 	// only(., X) is what the working directory's parent has and X does not
-	query.attach(Hg::run(workDir, { QStringLiteral("log"), QStringLiteral("-r"),
+	return Vcs::Query{ Hg::run(workDir, { QStringLiteral("log"), QStringLiteral("-r"),
 		QStringLiteral("only(., %1)").arg(recorded->second), QStringLiteral("-T"), QStringLiteral("{node|short} {desc|firstline}\n") },
-		context, answering(std::move(onDone), outputAsText)));
-	return query;
+		context, Vcs::answering(std::move(onDone), outputAsText)) };
 }
 
 RepositoryLocation HgRepository::submoduleLocation(const FileEntry& entry) const
