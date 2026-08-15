@@ -67,9 +67,10 @@ public:
 	// the invocation invariants and the progress flags are noise there.
 	[[nodiscard]] virtual QString pushCommandLabel(bool setUpstream) const = 0;
 
-	// Reads from the remote and records what it found, so the ahead/behind counts and the incoming list
-	// mean only what the last fetch left behind. The only thing in the app that goes to the network
-	// besides push.
+	// Brings whatever local state the behind count is read from up to date with the remote, which is why
+	// Peek runs this before it refreshes. A backend that keeps no such state has nothing to do and succeeds
+	// immediately, its count coming from the incoming query instead. That query, this and push are the only
+	// things here that go to the network.
 	virtual void fetch(Vcs::Answer<void> onDone) = 0;
 
 	// Puts untracked paths under version control, and takes them back out again. "Added but not yet
@@ -119,7 +120,8 @@ public:
 	// text was genuinely added or removed rather than merely edited around. A subset of the listing
 	// above, but for what it finds inside files the listing cannot read.
 	virtual Vcs::Query commitsAddingOrRemovingText(const LogQuery& query, const QObject* context, Vcs::Answer<QSet<QString>> onDone) = 0;
-	// What the upstream has and HEAD does not, newest first - as current as the last fetch, no more.
+	// What the upstream has and HEAD does not, newest first. A backend may read that from the remote here or
+	// from what the fetch above brought in, which is why Peek does both in that order.
 	virtual Vcs::Query incomingCommits(int maxCommits, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone) = 0;
 	// The files one commit touched. Empty for a merge, which has no diff of its own, so detect merges
 	// from the parent count rather than from an empty result.
