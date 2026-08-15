@@ -129,6 +129,22 @@ int ChangedFilesModel::checkableCount() const
 	return count;
 }
 
+std::optional<LineCounts> ChangedFilesModel::checkedLineTotals() const
+{
+	std::optional<LineCounts> totals;
+	for (const Row& row : _rows)
+	{
+		if (!row.checked || !row.entry.lineCounts)
+			continue;
+
+		if (!totals)
+			totals.emplace();
+		totals->added += row.entry.lineCounts->added;
+		totals->removed += row.entry.lineCounts->removed;
+	}
+	return totals;
+}
+
 QStringList ChangedFilesModel::checkedPathspec() const
 {
 	QStringList paths;

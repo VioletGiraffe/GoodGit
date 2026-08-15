@@ -45,6 +45,10 @@ public:
 
 	[[nodiscard]] int checkedCount() const;
 	[[nodiscard]] int checkableCount() const;
+	// The lines added and removed across the checked rows, or nothing when none of them has counts to add
+	// up. Rows without counts are left out rather than read as zero, exactly as their own cells are - an
+	// untracked file is in no diff and a binary one has no lines, whichever backend answered.
+	[[nodiscard]] std::optional<LineCounts> checkedLineTotals() const;
 
 	// All checked paths as a commit pathspec - includes both sides of every rename
 	[[nodiscard]] QStringList checkedPathspec() const;

@@ -217,6 +217,10 @@ void CommitWindow::buildUi()
 	modifiedOnlyButton->setToolTip(tr("Check all tracked changes, uncheck untracked files"));
 	counterLayout->addWidget(modifiedOnlyButton);
 	counterLayout->addStretch();
+	_lineTotalsLabel = new QLabel;
+	_lineTotalsLabel->setToolTip(tr("Lines added and removed in the checked files. Files with no counts of "
+		"their own - untracked and binary ones - are not in the total."));
+	counterLayout->addWidget(_lineTotalsLabel);
 	leftLayout->addWidget(counterBar);
 
 	_filesView = new QTreeView;
@@ -505,6 +509,15 @@ void CommitWindow::updateButtons()
 		_checkAllBox->setCheckState(checkedCount == 0 ? Qt::Unchecked
 			: checkedCount == checkableCount ? Qt::Checked : Qt::PartiallyChecked);
 	}
+
+	// One label rather than the list's two columns: colouring halves of a string is what a QLabel does
+	// without a delegate's help
+	const std::optional<LineCounts> lineTotals = _filesModel.checkedLineTotals();
+	_lineTotalsLabel->setText(lineTotals
+		? QStringLiteral("<span style=\"color:%1\">%2</span>&nbsp;&nbsp;<span style=\"color:%3\">%4</span>")
+			.arg(lineCountColor(true).name(), lineCountText(lineTotals, true),
+				lineCountColor(false).name(), lineCountText(lineTotals, false))
+		: QString{});
 
 	const bool detachedAndStuck = state.detached && state.localBranchesAtHead.isEmpty() && state.remoteBranchesAtHead.isEmpty();
 	const bool canCommit = checkedCount > 0 && !_messageEdit->toPlainText().trimmed().isEmpty()

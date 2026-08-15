@@ -110,6 +110,7 @@ private:
 	QLabel* _opStrip = nullptr;
 	QLabel* _detachedStrip = nullptr;
 	QCheckBox* _checkAllBox = nullptr;
+	QLabel* _lineTotalsLabel = nullptr;
 	QTreeView* _filesView = nullptr;
 	CLabelElided* _lastCommitLabel = nullptr;
 	MessageEdit* _messageEdit = nullptr;
