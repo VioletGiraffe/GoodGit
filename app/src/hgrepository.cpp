@@ -519,6 +519,13 @@ Vcs::Query HgRepository::diffFile(const FileEntry& entry, const QObject* context
 	// The rename's source needs no naming: hg records a copy rather than inferring one, so --git prints the
 	// old path from what it already knows
 	QStringList args = diffArgs();
+	if (entry.type == ChangeType::Deleted)
+	{
+		// A file gone from disk stays in the dirstate until its removal is recorded, and the dirstate is what
+		// the working directory means to `hg diff`: it would report no change at all. The parent against the
+		// null revision is the removal this row commits, and the same answer for an already `hg remove`d file.
+		args << QStringLiteral("-r") << QStringLiteral(".") << QStringLiteral("-r") << QStringLiteral("null");
+	}
 	args << QStringLiteral("--") << entry.path;
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
 }
