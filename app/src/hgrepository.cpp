@@ -120,11 +120,20 @@ QStringList diffArgs()
 	return { QStringLiteral("diff"), QStringLiteral("--git"), QStringLiteral("-Z") };
 }
 
+// The same diff with no context lines: an unchanged line is neither a word for the pool nor a line to count
+QStringList contextFreeDiffArgs()
+{
+	QStringList args = diffArgs();
+	args << QStringLiteral("-U") << QStringLiteral("0");
+	return args;
+}
+
 } // namespace
 
 struct HgRepository::RefreshRun
 {
 	std::vector<CommitFileChange> status;
+	std::map<QString, LineCounts> changeCounts; // by path; only the files with countable lines have one
 	std::vector<CommitRecord> head; // `.`, which is the null changeset in an unborn repository
 	Hg::WorkingDirectory workingDir;
 	bool hasDefaultPath = false;
@@ -172,6 +181,9 @@ void HgRepository::startRefresh()
 			else
 				run->noteFailure(r);
 		});
+	// Losing this costs the rows their counts, which is a shorter answer rather than a wrong one
+	round.launch(path(), contextFreeDiffArgs(),
+		[run](const ProcessResult& r) { run->changeCounts = Hg::parseDiffCounts(r.out); });
 	// The parent changeset: what the next commit builds on, and what the header names
 	round.launch(path(), { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("."), QStringLiteral("-T"), QStringLiteral("json") },
 		[run](const ProcessResult& r) {
@@ -315,7 +327,10 @@ std::vector<FileEntry> HgRepository::filesFromRun(const RefreshRun& run) const
 		}
 
 		const ChangeType type = run.conflicted.contains(change.path) ? ChangeType::Conflicted : change.type;
-		files.push_back({ .path = change.path, .oldPath = change.oldPath, .type = type });
+		FileEntry entry{ .path = change.path, .oldPath = change.oldPath, .type = type };
+		if (const auto counted = run.changeCounts.find(change.path); counted != run.changeCounts.end())
+			entry.lineCounts = counted->second;
+		files.push_back(std::move(entry));
 	}
 
 	for (const auto& [subPath, recordedNode] : _subrepoNodes)
@@ -533,9 +548,7 @@ Vcs::Query HgRepository::diffFile(const FileEntry& entry, const QObject* context
 Vcs::Query HgRepository::diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
 	// -Z, or a wholesale line-ending conversion floods the word pool with every line of the file
-	QStringList args = diffArgs();
-	args << QStringLiteral("-U") << QStringLiteral("0");
-	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
+	return runQuery(path(), contextFreeDiffArgs(), context, Vcs::answering(std::move(onDone), std::identity{}));
 }
 
 Vcs::Query HgRepository::commitLog(const LogQuery& query, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone)
@@ -610,12 +623,13 @@ Vcs::Query HgRepository::commitFiles(const QString& sha, const QObject* context,
 		QStringLiteral("-T"), QStringLiteral("json") }, context, Vcs::answering(std::move(onDone), Hg::parseStatus));
 }
 
-Vcs::Query HgRepository::commitFileCounts(const QString& /*sha*/, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone)
+Vcs::Query HgRepository::commitFileCounts(const QString& sha, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone)
 {
-	// Mercurial has no --numstat, and `diff --stat` is a human-formatted table rather than an answer. The
-	// rows carry no counts, which the file list already treats as a shorter answer rather than a wrong one.
-	QTimer::singleShot(0, context, [onDone = std::move(onDone)] { onDone(std::map<QString, LineCounts>{}); });
-	return {};
+	// Mercurial has no --numstat, and `diff --stat` scales its bar to the widest file in the set, so the
+	// split it shows is not a count. The lines themselves are, and -U0 leaves nothing else in the output.
+	QStringList args = contextFreeDiffArgs();
+	args << QStringLiteral("-c") << sha;
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Hg::parseDiffCounts));
 }
 
 Vcs::Query HgRepository::commitFileDiff(const QString& sha, const CommitFileChange& file, const QObject* context, Vcs::Answer<QByteArray> onDone)

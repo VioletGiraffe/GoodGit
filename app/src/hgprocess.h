@@ -3,8 +3,9 @@
 #include "vcsprocess.h"
 
 // Every hg invocation in the app goes through here: it names the executable and applies the invocation
-// invariants - HGPLAIN=1 in the environment and `--config ui.interactive=False`, so a prompt nothing here
-// would show fails instead of hanging. The queue, the streaming and the outcomes are Vcs::run's.
+// invariants - HGPLAIN=1 in the environment, `--config ui.interactive=False`, so a prompt nothing here
+// would show fails instead of hanging, and `--config diff.nobinary=True`, so no diff can carry a binary
+// file's contents. The queue, the streaming and the outcomes are Vcs::run's.
 //
 // The user's extensions are deliberately left enabled: they are part of their hg, exactly as their hooks
 // are. One consequence is that a broken extension prints to stderr on every invocation, which the app

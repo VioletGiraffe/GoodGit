@@ -17,7 +17,10 @@ namespace Hg {
 
 QStringList invariantArgs()
 {
-	return { QStringLiteral("--config"), QStringLiteral("ui.interactive=False") };
+	// diff.nobinary: a binary file's diff is the one-line note git prints by default, rather than the base85
+	// patch hg's --git mode would otherwise carry into a diff pane and into every line count
+	return { QStringLiteral("--config"), QStringLiteral("ui.interactive=False"),
+		QStringLiteral("--config"), QStringLiteral("diff.nobinary=True") };
 }
 
 Vcs::Job* run(const QString& workDir, QStringList args, const QObject* context, Vcs::Callback callback,

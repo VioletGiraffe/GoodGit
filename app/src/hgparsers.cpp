@@ -144,6 +144,49 @@ std::vector<CommitFileChange> parseStatus(const QByteArray& statusOutput)
 	return entries;
 }
 
+std::map<QString, LineCounts> parseDiffCounts(const QByteArray& diffOutput)
+{
+	// `diff --git` is the one line that cannot also be diff content, every line inside a hunk carrying a
+	// '+', '-' or ' ' prefix of its own. The path is read off the `---`/`+++` pair rather than that line,
+	// where a space in a path is no problem; a rename names its new path there, as the row does.
+	std::map<QString, LineCounts> counts;
+	QString path;
+	bool inHunks = false;
+
+	// The name half of `--- a/<path>` or `+++ b/<path>`, or nothing for the /dev/null half of an add or a removal
+	const auto headerPath = [](const QByteArray& line) {
+		const QByteArray name = line.mid(4);
+		return name.startsWith("a/") || name.startsWith("b/") ? QString::fromUtf8(name.mid(2)) : QString{};
+	};
+
+	for (const QByteArray& line : diffOutput.split('\n'))
+	{
+		if (line.startsWith("diff --git "))
+		{
+			path.clear();
+			inHunks = false;
+		}
+		else if (line.startsWith("@@"))
+			inHunks = true;
+		else if (!inHunks)
+		{
+			if (line.startsWith("--- ") || line.startsWith("+++ "))
+			{
+				if (const QString named = headerPath(line); !named.isEmpty())
+					path = named;
+			}
+		}
+		else if (!path.isEmpty())
+		{
+			if (line.startsWith('+'))
+				++counts[path].added;
+			else if (line.startsWith('-'))
+				++counts[path].removed;
+		}
+	}
+	return counts;
+}
+
 QStringList parseUnresolvedPaths(const QByteArray& resolveOutput)
 {
 	QStringList paths;

@@ -78,8 +78,8 @@ Two asymmetries the boundary deliberately does not hide:
 - **Line counts are optional per row and asked for separately.** `FileEntry::lineCounts` is an optional,
   and the query that counts lines is distinct from the one that names the files - in the working-tree list
   and in history alike. A backend whose command line has no count of its own can compute the counts, or
-  answer nothing and cost the rows two columns and nothing else. Mercurial counts no lines, and answers
-  nothing.
+  answer nothing and cost the rows two columns and nothing else. Mercurial has no `--numstat` and computes
+  them, by counting the lines of a `-U0` diff.
 
 ## Invocation invariants
 
@@ -89,12 +89,14 @@ fails fast instead of hanging on an invisible prompt; Git Credential Manager's o
 --pathspec-file-nul` via stdin - never argv, which Windows caps near 32 KB). The commit message goes through
 a temp file, never `-m` and never stdin: `-F -` and a stdin pathspec cannot share the pipe.
 
-`hgprocess` applies `HGPLAIN=1` and `--config ui.interactive=False`, and deliberately does **not** disable
-the user's extensions - a repository may need one (largefiles, lfs) to be readable at all. Queries ask for
-`-T json`, never with `-q` or `-v`, which change the field set. Both the message and any long path list
-travel in temp files, the latter named to hg as `listfile0:<file>`.
+`hgprocess` applies `HGPLAIN=1`, `--config ui.interactive=False` and `--config diff.nobinary=True`, and
+deliberately does **not** disable the user's extensions - a repository may need one (largefiles, lfs) to be
+readable at all. `nobinary` is what makes hg's `--git` diffs safe to ask for at all: without it a binary
+file arrives as a base85 patch, where git prints one line. Queries ask for `-T json`, never with `-q` or
+`-v`, which change the field set. Both the message and any long path list travel in temp files, the latter
+named to hg as `listfile0:<file>`.
 
-The diff shown in either window carries `--ignore-cr-at-eol`, and so do the file list's line counts, so a
+The diff shown in either window carries `--ignore-cr-at-eol` (`-Z` for hg), and so do the line counts, so a
 CRLF/LF-only change reads as no change and counts as no lines. That is a display choice and nothing more:
 the file still lists as modified and still commits its working-tree content byte for byte.
 

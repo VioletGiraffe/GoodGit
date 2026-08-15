@@ -33,6 +33,11 @@ struct WorkingDirectory
 // has one state for a file that will not be in the next commit.
 [[nodiscard]] std::vector<CommitFileChange> parseStatus(const QByteArray& statusOutput);
 
+// Input: `diff --git -U0` output, of the working tree or of one changeset. Keyed by path - the new one for
+// a rename, as parseStatus names its entries. A file with no counted lines is absent rather than zero,
+// which is what a binary one is: `diff.nobinary` (see hgprocess) leaves it a one-line note.
+[[nodiscard]] std::map<QString, LineCounts> parseDiffCounts(const QByteArray& diffOutput);
+
 // Input: `resolve --list -T json`, which lists the files a merge touched for as long as the mergestate
 // lives. Returns the ones still conflicted; a resolved file is listed too, marked `R`, and is by then an
 // ordinary modification.
