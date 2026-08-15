@@ -12,8 +12,6 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
-#include <QCryptographicHash>
-#include <QDir>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -55,10 +53,8 @@ HistoryWindow::HistoryWindow(const RepositoryLocation& location, const QString& 
 		: tr("History of %1 - %2 - GoodGit").arg(_query.path, _repo->name()));
 	buildUi();
 
-	// One geometry per repo, shared by its file histories: they are the same window in every other respect
-	const QString geometryKey = QStringLiteral("HistoryWindow_")
-		+ QString::fromLatin1(QCryptographicHash::hash(QDir::cleanPath(_repo->path()).toUtf8(), QCryptographicHash::Md5).toHex());
-	installEventFilter(new CPersistenceEnabler(geometryKey, this));
+	// One geometry for every history window, keyed like the splitters beside it
+	installEventFilter(new CPersistenceEnabler(QStringLiteral("HistoryWindow"), this));
 
 	reload();
 }

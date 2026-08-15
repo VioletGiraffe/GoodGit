@@ -52,7 +52,7 @@ Consequences that follow from this choice, all deliberate:
 | `historywindow`, `historymodels` | The commit history, read-only: log above, the selected commit's file list beside that file's diff. The same window narrowed to one path is a file history. Owns its own `Repository`, so a submodule's history opens without a `CommitWindow` on that submodule |
 | `consolelogview` | The push log's view: raw process output rendered as a terminal renders it, so a progress meter's carriage returns rewrite one line instead of filling the log |
 | `diffhighlighter`, `messageedit` | Prefix-driven unified-diff highlighting; message editor with the 50-column subject guide and word completion fed by one `diff -U0 HEAD` per refresh |
-| `settings` | Key vocabulary over qtutils `CSettings`. Window geometry is per-repo via qtutils `CPersistenceEnabler` |
+| `settings` | Key vocabulary over qtutils `CSettings`. Window geometry is qtutils `CPersistenceEnabler`, one key per window kind - as the splitter positions are, and shared by every repository the same way |
 
 ## Backends
 

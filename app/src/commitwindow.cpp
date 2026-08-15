@@ -17,7 +17,6 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
-#include <QCryptographicHash>
 #include <QDesktopServices>
 #include <QDir>
 #include <QEvent>
@@ -143,10 +142,8 @@ CommitWindow::CommitWindow(const RepositoryLocation& location) :
 	setAttribute(Qt::WA_DeleteOnClose);
 	buildUi();
 
-	// Per-repo geometry, so a submodule window does not inherit or clobber the parent's placement
-	const QString geometryKey = QStringLiteral("CommitWindow_")
-		+ QString::fromLatin1(QCryptographicHash::hash(QDir::cleanPath(location.root).toUtf8(), QCryptographicHash::Md5).toHex());
-	installEventFilter(new CPersistenceEnabler(geometryKey, this));
+	// One geometry for every commit window, keyed like the splitter beside it
+	installEventFilter(new CPersistenceEnabler(QStringLiteral("CommitWindow"), this));
 
 	connect(_repo.get(), &Repository::refreshed, this, &CommitWindow::onRefreshed);
 	_repo->refresh();
