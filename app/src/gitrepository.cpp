@@ -166,6 +166,7 @@ struct GitRepository::RefreshRun
 	QStringList localBranchesAtHead;
 	QStringList remoteBranchesAtHead;
 	QStringList unpushedSubjects;
+	QStringList conflicted; // paths with unmerged index entries
 
 	// Why this run cannot become the state. The tracked-changes query keeps its own slot: on an unborn HEAD
 	// its attempt against HEAD is meant to fail, and the re-run against the empty tree answers in its place.
@@ -213,13 +214,16 @@ void GitRepository::startRefresh()
 		round.launch(path(), { QStringLiteral("hash-object"), QStringLiteral("-t"), QStringLiteral("tree"), QStringLiteral("--stdin") },
 			[this](const ProcessResult& r) { _emptyTreeSha = QString::fromUtf8(r.out.trimmed()); });
 	}
-	// Only the branch header is parsed out of this, so the flags keep git from scanning the working tree and
-	// recursing into submodules to produce entries nobody reads
+	// The branch header and the unmerged entries are what this is parsed for, so the flags keep git from
+	// scanning the working tree and recursing into submodules to produce entries nobody reads
 	round.launch(path(), { QStringLiteral("status"), QStringLiteral("--porcelain=v2"), QStringLiteral("--branch"),
 			QStringLiteral("--untracked-files=no"), QStringLiteral("--ignore-submodules=all"), QStringLiteral("-z") },
 		[run](const ProcessResult& r) {
 			if (r.ok)
+			{
 				run->header = parseBranchHeader(r.out);
+				run->conflicted = parseUnmergedPaths(r.out);
+			}
 			else
 				run->noteFailure(r); // an unread header parses as "on a branch, born", the two things nothing may assume
 		});
@@ -388,8 +392,14 @@ std::vector<FileEntry> GitRepository::filesFromRun(const RefreshRun& run) const
 			entry.pointerMoved = true;
 			entry.content = contentOf(diffEntry.path);
 		}
-		else if (const auto it = run.changeCounts.find(diffEntry.path); it != run.changeCounts.end())
-			entry.lineCounts = it->second;
+		else
+		{
+			// The diff that named this row cannot tell a conflict from an edit; the unmerged index entries can
+			if (run.conflicted.contains(diffEntry.path))
+				entry.type = ChangeType::Conflicted;
+			if (const auto it = run.changeCounts.find(diffEntry.path); it != run.changeCounts.end())
+				entry.lineCounts = it->second;
+		}
 		files.push_back(std::move(entry));
 	}
 

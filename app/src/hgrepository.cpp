@@ -129,6 +129,7 @@ struct HgRepository::RefreshRun
 	Hg::WorkingDirectory workingDir;
 	bool hasDefaultPath = false;
 	std::vector<CommitRecord> unpushed; // the drafts `push -r .` would send
+	QStringList conflicted; // paths still unresolved; only asked for while a mergestate exists
 	std::map<QString, QString> subrepoNodes; // the changeset each subrepo is actually on; absent if unread
 
 	QString failure;
@@ -210,6 +211,15 @@ void HgRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run)
 		round.launch(path(), { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("draft() and ::."),
 				QStringLiteral("-T"), QStringLiteral("json") },
 			[run](const ProcessResult& r) { run->unpushed = Hg::parseCommitLog(r.out); });
+	}
+
+	// `status` calls a conflicted file modified, so only the mergestate knows better. Every command that can
+	// conflict leaves one - merge, graft, rebase, an update over local changes - and it lives until the
+	// resolve is committed or aborted, so its absence is a complete answer.
+	if (QFileInfo::exists(QDir{ path() }.filePath(QStringLiteral(".hg/merge"))))
+	{
+		round.launch(path(), { QStringLiteral("resolve"), QStringLiteral("--list"), QStringLiteral("-T"), QStringLiteral("json") },
+			[run](const ProcessResult& r) { run->conflicted = Hg::parseUnresolvedPaths(r.out); });
 	}
 
 	for (const auto& subrepo : _subrepoNodes)
@@ -304,7 +314,8 @@ std::vector<FileEntry> HgRepository::filesFromRun(const RefreshRun& run) const
 			continue;
 		}
 
-		files.push_back({ .path = change.path, .oldPath = change.oldPath, .type = change.type });
+		const ChangeType type = run.conflicted.contains(change.path) ? ChangeType::Conflicted : change.type;
+		files.push_back({ .path = change.path, .oldPath = change.oldPath, .type = type });
 	}
 
 	for (const auto& [subPath, recordedNode] : _subrepoNodes)

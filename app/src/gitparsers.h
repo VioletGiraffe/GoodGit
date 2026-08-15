@@ -24,6 +24,11 @@ struct BranchHeader
 // Input: `status --porcelain=v2 --branch --untracked-files=no -z` output
 [[nodiscard]] BranchHeader parseBranchHeader(const QByteArray& statusOutput);
 
+// The unmerged paths out of that same output, the only refresh query that names them - a diff calls an
+// unmerged path modified. Not every conflict leaves a marker in the git directory to look for instead:
+// an interrupted `stash pop` leaves none.
+[[nodiscard]] QStringList parseUnmergedPaths(const QByteArray& statusOutput);
+
 // Input: `diff --name-status -M -z HEAD` output
 [[nodiscard]] std::vector<CommitFileChange> parseNameStatusZ(const QByteArray& diffOutput);
 

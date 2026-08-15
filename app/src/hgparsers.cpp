@@ -144,6 +144,18 @@ std::vector<CommitFileChange> parseStatus(const QByteArray& statusOutput)
 	return entries;
 }
 
+QStringList parseUnresolvedPaths(const QByteArray& resolveOutput)
+{
+	QStringList paths;
+	for (const QJsonValue& value : jsonRecords(resolveOutput))
+	{
+		const QJsonObject record = value.toObject();
+		if (record.value(QStringLiteral("mergestatus")).toString() == QLatin1String("U"))
+			paths << record.value(QStringLiteral("path")).toString();
+	}
+	return paths;
+}
+
 std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput)
 {
 	const QJsonArray records = jsonRecords(logOutput);

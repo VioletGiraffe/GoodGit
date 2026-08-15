@@ -33,6 +33,11 @@ struct WorkingDirectory
 // has one state for a file that will not be in the next commit.
 [[nodiscard]] std::vector<CommitFileChange> parseStatus(const QByteArray& statusOutput);
 
+// Input: `resolve --list -T json`, which lists the files a merge touched for as long as the mergestate
+// lives. Returns the ones still conflicted; a resolved file is listed too, marked `R`, and is by then an
+// ordinary modification.
+[[nodiscard]] QStringList parseUnresolvedPaths(const QByteArray& resolveOutput);
+
 // Input: `log -T json`, in whatever order the revset produced. Records keep that order.
 [[nodiscard]] std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput);
 

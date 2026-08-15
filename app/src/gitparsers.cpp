@@ -34,6 +34,30 @@ BranchHeader parseBranchHeader(const QByteArray& statusOutput)
 	return header;
 }
 
+QStringList parseUnmergedPaths(const QByteArray& statusOutput)
+{
+	// Record: u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>. The path is whatever follows the tenth
+	// space rather than the last field, since -z leaves it unquoted and a path may hold spaces of its own.
+	constexpr int fieldsBeforePath = 10;
+
+	QStringList paths;
+	for (const QByteArray& record : statusOutput.split('\0'))
+	{
+		if (!record.startsWith("u "))
+			continue;
+
+		qsizetype pathStart = 0;
+		for (int field = 0; field < fieldsBeforePath && pathStart >= 0; ++field)
+		{
+			const qsizetype space = record.indexOf(' ', pathStart);
+			pathStart = space < 0 ? -1 : space + 1;
+		}
+		if (pathStart > 0)
+			paths.push_back(QString::fromUtf8(record.mid(pathStart)));
+	}
+	return paths;
+}
+
 std::vector<CommitFileChange> parseNameStatusZ(const QByteArray& diffOutput)
 {
 	std::vector<CommitFileChange> entries;
@@ -52,8 +76,8 @@ std::vector<CommitFileChange> parseNameStatusZ(const QByteArray& diffOutput)
 		case 'A': entry.type = ChangeType::Added; break;
 		case 'D': entry.type = ChangeType::Deleted; break;
 		case 'T': entry.type = ChangeType::TypeChanged; break;
-		// The refresh never sees U: `diff --name-status HEAD` calls an unmerged path M, so a conflicted
-		// file reaches the list as Modified. Nothing downstream may key off Conflicted to find one.
+		// `diff --name-status HEAD` calls an unmerged path M, so this does not fire during a merge:
+		// parseUnmergedPaths is what names the conflicted rows.
 		case 'U': entry.type = ChangeType::Conflicted; break;
 		case 'R': case 'C': entry.type = ChangeType::Renamed; break;
 		default:  entry.type = ChangeType::Modified; break;
