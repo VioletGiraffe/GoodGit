@@ -9,11 +9,13 @@
 
 namespace {
 
-// One lane's share of the width. Taken from the row's own metrics rather than a constant, so the diagram
-// keeps its proportions on any font size or screen scaling.
+constexpr qreal NodeRadius = 5.0; // a 10px node, in logical pixels - the display's scaling applies on top
+
+// One lane's share of the width, leaving a node the same gap either side. The floor is what any ordinary
+// font gets; the metrics take over only for a large one, where the taller row wants wider lanes to match.
 int laneWidth(const QStyleOptionViewItem& option)
 {
-	return std::max(12, option.fontMetrics.height() * 3 / 4);
+	return std::max(14, option.fontMetrics.height() * 3 / 4);
 }
 
 const QColor& chainColor(int chain)
@@ -54,7 +56,7 @@ void CommitGraphDelegate::paint(QPainter* painter, const QStyleOptionViewItem& o
 	const bool unpushed = index.data(CommitLogModel::UnpushedRole).toBool();
 	painter->setPen(unpushed ? QPen{ chainColor(row.chain), thickness } : QPen{ Qt::NoPen });
 	painter->setBrush(unpushed ? QBrush{ Qt::NoBrush } : QBrush{ chainColor(row.chain) });
-	painter->drawEllipse(QPointF{ x(row.lane), middle }, width / 4.0, width / 4.0);
+	painter->drawEllipse(QPointF{ x(row.lane), middle }, NodeRadius, NodeRadius);
 	painter->restore();
 }
 
