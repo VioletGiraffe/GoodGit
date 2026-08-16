@@ -223,7 +223,9 @@ repository inside an hg parent, which is why `submoduleLocation()` answers with 
 per-subrepo refresh queries are dispatched to whichever tool owns the directory. What is uncommitted inside
 one is asked of the subrepo itself, never of the parent's recursing `hg status`: that answers against the
 node `.hgsubstate` records rather than against the subrepo's own parent changeset, and so reports a
-committed pointer move as modified files inside.
+committed pointer move as modified files inside. Asked one level down the same recursion is what is wanted,
+and the query carries `-S`: a nested subrepo the enclosing one has not recorded yet is uncommitted work
+there, and blocks the row as any other uncommitted work inside does.
 
 Push is `git push --recurse-submodules=on-demand`, passed explicitly (machine config varies): git pushes
 referenced submodule commits first, which is a correctness requirement, not a preference - a superproject

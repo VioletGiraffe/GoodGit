@@ -245,11 +245,14 @@ void HgRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run)
 		if (!QFileInfo::exists(workDir))
 			continue; // never cloned: there is nothing inside to ask, and nothing inside to lose
 
-		// The dirtiness question goes to the subrepo itself. hg's own recursing status answers it against the
-		// node .hgsubstate records rather than against the subrepo's parent changeset, so it reports the files
-		// of a committed pointer move as modified - the one state in which the pointer has to be committable.
+		// The dirtiness question goes to the subrepo itself. Asked of the parent, a recursing status answers it
+		// against the node .hgsubstate records rather than against the subrepo's parent changeset, so it reports
+		// the files of a committed pointer move as modified - the one state in which the pointer has to be
+		// committable. Asked of the subrepo it may recurse freely, and must: a nested subrepo the enclosing one
+		// has not recorded yet is uncommitted work there, which is what blocks this row.
 		if (isGitSubrepo(subPath))
 		{
+			// git needs no flag for that: its status calls a submodule holding commits of its own modified
 			round.launch(workDir, { QStringLiteral("status"), QStringLiteral("--porcelain"), QStringLiteral("-z") },
 				[run, subPath = subPath](const ProcessResult& r) {
 					run->subrepoContent[subPath] = submoduleContentOf(r.ok, Git::parsePorcelainDirtiness(r.out));
@@ -261,7 +264,7 @@ void HgRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run)
 				});
 			continue;
 		}
-		round.launch(workDir, { QStringLiteral("status"), QStringLiteral("-T"), QStringLiteral("json") },
+		round.launch(workDir, { QStringLiteral("status"), QStringLiteral("-S"), QStringLiteral("-T"), QStringLiteral("json") },
 			[run, subPath = subPath](const ProcessResult& r) {
 				run->subrepoContent[subPath] = submoduleContentOf(r.ok, Hg::parseDirtiness(r.out));
 			});
