@@ -52,13 +52,15 @@ void CommitGraphDelegate::paint(QPainter* painter, const QStyleOptionViewItem& o
 		painter->drawLine(endpoint(segment.fromLane, top), endpoint(segment.toLane, bottom));
 	}
 
-	// A commit no upstream has seen is a ring rather than a disc. The lines are drawn first and run behind the
-	// node, so the ring is filled with the row's own background rather than left open - no line crosses it.
+	// A commit no upstream has seen is a dotted ring rather than a disc. The lines are drawn first and run
+	// behind the node, so the ring is filled with the row's own background rather than left open - no line
+	// crosses it. Round caps, or the dots draw as squares against the curve.
 	const bool unpushed = index.data(CommitLogModel::UnpushedRole).toBool();
 	const QColor nodeFill = unpushed
 		? (option.state.testFlag(QStyle::State_Selected) ? activeTheme().sel : activeTheme().pane)
 		: chainColor(row.chain);
-	painter->setPen(unpushed ? QPen{ chainColor(row.chain), thickness } : QPen{ Qt::NoPen });
+	const QPen ringPen{ chainColor(row.chain), thickness, Qt::DotLine, Qt::RoundCap };
+	painter->setPen(unpushed ? ringPen : QPen{ Qt::NoPen });
 	painter->setBrush(nodeFill);
 	painter->drawEllipse(QPointF{ x(row.lane), middle }, NodeRadius, NodeRadius);
 	painter->restore();
