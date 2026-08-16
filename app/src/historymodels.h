@@ -18,7 +18,8 @@ class CommitLogModel final : public QAbstractTableModel
 	Q_OBJECT
 
 public:
-	enum Column { ShaColumn = 0, SubjectColumn, AuthorColumn, DateColumn, ColumnCount };
+	// CommitColumn labels the row with whatever its system identifies a commit by - see CommitRecord::revision
+	enum Column { CommitColumn = 0, SubjectColumn, AuthorColumn, DateColumn, ColumnCount };
 
 	explicit CommitLogModel(QObject* parent = nullptr);
 

@@ -211,6 +211,8 @@ std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput)
 
 		CommitRecord commit;
 		commit.sha = record.value(QStringLiteral("node")).toString();
+		if (const QJsonValue rev = record.value(QStringLiteral("rev")); rev.isDouble())
+			commit.revision = rev.toInt(); // tested for rather than defaulted: revision 0 is a real one
 		commit.parents = nodeList(record.value(QStringLiteral("parents")));
 		commit.parents.removeAll(QString::fromLatin1(NullNode)); // a root changeset has no parent the app can name
 		commit.author = authorName(record.value(QStringLiteral("user")).toString());

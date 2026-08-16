@@ -626,6 +626,10 @@ Vcs::Query HgRepository::incomingCommits(int maxCommits, const QObject* context,
 	const auto record = [this](const QByteArray& output) {
 		std::vector<CommitRecord> commits = Hg::parseCommitLog(output);
 		_behind = int(commits.size());
+		// A revision number names a position in the repository it was read from, and these were read from
+		// the remote's: pulling them here would number them differently
+		for (CommitRecord& commit : commits)
+			commit.revision.reset();
 		return commits;
 	};
 	return runQuery(path(), { QStringLiteral("incoming"), QStringLiteral("-l"), QString::number(maxCommits),

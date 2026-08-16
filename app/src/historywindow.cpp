@@ -107,7 +107,7 @@ void HistoryWindow::buildUi()
 	_logView->setSelectionBehavior(QAbstractItemView::SelectRows);
 	_logView->setContextMenuPolicy(Qt::CustomContextMenu);
 	_logView->header()->setStretchLastSection(false); // it would override Date's resize mode, and Subject is the one to grow
-	_logView->header()->setSectionResizeMode(CommitLogModel::ShaColumn, QHeaderView::ResizeToContents);
+	_logView->header()->setSectionResizeMode(CommitLogModel::CommitColumn, QHeaderView::ResizeToContents);
 	_logView->header()->setSectionResizeMode(CommitLogModel::SubjectColumn, QHeaderView::Stretch);
 	_logView->header()->setSectionResizeMode(CommitLogModel::AuthorColumn, QHeaderView::ResizeToContents);
 	_logView->header()->setSectionResizeMode(CommitLogModel::DateColumn, QHeaderView::ResizeToContents);
@@ -294,7 +294,7 @@ void HistoryWindow::reload()
 		_logLoaded = true;
 		updateCountLabel();
 		if (_logModel.rowCount() > 0)
-			_logView->setCurrentIndex(_logModel.index(0, CommitLogModel::ShaColumn));
+			_logView->setCurrentIndex(_logModel.index(0, CommitLogModel::CommitColumn));
 	});
 }
 
@@ -305,7 +305,7 @@ void HistoryWindow::applySearch()
 
 	// Land on the first match, so typing walks the list and the arrows step between matches from there
 	if (_logModel.rowCount() > 0)
-		_logView->setCurrentIndex(_logModel.index(0, CommitLogModel::ShaColumn));
+		_logView->setCurrentIndex(_logModel.index(0, CommitLogModel::CommitColumn));
 }
 
 void HistoryWindow::updateCountLabel()

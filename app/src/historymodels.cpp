@@ -63,10 +63,18 @@ QString subjectText(const CommitRecord& commit)
 	return commit.refs.isEmpty() ? subject : QStringLiteral("(%1) %2").arg(commit.refs, subject);
 }
 
+// What the row is labelled by: the system's own number for the commit where there is one, the abbreviated
+// sha where there is not. Never both - a numbered commit's sha is on the row's tooltip and in the pane below.
+QString commitIdText(const CommitRecord& commit)
+{
+	return commit.revision ? QString::number(*commit.revision) : shortSha(commit.sha);
+}
+
 // Cheapest fields first: || stops before scanning the message, which is far the longest of them
 bool matchesSearch(const CommitRecord& commit, const QString& text)
 {
 	return commit.sha.contains(text, Qt::CaseInsensitive)
+		|| (commit.revision && QString::number(*commit.revision).contains(text))
 		|| commit.author.contains(text, Qt::CaseInsensitive)
 		|| commit.refs.contains(text, Qt::CaseInsensitive)
 		|| commit.date.contains(text, Qt::CaseInsensitive)
@@ -189,13 +197,18 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 	case Qt::DisplayRole:
 		switch (index.column())
 		{
-		case ShaColumn:     return shortSha(commit.sha);
-		// The mark rides the subject because the sha column already carries the unpushed one, and a
+		case CommitColumn:  return commitIdText(commit);
+		// The mark rides the subject because the commit column already carries the unpushed one, and a
 		// commit can be both
 		case SubjectColumn: return addsOrRemoves ? QStringLiteral("± ") + subjectText(commit) : subjectText(commit);
 		case AuthorColumn:  return commit.author;
 		case DateColumn:    return _displayedDates[size_t(commitIndexAt(index.row()))];
 		}
+		return {};
+	case Qt::TextAlignmentRole:
+		// A number reads by magnitude, so it lines up on the right; a sha reads by its leading characters
+		if (index.column() == CommitColumn && commit.revision)
+			return int(Qt::AlignRight | Qt::AlignVCenter);
 		return {};
 	case Qt::FontRole:
 	{
@@ -207,7 +220,7 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 			font.setWeight(QFont::DemiBold);
 			return font;
 		}
-		if (index.column() != ShaColumn)
+		if (index.column() != CommitColumn)
 			return {};
 		QFont font = monospaceFont();
 		if (unpushed)
@@ -216,7 +229,7 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 	}
 	case Qt::ForegroundRole:
 		// Unpushed commits wear the same accent the commit window's ahead count does
-		if (index.column() == ShaColumn && unpushed)
+		if (index.column() == CommitColumn && unpushed)
 			return QBrush{ activeTheme().accent };
 		return index.column() == SubjectColumn ? QVariant{} : QVariant{ QBrush{ activeTheme().dim } };
 	case Qt::ToolTipRole:
@@ -243,7 +256,7 @@ QVariant CommitLogModel::headerData(int section, Qt::Orientation orientation, in
 
 	switch (section)
 	{
-	case ShaColumn:     return tr("Commit");
+	case CommitColumn:  return tr("Commit");
 	case SubjectColumn: return tr("Subject");
 	case AuthorColumn:  return tr("Author");
 	case DateColumn:    return tr("Date");

@@ -45,6 +45,9 @@ struct CommitFileChange
 struct CommitRecord
 {
 	QString sha;
+	// What the system's own commands take for this commit, where it has such a thing: Mercurial's revision
+	// number, local to the clone and shifted by anything that rewrites history. Git has none and leaves it absent.
+	std::optional<int> revision;
 	QStringList parents; // more than one is a merge
 	QString author;
 	QString date;    // ISO 8601 with offset

@@ -82,7 +82,7 @@ kind.
 The refresh policy is not the backend's: re-entry is coalesced and a run is applied whole or not at all,
 once, in the base.
 
-Two asymmetries the boundary deliberately does not hide:
+Three asymmetries the boundary deliberately does not hide:
 
 - **`RepoState` carries shapes not every system has** - `detached`, the branch tips at HEAD, `upstream`,
   ahead/behind. A backend without them leaves them empty and the header and the reattachment flow have
@@ -94,6 +94,10 @@ Two asymmetries the boundary deliberately does not hide:
   and in history alike. A backend whose command line has no count of its own can compute the counts, or
   answer nothing and cost the rows two columns and nothing else. Mercurial has no `--numstat` and computes
   them, by counting the lines of a `-U0` diff.
+- **A commit is labelled by whatever its own system names it.** `CommitRecord::revision` is an optional -
+  Mercurial's clone-local revision number, absent in git, which has no such thing - and the history's Commit
+  column shows it where it is there and the abbreviated sha where it is not, never both. `incomingCommits()`
+  drops it: those numbers are the remote's, and would mean something else here.
 
 ## Invocation invariants
 
