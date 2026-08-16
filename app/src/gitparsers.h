@@ -46,12 +46,6 @@ struct BranchHeader
 // Input: `ls-files --stage -z` output. Returns the paths of the gitlink entries - that is, the submodules
 [[nodiscard]] QStringList parseGitlinkPaths(const QByteArray& lsFilesOutput);
 
-struct WorktreeDirtiness
-{
-	bool dirtyTracked = false; // any entry that is not purely untracked
-	bool untracked = false;
-};
-
 // Input: `status --porcelain -z` output (v1 format)
 [[nodiscard]] WorktreeDirtiness parsePorcelainDirtiness(const QByteArray& statusOutput);
 

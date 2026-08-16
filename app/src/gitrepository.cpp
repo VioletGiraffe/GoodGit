@@ -40,19 +40,6 @@ void rollBackAddThenReport(const QString& workDir, const QObject* context, const
 		[onDone, commitResult](const ProcessResult&) { onDone(commitResult); }, Vcs::nulJoined(untrackedPaths));
 }
 
-// A status that could not be run answers nothing about the worktree it was pointed at, and the parent
-// may not act on the pointer without that answer - so it is the dirty case, not the clean one.
-SubmoduleContent contentFromStatus(const ProcessResult& statusResult)
-{
-	if (!statusResult.ok)
-		return SubmoduleContent::Unknown;
-
-	const Git::WorktreeDirtiness dirtiness = Git::parsePorcelainDirtiness(statusResult.out);
-	if (dirtiness.dirtyTracked)
-		return SubmoduleContent::DirtyTracked;
-	return dirtiness.untracked ? SubmoduleContent::Untracked : SubmoduleContent::Clean;
-}
-
 // The tracked half of the file list, read out two ways: the names, and the lines behind them. The pairing
 // and the baseline are shared, or a count would answer for a row that is not in the list. Identical
 // whatever it is taken against, so an unborn HEAD changes the baseline and nothing else.
@@ -323,7 +310,9 @@ void GitRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run
 		if (!QFileInfo::exists(workDir + QLatin1String("/.git")))
 			continue; // never initialized: the directory is empty, there is nothing inside to query
 		round.launch(workDir, { QStringLiteral("status"), QStringLiteral("--porcelain"), QStringLiteral("-z") },
-			[run, subPath](const ProcessResult& r) { run->submoduleContent[subPath] = contentFromStatus(r); });
+			[run, subPath](const ProcessResult& r) {
+				run->submoduleContent[subPath] = submoduleContentOf(r.ok, Git::parsePorcelainDirtiness(r.out));
+			});
 	}
 
 	if (!run->header.upstream.isEmpty() && run->header.ahead > 0)

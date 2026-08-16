@@ -144,6 +144,25 @@ std::vector<CommitFileChange> parseStatus(const QByteArray& statusOutput)
 	return entries;
 }
 
+WorktreeDirtiness parseDirtiness(const QByteArray& statusOutput)
+{
+	WorktreeDirtiness dirtiness;
+	for (const QJsonValue& value : jsonRecords(statusOutput))
+	{
+		const QString status = value.toObject().value(QStringLiteral("status")).toString();
+		if (status.isEmpty())
+			continue;
+
+		switch (status.at(0).toLatin1())
+		{
+		case 'M': case 'A': case 'R': case '!': dirtiness.dirtyTracked = true; break;
+		case '?': dirtiness.untracked = true; break;
+		default: break; // clean and ignored records, which the app never asks for
+		}
+	}
+	return dirtiness;
+}
+
 std::map<QString, LineCounts> parseDiffCounts(const QByteArray& diffOutput)
 {
 	// `diff --git` is the one line that cannot also be diff content, every line inside a hunk carrying a

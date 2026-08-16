@@ -100,6 +100,13 @@ struct RepoState
 	}
 };
 
+// What a worktree holds beyond the commit it is on, as a status of that worktree reports it
+struct WorktreeDirtiness
+{
+	bool dirtyTracked = false; // any entry that is not purely untracked
+	bool untracked = false;
+};
+
 // What a submodule's own worktree holds, as far as the parent was able to determine
 enum class SubmoduleContent : uint8_t
 {
@@ -108,6 +115,17 @@ enum class SubmoduleContent : uint8_t
 	DirtyTracked, // modified tracked files inside
 	Unknown,      // the status query inside failed; it may be dirty, so it counts as dirty
 };
+
+// A status that could not be run answers nothing about the worktree it was pointed at, and the parent may
+// not act on the pointer without that answer - so it is the dirty case, not the clean one.
+[[nodiscard]] inline SubmoduleContent submoduleContentOf(bool statusRead, WorktreeDirtiness dirtiness)
+{
+	if (!statusRead)
+		return SubmoduleContent::Unknown;
+	if (dirtiness.dirtyTracked)
+		return SubmoduleContent::DirtyTracked;
+	return dirtiness.untracked ? SubmoduleContent::Untracked : SubmoduleContent::Clean;
+}
 
 // One row of the file list: the working tree's delta from the last commit, one path at a time
 struct FileEntry

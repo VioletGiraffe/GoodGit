@@ -83,9 +83,6 @@ private:
 	// repository may be a git one, and its arguments are then git's.
 	[[nodiscard]] QueryRound::Launcher refreshQueries();
 
-	// The subrepo the path is under, or empty when it is the parent's own file. A subrepo's own row is the
-	// subrepo itself, so its path counts as inside it.
-	[[nodiscard]] QString enclosingSubrepo(const QString& repoRelativePath) const;
 	// Whether .hgsub names this subrepo's source as a git repository
 	[[nodiscard]] bool isGitSubrepo(const QString& subrepoPath) const;
 	// A pathspec as hg takes one: a temp file of NUL-separated paths, named as `listfile0:<name>`. Null if

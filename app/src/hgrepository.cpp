@@ -1,4 +1,5 @@
 #include "hgrepository.h"
+#include "gitparsers.h"
 #include "gitprocess.h"
 #include "hgparsers.h"
 #include "hgprocess.h"
@@ -144,6 +145,7 @@ struct HgRepository::RefreshRun
 	std::vector<CommitRecord> unpushed; // the drafts `push -r .` would send
 	QStringList conflicted; // paths still unresolved; only asked for while a mergestate exists
 	std::map<QString, QString> subrepoNodes; // the changeset each subrepo is actually on; absent if unread
+	std::map<QString, SubmoduleContent> subrepoContent; // what each subrepo's own worktree holds; absent if unread
 
 	QString failure;
 
@@ -164,9 +166,8 @@ void HgRepository::startRefresh()
 	auto run = std::make_shared<RefreshRun>();
 	_run = run;
 
-	// The parent's own record of its subrepos, re-read before the first process: it decides whether status
-	// has to recurse, which of the paths it then reports belong to a subrepo rather than to the parent, and
-	// which tool answers for each one.
+	// The parent's own record of its subrepos, re-read before the first process: it decides which subrepos the
+	// second round asks about, and which tool answers for each one.
 	_subrepoNodes = Hg::parseSubrepoState(fileContents(QDir{ path() }.filePath(QStringLiteral(".hgsubstate"))));
 	_subrepoSources = Hg::parseSubrepoSources(fileContents(QDir{ path() }.filePath(QStringLiteral(".hgsub"))));
 
@@ -175,10 +176,9 @@ void HgRepository::startRefresh()
 			self->startDependentQueries(run);
 	} };
 
-	QStringList statusArgs = { QStringLiteral("status"), QStringLiteral("-C"), QStringLiteral("-T"), QStringLiteral("json") };
-	if (!_subrepoNodes.empty())
-		statusArgs << QStringLiteral("-S"); // recursing is the only way to learn what is going on inside a subrepo
-	round.launch(path(), statusArgs,
+	// Not recursing: what is inside a subrepo is asked of that subrepo in the second round, and the parent's
+	// list holds the subrepo itself rather than the files under it
+	round.launch(path(), { QStringLiteral("status"), QStringLiteral("-C"), QStringLiteral("-T"), QStringLiteral("json") },
 		[run](const ProcessResult& r) {
 			if (r.ok)
 				run->status = Hg::parseStatus(r.out);
@@ -211,7 +211,7 @@ void HgRepository::startRefresh()
 }
 
 // The queries the first round's answers call for: the unpushed set, which is only worth walking where
-// there is a remote to be ahead of, and what each subrepo is actually on.
+// there is a remote to be ahead of, and what each subrepo is on and holds.
 void HgRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run)
 {
 	QueryRound round{ refreshQueries(), [self = QPointer<HgRepository>{ this }] {
@@ -245,8 +245,15 @@ void HgRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run)
 		if (!QFileInfo::exists(workDir))
 			continue; // never cloned: there is nothing inside to ask, and nothing inside to lose
 
+		// The dirtiness question goes to the subrepo itself. hg's own recursing status answers it against the
+		// node .hgsubstate records rather than against the subrepo's parent changeset, so it reports the files
+		// of a committed pointer move as modified - the one state in which the pointer has to be committable.
 		if (isGitSubrepo(subPath))
 		{
+			round.launch(workDir, { QStringLiteral("status"), QStringLiteral("--porcelain"), QStringLiteral("-z") },
+				[run, subPath = subPath](const ProcessResult& r) {
+					run->subrepoContent[subPath] = submoduleContentOf(r.ok, Git::parsePorcelainDirtiness(r.out));
+				});
 			round.launch(workDir, { QStringLiteral("rev-parse"), QStringLiteral("HEAD") },
 				[run, subPath = subPath](const ProcessResult& r) {
 					if (r.ok)
@@ -254,6 +261,10 @@ void HgRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run)
 				});
 			continue;
 		}
+		round.launch(workDir, { QStringLiteral("status"), QStringLiteral("-T"), QStringLiteral("json") },
+			[run, subPath = subPath](const ProcessResult& r) {
+				run->subrepoContent[subPath] = submoduleContentOf(r.ok, Hg::parseDirtiness(r.out));
+			});
 		round.launch(workDir, { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("."), QStringLiteral("-T"), QStringLiteral("json") },
 			[run, subPath = subPath](const ProcessResult& r) {
 				const std::vector<CommitRecord> parent = Hg::parseCommitLog(r.out);
@@ -314,23 +325,10 @@ RepoState HgRepository::stateFromRun(const RefreshRun& run) const
 
 std::vector<FileEntry> HgRepository::filesFromRun(const RefreshRun& run) const
 {
-	std::map<QString, SubmoduleContent> content;
 	std::vector<FileEntry> files;
 
 	for (const CommitFileChange& change : run.status)
 	{
-		// A recursing status reports the files inside a subrepo by their paths in the parent. They are not
-		// the parent's rows: what the parent can act on is the subrepo as a whole.
-		if (const QString subPath = enclosingSubrepo(change.path); !subPath.isEmpty())
-		{
-			SubmoduleContent& inside = content[subPath];
-			if (change.type != ChangeType::Untracked)
-				inside = SubmoduleContent::DirtyTracked;
-			else if (inside == SubmoduleContent::Clean)
-				inside = SubmoduleContent::Untracked;
-			continue;
-		}
-
 		const ChangeType type = run.conflicted.contains(change.path) ? ChangeType::Conflicted : change.type;
 		FileEntry entry{ .path = change.path, .oldPath = change.oldPath, .type = type };
 		if (const auto counted = run.changeCounts.find(change.path); counted != run.changeCounts.end())
@@ -343,8 +341,10 @@ std::vector<FileEntry> HgRepository::filesFromRun(const RefreshRun& run) const
 		if (!QFileInfo::exists(QDir{ path() }.filePath(subPath)))
 			continue; // never cloned: nothing inside to have moved, and nothing inside to lose
 
+		const auto contentInside = run.subrepoContent.find(subPath);
 		const auto currentNode = run.subrepoNodes.find(subPath);
-		FileEntry entry{ .path = subPath, .isSubmodule = true, .content = content[subPath] };
+		FileEntry entry{ .path = subPath, .isSubmodule = true,
+			.content = contentInside != run.subrepoContent.end() ? contentInside->second : SubmoduleContent::Unknown };
 		if (currentNode == run.subrepoNodes.end())
 		{
 			// It is there but would not say what it is on, so whether the pointer moved is unknown - and an
@@ -359,17 +359,6 @@ std::vector<FileEntry> HgRepository::filesFromRun(const RefreshRun& run) const
 			files.push_back(std::move(entry));
 	}
 	return files;
-}
-
-QString HgRepository::enclosingSubrepo(const QString& repoRelativePath) const
-{
-	for (const auto& subrepo : _subrepoNodes)
-	{
-		const QString& subPath = subrepo.first;
-		if (repoRelativePath == subPath || repoRelativePath.startsWith(subPath + QLatin1Char('/')))
-			return subPath;
-	}
-	return {};
 }
 
 bool HgRepository::isGitSubrepo(const QString& subrepoPath) const

@@ -144,7 +144,7 @@ errors through the normal failure path, not silent re-scans.
 `GitRepository`'s refresh runs two phases of parallel queries - the base queries, then the ones their
 results call for. `HgRepository` has the same two: one `hg status` answers tracked changes, untracked files
 and rename sources together, and the second round asks what the first implies - the unpushed set, each
-subrepo's pointer, and the conflicted paths where a mergestate exists. Check state survives a refresh,
+subrepo's pointer and dirtiness, and the conflicted paths where a mergestate exists. Check state survives a refresh,
 re-derived by path: persisting rows keep their state, new rows default to checked unless untracked.
 
 Some of those queries the state cannot be established without: the branch header, the gitlink list, the
@@ -220,7 +220,10 @@ checkout would overwrite the changes inside without a word.
 
 Mercurial subrepos are the same rows, read from `.hgsub` and `.hgsubstate`. A subrepo may be a git
 repository inside an hg parent, which is why `submoduleLocation()` answers with a kind and why the
-per-subrepo refresh queries are dispatched to whichever tool owns the directory.
+per-subrepo refresh queries are dispatched to whichever tool owns the directory. What is uncommitted inside
+one is asked of the subrepo itself, never of the parent's recursing `hg status`: that answers against the
+node `.hgsubstate` records rather than against the subrepo's own parent changeset, and so reports a
+committed pointer move as modified files inside.
 
 Push is `git push --recurse-submodules=on-demand`, passed explicitly (machine config varies): git pushes
 referenced submodule commits first, which is a correctness requirement, not a preference - a superproject

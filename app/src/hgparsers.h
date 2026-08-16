@@ -33,6 +33,9 @@ struct WorkingDirectory
 // has one state for a file that will not be in the next commit.
 [[nodiscard]] std::vector<CommitFileChange> parseStatus(const QByteArray& statusOutput);
 
+// Input: `status -T json` again, reduced to whether anything is uncommitted at all - tracked, untracked or both
+[[nodiscard]] WorktreeDirtiness parseDirtiness(const QByteArray& statusOutput);
+
 // Input: `diff --git -U0` output, of the working tree or of one changeset. Keyed by path - the new one for
 // a rename, as parseStatus names its entries. A file with no counted lines is absent rather than zero,
 // which is what a binary one is: `diff.nobinary` (see hgprocess) leaves it a one-line note.
