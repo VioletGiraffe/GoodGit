@@ -111,6 +111,7 @@ void CommitLogModel::setCommits(std::vector<CommitRecord> commits)
 	for (const CommitRecord& commit : _commits)
 		_displayedDates.push_back(displayedDate(commit.date, now));
 
+	_graph = buildCommitGraph(_commits);
 	rebuildVisible();
 	endResetModel();
 }
@@ -171,6 +172,13 @@ void CommitLogModel::rebuildVisible()
 		if (_searchText.isEmpty() || matchesSearch(_commits[size_t(i)], _searchText))
 			_visible.push_back(i);
 	}
+	_searchGraph = _searchText.isEmpty() ? CommitGraph{} : filteredCommitGraph(_graph, _visible);
+}
+
+const GraphRow& CommitLogModel::graphRowAt(int row) const
+{
+	const CommitGraph& graph = _searchText.isEmpty() ? _graph : _searchGraph;
+	return graph.rows[size_t(row)];
 }
 
 int CommitLogModel::rowCount(const QModelIndex& parent) const
@@ -244,6 +252,11 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 				: QStringLiteral("\nChanges a line containing the search text");
 		return tooltip;
 	}
+	case GraphRole:
+		return QVariant::fromValue(graphRowAt(index.row()));
+	case GraphLaneCountRole:
+		// The unfiltered width in either case, so typing in the search box does not resize the column
+		return _graph.laneCount;
 	default:
 		return {};
 	}

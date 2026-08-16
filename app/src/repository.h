@@ -117,8 +117,9 @@ public:
 		bool ignoreCase = true;
 	};
 
-	// At most maxCommits reachable from HEAD, newest first. Widening the window means re-running with
-	// a larger cap: a date-ordered walk has no resumable cursor (doc/ARCHITECTURE.md).
+	// At most maxCommits reachable from HEAD, newest first and with no commit listed before any of its
+	// children - the lane diagram is drawn from that ordering. Widening the window means re-running with
+	// a larger cap: such a walk has no resumable cursor (doc/ARCHITECTURE.md).
 	// With a content search this lists every commit that changed a line containing the text.
 	virtual Vcs::Query commitLog(const LogQuery& query, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone) = 0;
 	// The narrower half of a content search: commits where the number of occurrences changed, so the

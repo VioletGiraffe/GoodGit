@@ -63,7 +63,7 @@ private:
 	CommitFilesModel _filesModel;
 
 	// What this window shows. maxCommits is widened by Load more, which re-runs the whole query: a
-	// date-ordered walk cannot be resumed from a cursor - see doc/ARCHITECTURE.md. The path is fixed
+	// walk of this shape cannot be resumed from a cursor - see doc/ARCHITECTURE.md. The path is fixed
 	// at construction; the pickaxe is not.
 	Repository::LogQuery _query;
 	bool _logCapped = false; // the last query returned its full limit, so older commits exist unread

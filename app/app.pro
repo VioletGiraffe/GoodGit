@@ -34,6 +34,8 @@ INCLUDEPATH += \
 
 HEADERS += \
 	src/changedfilesmodel.h \
+	src/commitgraph.h \
+	src/commitgraphdelegate.h \
 	src/commitwindow.h \
 	src/consolelogview.h \
 	src/diffhighlighter.h \
@@ -57,6 +59,8 @@ HEADERS += \
 
 SOURCES += \
 	src/changedfilesmodel.cpp \
+	src/commitgraph.cpp \
+	src/commitgraphdelegate.cpp \
 	src/commitwindow.cpp \
 	src/consolelogview.cpp \
 	src/diffhighlighter.cpp \

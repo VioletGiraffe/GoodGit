@@ -1,4 +1,5 @@
 #include "historywindow.h"
+#include "commitgraphdelegate.h"
 #include "diffhighlighter.h"
 #include "filelistdelegate.h"
 #include "repositoryfactory.h"
@@ -106,7 +107,9 @@ void HistoryWindow::buildUi()
 	_logView->setAllColumnsShowFocus(true);
 	_logView->setSelectionBehavior(QAbstractItemView::SelectRows);
 	_logView->setContextMenuPolicy(Qt::CustomContextMenu);
+	_logView->setItemDelegateForColumn(CommitLogModel::GraphColumn, new CommitGraphDelegate{ _logView });
 	_logView->header()->setStretchLastSection(false); // it would override Date's resize mode, and Subject is the one to grow
+	_logView->header()->setSectionResizeMode(CommitLogModel::GraphColumn, QHeaderView::ResizeToContents);
 	_logView->header()->setSectionResizeMode(CommitLogModel::CommitColumn, QHeaderView::ResizeToContents);
 	_logView->header()->setSectionResizeMode(CommitLogModel::SubjectColumn, QHeaderView::Stretch);
 	_logView->header()->setSectionResizeMode(CommitLogModel::AuthorColumn, QHeaderView::ResizeToContents);
@@ -262,6 +265,10 @@ void HistoryWindow::reload()
 	refreshUnpushedMarks();
 	_logLoaded = false;
 	_countLabel->setText(tr("Loading..."));
+
+	// The diagram needs a listing holding every commit between the ones it draws. A path limit prunes them
+	// and a content search names a scattered handful, so neither walk leaves lines that could be drawn.
+	_logView->setColumnHidden(CommitLogModel::GraphColumn, !_query.path.isEmpty() || !_query.contentSearch.isEmpty());
 
 	// The narrower -S half runs beside the listing, marking within it rather than producing a list of
 	// its own; the two are independent walks, so they overlap instead of queueing behind each other

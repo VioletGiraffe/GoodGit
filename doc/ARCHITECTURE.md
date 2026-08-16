@@ -64,6 +64,8 @@ modified by design.
 | `theme` | The whole visual style in one place, mirroring the mockup's CSS variables. Applied once at startup; light or dark follows the system theme |
 | `commitwindow` | One window = one repository. Owns a `Repository` and all user flows. Submodule rows open another `CommitWindow` on the submodule, same process; the child's `committed()` signal refreshes the parent |
 | `historywindow`, `historymodels` | The commit history, read-only: log above, the selected commit's file list beside that file's diff. The same window narrowed to one path is a file history. Owns its own `Repository`, so a submodule's history opens without a `CommitWindow` on that submodule |
+| `commitgraph` | The lane diagram behind the commit list: each row's lane, its first-parent chain, and the lines crossing it - from the records' parent links and nothing else. Backend- and UI-free, like the parsers |
+| `commitgraphdelegate` | Paints that diagram in the log's first column, each line colored by the chain it belongs to |
 | `consolelogview` | The push log's view: raw process output rendered as a terminal renders it, so a progress meter's carriage returns rewrite one line instead of filling the log |
 | `diffhighlighter`, `messageedit` | Prefix-driven unified-diff highlighting; message editor with the 50-column subject guide and word completion fed by one `diff -U0 HEAD` per refresh |
 | `settings` | Key vocabulary over qtutils `CSettings`. Window geometry is qtutils `CPersistenceEnabler`, one key per window kind - as the splitter positions are, and shared by every repository the same way |
@@ -157,14 +159,24 @@ correctness, so they stay silent.
 
 Read-only, and bounded rather than paged: one `log --max-count=N` builds the whole list, and "Load more"
 re-runs it with N doubled. A file history is that same window with a path appended to the query and
-`--follow` set, so it traces the file across renames; everything else - search, marks, panes - is shared. **A date-ordered walk has no resumable cursor** - continuing from the last
+`--follow` set, so it traces the file across renames; everything else - search, marks, panes - is shared. **Such a walk has no resumable cursor** - continuing from the last
 sha's ancestors drops every commit that sits on a parallel branch, since those are ancestors of HEAD but
 not of that sha. `--skip` avoids that bug but re-walks the skipped commits anyway, which is what the
 re-run costs. The only alternative is streaming one `log` process, which needs the `readyRead` path
 `vcsprocess` does not have.
 
-Search runs entirely in memory, over the records already loaded - sha, author, refs, date and message
-are all held there, so no git process is involved and non-matching rows are simply hidden. This is why
+The lane diagram beside the list is computed from the records' parent links alone (`commitgraph`), so one
+implementation serves both backends and no command draws it. It needs a **topologically ordered** listing -
+every commit above all of its parents - which is why git's walk carries `--topo-order`; Mercurial's
+revision-descending order is one already. HEAD's ancestry is the whole of what either walk covers, so a
+merged branch appears as a parallel line and no unrelated head does. Two things the diagram is not drawn for,
+because neither listing holds the commits between the ones it would join: a file history, whose path limit
+prunes them, and a content search, which names a scattered handful. A search over the loaded records is the
+middle case - the rows are still one ancestry, so what survives is each node and a line between consecutive
+shown rows on the same first-parent chain, dashed where hidden commits lie between them.
+
+Search runs entirely in memory, over the records already loaded - sha, revision number, author, refs, date
+and message are all held there, so no git process is involved and non-matching rows are simply hidden. This is why
 a miss is reported against the loaded count rather than as "not found": the commit may just be older
 than the limit.
 
@@ -182,7 +194,7 @@ record per matching line, so the changesets it names are the list, and the ones 
 and removed differ in number are the marked ones. The log is then re-run over exactly those changesets.
 
 Commits the upstream has not seen are marked in the accent color, from a `rev-list @{upstream}..HEAD`
-run beside the log query. Reachability has to be asked of git: position in a date-ordered list does not
+run beside the log query. Reachability has to be asked of git: position in the list does not
 imply it, and on a diverged branch the upstream ref is not in the list at all. The query failing means
 there is nothing to compare against - no upstream, or a detached HEAD - and marks nothing. Mercurial
 answers it locally and for free from `draft()`: phases already record what a remote has seen.

@@ -141,6 +141,7 @@ const Theme& activeTheme()
 		.diffAddBg = c(0xe3f7e8), .diffAddFg = c(0x0f5f2e),
 		.diffDelBg = c(0xfdeaea), .diffDelFg = c(0x8f2318),
 		.diffHunk = c(0x6a5fb0), .diffCtx = c(0x2b2f36),
+		.graphLanes = { c(0x1668c4), c(0x12783c), c(0xa15c00), c(0x7345c0), c(0x0f8a8a), c(0xb8302a) },
 	};
 	static const Theme dark{
 		.winBg = c(0x1f2227), .pane = c(0x191c21), .paneAlt = c(0x1c1f24),
@@ -155,6 +156,7 @@ const Theme& activeTheme()
 		.diffAddBg = c(0x16341f), .diffAddFg = c(0x8fdca8),
 		.diffDelBg = c(0x3a1d1c), .diffDelFg = c(0xf0a79c),
 		.diffHunk = c(0x9b8fe0), .diffCtx = c(0xc9ced6),
+		.graphLanes = { c(0x6cb0f0), c(0x62c98a), c(0xdda45c), c(0xb394ef), c(0x5ec8c8), c(0xef8c82) },
 	};
 	return s_darkTheme ? dark : light;
 }

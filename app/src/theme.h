@@ -3,6 +3,8 @@
 #include <QColor>
 #include <QFont>
 
+#include <array>
+
 class QApplication;
 
 // The app's visual style, mirroring the CSS variables of doc/UI/mockup.html.
@@ -34,6 +36,11 @@ struct Theme
 	QColor diffDelBg, diffDelFg;
 	QColor diffHunk;
 	QColor diffCtx; // context lines in the diff view
+
+	// The commit graph's lines, cycled by line of history rather than by lane, so a branch and the one that
+	// reuses its lane still differ. Chains are numbered as the walk meets them, which keeps the lines on
+	// screen together on different colors.
+	std::array<QColor, 6> graphLanes;
 
 	QColor blockedRowTint() const; // warnBg, translucent so selection and the base show through
 };

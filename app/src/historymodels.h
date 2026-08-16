@@ -1,5 +1,6 @@
 #pragma once
 
+#include "commitgraph.h"
 #include "vcstypes.h"
 
 #include <QAbstractTableModel>
@@ -12,14 +13,16 @@
 // The abbreviation every history view shows a sha as
 [[nodiscard]] QString shortSha(const QString& sha);
 
-// The commit list, in the order git walked it - newest first.
+// The commit list, in the order the backend walked it - newest first, and no commit before its children.
 class CommitLogModel final : public QAbstractTableModel
 {
 	Q_OBJECT
 
 public:
 	// CommitColumn labels the row with whatever its system identifies a commit by - see CommitRecord::revision
-	enum Column { CommitColumn = 0, SubjectColumn, AuthorColumn, DateColumn, ColumnCount };
+	enum Column { GraphColumn = 0, CommitColumn, SubjectColumn, AuthorColumn, DateColumn, ColumnCount };
+	// What CommitGraphDelegate paints from: this row's slice of the diagram, and the lanes the list needs
+	enum Role { GraphRole = Qt::UserRole, GraphLaneCountRole };
 
 	explicit CommitLogModel(QObject* parent = nullptr);
 
@@ -52,11 +55,15 @@ public:
 private:
 	void rebuildVisible();
 	[[nodiscard]] int commitIndexAt(int row) const { return _visible[size_t(row)]; }
+	// A search leaves the rows it hides out of the diagram, so the shown rows have one of their own
+	[[nodiscard]] const GraphRow& graphRowAt(int row) const;
 
 private:
 	std::vector<CommitRecord> _commits;
 	std::vector<QString> _displayedDates; // parallel to _commits; the age each shows is as of the load
 	std::vector<int> _visible; // indexes into _commits, every one of them while the search is empty
+	CommitGraph _graph;        // over _commits; _searchText is what decides which of the two the rows read
+	CommitGraph _searchGraph;  // over _visible, built only while a search is narrowing it
 	QString _searchText;
 	QSet<QString> _unpushedShas;
 	QSet<QString> _addingOrRemovingShas;
