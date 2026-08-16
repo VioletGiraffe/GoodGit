@@ -40,17 +40,20 @@ void CommitGraphDelegate::paint(QPainter* painter, const QStyleOptionViewItem& o
 	painter->save();
 	painter->setRenderHint(QPainter::Antialiasing, true);
 
+	const qreal thickness = std::max(1.0, width / 8.0);
 	for (const GraphSegment& segment : row.segments)
 	{
-		QPen pen{ chainColor(segment.chain), std::max(1.0, width / 8.0) };
+		QPen pen{ chainColor(segment.chain), thickness };
 		if (segment.elided)
 			pen.setStyle(Qt::DashLine); // commits between the two ends are hidden: not one step but several
 		painter->setPen(pen);
 		painter->drawLine(endpoint(segment.fromLane, top), endpoint(segment.toLane, bottom));
 	}
 
-	painter->setPen(Qt::NoPen);
-	painter->setBrush(chainColor(row.chain));
+	// A commit no upstream has seen is a ring rather than a disc, the row's own background showing through it
+	const bool unpushed = index.data(CommitLogModel::UnpushedRole).toBool();
+	painter->setPen(unpushed ? QPen{ chainColor(row.chain), thickness } : QPen{ Qt::NoPen });
+	painter->setBrush(unpushed ? QBrush{ Qt::NoBrush } : QBrush{ chainColor(row.chain) });
 	painter->drawEllipse(QPointF{ x(row.lane), middle }, width / 4.0, width / 4.0);
 	painter->restore();
 }

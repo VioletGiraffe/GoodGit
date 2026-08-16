@@ -193,9 +193,10 @@ lives at the boundary rather than in either backend. Both strengths come out of 
 record per matching line, so the changesets it names are the list, and the ones whose matching lines added
 and removed differ in number are the marked ones. The log is then re-run over exactly those changesets.
 
-Commits the upstream has not seen are marked in the accent color, from a `rev-list @{upstream}..HEAD`
-run beside the log query. Reachability has to be asked of git: position in the list does not
-imply it, and on a diverged branch the upstream ref is not in the list at all. The query failing means
+Commits the upstream has not seen are marked in the accent color, and drawn as a ring rather than a disc in
+the graph beside them, from a `rev-list @{upstream}..HEAD` run beside the log query. Reachability has to be
+asked of git: position in the list does not imply it, and on a diverged branch the upstream ref is not in the
+list at all. The query failing means
 there is nothing to compare against - no upstream, or a detached HEAD - and marks nothing. Mercurial
 answers it locally and for free from `draft()`: phases already record what a remote has seen.
 

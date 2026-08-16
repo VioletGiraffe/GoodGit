@@ -21,8 +21,9 @@ class CommitLogModel final : public QAbstractTableModel
 public:
 	// CommitColumn labels the row with whatever its system identifies a commit by - see CommitRecord::revision
 	enum Column { GraphColumn = 0, CommitColumn, SubjectColumn, AuthorColumn, DateColumn, ColumnCount };
-	// What CommitGraphDelegate paints from: this row's slice of the diagram, and the lanes the list needs
-	enum Role { GraphRole = Qt::UserRole, GraphLaneCountRole };
+	// What CommitGraphDelegate paints from: this row's slice of the diagram, the lanes the whole list needs,
+	// and whether its node stands for a commit no upstream has seen
+	enum Role { GraphRole = Qt::UserRole, GraphLaneCountRole, UnpushedRole };
 
 	explicit CommitLogModel(QObject* parent = nullptr);
 

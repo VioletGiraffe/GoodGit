@@ -257,6 +257,8 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 	case GraphLaneCountRole:
 		// The unfiltered width in either case, so typing in the search box does not resize the column
 		return _graph.laneCount;
+	case UnpushedRole:
+		return unpushed;
 	default:
 		return {};
 	}
