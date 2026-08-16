@@ -72,24 +72,28 @@ Vcs::Query runQuery(const QString& workDir, QStringList args, const QObject* con
 	return Vcs::Query{ Hg::run(workDir, std::move(args), context, std::move(callback)) };
 }
 
-// The base of every commit-listing query; the walk itself is whatever the caller appends
+// The base of every commit-listing query; the walk itself is whatever the caller appends. -f is what confines
+// it to one line of history: a plain `hg log` lists every changeset in the repository, unrelated heads
+// included. With no path it means the ancestors of `.`; with one it also follows that file across renames.
 QStringList commitLogArgs(int maxCommits)
 {
-	return { QStringLiteral("log"), QStringLiteral("-l"), QString::number(maxCommits),
+	return { QStringLiteral("log"), QStringLiteral("-f"), QStringLiteral("-l"), QString::number(maxCommits),
 		QStringLiteral("-T"), QStringLiteral("json") };
 }
 
-// -f follows the one path across renames. It closes the argument list, so everything else is in place first.
+// The pathspec closes the argument list, so everything else has to be in place first
 void appendPathLimit(QStringList& args, const Repository::LogQuery& query)
 {
 	if (!query.path.isEmpty())
-		args << QStringLiteral("-f") << QStringLiteral("--") << query.path;
+		args << QStringLiteral("--") << query.path;
 }
 
-// `hg grep` has no fixed-string mode, so the search term reaches it as a pattern whatever it holds
+// `hg grep` has no fixed-string mode, so the search term reaches it as a pattern whatever it holds. -f confines
+// it to the line of history the listing walks; without one it searches every head.
 QStringList grepArgs(const Repository::LogQuery& query)
 {
-	QStringList args = { QStringLiteral("grep"), QStringLiteral("--diff"), QStringLiteral("-T"), QStringLiteral("json") };
+	QStringList args = { QStringLiteral("grep"), QStringLiteral("--diff"), QStringLiteral("-f"),
+		QStringLiteral("-T"), QStringLiteral("json") };
 	if (query.ignoreCase)
 		args << QStringLiteral("-i");
 	args << escapedForRegex(query.contentSearch);
