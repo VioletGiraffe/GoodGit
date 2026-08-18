@@ -43,10 +43,14 @@ void rollBackAddThenReport(const QString& workDir, const QObject* context, const
 // The tracked half of the file list, read out two ways: the names, and the lines behind them. The pairing
 // and the baseline are shared, or a count would answer for a row that is not in the list. Identical
 // whatever it is taken against, so an unborn HEAD changes the baseline and nothing else.
-QStringList trackedDiffArgs(const QString& base, const QString& outputFormat)
+// `extraFlags` join the others, ahead of the base that closes the list.
+QStringList trackedDiffArgs(const QString& base, const QString& outputFormat, const QStringList& extraFlags = {})
 {
-	return { QStringLiteral("diff"), outputFormat, QStringLiteral("-M"),
-		QStringLiteral("--ignore-submodules=dirty"), QStringLiteral("-z"), base };
+	QStringList args = { QStringLiteral("diff"), outputFormat, QStringLiteral("-M"),
+		QStringLiteral("--ignore-submodules=dirty"), QStringLiteral("-z") };
+	args += extraFlags;
+	args << base;
+	return args;
 }
 
 QStringList trackedChangesArgs(const QString& base)
@@ -58,17 +62,19 @@ QStringList trackedChangesArgs(const QString& base)
 // and a line-endings-only change reads as no change there.
 QStringList trackedChangeCountsArgs(const QString& base)
 {
-	QStringList args = trackedDiffArgs(base, QStringLiteral("--numstat"));
-	args.insert(1, QStringLiteral("--ignore-cr-at-eol"));
-	return args;
+	return trackedDiffArgs(base, QStringLiteral("--numstat"), { QStringLiteral("--ignore-cr-at-eol") });
 }
 
 // One commit's files, read out two ways as the file list's own delta is: the names, and the lines behind
 // them. The rename detection is shared, or a count would answer for a row that is not in the list.
-QStringList commitFilesArgs(const QString& sha, const QString& outputFormat)
+// `extraFlags` join the others, ahead of the revision that closes the list.
+QStringList commitFilesArgs(const QString& sha, const QString& outputFormat, const QStringList& extraFlags)
 {
-	return { QStringLiteral("show"), outputFormat, QStringLiteral("-M"), QStringLiteral("-z"),
-		QStringLiteral("--format="), sha };
+	QStringList args = { QStringLiteral("show"), outputFormat, QStringLiteral("-M"), QStringLiteral("-z"),
+		QStringLiteral("--format=") };
+	args += extraFlags;
+	args << sha;
+	return args;
 }
 
 // The base of every commit-listing query; the walk itself is whatever the caller appends. --topo-order is what
@@ -626,17 +632,16 @@ Vcs::Query GitRepository::incomingCommits(int maxCommits, const QObject* context
 Vcs::Query GitRepository::commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone)
 {
 	// --raw rather than --name-status for the modes and the object names: they are what marks a row as a
-	// submodule and names the commit its pointer moved to
-	QStringList args = commitFilesArgs(sha, QStringLiteral("--raw"));
-	args.insert(1, QStringLiteral("--no-abbrev")); // the shas are opened as revisions, so prefixes will not do
-	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Git::parseRawZ));
+	// submodule and names the commit its pointer moved to. --no-abbrev, as those shas are opened as revisions.
+	return runQuery(path(), commitFilesArgs(sha, QStringLiteral("--raw"), { QStringLiteral("--no-abbrev") }),
+		context, Vcs::answering(std::move(onDone), Git::parseRawZ));
 }
 
 Vcs::Query GitRepository::commitFileCounts(const QString& sha, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone)
 {
-	QStringList args = commitFilesArgs(sha, QStringLiteral("--numstat"));
-	args.insert(1, QStringLiteral("--ignore-cr-at-eol")); // as commitFileDiff carries it: a row's counts are the ones its own diff shows
-	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Git::parseNumstatZ));
+	// --ignore-cr-at-eol as commitFileDiff carries it: a row's counts are the ones its own diff shows
+	return runQuery(path(), commitFilesArgs(sha, QStringLiteral("--numstat"), { QStringLiteral("--ignore-cr-at-eol") }),
+		context, Vcs::answering(std::move(onDone), Git::parseNumstatZ));
 }
 
 Vcs::Query GitRepository::commitFileDiff(const QString& sha, const CommitFileChange& file, const QObject* context, Vcs::Answer<QByteArray> onDone)
