@@ -14,6 +14,7 @@
 #include <QTemporaryFile>
 #include <QTimer>
 
+#include <algorithm>
 #include <functional>
 #include <utility>
 
@@ -131,6 +132,26 @@ QStringList contextFreeDiffArgs()
 	QStringList args = diffArgs();
 	args << QStringLiteral("-U") << QStringLiteral("0");
 	return args;
+}
+
+// One changeset's pointer moves, as lines of .hgsubstate: a changeset's status names that file rather
+// than the subrepos it records. `path:` keeps the name a literal path rather than a pattern.
+QStringList substateDiffArgs(const QString& sha)
+{
+	QStringList args = contextFreeDiffArgs();
+	args << QStringLiteral("-c") << sha << QStringLiteral("--") << QStringLiteral("path:.hgsubstate");
+	return args;
+}
+
+// A pointer move rendered the way .hgsubstate carries it, which the diff view colors like any diff
+QByteArray pointerMoveText(const Hg::SubrepoPointerChange& change)
+{
+	QByteArray text;
+	if (!change.oldNode.isEmpty())
+		text += "-" + change.oldNode.toUtf8() + " " + change.path.toUtf8() + "\n";
+	if (!change.newNode.isEmpty())
+		text += "+" + change.newNode.toUtf8() + " " + change.path.toUtf8() + "\n";
+	return text;
 }
 
 } // namespace
@@ -631,8 +652,48 @@ Vcs::Query HgRepository::incomingCommits(int maxCommits, const QObject* context,
 
 Vcs::Query HgRepository::commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone)
 {
-	return runQuery(path(), { QStringLiteral("status"), QStringLiteral("--change"), sha, QStringLiteral("-C"),
-		QStringLiteral("-T"), QStringLiteral("json") }, context, Vcs::answering(std::move(onDone), Hg::parseStatus));
+	// The status may name .hgsubstate, which stands for the subrepos it records - that row becomes one row
+	// per subrepo, from the pointer moves in its own diff. The same two-process shape as commitLog's search.
+	Vcs::Query query;
+	query.attach(Hg::run(path(), { QStringLiteral("status"), QStringLiteral("--change"), sha, QStringLiteral("-C"),
+			QStringLiteral("-T"), QStringLiteral("json") }, context,
+		[this, query, sha, context, onDone = std::move(onDone)](const ProcessResult& result) mutable {
+			if (!result.ok)
+			{
+				onDone(std::unexpected(result.errorText()));
+				return;
+			}
+
+			std::vector<CommitFileChange> entries = Hg::parseStatus(result.out);
+			const auto substate = std::ranges::find(entries, QStringLiteral(".hgsubstate"), &CommitFileChange::path);
+			if (substate == entries.end())
+			{
+				onDone(std::move(entries));
+				return;
+			}
+			const qsizetype insertAt = substate - entries.begin(); // the rows take the row's place
+			entries.erase(substate);
+
+			query.attach(Hg::run(path(), substateDiffArgs(sha), context,
+				[entries = std::move(entries), insertAt, onDone = std::move(onDone)](const ProcessResult& diffResult) mutable {
+					if (!diffResult.ok)
+					{
+						onDone(std::unexpected(diffResult.errorText()));
+						return;
+					}
+
+					std::vector<CommitFileChange> rows;
+					for (Hg::SubrepoPointerChange& change : Hg::parseSubstateDiff(diffResult.out))
+					{
+						const ChangeType type = change.oldNode.isEmpty() ? ChangeType::Added
+							: change.newNode.isEmpty() ? ChangeType::Deleted : ChangeType::Modified;
+						rows.push_back({ .type = type, .path = std::move(change.path), .isSubmodule = true });
+					}
+					entries.insert(entries.begin() + insertAt, rows.begin(), rows.end());
+					onDone(std::move(entries));
+			}));
+		}));
+	return query;
 }
 
 Vcs::Query HgRepository::commitFileCounts(const QString& sha, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone)
@@ -646,6 +707,21 @@ Vcs::Query HgRepository::commitFileCounts(const QString& sha, const QObject* con
 
 Vcs::Query HgRepository::commitFileDiff(const QString& sha, const CommitFileChange& file, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
+	// A subrepo path has no diff of its own in the parent; the row's diff is its pointer move,
+	// read back out of .hgsubstate's
+	if (file.isSubmodule)
+	{
+		const auto pointerMove = [path = file.path](const QByteArray& diff) {
+			for (const Hg::SubrepoPointerChange& change : Hg::parseSubstateDiff(diff))
+			{
+				if (change.path == path)
+					return pointerMoveText(change);
+			}
+			return QByteArray{};
+		};
+		return runQuery(path(), substateDiffArgs(sha), context, Vcs::answering(std::move(onDone), pointerMove));
+	}
+
 	QStringList args = diffArgs();
 	args << QStringLiteral("-c") << sha << QStringLiteral("--") << file.path;
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));

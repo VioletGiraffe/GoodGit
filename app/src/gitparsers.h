@@ -33,6 +33,10 @@ struct BranchHeader
 // Input: `diff --name-status -M -z HEAD` output
 [[nodiscard]] std::vector<CommitFileChange> parseNameStatusZ(const QByteArray& diffOutput);
 
+// Input: `show --raw -M -z` output - the same rows as --name-status, plus the file modes, which are what
+// tells a submodule (gitlink, mode 160000) from a file
+[[nodiscard]] std::vector<CommitFileChange> parseRawZ(const QByteArray& diffOutput);
+
 // Input: `diff --numstat -M -z` output. Keyed by path - the new one for a rename, as parseNameStatusZ
 // names its entries. A binary file, which git counts as `-`, is absent rather than zero.
 [[nodiscard]] std::map<QString, LineCounts> parseNumstatZ(const QByteArray& diffOutput);

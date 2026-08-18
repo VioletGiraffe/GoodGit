@@ -68,6 +68,18 @@ struct GrepMatch
 // Input: the repository root's `.hgsubstate` - one "<node> <path>" line per subrepo. Keyed by path.
 [[nodiscard]] std::map<QString, QString> parseSubrepoState(const QByteArray& content);
 
+// One subrepo as one changeset moved it: an empty side is the subrepo being added or removed there
+struct SubrepoPointerChange
+{
+	QString path;
+	QString oldNode;
+	QString newNode;
+};
+
+// Input: `diff --git -U0` output scoped to .hgsubstate, of one changeset. A changeset's status names that
+// file rather than the subrepos it records, so this is where its rows' pointer moves come from. Ordered by path.
+[[nodiscard]] std::vector<SubrepoPointerChange> parseSubstateDiff(const QByteArray& diffOutput);
+
 // Input: the repository root's `.hgsub` - one "<path> = <source>" line per subrepo. Keyed by path; the
 // source may name another system, as in "[git]https://...".
 [[nodiscard]] std::map<QString, QString> parseSubrepoSources(const QByteArray& content);

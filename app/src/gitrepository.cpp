@@ -616,8 +616,9 @@ Vcs::Query GitRepository::incomingCommits(int maxCommits, const QObject* context
 
 Vcs::Query GitRepository::commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone)
 {
-	return runQuery(path(), commitFilesArgs(sha, QStringLiteral("--name-status")),
-		context, Vcs::answering(std::move(onDone), Git::parseNameStatusZ));
+	// --raw rather than --name-status for the modes: they are what marks a row as a submodule
+	return runQuery(path(), commitFilesArgs(sha, QStringLiteral("--raw")),
+		context, Vcs::answering(std::move(onDone), Git::parseRawZ));
 }
 
 Vcs::Query GitRepository::commitFileCounts(const QString& sha, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone)

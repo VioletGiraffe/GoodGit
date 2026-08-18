@@ -40,6 +40,7 @@ struct CommitFileChange
 	ChangeType type = ChangeType::Modified;
 	QString path;    // the new path for renames
 	QString oldPath; // renames only
+	bool isSubmodule = false; // a submodule pointer rather than file content, so its diff is not the path's own
 };
 
 struct CommitRecord

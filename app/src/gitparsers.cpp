@@ -60,6 +60,41 @@ QStringList parseUnmergedPaths(const QByteArray& statusOutput)
 	return paths;
 }
 
+namespace {
+
+// The status letter of --name-status and --raw alike. `diff --name-status HEAD` calls an unmerged path M,
+// so 'U' does not fire during a merge: parseUnmergedPaths is what names the conflicted rows.
+ChangeType changeTypeOfLetter(char letter)
+{
+	switch (letter)
+	{
+	case 'A': return ChangeType::Added;
+	case 'D': return ChangeType::Deleted;
+	case 'T': return ChangeType::TypeChanged;
+	case 'U': return ChangeType::Conflicted;
+	case 'R': case 'C': return ChangeType::Renamed;
+	default:  return ChangeType::Modified;
+	}
+}
+
+// The one or two path tokens following a record's status, appended to `entry` - two for a rename or copy,
+// old first. Returns the index past them, or -1 when the record is cut short.
+qsizetype readPathTokens(const QList<QByteArray>& tokens, qsizetype i, CommitFileChange& entry)
+{
+	if (entry.type == ChangeType::Renamed)
+	{
+		if (i + 1 >= tokens.size())
+			return -1;
+		entry.oldPath = QString::fromUtf8(tokens[i]);
+		entry.path = QString::fromUtf8(tokens[i + 1]);
+		return i + 2;
+	}
+	entry.path = QString::fromUtf8(tokens[i]);
+	return i + 1;
+}
+
+} // namespace
+
 std::vector<CommitFileChange> parseNameStatusZ(const QByteArray& diffOutput)
 {
 	std::vector<CommitFileChange> entries;
@@ -73,31 +108,38 @@ std::vector<CommitFileChange> parseNameStatusZ(const QByteArray& diffOutput)
 			break;
 
 		CommitFileChange entry;
-		switch (status[0])
-		{
-		case 'A': entry.type = ChangeType::Added; break;
-		case 'D': entry.type = ChangeType::Deleted; break;
-		case 'T': entry.type = ChangeType::TypeChanged; break;
-		// `diff --name-status HEAD` calls an unmerged path M, so this does not fire during a merge:
-		// parseUnmergedPaths is what names the conflicted rows.
-		case 'U': entry.type = ChangeType::Conflicted; break;
-		case 'R': case 'C': entry.type = ChangeType::Renamed; break;
-		default:  entry.type = ChangeType::Modified; break;
-		}
+		entry.type = changeTypeOfLetter(status[0]);
+		i = readPathTokens(tokens, i + 1, entry);
+		if (i < 0)
+			break;
+		entries.push_back(std::move(entry));
+	}
+	return entries;
+}
 
-		if (entry.type == ChangeType::Renamed)
-		{
-			if (i + 2 >= tokens.size())
-				break;
-			entry.oldPath = QString::fromUtf8(tokens[i + 1]);
-			entry.path = QString::fromUtf8(tokens[i + 2]);
-			i += 3;
-		}
-		else
-		{
-			entry.path = QString::fromUtf8(tokens[i + 1]);
-			i += 2;
-		}
+std::vector<CommitFileChange> parseRawZ(const QByteArray& diffOutput)
+{
+	std::vector<CommitFileChange> entries;
+	const auto tokens = diffOutput.split('\0');
+
+	// Layout: ":<oldmode> <newmode> <oldsha> <newsha> <letter>\0<path>\0", with the same rename/copy
+	// letters and path pairs as --name-status. The modes are what --name-status cannot say: 160000 on
+	// either side is a gitlink, so the row is a submodule.
+	for (qsizetype i = 0; i + 1 < tokens.size(); )
+	{
+		const QByteArray& meta = tokens[i];
+		if (!meta.startsWith(':'))
+			break;
+		const auto fields = meta.mid(1).split(' ');
+		if (fields.size() < 5 || fields[4].isEmpty())
+			break;
+
+		CommitFileChange entry;
+		entry.type = changeTypeOfLetter(fields[4][0]);
+		entry.isSubmodule = fields[0] == "160000" || fields[1] == "160000";
+		i = readPathTokens(tokens, i + 1, entry);
+		if (i < 0)
+			break;
 		entries.push_back(std::move(entry));
 	}
 	return entries;

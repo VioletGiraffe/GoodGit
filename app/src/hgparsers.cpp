@@ -291,6 +291,35 @@ std::map<QString, QString> parseSubrepoState(const QByteArray& content)
 	return nodes;
 }
 
+std::vector<SubrepoPointerChange> parseSubstateDiff(const QByteArray& diffOutput)
+{
+	// Every hunk line is a "<node> <path>" leaving or entering the file; the only other lines starting
+	// with '-' or '+' are the `---`/`+++` header pair
+	std::map<QString, SubrepoPointerChange> byPath;
+	for (const QByteArray& line : diffOutput.split('\n'))
+	{
+		if (line.startsWith("---") || line.startsWith("+++"))
+			continue;
+		const bool oldSide = line.startsWith('-');
+		if (!oldSide && !line.startsWith('+'))
+			continue;
+
+		const auto [node, path] = splitAt(line.mid(1), QLatin1Char(' '));
+		if (path.isEmpty())
+			continue;
+
+		SubrepoPointerChange& change = byPath[path];
+		change.path = path;
+		(oldSide ? change.oldNode : change.newNode) = node;
+	}
+
+	std::vector<SubrepoPointerChange> changes;
+	changes.reserve(byPath.size());
+	for (auto& [path, change] : byPath)
+		changes.push_back(std::move(change));
+	return changes;
+}
+
 std::map<QString, QString> parseSubrepoSources(const QByteArray& content)
 {
 	std::map<QString, QString> sources;

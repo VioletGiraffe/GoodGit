@@ -228,6 +228,11 @@ committed pointer move as modified files inside. Asked one level down the same r
 and the query carries `-S`: a nested subrepo the enclosing one has not recorded yet is uncommitted work
 there, and blocks the row as any other uncommitted work inside does.
 
+History marks submodule rows too. Git's commit file listing reads them off the file modes (`--raw` rather
+than `--name-status`). Mercurial's names only `.hgsubstate`, so that row is replaced with one row per
+subrepo from that file's own diff, which is also what stands in for such a row's diff - the subrepo path
+has no diff of its own in the parent.
+
 Push is `git push --recurse-submodules=on-demand`, passed explicitly (machine config varies): git pushes
 referenced submodule commits first, which is a correctness requirement, not a preference - a superproject
 commit referencing an unpushed submodule commit is unfetchable.
