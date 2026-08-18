@@ -665,7 +665,8 @@ Vcs::Query HgRepository::commitFiles(const QString& sha, const QObject* context,
 			}
 
 			std::vector<CommitFileChange> entries = Hg::parseStatus(result.out);
-			const auto substate = std::ranges::find(entries, QStringLiteral(".hgsubstate"), &CommitFileChange::path);
+			const auto substate = std::ranges::find_if(entries,
+				[](const CommitFileChange& entry) { return entry.path == QLatin1String(".hgsubstate"); });
 			if (substate == entries.end())
 			{
 				onDone(std::move(entries));

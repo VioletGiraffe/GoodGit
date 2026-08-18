@@ -51,15 +51,15 @@ QString authorName(const QString& user)
 QString refsOf(const QJsonObject& record)
 {
 	QStringList refs;
-	for (const QJsonValue& bookmark : record.value(QStringLiteral("bookmarks")).toArray())
+	for (const QJsonValue& bookmark : record.value(QLatin1String("bookmarks")).toArray())
 		refs << bookmark.toString();
-	for (const QJsonValue& tag : record.value(QStringLiteral("tags")).toArray())
+	for (const QJsonValue& tag : record.value(QLatin1String("tags")).toArray())
 	{
 		if (tag.toString() != QLatin1String("tip"))
 			refs << tag.toString();
 	}
 
-	const QString branch = record.value(QStringLiteral("branch")).toString();
+	const QString branch = record.value(QLatin1String("branch")).toString();
 	if (!branch.isEmpty() && branch != QLatin1String("default"))
 		refs << branch;
 	return refs.join(QStringLiteral(", "));
@@ -97,7 +97,7 @@ WorkingDirectory parseWorkingDirectory(const QByteArray& logOutput)
 		return {};
 
 	const QJsonObject record = records.first().toObject();
-	return { nodeList(record.value(QStringLiteral("parents"))), record.value(QStringLiteral("branch")).toString() };
+	return { nodeList(record.value(QLatin1String("parents"))), record.value(QLatin1String("branch")).toString() };
 }
 
 std::vector<CommitFileChange> parseStatus(const QByteArray& statusOutput)
@@ -107,7 +107,7 @@ std::vector<CommitFileChange> parseStatus(const QByteArray& statusOutput)
 	QSet<QString> renameSources;
 	for (const QJsonValue& value : records)
 	{
-		const QString source = value.toObject().value(QStringLiteral("source")).toString();
+		const QString source = value.toObject().value(QLatin1String("source")).toString();
 		if (!source.isEmpty())
 			renameSources.insert(source);
 	}
@@ -117,9 +117,9 @@ std::vector<CommitFileChange> parseStatus(const QByteArray& statusOutput)
 	for (const QJsonValue& value : records)
 	{
 		const QJsonObject record = value.toObject();
-		const QString status = record.value(QStringLiteral("status")).toString();
-		const QString path = record.value(QStringLiteral("path")).toString();
-		const QString source = record.value(QStringLiteral("source")).toString();
+		const QString status = record.value(QLatin1String("status")).toString();
+		const QString path = record.value(QLatin1String("path")).toString();
+		const QString source = record.value(QLatin1String("source")).toString();
 		if (status.isEmpty() || path.isEmpty())
 			continue;
 
@@ -149,7 +149,7 @@ WorktreeDirtiness parseDirtiness(const QByteArray& statusOutput)
 	WorktreeDirtiness dirtiness;
 	for (const QJsonValue& value : jsonRecords(statusOutput))
 	{
-		const QString status = value.toObject().value(QStringLiteral("status")).toString();
+		const QString status = value.toObject().value(QLatin1String("status")).toString();
 		if (status.isEmpty())
 			continue;
 
@@ -212,8 +212,8 @@ QStringList parseUnresolvedPaths(const QByteArray& resolveOutput)
 	for (const QJsonValue& value : jsonRecords(resolveOutput))
 	{
 		const QJsonObject record = value.toObject();
-		if (record.value(QStringLiteral("mergestatus")).toString() == QLatin1String("U"))
-			paths << record.value(QStringLiteral("path")).toString();
+		if (record.value(QLatin1String("mergestatus")).toString() == QLatin1String("U"))
+			paths << record.value(QLatin1String("path")).toString();
 	}
 	return paths;
 }
@@ -229,15 +229,15 @@ std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput)
 		const QJsonObject record = value.toObject();
 
 		CommitRecord commit;
-		commit.sha = record.value(QStringLiteral("node")).toString();
-		if (const QJsonValue rev = record.value(QStringLiteral("rev")); rev.isDouble())
+		commit.sha = record.value(QLatin1String("node")).toString();
+		if (const QJsonValue rev = record.value(QLatin1String("rev")); rev.isDouble())
 			commit.revision = rev.toInt(); // tested for rather than defaulted: revision 0 is a real one
-		commit.parents = nodeList(record.value(QStringLiteral("parents")));
+		commit.parents = nodeList(record.value(QLatin1String("parents")));
 		commit.parents.removeAll(QString::fromLatin1(NullNode)); // a root changeset has no parent the app can name
-		commit.author = authorName(record.value(QStringLiteral("user")).toString());
-		commit.date = isoDate(record.value(QStringLiteral("date")));
+		commit.author = authorName(record.value(QLatin1String("user")).toString());
+		commit.date = isoDate(record.value(QLatin1String("date")));
 		commit.refs = refsOf(record);
-		commit.message = record.value(QStringLiteral("desc")).toString();
+		commit.message = record.value(QLatin1String("desc")).toString();
 		commits.push_back(std::move(commit));
 	}
 	return commits;
@@ -247,7 +247,7 @@ QStringList parseBranchNames(const QByteArray& branchesOutput)
 {
 	QStringList names;
 	for (const QJsonValue& value : jsonRecords(branchesOutput))
-		names << value.toObject().value(QStringLiteral("branch")).toString();
+		names << value.toObject().value(QLatin1String("branch")).toString();
 	return names;
 }
 
@@ -257,14 +257,14 @@ std::vector<GrepMatch> parseGrepDiff(const QByteArray& grepOutput)
 	for (const QJsonValue& value : jsonRecords(grepOutput))
 	{
 		const QJsonObject record = value.toObject();
-		const QString node = record.value(QStringLiteral("node")).toString();
+		const QString node = record.value(QLatin1String("node")).toString();
 		if (node.isEmpty())
 			continue;
 
 		GrepMatch& match = byNode[node];
 		match.node = node;
-		match.rev = record.value(QStringLiteral("rev")).toInt();
-		if (record.value(QStringLiteral("change")).toString() == QLatin1String("-"))
+		match.rev = record.value(QLatin1String("rev")).toInt();
+		if (record.value(QLatin1String("change")).toString() == QLatin1String("-"))
 			++match.matchedLines.removed;
 		else
 			++match.matchedLines.added;
