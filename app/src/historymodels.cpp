@@ -148,6 +148,16 @@ void CommitLogModel::setAddingOrRemovingShas(QSet<QString> shas)
 		emit dataChanged(index(0, 0), index(int(_visible.size()) - 1, ColumnCount - 1));
 }
 
+int CommitLogModel::rowOfSha(const QString& sha) const
+{
+	for (size_t row = 0; row < _visible.size(); ++row)
+	{
+		if (_commits[size_t(_visible[row])].sha == sha)
+			return int(row);
+	}
+	return -1;
+}
+
 int CommitLogModel::addingOrRemovingCount() const
 {
 	int count = 0;

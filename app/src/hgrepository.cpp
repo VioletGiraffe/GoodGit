@@ -83,6 +83,14 @@ QStringList commitLogArgs(int maxCommits)
 		QStringLiteral("-T"), QStringLiteral("json") };
 }
 
+// Where the walk starts; `-f` alone means the ancestors of `.`, and with a revision the ancestors of that
+// one. Before the pattern and the pathspec, both of which are positional.
+void appendStartRevision(QStringList& args, const Repository::LogQuery& query)
+{
+	if (!query.startRevision.isEmpty())
+		args << QStringLiteral("-r") << query.startRevision;
+}
+
 // The pathspec closes the argument list, so everything else has to be in place first
 void appendPathLimit(QStringList& args, const Repository::LogQuery& query)
 {
@@ -98,6 +106,7 @@ QStringList grepArgs(const Repository::LogQuery& query)
 		QStringLiteral("-T"), QStringLiteral("json") };
 	if (query.ignoreCase)
 		args << QStringLiteral("-i");
+	appendStartRevision(args, query);
 	args << escapedForRegex(query.contentSearch);
 	if (!query.path.isEmpty())
 		args << QStringLiteral("--") << query.path;
@@ -585,6 +594,7 @@ Vcs::Query HgRepository::commitLog(const LogQuery& query, const QObject* context
 	if (query.contentSearch.isEmpty())
 	{
 		QStringList args = commitLogArgs(query.maxCommits);
+		appendStartRevision(args, query);
 		appendPathLimit(args, query);
 		return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Hg::parseCommitLog));
 	}
@@ -688,7 +698,9 @@ Vcs::Query HgRepository::commitFiles(const QString& sha, const QObject* context,
 					{
 						const ChangeType type = change.oldNode.isEmpty() ? ChangeType::Added
 							: change.newNode.isEmpty() ? ChangeType::Deleted : ChangeType::Modified;
-						rows.push_back({ .type = type, .path = std::move(change.path), .isSubmodule = true });
+						QString node = change.newNode.isEmpty() ? std::move(change.oldNode) : std::move(change.newNode);
+						rows.push_back({ .type = type, .path = std::move(change.path), .isSubmodule = true,
+							.submoduleSha = std::move(node) });
 					}
 					entries.insert(entries.begin() + insertAt, rows.begin(), rows.end());
 					onDone(std::move(entries));
@@ -768,10 +780,10 @@ Vcs::Query HgRepository::submodulePointerLog(const FileEntry& entry, const QObje
 		context, Vcs::answering(std::move(onDone), outputAsText)) };
 }
 
-RepositoryLocation HgRepository::submoduleLocation(const FileEntry& entry) const
+RepositoryLocation HgRepository::submoduleLocation(const QString& repoRelativePath) const
 {
 	// .hgsub may name a subrepo of another kind, and a window on one is that kind's window
-	return { isGitSubrepo(entry.path) ? VcsKind::Git : VcsKind::Mercurial, QDir{ path() }.filePath(entry.path) };
+	return { isGitSubrepo(repoRelativePath) ? VcsKind::Git : VcsKind::Mercurial, QDir{ path() }.filePath(repoRelativePath) };
 }
 
 QString HgRepository::ignoreFileName() const

@@ -137,6 +137,8 @@ std::vector<CommitFileChange> parseRawZ(const QByteArray& diffOutput)
 		CommitFileChange entry;
 		entry.type = changeTypeOfLetter(fields[4][0]);
 		entry.isSubmodule = fields[0] == "160000" || fields[1] == "160000";
+		if (entry.isSubmodule) // the side that names a commit; a removal has only the old one
+			entry.submoduleSha = QString::fromUtf8(entry.type == ChangeType::Deleted ? fields[2] : fields[3]);
 		i = readPathTokens(tokens, i + 1, entry);
 		if (i < 0)
 			break;

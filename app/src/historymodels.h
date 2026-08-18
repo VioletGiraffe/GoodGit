@@ -46,6 +46,9 @@ public:
 
 	// Row indexes address what is shown, so they mean the same thing with a search active as without.
 	[[nodiscard]] const CommitRecord& commitAt(int row) const { return _commits[size_t(commitIndexAt(row))]; }
+	// The shown row holding this sha, or -1 where the listing does not have it: the walk may not have
+	// covered that line of history, or it may be older than the limit
+	[[nodiscard]] int rowOfSha(const QString& sha) const;
 	[[nodiscard]] int totalCount() const { return int(_commits.size()); } // rowCount() is the shown count
 
 	int rowCount(const QModelIndex& parent = {}) const override;

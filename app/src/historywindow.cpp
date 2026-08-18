@@ -209,6 +209,7 @@ void HistoryWindow::buildUi()
 	connect(_filesView, &QWidget::customContextMenuRequested, this, &HistoryWindow::showFileContextMenu);
 	connect(_logView->selectionModel(), &QItemSelectionModel::currentChanged, this, &HistoryWindow::showFilesForCurrentCommit);
 	connect(_filesView->selectionModel(), &QItemSelectionModel::currentChanged, this, &HistoryWindow::showDiffForCurrentFile);
+	connect(_filesView, &QAbstractItemView::activated, this, &HistoryWindow::onFileRowActivated);
 
 	new QShortcut(QKeySequence(Qt::Key_F5), this, [this] { reload(); });
 	new QShortcut(QKeySequence::Find, this, [this] {
@@ -300,9 +301,59 @@ void HistoryWindow::reload()
 		_logModel.setCommits(std::move(commits)); // re-applies the active search to the new records
 		_logLoaded = true;
 		updateCountLabel();
-		if (_logModel.rowCount() > 0)
-			_logView->setCurrentIndex(_logModel.index(0, CommitLogModel::CommitColumn));
+		selectLoadedCommit();
 	});
+}
+
+void HistoryWindow::revealCommit(const QString& sha)
+{
+	_revealSha = sha;
+	if (_logLoaded)
+		selectLoadedCommit(); // already listed, so nothing is coming to carry the reveal
+}
+
+void HistoryWindow::selectLoadedCommit()
+{
+	if (!_revealSha.isEmpty())
+	{
+		if (const int row = _logModel.rowOfSha(_revealSha); row >= 0)
+		{
+			const QModelIndex index = _logModel.index(row, CommitLogModel::CommitColumn);
+			_revealSha.clear();
+			_logView->setCurrentIndex(index); // carries the panes below with it, through currentChanged
+			_logView->scrollTo(index, QAbstractItemView::PositionAtCenter);
+			return;
+		}
+		if (_query.startRevision != _revealSha)
+		{
+			// Not on the line of history the walk covered, so the walk has to start at the commit itself
+			_query.startRevision = _revealSha;
+			reload();
+			return;
+		}
+		_revealSha.clear(); // walked from it and it is still not listed; the newest row is all that is left
+	}
+
+	if (_logModel.rowCount() > 0)
+		_logView->setCurrentIndex(_logModel.index(0, CommitLogModel::CommitColumn));
+}
+
+void HistoryWindow::onFileRowActivated(const QModelIndex& index)
+{
+	if (!index.isValid() || index.row() >= _filesModel.rowCount())
+		return;
+
+	const CommitFileChange entry = _filesModel.entryAt(index.row());
+	if (entry.isSubmodule)
+		openSubmoduleHistory(entry);
+}
+
+void HistoryWindow::openSubmoduleHistory(const CommitFileChange& entry)
+{
+	// Not deduplicated, matching the commit window's submodule windows
+	auto* window = new HistoryWindow(_repo->submoduleLocation(entry.path), this);
+	window->show();
+	window->revealCommit(entry.submoduleSha);
 }
 
 void HistoryWindow::applySearch()
@@ -426,11 +477,20 @@ void HistoryWindow::showFileContextMenu(const QPoint& pos)
 		return;
 
 	// Read before exec() spins an event loop, which a completing query could reset the model under
-	const QString path = _filesModel.entryAt(index.row()).path;
+	const CommitFileChange entry = _filesModel.entryAt(index.row());
 
 	QMenu menu{ this };
-	QAction* action = menu.addAction(tr("View file history"), this, [this, path] { openFileHistory(path); });
-	action->setEnabled(path != _query.path); // this window already is that file's history
+	if (entry.isSubmodule)
+	{
+		// A submodule's history is its own repository's; the parent's log of that path holds only the
+		// pointer moves. Same window the row opens on activation.
+		menu.addAction(tr("View commit history"), this, [this, entry] { openSubmoduleHistory(entry); });
+	}
+	else
+	{
+		QAction* action = menu.addAction(tr("View file history"), this, [this, path = entry.path] { openFileHistory(path); });
+		action->setEnabled(entry.path != _query.path); // this window already is that file's history
+	}
 	menu.exec(_filesView->viewport()->mapToGlobal(pos));
 }
 

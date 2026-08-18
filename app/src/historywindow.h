@@ -31,6 +31,12 @@ public:
 	// The history of one repo-relative path, traced across renames
 	HistoryWindow(const RepositoryLocation& location, const QString& filePath, QWidget* parent);
 
+	// Selects this commit and scrolls it into view once the listing is in - the window is opened and told
+	// to reveal one in the same breath, before any of it has been read. A commit the walk did not cover
+	// (the checkout has moved on from it, or it is older than the limit) re-runs the walk from that commit,
+	// which is then the newest row.
+	void revealCommit(const QString& sha);
+
 	// Re-runs the log query from scratch. The commit window calls this after committing here.
 	void reload();
 	// Re-reads which commits are unpushed, leaving the list and the selection alone - a push changes
@@ -51,6 +57,12 @@ private:
 	void showCommitContextMenu(const QPoint& pos);
 	void showFileContextMenu(const QPoint& pos);
 	void openFileHistory(const QString& filePath);
+	// A submodule row opens its own repository's history, at the commit this one's pointer names
+	void onFileRowActivated(const QModelIndex& index);
+	void openSubmoduleHistory(const CommitFileChange& entry);
+	// Where a finished listing lands: the commit revealCommit() asked for, or the newest row. A requested
+	// commit the listing does not hold re-runs the walk from that commit, which does hold it.
+	void selectLoadedCommit();
 	void showFilesForCurrentCommit();
 	void showDiffForCurrentFile();
 	// The two kinds of content the right-hand pane holds; each owns whether the diff highlighting applies
@@ -68,6 +80,9 @@ private:
 	Repository::LogQuery _query;
 	bool _logCapped = false; // the last query returned its full limit, so older commits exist unread
 	bool _logLoaded = false; // the marks query can land first, and its counts mean nothing until this
+	// The commit the next finished listing should land on; cleared once it has, so a later reload or
+	// Load more selects the newest row as it otherwise would
+	QString _revealSha;
 
 	QSplitter* _splitter = nullptr;       // log above, the commit's detail below
 	QSplitter* _detailSplitter = nullptr; // file list beside the diff

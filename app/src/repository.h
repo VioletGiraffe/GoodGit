@@ -114,6 +114,9 @@ public:
 		int maxCommits = 0;
 		QString path;          // empty: the whole repo. Otherwise the walk follows this one path across renames
 		QString contentSearch; // empty: no content search. A literal string - never a pattern, whatever it contains
+		// empty: the walk starts at HEAD. Otherwise it starts here, and so covers this commit's ancestry
+		// rather than the checkout's - the two need not overlap at all.
+		QString startRevision;
 		bool ignoreCase = true;
 	};
 
@@ -144,9 +147,9 @@ public:
 	// For a moved submodule pointer: the commits being pulled in, one line each
 	virtual Vcs::Query submodulePointerLog(const FileEntry& entry, const QObject* context, Vcs::Answer<QString> onDone) = 0;
 
-	// Where a submodule row's own repository is, so a window can be opened on it. The parent names the
-	// kind: a nested repository need not be of the same kind as the repository holding it.
-	[[nodiscard]] virtual RepositoryLocation submoduleLocation(const FileEntry& entry) const = 0;
+	// Where the submodule at a repo-relative path has its own repository, so a window can be opened on it.
+	// The parent names the kind: a nested repository need not be of the same kind as the one holding it.
+	[[nodiscard]] virtual RepositoryLocation submoduleLocation(const QString& repoRelativePath) const = 0;
 
 	// The ignore file this repository's kind reads, at the repository root, and the patterns that would
 	// exclude `repoRelativePath` from it - most specific first, in that file's own syntax.

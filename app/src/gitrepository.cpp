@@ -95,6 +95,13 @@ void appendPickaxe(QStringList& args, const Repository::LogQuery& query, bool co
 		args << QStringLiteral("-i");
 }
 
+// Where the walk starts; git's own default is HEAD. Before the path limit, which closes the list.
+void appendStartRevision(QStringList& args, const Repository::LogQuery& query)
+{
+	if (!query.startRevision.isEmpty())
+		args << query.startRevision;
+}
+
 // The pathspec closes the argument list, so everything else has to be in place first
 void appendPathLimit(QStringList& args, const Repository::LogQuery& query)
 {
@@ -594,6 +601,7 @@ Vcs::Query GitRepository::commitLog(const LogQuery& query, const QObject* contex
 {
 	QStringList args = commitLogArgs(query.maxCommits);
 	appendPickaxe(args, query, /*countChangesOnly=*/false);
+	appendStartRevision(args, query);
 	appendPathLimit(args, query);
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Git::parseCommitLog));
 }
@@ -603,6 +611,7 @@ Vcs::Query GitRepository::commitsAddingOrRemovingText(const LogQuery& query, con
 	QStringList args = { QStringLiteral("log"), QStringLiteral("--max-count=%1").arg(query.maxCommits),
 		QStringLiteral("--format=%H") };
 	appendPickaxe(args, query, /*countChangesOnly=*/true);
+	appendStartRevision(args, query);
 	appendPathLimit(args, query);
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), shaSet));
 }
@@ -616,9 +625,11 @@ Vcs::Query GitRepository::incomingCommits(int maxCommits, const QObject* context
 
 Vcs::Query GitRepository::commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone)
 {
-	// --raw rather than --name-status for the modes: they are what marks a row as a submodule
-	return runQuery(path(), commitFilesArgs(sha, QStringLiteral("--raw")),
-		context, Vcs::answering(std::move(onDone), Git::parseRawZ));
+	// --raw rather than --name-status for the modes and the object names: they are what marks a row as a
+	// submodule and names the commit its pointer moved to
+	QStringList args = commitFilesArgs(sha, QStringLiteral("--raw"));
+	args.insert(1, QStringLiteral("--no-abbrev")); // the shas are opened as revisions, so prefixes will not do
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Git::parseRawZ));
 }
 
 Vcs::Query GitRepository::commitFileCounts(const QString& sha, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone)
@@ -662,9 +673,9 @@ Vcs::Query GitRepository::submodulePointerLog(const FileEntry& entry, const QObj
 	return query;
 }
 
-RepositoryLocation GitRepository::submoduleLocation(const FileEntry& entry) const
+RepositoryLocation GitRepository::submoduleLocation(const QString& repoRelativePath) const
 {
-	return { VcsKind::Git, path() + QLatin1Char('/') + entry.path }; // a git submodule is a git repository
+	return { VcsKind::Git, path() + QLatin1Char('/') + repoRelativePath }; // a git submodule is a git repository
 }
 
 QString GitRepository::ignoreFileName() const

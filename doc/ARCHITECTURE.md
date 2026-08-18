@@ -233,6 +233,13 @@ than `--name-status`). Mercurial's names only `.hgsubstate`, so that row is repl
 subrepo from that file's own diff, which is also what stands in for such a row's diff - the subrepo path
 has no diff of its own in the parent.
 
+Such a row also carries the commit its pointer names, and activating it opens the submodule's own history
+there. That is a selection within the ordinary walk, so the surrounding history stays visible; a commit the
+walk did not cover - the submodule's checkout has moved on from it, or it is older than the limit - is
+reached by re-running the walk from that commit instead (`LogQuery::startRevision`), where it is the newest
+row. The two are not interchangeable, which is why the selection is tried first: a walk started at the
+commit cannot show what came after it.
+
 Push is `git push --recurse-submodules=on-demand`, passed explicitly (machine config varies): git pushes
 referenced submodule commits first, which is a correctness requirement, not a preference - a superproject
 commit referencing an unpushed submodule commit is unfetchable.

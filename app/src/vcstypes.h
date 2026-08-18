@@ -41,6 +41,9 @@ struct CommitFileChange
 	QString path;    // the new path for renames
 	QString oldPath; // renames only
 	bool isSubmodule = false; // a submodule pointer rather than file content, so its diff is not the path's own
+	// Submodule rows only: the commit the pointer names, which is where its own history opens. The one it
+	// moved to, or the one it held before where the change removed the submodule.
+	QString submoduleSha;
 };
 
 struct CommitRecord

@@ -939,7 +939,7 @@ void CommitWindow::showHistoryWindow()
 
 void CommitWindow::openSubmoduleWindow(const FileEntry& entry)
 {
-	auto* window = new CommitWindow(_repo->submoduleLocation(entry));
+	auto* window = new CommitWindow(_repo->submoduleLocation(entry.path));
 	connect(window, &CommitWindow::committed, _repo.get(), &Repository::refresh);
 	window->show();
 }
@@ -997,7 +997,7 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	openAction->setEnabled(singleFile);
 	QAction* submoduleHistoryAction = menu.addAction(tr("View commit history"), this, [this, entry = entries.front()] {
 		// Not deduplicated the way this repo's own history window is, matching openSubmoduleWindow
-		auto* window = new HistoryWindow(_repo->submoduleLocation(entry), this);
+		auto* window = new HistoryWindow(_repo->submoduleLocation(entry.path), this);
 		window->show();
 	});
 	submoduleHistoryAction->setEnabled(entries.size() == 1 && entries.front().isSubmodule);
