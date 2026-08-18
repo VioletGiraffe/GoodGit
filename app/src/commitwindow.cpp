@@ -356,9 +356,7 @@ void CommitWindow::buildUi()
 	new QShortcut(QKeySequence(Qt::Key_F5), this, [this] { _repo->refresh(); });
 	new QShortcut(QKeySequence(Qt::Key_Escape), this, [this] { close(); });
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_H), this, [this] { showHistoryWindow(); });
-	// A printable key reaches a focused editable widget before any shortcut sees it, so a bare letter is safe
-	// here: this cannot fire while the message is being typed.
-	new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_P), this, [this] {
+	new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_P), this, [this] {
 		if (_pushButton->isEnabled())
 			doPush(/*setUpstream=*/false);
 	});
@@ -459,8 +457,8 @@ void CommitWindow::updateHeader()
 			lines.push_back(tr("... and %1 more").arg(state.ahead - lines.size()));
 		unpushedTooltip = lines.join(QLatin1Char('\n'));
 	}
-	_pushButton->setToolTip(unpushedTooltip.isEmpty() ? QStringLiteral("Shift+P")
-		: QStringLiteral("Shift+P\n") + unpushedTooltip);
+	_pushButton->setToolTip(unpushedTooltip.isEmpty() ? QStringLiteral("Ctrl+Shift+P")
+		: QStringLiteral("Ctrl+Shift+P\n") + unpushedTooltip);
 	_aheadLabel->setToolTip(unpushedTooltip); // the label is not the button, and has no shortcut to advertise
 
 	_lastCommitLabel->setText(state.headSubject.isEmpty() ? QString{} : tr("Previous commit: %1").arg(state.headSubject));
