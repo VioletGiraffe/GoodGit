@@ -1,6 +1,6 @@
 #include "historywindow.h"
 #include "commitgraphdelegate.h"
-#include "diffhighlighter.h"
+#include "diffpane.h"
 #include "filelistdelegate.h"
 #include "repositoryfactory.h"
 #include "settings.h"
@@ -10,6 +10,7 @@
 #include "widgets/cpersistentwindow.h"
 #include "widgets/widgetutils.h"
 
+#include <QAbstractItemView>
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
@@ -20,7 +21,6 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
-#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QShortcut>
 #include <QSplitter>
@@ -30,7 +30,6 @@
 namespace {
 
 constexpr int InitialMaxCommits = 20000;
-constexpr qsizetype MaxDiffBytes = 2 * 1024 * 1024;
 constexpr int FileListWidth = 320;
 constexpr int MaxFilePathLabelWidth = 420; // beyond this the path elides rather than crowding the bar
 constexpr int PickaxeEditWidth = 320;
@@ -145,38 +144,13 @@ void HistoryWindow::buildUi()
 	_filesView->header()->setSectionResizeMode(CommitFilesModel::PathColumn, QHeaderView::Stretch);
 	filesLayout->addWidget(_filesView, 1);
 
-	auto* diffPane = new QWidget;
-	auto* diffLayout = new QVBoxLayout(diffPane);
-	diffLayout->setContentsMargins(0, 0, 0, 0);
-	diffLayout->setSpacing(0);
-
-	auto* diffHeader = new QFrame;
-	diffHeader->setObjectName(QStringLiteral("diffHeader"));
-	auto* diffHeaderLayout = new QHBoxLayout(diffHeader);
-	diffHeaderLayout->setContentsMargins(8, 6, 8, 6);
-	_diffPathLabel = new CLabelElided;
-	_diffPathLabel->setFont(monospaceFont());
-	// Eliding does not shrink a QLabel's minimum width, which would otherwise set the pane's
-	_diffPathLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-	_diffTagLabel = new QLabel;
-	_diffTagLabel->setObjectName(QStringLiteral("diffTagLabel"));
-	diffHeaderLayout->addWidget(_diffPathLabel, 1);
-	diffHeaderLayout->addWidget(_diffTagLabel);
-	diffLayout->addWidget(diffHeader);
-
-	_diffView = new QPlainTextEdit;
-	_diffView->setObjectName(QStringLiteral("diffView"));
-	_diffView->setReadOnly(true);
-	_diffView->setLineWrapMode(QPlainTextEdit::WidgetWidth);
-	_diffView->setFont(monospaceFont());
-	_diffHighlighter = new DiffHighlighter(_diffView->document());
-	diffLayout->addWidget(_diffView, 1);
+	_diffPane = new DiffPane;
 
 	_detailSplitter = new QSplitter(Qt::Horizontal);
 	_detailSplitter->setChildrenCollapsible(false);
 	_detailSplitter->setHandleWidth(1);
 	_detailSplitter->addWidget(filesPane);
-	_detailSplitter->addWidget(diffPane);
+	_detailSplitter->addWidget(_diffPane);
 	_detailSplitter->setStretchFactor(0, 0);
 	_detailSplitter->setStretchFactor(1, 1);
 	if (const QByteArray state = Settings::splitterState(QStringLiteral("HistoryWindowDetail")); !state.isEmpty())
@@ -289,7 +263,7 @@ void HistoryWindow::reload()
 			_logModel.setCommits({}); // resetting the model clears the panes below through currentChanged
 			_countLabel->clear();
 			_loadMoreButton->setVisible(false);
-			setDiffText({}, {}, result.error());
+			_diffPane->showDiff({}, {}, result.error());
 			return;
 		}
 
@@ -510,7 +484,7 @@ void HistoryWindow::showFilesForCurrentCommit()
 	{
 		_filesModel.clear();
 		_fileCountLabel->clear();
-		setDiffText({}, {}, {});
+		_diffPane->showDiff({}, {}, {});
 		return;
 	}
 
@@ -539,7 +513,7 @@ void HistoryWindow::showFilesForCurrentCommit()
 		{
 			_filesModel.clear();
 			_fileCountLabel->clear();
-			setDiffText({}, shortSha(sha), result.error());
+			_diffPane->showDiff({}, shortSha(sha), result.error());
 			return;
 		}
 
@@ -569,31 +543,21 @@ void HistoryWindow::showDiffForCurrentFile()
 	const QString sha = _logModel.commitAt(currentCommit.row()).sha;
 	const QString tag = shortSha(sha);
 
-	setDiffText(entry.path, tag, tr("Loading..."));
+	_diffPane->showDiff(entry.path, tag, tr("Loading..."));
 	_diffQuery = _repo->commitFileDiff(sha, entry, this, [this, entry, tag](std::expected<QByteArray, QString> diff) {
 		if (!diff)
-			setDiffText(entry.path, tag, diff.error());
+			_diffPane->showDiff(entry.path, tag, diff.error());
 		else if (diff->size() > MaxDiffBytes)
-			setDiffText(entry.path, tag, tr("The diff is too large to display (%1 MB).").arg(double(diff->size()) / (1024 * 1024), 0, 'f', 1));
+			_diffPane->showDiff(entry.path, tag, tr("The diff is too large to display (%1 MB).").arg(double(diff->size()) / (1024 * 1024), 0, 'f', 1));
 		else if (diff->isEmpty())
-			setDiffText(entry.path, tag, tr("No content changes (only the mode or the line endings differ, or a rename with identical content)."));
+			_diffPane->showDiff(entry.path, tag, tr("No content changes (only the mode or the line endings differ, or a rename with identical content)."));
 		else
-			setDiffText(entry.path, tag, QString::fromUtf8(*diff));
+			_diffPane->showDiff(entry.path, tag, QString::fromUtf8(*diff));
 	});
 }
 
 void HistoryWindow::showCommitMessage(const CommitRecord& commit)
 {
-	_diffHighlighter->setEnabled(false);
-	_diffPathLabel->setText({});
-	_diffTagLabel->setText(shortSha(commit.sha));
-	_diffView->setPlainText(commit.message);
+	_diffPane->showText({}, shortSha(commit.sha), commit.message);
 }
 
-void HistoryWindow::setDiffText(const QString& pathLabel, const QString& tag, const QString& text)
-{
-	_diffHighlighter->setEnabled(true);
-	_diffPathLabel->setText(pathLabel);
-	_diffTagLabel->setText(tag);
-	_diffView->setPlainText(text);
-}

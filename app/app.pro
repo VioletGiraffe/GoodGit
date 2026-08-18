@@ -39,6 +39,7 @@ HEADERS += \
 	src/commitwindow.h \
 	src/consolelogview.h \
 	src/diffhighlighter.h \
+	src/diffpane.h \
 	src/filelistdelegate.h \
 	src/gitparsers.h \
 	src/gitprocess.h \
@@ -64,6 +65,7 @@ SOURCES += \
 	src/commitwindow.cpp \
 	src/consolelogview.cpp \
 	src/diffhighlighter.cpp \
+	src/diffpane.cpp \
 	src/filelistdelegate.cpp \
 	src/gitparsers.cpp \
 	src/gitprocess.cpp \

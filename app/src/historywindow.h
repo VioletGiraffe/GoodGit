@@ -11,12 +11,11 @@ class QCheckBox;
 class QFrame;
 class QLabel;
 class QLineEdit;
-class QPlainTextEdit;
 class QPushButton;
 class QSplitter;
 class QTreeView;
 class CLabelElided;
-class DiffHighlighter;
+class DiffPane;
 
 // The commit history of one repository, read-only. Owns its own Repository - it only ever asks
 // read-only questions, and a submodule's history is opened without a CommitWindow on that submodule
@@ -65,9 +64,7 @@ private:
 	void selectLoadedCommit();
 	void showFilesForCurrentCommit();
 	void showDiffForCurrentFile();
-	// The two kinds of content the right-hand pane holds; each owns whether the diff highlighting applies
 	void showCommitMessage(const CommitRecord& commit);
-	void setDiffText(const QString& pathLabel, const QString& tag, const QString& text);
 
 private:
 	const std::unique_ptr<Repository> _repo;
@@ -97,10 +94,7 @@ private:
 	QCheckBox* _pickaxeIgnoreCaseBox = nullptr;
 	QLabel* _fileCountLabel = nullptr;
 	QPushButton* _loadMoreButton = nullptr;
-	CLabelElided* _diffPathLabel = nullptr;
-	QLabel* _diffTagLabel = nullptr;
-	QPlainTextEdit* _diffView = nullptr;
-	DiffHighlighter* _diffHighlighter = nullptr;
+	DiffPane* _diffPane = nullptr;
 
 	Vcs::Query _logQuery;
 	Vcs::Query _pickaxeQuery;

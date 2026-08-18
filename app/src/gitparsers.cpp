@@ -1,5 +1,7 @@
 #include "gitparsers.h"
 
+#include <QList>
+
 namespace Git {
 
 BranchHeader parseBranchHeader(const QByteArray& statusOutput)

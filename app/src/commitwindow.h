@@ -17,7 +17,7 @@ class QSplitter;
 class QTreeView;
 class QPlainTextEdit;
 class ConsoleLogView;
-class DiffHighlighter;
+class DiffPane;
 class MessageEdit;
 class CLabelElided;
 class HistoryWindow;
@@ -69,7 +69,6 @@ private:
 	void showDiffForCurrentRow();
 	// An untracked file is nothing's modification, so the pane shows what it holds, unhighlighted
 	void showFileContents(const FileEntry& entry);
-	void setDiffText(const QString& pathLabel, const QString& tag, const QString& text);
 	void onRowActivated(const QModelIndex& index);
 	void openSubmoduleWindow(const FileEntry& entry);
 	void showContextMenu(const QPoint& pos);
@@ -118,10 +117,7 @@ private:
 	MessageEdit* _messageEdit = nullptr;
 	QPushButton* _commitButton = nullptr;
 	QPushButton* _commitPushButton = nullptr;
-	CLabelElided* _diffPathLabel = nullptr;
-	QLabel* _diffTagLabel = nullptr;
-	QPlainTextEdit* _diffView = nullptr;
-	DiffHighlighter* _diffHighlighter = nullptr;
+	DiffPane* _diffPane = nullptr;
 	QWidget* _pushLogPane = nullptr; // hidden until the first push of the session
 	ConsoleLogView* _pushLogView = nullptr;
 

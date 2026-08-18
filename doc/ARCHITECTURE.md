@@ -68,6 +68,7 @@ modified by design.
 | `commitgraphdelegate` | Paints that diagram in the log's first column, each line colored by the chain it belongs to |
 | `consolelogview` | The push log's view: raw process output rendered as a terminal renders it, so a progress meter's carriage returns rewrite one line instead of filling the log |
 | `diffhighlighter`, `messageedit` | Prefix-driven unified-diff highlighting; message editor with the 50-column subject guide and word completion fed by one `diff -U0 HEAD` per refresh |
+| `diffpane` | The pane both windows show one file's text in: the path and tag header over a read-only monospace view, and whether that text is highlighted as a diff. It neither reads nor caps what it is handed - `MaxDiffBytes` is the cap, and what to say instead is each window's own wording |
 | `settings` | Key vocabulary over qtutils `CSettings`. Window geometry is qtutils `CPersistenceEnabler`, one key per window kind - as the splitter positions are, and shared by every repository the same way |
 
 ## Backends

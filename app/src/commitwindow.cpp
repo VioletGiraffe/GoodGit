@@ -1,6 +1,6 @@
 #include "commitwindow.h"
 #include "consolelogview.h"
-#include "diffhighlighter.h"
+#include "diffpane.h"
 #include "filelistdelegate.h"
 #include "historymodels.h"
 #include "historywindow.h"
@@ -46,7 +46,6 @@
 namespace {
 
 constexpr int LeftColumnWidth = 430; // sized so the 50-column subject guide fits the message editor
-constexpr qsizetype MaxDiffBytes = 2 * 1024 * 1024;
 constexpr qsizetype BinarySniffBytes = 8000; // git's own threshold: a NUL this early means the file is not text
 constexpr int MaxListedPathsInDialog = 20;
 constexpr int MaxIncomingCommits = 200; // a peek, not a history window - that is what History is for
@@ -279,27 +278,8 @@ void CommitWindow::buildUi()
 	rightLayout->setContentsMargins(0, 0, 0, 0);
 	rightLayout->setSpacing(0);
 
-	auto* diffHeader = new QFrame;
-	diffHeader->setObjectName(QStringLiteral("diffHeader"));
-	auto* diffHeaderLayout = new QHBoxLayout(diffHeader);
-	diffHeaderLayout->setContentsMargins(8, 6, 8, 6);
-	_diffPathLabel = new CLabelElided;
-	_diffPathLabel->setFont(monospaceFont());
-	// Eliding does not shrink a QLabel's minimum width, which would otherwise set the pane's
-	_diffPathLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-	_diffTagLabel = new QLabel;
-	_diffTagLabel->setObjectName(QStringLiteral("diffTagLabel"));
-	diffHeaderLayout->addWidget(_diffPathLabel, 1);
-	diffHeaderLayout->addWidget(_diffTagLabel);
-	rightLayout->addWidget(diffHeader);
-
-	_diffView = new QPlainTextEdit;
-	_diffView->setObjectName(QStringLiteral("diffView"));
-	_diffView->setReadOnly(true);
-	_diffView->setLineWrapMode(QPlainTextEdit::WidgetWidth);
-	_diffView->setFont(monospaceFont());
-	_diffHighlighter = new DiffHighlighter(_diffView->document());
-	rightLayout->addWidget(_diffView, 1);
+	_diffPane = new DiffPane;
+	rightLayout->addWidget(_diffPane, 1);
 
 	_pushLogPane = new QWidget;
 	auto* pushLogLayout = new QVBoxLayout(_pushLogPane);
@@ -821,7 +801,7 @@ void CommitWindow::showDiffForCurrentRow()
 	const QModelIndex current = _filesView->currentIndex();
 	if (!current.isValid() || current.row() >= _filesModel.rowCount())
 	{
-		setDiffText({}, {}, {});
+		_diffPane->showDiff({}, {}, {});
 		return;
 	}
 
@@ -831,12 +811,12 @@ void CommitWindow::showDiffForCurrentRow()
 	{
 		if (!entry.pointerMoved)
 		{
-			setDiffText(entry.path, tr("submodule"), tr("The submodule pointer has not moved.\nThere are uncommitted changes inside - double-click to open the submodule."));
+			_diffPane->showDiff(entry.path, tr("submodule"), tr("The submodule pointer has not moved.\nThere are uncommitted changes inside - double-click to open the submodule."));
 			return;
 		}
-		setDiffText(entry.path, tr("new commits"), tr("Loading..."));
+		_diffPane->showDiff(entry.path, tr("new commits"), tr("Loading..."));
 		_diffQuery = _repo->submodulePointerLog(entry.path, this, [this, entry](std::expected<QString, QString> log) {
-			setDiffText(entry.path, tr("new commits"), log ? tr("Commits being pulled in:\n\n") + *log : log.error());
+			_diffPane->showDiff(entry.path, tr("new commits"), log ? tr("Commits being pulled in:\n\n") + *log : log.error());
 		});
 		return;
 	}
@@ -848,16 +828,16 @@ void CommitWindow::showDiffForCurrentRow()
 	}
 
 	const QString tag = tr("HEAD %1 working tree").arg(QChar(0x2192));
-	setDiffText(entry.path, tag, tr("Loading..."));
+	_diffPane->showDiff(entry.path, tag, tr("Loading..."));
 	_diffQuery = _repo->diffFile(entry, this, [this, entry, tag](std::expected<QByteArray, QString> diff) {
 		if (!diff)
-			setDiffText(entry.path, {}, diff.error());
+			_diffPane->showDiff(entry.path, {}, diff.error());
 		else if (diff->size() > MaxDiffBytes)
-			setDiffText(entry.path, {}, tr("The diff is too large to display (%1 MB).").arg(double(diff->size()) / (1024 * 1024), 0, 'f', 1));
+			_diffPane->showDiff(entry.path, {}, tr("The diff is too large to display (%1 MB).").arg(double(diff->size()) / (1024 * 1024), 0, 'f', 1));
 		else if (diff->isEmpty())
-			setDiffText(entry.path, {}, tr("No content changes (only the mode or the line endings differ, or the file matches HEAD)."));
+			_diffPane->showDiff(entry.path, {}, tr("No content changes (only the mode or the line endings differ, or the file matches HEAD)."));
 		else
-			setDiffText(entry.path, tag, QString::fromUtf8(*diff));
+			_diffPane->showDiff(entry.path, tag, QString::fromUtf8(*diff));
 	});
 }
 
@@ -867,39 +847,27 @@ void CommitWindow::showFileContents(const FileEntry& entry)
 	QFile file{ absolutePath(entry) };
 	if (file.size() > MaxDiffBytes)
 	{
-		setDiffText(entry.path, tag, tr("The file is too large to display (%1 MB).").arg(double(file.size()) / (1024 * 1024), 0, 'f', 1));
+		_diffPane->showDiff(entry.path, tag, tr("The file is too large to display (%1 MB).").arg(double(file.size()) / (1024 * 1024), 0, 'f', 1));
 		return;
 	}
 	if (!file.open(QIODevice::ReadOnly))
 	{
-		setDiffText(entry.path, tag, tr("Could not read '%1'.").arg(QDir::toNativeSeparators(file.fileName())));
+		_diffPane->showDiff(entry.path, tag, tr("Could not read '%1'.").arg(QDir::toNativeSeparators(file.fileName())));
 		return;
 	}
 	const QByteArray contents = file.readAll();
 	if (contents.isEmpty())
 	{
-		setDiffText(entry.path, tag, tr("The file is empty."));
+		_diffPane->showDiff(entry.path, tag, tr("The file is empty."));
 		return;
 	}
 	if (contents.left(BinarySniffBytes).contains('\0'))
 	{
-		setDiffText(entry.path, tag, tr("Binary file (%1 bytes).").arg(contents.size()));
+		_diffPane->showDiff(entry.path, tag, tr("Binary file (%1 bytes).").arg(contents.size()));
 		return;
 	}
 
-	// The file's own lines: a leading '-' is not a deletion here
-	_diffHighlighter->setEnabled(false);
-	_diffPathLabel->setText(entry.path);
-	_diffTagLabel->setText(tag);
-	_diffView->setPlainText(QString::fromUtf8(contents));
-}
-
-void CommitWindow::setDiffText(const QString& pathLabel, const QString& tag, const QString& text)
-{
-	_diffHighlighter->setEnabled(true);
-	_diffPathLabel->setText(pathLabel);
-	_diffTagLabel->setText(tag);
-	_diffView->setPlainText(text);
+	_diffPane->showText(entry.path, tag, QString::fromUtf8(contents));
 }
 
 void CommitWindow::onRowActivated(const QModelIndex& index)
