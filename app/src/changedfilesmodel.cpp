@@ -65,6 +65,11 @@ QColor lineCountColor(bool added)
 	return added ? t.stAdded : t.stDeleted;
 }
 
+QIcon submoduleIcon()
+{
+	return QApplication::style()->standardIcon(QStyle::SP_DirIcon);
+}
+
 ChangedFilesModel::ChangedFilesModel(QObject* parent) :
 	QAbstractTableModel(parent)
 {
@@ -242,7 +247,7 @@ QVariant ChangedFilesModel::data(const QModelIndex& index, int role) const
 		return {};
 	case Qt::DecorationRole:
 		if (index.column() == StateColumn && entry.isSubmodule)
-			return QApplication::style()->standardIcon(QStyle::SP_DirIcon);
+			return submoduleIcon();
 		return {};
 	case Qt::ForegroundRole:
 		if (index.column() == StateColumn)

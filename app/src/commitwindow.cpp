@@ -835,7 +835,7 @@ void CommitWindow::showDiffForCurrentRow()
 			return;
 		}
 		setDiffText(entry.path, tr("new commits"), tr("Loading..."));
-		_diffQuery = _repo->submodulePointerLog(entry, this, [this, entry](std::expected<QString, QString> log) {
+		_diffQuery = _repo->submodulePointerLog(entry.path, this, [this, entry](std::expected<QString, QString> log) {
 			setDiffText(entry.path, tr("new commits"), log ? tr("Commits being pulled in:\n\n") + *log : log.error());
 		});
 		return;

@@ -6,7 +6,6 @@
 #include <QBrush>
 #include <QDateTime>
 #include <QFont>
-#include <QStyle>
 
 namespace {
 
@@ -355,9 +354,9 @@ QVariant CommitFilesModel::data(const QModelIndex& index, int role) const
 		if (index.column() == AddedColumn || index.column() == RemovedColumn)
 			return int(Qt::AlignRight | Qt::AlignVCenter);
 		return {};
-	case Qt::DecorationRole: // the commit window's submodule marker
+	case Qt::DecorationRole:
 		if (index.column() == StateColumn && entry.isSubmodule)
-			return QApplication::style()->standardIcon(QStyle::SP_DirIcon);
+			return submoduleIcon();
 		return {};
 	case Qt::ForegroundRole:
 		if (index.column() == StateColumn)

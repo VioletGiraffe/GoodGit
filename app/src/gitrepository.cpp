@@ -654,12 +654,12 @@ Vcs::Query GitRepository::unpushedCommits(const QObject* context, Vcs::Answer<QS
 		context, Vcs::answering(std::move(onDone), shaSet));
 }
 
-Vcs::Query GitRepository::submodulePointerLog(const FileEntry& entry, const QObject* context, Vcs::Answer<QString> onDone)
+Vcs::Query GitRepository::submodulePointerLog(const QString& repoRelativePath, const QObject* context, Vcs::Answer<QString> onDone)
 {
-	const QString subPath = path() + QLatin1Char('/') + entry.path;
+	const QString subPath = path() + QLatin1Char('/') + repoRelativePath;
 	Vcs::Query query;
 	// A callback only runs while its context lives, so this one can hand the same context to the second query
-	query.attach(Git::run(path(), { QStringLiteral("rev-parse"), QStringLiteral("HEAD:") + entry.path }, context,
+	query.attach(Git::run(path(), { QStringLiteral("rev-parse"), QStringLiteral("HEAD:") + repoRelativePath }, context,
 		[query, subPath, context, onDone = std::move(onDone)](const ProcessResult& revResult) mutable {
 			if (!revResult.ok)
 			{

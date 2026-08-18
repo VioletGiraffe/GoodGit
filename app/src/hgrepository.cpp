@@ -754,19 +754,19 @@ Vcs::Query HgRepository::unpushedCommits(const QObject* context, Vcs::Answer<QSe
 		QStringLiteral("-T"), QStringLiteral("json") }, context, Vcs::answering(std::move(onDone), nodes));
 }
 
-Vcs::Query HgRepository::submodulePointerLog(const FileEntry& entry, const QObject* context, Vcs::Answer<QString> onDone)
+Vcs::Query HgRepository::submodulePointerLog(const QString& repoRelativePath, const QObject* context, Vcs::Answer<QString> onDone)
 {
-	const auto recorded = _subrepoNodes.find(entry.path);
+	const auto recorded = _subrepoNodes.find(repoRelativePath);
 	if (recorded == _subrepoNodes.end())
 	{
-		QTimer::singleShot(0, context, [onDone = std::move(onDone), path = entry.path] {
+		QTimer::singleShot(0, context, [onDone = std::move(onDone), path = repoRelativePath] {
 			onDone(std::unexpected(QStringLiteral("'%1' is not recorded in .hgsubstate.").arg(path)));
 		});
 		return {};
 	}
 
-	const QString workDir = QDir{ path() }.filePath(entry.path);
-	if (isGitSubrepo(entry.path))
+	const QString workDir = QDir{ path() }.filePath(repoRelativePath);
+	if (isGitSubrepo(repoRelativePath))
 	{
 		// A subrepo of an hg repository may be a git one, and the commits its pointer pulls in are then
 		// git's to list

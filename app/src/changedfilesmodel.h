@@ -4,6 +4,7 @@
 
 #include <QAbstractTableModel>
 #include <QColor>
+#include <QIcon>
 
 #include <functional>
 #include <vector>
@@ -17,6 +18,9 @@
 // leaves an empty cell rather than claiming a zero.
 [[nodiscard]] QString lineCountText(const std::optional<LineCounts>& counts, bool added);
 [[nodiscard]] QColor lineCountColor(bool added);
+
+// The marker a submodule row carries, in either list
+[[nodiscard]] QIcon submoduleIcon();
 
 // The checkable file list. Columns: checkbox + icon + state text, the lines added and removed, the path.
 // The counts take a column each so that a data role can color them; one "+12 -3" cell would need the

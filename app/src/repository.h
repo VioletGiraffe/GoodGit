@@ -144,8 +144,8 @@ public:
 	// HEAD's line - so an unlisted commit is not thereby a pushed one. Fails when there is no upstream to
 	// compare against - none configured, or a detached HEAD - which is not an error to report.
 	virtual Vcs::Query unpushedCommits(const QObject* context, Vcs::Answer<QSet<QString>> onDone) = 0;
-	// For a moved submodule pointer: the commits being pulled in, one line each
-	virtual Vcs::Query submodulePointerLog(const FileEntry& entry, const QObject* context, Vcs::Answer<QString> onDone) = 0;
+	// For a moved submodule pointer, at a repo-relative path: the commits being pulled in, one line each
+	virtual Vcs::Query submodulePointerLog(const QString& repoRelativePath, const QObject* context, Vcs::Answer<QString> onDone) = 0;
 
 	// Where the submodule at a repo-relative path has its own repository, so a window can be opened on it.
 	// The parent names the kind: a nested repository need not be of the same kind as the one holding it.
