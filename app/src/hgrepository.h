@@ -73,8 +73,7 @@ protected:
 
 private:
 	struct RefreshRun;
-	// The refresh's second round: the queries the first one's answers call for. Runs once they have all answered.
-	void startDependentQueries(const std::shared_ptr<RefreshRun>& run);
+	void launchSubrepoQueries(QueryRound& round, const std::shared_ptr<RefreshRun>& run);
 	void finishRefresh();
 	[[nodiscard]] std::vector<FileEntry> filesFromRun(const RefreshRun& run) const;
 	[[nodiscard]] RepoState stateFromRun(const RefreshRun& run) const;

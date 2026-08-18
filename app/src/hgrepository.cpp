@@ -196,17 +196,18 @@ void HgRepository::startRefresh()
 	auto run = std::make_shared<RefreshRun>();
 	_run = run;
 
-	// The parent's own record of its subrepos, re-read before the first process: it decides which subrepos the
-	// second round asks about, and which tool answers for each one.
+	// The parent's own record of its subrepos, re-read before the first process: it decides which subrepos
+	// are asked about, and which tool answers for each one.
 	_subrepoNodes = Hg::parseSubrepoState(fileContents(QDir{ path() }.filePath(QStringLiteral(".hgsubstate"))));
 	_subrepoSources = Hg::parseSubrepoSources(fileContents(QDir{ path() }.filePath(QStringLiteral(".hgsub"))));
 
-	QueryRound round{ refreshQueries(), [self = QPointer<HgRepository>{ this }, run] {
+	// One round: every hg invocation pays Python startup, so nothing waits that does not have to
+	QueryRound round{ refreshQueries(), [self = QPointer<HgRepository>{ this }] {
 		if (self)
-			self->startDependentQueries(run);
+			self->finishRefresh();
 	} };
 
-	// Not recursing: what is inside a subrepo is asked of that subrepo in the second round, and the parent's
+	// Not recursing: what is inside a subrepo is asked of that subrepo itself, and the parent's
 	// list holds the subrepo itself rather than the files under it
 	round.launch(path(), { QStringLiteral("status"), QStringLiteral("-C"), QStringLiteral("-T"), QStringLiteral("json") },
 		[run](const ProcessResult& r) {
@@ -238,26 +239,12 @@ void HgRepository::startRefresh()
 	// No default path is an answer rather than a failure: this repository has nowhere to push to
 	round.launch(path(), { QStringLiteral("paths"), QStringLiteral("default") },
 		[run](const ProcessResult& r) { run->hasDefaultPath = r.ok; });
-}
-
-// The queries the first round's answers call for: the unpushed set, which is only worth walking where
-// there is a remote to be ahead of, and what each subrepo is on and holds.
-void HgRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run)
-{
-	QueryRound round{ refreshQueries(), [self = QPointer<HgRepository>{ this }] {
-		if (self)
-			self->finishRefresh();
-	} };
-
 	// A draft changeset is one no remote has seen, limited here to the ancestors of the parent because that
 	// is what `push -r .` sends and this count stands next to that button. Without a remote every changeset
-	// is draft, so the question is only asked where its answer means something.
-	if (run->hasDefaultPath)
-	{
-		round.launch(path(), { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("draft() and ::."),
-				QStringLiteral("-T"), QStringLiteral("json") },
-			[run](const ProcessResult& r) { run->unpushed = Hg::parseCommitLog(r.out); });
-	}
+	// is draft, so stateFromRun only reads the answer where there is a remote to be ahead of.
+	round.launch(path(), { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("draft() and ::."),
+			QStringLiteral("-T"), QStringLiteral("json") },
+		[run](const ProcessResult& r) { run->unpushed = Hg::parseCommitLog(r.out); });
 
 	// `status` calls a conflicted file modified, so only the mergestate knows better. Every command that can
 	// conflict leaves one - merge, graft, rebase, an update over local changes - and it lives until the
@@ -268,6 +255,12 @@ void HgRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run)
 			[run](const ProcessResult& r) { run->conflicted = Hg::parseUnresolvedPaths(r.out); });
 	}
 
+	launchSubrepoQueries(round, run);
+}
+
+// What each subrepo is on and holds, asked of the subrepo itself
+void HgRepository::launchSubrepoQueries(QueryRound& round, const std::shared_ptr<RefreshRun>& run)
+{
 	for (const auto& subrepo : _subrepoNodes)
 	{
 		const QString& subPath = subrepo.first;
@@ -339,14 +332,17 @@ RepoState HgRepository::stateFromRun(const RefreshRun& run) const
 	// One name for the whole remote, which is as far as hg's own vocabulary goes - there is no per-branch
 	// upstream, and `default` is what a push contacts
 	state.upstream = run.hasDefaultPath ? QStringLiteral("default") : QString{};
-	state.ahead = int(run.unpushed.size());
 	state.behind = _behind;
 
-	for (const CommitRecord& commit : run.unpushed)
+	if (run.hasDefaultPath)
 	{
-		if (state.unpushedSubjects.size() >= MaxUnpushedLogEntries)
-			break;
-		state.unpushedSubjects << commit.subject();
+		state.ahead = int(run.unpushed.size());
+		for (const CommitRecord& commit : run.unpushed)
+		{
+			if (state.unpushedSubjects.size() >= MaxUnpushedLogEntries)
+				break;
+			state.unpushedSubjects << commit.subject();
+		}
 	}
 
 	// An uncommitted merge is the working directory having two parents. Rebase, graft and histedit leave
