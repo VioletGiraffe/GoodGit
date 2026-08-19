@@ -59,6 +59,9 @@ private:
 	// A submodule row opens its own repository's history, at the commit this one's pointer names
 	void onFileRowActivated(const QModelIndex& index);
 	void openSubmoduleHistory(const CommitFileChange& entry);
+	// The background second phase of a cold open: the same walk at the full limit, extending the shown
+	// batch in place when it lands
+	void loadRemainingCommits();
 	// Where a finished listing lands: the commit revealCommit() asked for, or the newest row. A requested
 	// commit the listing does not hold re-runs the walk from that commit, which does hold it.
 	void selectLoadedCommit();
@@ -77,6 +80,9 @@ private:
 	Repository::LogQuery _query;
 	bool _logCapped = false; // the last query returned its full limit, so older commits exist unread
 	bool _logLoaded = false; // the marks query can land first, and its counts mean nothing until this
+	// A cold open shows a small first batch while the full-limit walk still runs; while it does, a
+	// reveal miss waits for it instead of re-walking, and the count label says more is coming
+	bool _fullLoadPending = false;
 	// The commit the next finished listing should land on; cleared once it has, so a later reload or
 	// Load more selects the newest row as it otherwise would
 	QString _revealSha;

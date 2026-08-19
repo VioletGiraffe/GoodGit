@@ -11,6 +11,10 @@ namespace {
 
 constexpr qreal NodeRadius = 5.0; // a 10px node, in logical pixels - the display's scaling applies on top
 
+// The column is hinted at least this many lanes wide, so the deeper listing a cold open appends rarely
+// widens it mid-view; a diagram that genuinely needs more still gets more
+constexpr int MinHintedLanes = 6;
+
 // One lane's share of the width, leaving a node the same gap either side. The floor is what any ordinary
 // font gets; the metrics take over only for a large one, where the taller row wants wider lanes to match.
 int laneWidth(const QStyleOptionViewItem& option)
@@ -69,6 +73,6 @@ void CommitGraphDelegate::paint(QPainter* painter, const QStyleOptionViewItem& o
 QSize CommitGraphDelegate::sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const
 {
 	const QSize base = QStyledItemDelegate::sizeHint(option, index);
-	const int lanes = std::max(1, index.data(CommitLogModel::GraphLaneCountRole).toInt());
+	const int lanes = std::max(MinHintedLanes, index.data(CommitLogModel::GraphLaneCountRole).toInt());
 	return { laneWidth(option) * lanes, base.height() };
 }

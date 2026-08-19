@@ -28,9 +28,14 @@
 #include <QTreeView>
 #include <QVBoxLayout>
 
+#include <algorithm>
+
 namespace {
 
-constexpr int InitialMaxCommits = 20000;
+// A cold open lists the first batch as soon as that little is read, then extends to the full depth in
+// the background - the walk's cost is proportional to how much of history it covers
+constexpr int InitialCommitBatch = 500;
+constexpr int FullMaxCommits = 20000;
 constexpr int FileListWidth = 320;
 constexpr int MaxFilePathLabelWidth = 420; // beyond this the path elides rather than crowding the bar
 constexpr int PickaxeEditWidth = 320;
@@ -46,7 +51,7 @@ HistoryWindow::HistoryWindow(const RepositoryLocation& location, QWidget* parent
 HistoryWindow::HistoryWindow(const RepositoryLocation& location, const QString& filePath, QWidget* parent) :
 	QMainWindow(parent, Qt::Window),
 	_repo{ openRepository(location) },
-	_query{ .maxCommits = InitialMaxCommits, .path = filePath }
+	_query{ .maxCommits = FullMaxCommits, .path = filePath }
 {
 	setAttribute(Qt::WA_DeleteOnClose);
 	setWindowTitle(_query.path.isEmpty()
@@ -235,11 +240,12 @@ void HistoryWindow::refreshUnpushedMarks()
 
 void HistoryWindow::reload()
 {
-	_logQuery.cancel();
+	_logQuery.cancel(); // a pending full-depth phase with it
 	_pickaxeQuery.cancel();
 
 	refreshUnpushedMarks();
 	_logLoaded = false;
+	_fullLoadPending = false;
 	_countLabel->setText(tr("Loading..."));
 
 	// The diagram needs a listing holding every commit between the ones it draws. A path limit prunes them
@@ -257,7 +263,15 @@ void HistoryWindow::reload()
 		});
 	}
 
-	_logQuery = _repo->commitLog(_query, this, [this](std::expected<std::vector<CommitRecord>, QString> result) {
+	// A cold open pays for the walk in proportion to its limit, so it starts with a small batch and
+	// extends to the full depth in the background. A window already showing rows re-runs in one phase:
+	// resetting it down to the batch just to grow back would make every refresh a visible collapse.
+	Repository::LogQuery firstQuery = _query;
+	if (_logModel.totalCount() == 0 && _query.contentSearch.isEmpty())
+		firstQuery.maxCommits = std::min(_query.maxCommits, InitialCommitBatch);
+
+	_logQuery = _repo->commitLog(firstQuery, this,
+		[this, phase1Limit = firstQuery.maxCommits](std::expected<std::vector<CommitRecord>, QString> result) {
 		if (!result)
 		{
 			_logCapped = false;
@@ -271,7 +285,9 @@ void HistoryWindow::reload()
 		std::vector<CommitRecord> commits = *std::move(result);
 		PROFILE_MARK(QStringLiteral("history log parsed (%1 commits)").arg(commits.size()).toUtf8().constData());
 		// Exactly the limit means the walk was cut short, not that history ends here
-		_logCapped = int(commits.size()) >= _query.maxCommits;
+		const bool capped = int(commits.size()) >= phase1Limit;
+		_fullLoadPending = capped && phase1Limit < _query.maxCommits;
+		_logCapped = capped && !_fullLoadPending;
 		_loadMoreButton->setVisible(_logCapped);
 
 		_logModel.setCommits(std::move(commits)); // re-applies the active search to the new records
@@ -279,6 +295,36 @@ void HistoryWindow::reload()
 		updateCountLabel();
 		selectLoadedCommit();
 		PROFILE_MARK("history populated");
+
+		if (_fullLoadPending)
+			loadRemainingCommits();
+	});
+}
+
+void HistoryWindow::loadRemainingCommits()
+{
+	_logQuery = _repo->commitLog(_query, this, [this](std::expected<std::vector<CommitRecord>, QString> result) {
+		_fullLoadPending = false;
+		if (!result)
+		{
+			// The batch on show stands; what failed is only the depth behind it, and the button offers it again
+			_logCapped = true;
+			_loadMoreButton->setVisible(true);
+			updateCountLabel();
+			return;
+		}
+
+		std::vector<CommitRecord> commits = *std::move(result);
+		PROFILE_MARK(QStringLiteral("history full log parsed (%1 commits)").arg(commits.size()).toUtf8().constData());
+		_logCapped = int(commits.size()) >= _query.maxCommits;
+		_loadMoreButton->setVisible(_logCapped);
+
+		if (!_logModel.extendCommits(std::move(commits)))
+			selectLoadedCommit(); // the extension fell back to a reset, and the selection went with it
+		else if (!_revealSha.isEmpty())
+			selectLoadedCommit(); // a reveal the first batch missed; never re-selects over the user otherwise
+		updateCountLabel();
+		PROFILE_MARK("history fully populated");
 	});
 }
 
@@ -301,6 +347,8 @@ void HistoryWindow::selectLoadedCommit()
 			_logView->scrollTo(index, QAbstractItemView::PositionAtCenter);
 			return;
 		}
+		if (_fullLoadPending)
+			return; // the full depth is still coming and may list it; decided when it lands
 		if (_query.startRevision != _revealSha)
 		{
 			// Not on the line of history the walk covered, so the walk has to start at the commit itself
@@ -353,7 +401,9 @@ void HistoryWindow::updateCountLabel()
 
 	QString text = shown == total ? tr("%1 commits").arg(total) : tr("%1 of %2 commits").arg(shown).arg(total);
 	// Kept visible during a search too: finding nothing may only mean the commit is older than the limit
-	if (_logCapped)
+	if (_fullLoadPending)
+		text = tr("%1, loading more...").arg(text);
+	else if (_logCapped)
 		text = tr("%1, more to load").arg(text);
 
 	if (!_query.contentSearch.isEmpty())

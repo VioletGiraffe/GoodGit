@@ -28,6 +28,11 @@ public:
 	explicit CommitLogModel(QObject* parent = nullptr);
 
 	void setCommits(std::vector<CommitRecord> commits);
+	// The same walk re-run with a longer limit: the loaded list reappears as its prefix, and only the
+	// rows beyond it are inserted - no reset, so the selection and the scroll position survive. Returns
+	// false where the prefix does not hold (the repository changed between the walks) - then this is an
+	// ordinary setCommits() and the caller's selection is gone with the reset.
+	[[nodiscard]] bool extendCommits(std::vector<CommitRecord> commits);
 	// Hides every commit that does not contain `text` in its sha, author, refs, date or message.
 	// Empty text shows all of them again.
 	void setSearchText(const QString& text);

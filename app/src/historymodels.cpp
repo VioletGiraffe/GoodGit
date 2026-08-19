@@ -116,6 +116,49 @@ void CommitLogModel::setCommits(std::vector<CommitRecord> commits)
 	endResetModel();
 }
 
+bool CommitLogModel::extendCommits(std::vector<CommitRecord> commits)
+{
+	bool isPrefix = commits.size() >= _commits.size();
+	for (size_t i = 0; isPrefix && i < _commits.size(); ++i)
+		isPrefix = commits[i].sha == _commits[i].sha;
+	if (!isPrefix)
+	{
+		setCommits(std::move(commits));
+		return false;
+	}
+	if (commits.size() == _commits.size())
+		return true;
+
+	// The tail's visible rows form one block at the end: every appended commit indexes after every
+	// loaded one, and _visible is in index order
+	const size_t firstNew = _commits.size();
+	int appendedVisible = 0;
+	for (size_t i = firstNew; i < commits.size(); ++i)
+	{
+		if (_searchText.isEmpty() || matchesSearch(commits[i], _searchText))
+			++appendedVisible;
+	}
+
+	const int oldVisibleCount = int(_visible.size());
+	if (appendedVisible > 0)
+		beginInsertRows({}, oldVisibleCount, oldVisibleCount + appendedVisible - 1);
+
+	const QDateTime now = QDateTime::currentDateTime();
+	for (size_t i = firstNew; i < commits.size(); ++i)
+		_displayedDates.push_back(displayedDate(commits[i].date, now));
+	_commits = std::move(commits); // wholesale: the prefix is the same commits, at worst with fresher refs
+	_graph = buildCommitGraph(_commits);
+	rebuildVisible();
+
+	if (appendedVisible > 0)
+		endInsertRows();
+	// Deeper history can extend lines through rows already shown - a lane dangling at the old bottom
+	// now continues - and the lane count can grow, so the whole column repaints
+	if (!_visible.empty())
+		emit dataChanged(index(0, GraphColumn), index(int(_visible.size()) - 1, GraphColumn));
+	return true;
+}
+
 void CommitLogModel::setSearchText(const QString& text)
 {
 	if (_searchText == text)

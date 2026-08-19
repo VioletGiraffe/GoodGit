@@ -161,7 +161,9 @@ correctness, so they stay silent.
 ## History
 
 Read-only, and bounded rather than paged: one `log --max-count=N` builds the whole list, and "Load more"
-re-runs it with N doubled. A file history is that same window with a path appended to the query and
+re-runs it with N doubled. A cold open runs that walk twice - a small batch for an instant list, then the
+full limit in the background, appended in place: the shorter walk's result is a prefix of the longer's,
+which is verified, with a plain reset as the fallback when the repository changed in between. A file history is that same window with a path appended to the query and
 `--follow` set, so it traces the file across renames; everything else - search, marks, panes - is shared. **Such a walk has no resumable cursor** - continuing from the last
 sha's ancestors drops every commit that sits on a parallel branch, since those are ancestors of HEAD but
 not of that sha. `--skip` avoids that bug but re-walks the skipped commits anyway, which is what the
