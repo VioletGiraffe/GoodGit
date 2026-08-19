@@ -1,30 +1,11 @@
 #include "vcsprocess.h"
 
-#include "timing/profiler.h"
-
 #include <QPointer>
 #include <QTemporaryFile>
 
 #include <deque>
 
 namespace {
-
-// The command as one log line, without the --config pairs every hg invocation carries - they are
-// invariant, so they say nothing about where the time went
-QString commandForLog(const QString& toolName, const QStringList& args)
-{
-	QString line = toolName;
-	for (qsizetype i = 0; i < args.size(); ++i)
-	{
-		if (args[i] == QLatin1String("--config"))
-		{
-			++i; // its value
-			continue;
-		}
-		line += QLatin1Char(' ') + args[i];
-	}
-	return line;
-}
 
 // Only the last state of a line a progress meter kept rewriting is text; a CRLF ends its line as an LF does
 QString collapseCarriageReturns(QString text)
@@ -161,7 +142,6 @@ void Job::collect(const QByteArray& chunk, QByteArray& buffer)
 
 void ProcessJob::start()
 {
-	_queuedMs = int64_t(_sinceEnqueued.msElapsed());
 	_process = new QProcess(this);
 	_process->setWorkingDirectory(_workDir);
 	_process->setProcessEnvironment(_tool.environment);
@@ -208,7 +188,6 @@ void ProcessJob::start()
 
 ProcessResult runSync(const Tool& tool, const QString& workDir, QStringList args, int timeoutMs)
 {
-	const CTimeElapsed elapsed{ /*autoStart=*/true };
 	QProcess process;
 	process.setWorkingDirectory(workDir);
 	process.setProcessEnvironment(tool.environment);
@@ -242,8 +221,6 @@ ProcessResult runSync(const Tool& tool, const QString& workDir, QStringList args
 	// Whatever reached the pipes before it stopped, however it stopped
 	result.out = process.readAllStandardOutput();
 	result.err = process.readAllStandardError();
-	PROFILE_MARK(QStringLiteral("%1 (sync, ran %2ms)").arg(commandForLog(tool.displayName, args))
-		.arg(elapsed.msElapsed()).toUtf8().constData());
 	return result;
 }
 
@@ -280,17 +257,6 @@ std::shared_ptr<QTemporaryFile> openTempFile(const QByteArray& contents, const Q
 void Job::finish(ProcessResult result)
 {
 	result.toolName = _tool.displayName;
-
-	QString note;
-	if (result.outcome == ProcessOutcome::LaunchFailed)
-		note = QStringLiteral(", launch failed");
-	else if (result.outcome == ProcessOutcome::Crashed)
-		note = QStringLiteral(", killed");
-	else if (result.exitCode != 0)
-		note = QStringLiteral(", exit %1").arg(result.exitCode);
-	PROFILE_MARK(QStringLiteral("%1 (%2queued %3ms, ran %4ms%5)").arg(commandForLog(_tool.displayName, _args))
-		.arg(_viaServer ? QStringLiteral("server, ") : QString{})
-		.arg(_queuedMs).arg(int64_t(_sinceEnqueued.msElapsed()) - _queuedMs).arg(note).toUtf8().constData());
 
 	if (!_cancelled && _callback && (!_hasContext || _context))
 		_callback(result);

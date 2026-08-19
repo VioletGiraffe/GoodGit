@@ -1,7 +1,5 @@
 #include "hgcommandserver.h"
 
-#include "timing/profiler.h"
-
 #include <QTimer>
 #include <QtEndian>
 
@@ -27,7 +25,6 @@ namespace Hg {
 ServerJob::ServerJob(Vcs::Tool tool, QString workDir, QStringList args, const QObject* context, Vcs::Callback callback) :
 	Vcs::Job{ std::move(tool), std::move(workDir), std::move(args), {}, context, std::move(callback) }
 {
-	_viaServer = true;
 }
 
 void ServerJob::completed(int exitCode)
@@ -114,7 +111,6 @@ void HgCommandServer::execute(Hg::ServerJob* job)
 	assert(idle());
 	_currentJob = job;
 	job->_runningOn = this;
-	job->_queuedMs = int64_t(job->_sinceEnqueued.msElapsed());
 
 	QStringList args = job->_args;
 	// Without -R the dispatch stays on the bound repository whatever the cwd, and relative path
@@ -213,7 +209,6 @@ void HgCommandServer::readHello(const QByteArray& payload)
 		return;
 	}
 	_helloSeen = true;
-	PROFILE_MARK(QStringLiteral("hg server ready (bound to %1, %2ms)").arg(_bindRoot).arg(_sinceSpawn.msElapsed()).toUtf8().constData());
 	_pool.serverReady(this);
 }
 

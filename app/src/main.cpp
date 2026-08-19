@@ -2,22 +2,16 @@
 #include "repositoryfactory.h"
 #include "theme.h"
 
-#include "timing/profiler.h"
-
 #include <QApplication>
-#include <QDebug>
 #include <QDir>
 #include <QMessageBox>
 
 int main(int argc, char* argv[])
 {
-	Profiler::setLoggingFunc([](const char* message) { qInfo().noquote() << message; });
-	Profiler::start();
 	QApplication app{ argc, argv };
 	QApplication::setOrganizationName(QStringLiteral("GoodGit"));
 	QApplication::setApplicationName(QStringLiteral("GoodGit"));
 	applyTheme(app);
-	PROFILE_MARK("QApplication ready");
 
 	// Not argv, which on Windows arrives in the local codepage and mangles anything outside it
 	const QStringList arguments = QApplication::arguments();
@@ -34,7 +28,6 @@ int main(int argc, char* argv[])
 
 	auto* window = new CommitWindow{ *location };
 	window->show();
-	PROFILE_MARK("window shown");
 
 	return QApplication::exec();
 }

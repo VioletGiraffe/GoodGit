@@ -10,7 +10,6 @@
 #include "theme.h"
 
 #include "dialogs/messagebox.h"
-#include "timing/profiler.h"
 #include "widgets/clabelelided.h"
 #include "widgets/cpersistentwindow.h"
 #include "widgets/widgetutils.h"
@@ -404,9 +403,7 @@ void CommitWindow::onRefreshed()
 	_wordPoolQuery.cancel();
 	_wordPoolQuery = _repo->diffAllChanges(this, [this](std::expected<QByteArray, QString> diff) {
 		_messageEdit->setCompletionWords(completionWordsFor(_repo->files(), std::move(diff).value_or(QByteArray{})));
-		PROFILE_MARK("word pool ready");
 	});
-	PROFILE_MARK(QStringLiteral("commit window populated (%1 rows)").arg(_filesModel.rowCount()).toUtf8().constData());
 }
 
 void CommitWindow::updateHeader()
@@ -841,7 +838,6 @@ void CommitWindow::showDiffForCurrentRow()
 			_diffPane->showDiff(entry.path, {}, tr("No content changes (only the mode or the line endings differ, or the file matches HEAD)."));
 		else
 			_diffPane->showDiff(entry.path, tag, QString::fromUtf8(*diff));
-		PROFILE_MARK(QStringLiteral("row diff shown: %1").arg(entry.path).toUtf8().constData());
 	});
 }
 

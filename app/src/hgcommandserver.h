@@ -79,7 +79,6 @@ private:
 	Hg::ServerJob* _currentJob = nullptr;
 	bool _helloSeen = false;
 	bool _dead = false;
-	CTimeElapsed _sinceSpawn{ /*autoStart=*/true }; // profiling: how long the server takes to become ready
 };
 
 // Up to MaxServers connections, spawned lazily against demand and each bound to the repository of the

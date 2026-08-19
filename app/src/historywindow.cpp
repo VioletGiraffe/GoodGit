@@ -6,7 +6,6 @@
 #include "settings.h"
 #include "theme.h"
 
-#include "timing/profiler.h"
 #include "widgets/clabelelided.h"
 #include "widgets/cpersistentwindow.h"
 #include "widgets/widgetutils.h"
@@ -283,7 +282,6 @@ void HistoryWindow::reload()
 		}
 
 		std::vector<CommitRecord> commits = *std::move(result);
-		PROFILE_MARK(QStringLiteral("history log parsed (%1 commits)").arg(commits.size()).toUtf8().constData());
 		// Exactly the limit means the walk was cut short, not that history ends here
 		const bool capped = int(commits.size()) >= phase1Limit;
 		_fullLoadPending = capped && phase1Limit < _query.maxCommits;
@@ -294,7 +292,6 @@ void HistoryWindow::reload()
 		_logLoaded = true;
 		updateCountLabel();
 		selectLoadedCommit();
-		PROFILE_MARK("history populated");
 
 		if (_fullLoadPending)
 			loadRemainingCommits();
@@ -315,7 +312,6 @@ void HistoryWindow::loadRemainingCommits()
 		}
 
 		std::vector<CommitRecord> commits = *std::move(result);
-		PROFILE_MARK(QStringLiteral("history full log parsed (%1 commits)").arg(commits.size()).toUtf8().constData());
 		_logCapped = int(commits.size()) >= _query.maxCommits;
 		_loadMoreButton->setVisible(_logCapped);
 
@@ -324,7 +320,6 @@ void HistoryWindow::loadRemainingCommits()
 		else if (!_revealSha.isEmpty())
 			selectLoadedCommit(); // a reveal the first batch missed; never re-selects over the user otherwise
 		updateCountLabel();
-		PROFILE_MARK("history fully populated");
 	});
 }
 

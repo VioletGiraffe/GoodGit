@@ -1,7 +1,5 @@
 #pragma once
 
-#include "timing/ctimeelapsed.h"
-
 #include <QByteArray>
 #include <QObject>
 #include <QPointer>
@@ -91,9 +89,6 @@ protected:
 	QPointer<const QObject> _context;
 	bool _hasContext = false;
 	bool _cancelled = false;
-	bool _viaServer = false; // profiling: names the transport
-	CTimeElapsed _sinceEnqueued{ /*autoStart=*/true }; // profiling: runs from creation, which is enqueueing
-	int64_t _queuedMs = 0; // profiling: how long the job waited; the transport snapshots it at dispatch
 };
 
 // How a query answers: what it was asked for, or why it cannot be had. Taken by value - the answer
