@@ -682,32 +682,37 @@ void CommitWindow::doCommit(bool pushAfterwards)
 void CommitWindow::doPush(bool setUpstream)
 {
 	_pushButton->setEnabled(false);
-	if (!setUpstream)
-		_pushLogView->clearLog(); // the set-upstream retry continues the same push - its report joins the failed attempt's
+	_pushLogView->clearLog(); // the set-upstream retry replaces the attempt it follows rather than adding to it
 
 	_pushLogPane->show(); // before the entry: the log's scrolling needs a laid-out viewport
 	_pushLogView->beginEntry(_repo->pushCommandLabel(setUpstream));
 
 	const auto onDone = [this, setUpstream](const ProcessResult& result) {
 		_pushButton->setEnabled(true);
+
+		// A push with nowhere to go is not over until the offer to give it one is answered
+		const bool upstreamOffered = !result.ok && !setUpstream && QString::fromUtf8(result.err).contains(QLatin1String("no upstream"));
+		if (upstreamOffered)
+		{
+			const auto answer = MessageBox::question(this, tr("No upstream branch"),
+				tr("The current branch has no upstream configured. Push it to 'origin' and set the upstream?"),
+				{ tr("Push and set upstream") });
+			if (answer == 0)
+			{
+				doPush(/*setUpstream=*/true); // the retry ends the push, so the verdict is the retry's to give
+				return;
+			}
+		}
+
 		closePushLogEntry(result);
 
 		if (result.ok)
 		{
 			_repo->refresh();
 			emit pushed();
-			return;
 		}
-		if (!setUpstream && QString::fromUtf8(result.err).contains(QLatin1String("no upstream")))
-		{
-			const auto answer = MessageBox::question(this, tr("No upstream branch"),
-				tr("The current branch has no upstream configured. Push it to 'origin' and set the upstream?"),
-				{ tr("Push and set upstream") });
-			if (answer == 0)
-				doPush(/*setUpstream=*/true);
-			return;
-		}
-		showError(tr("Push failed"), result.errorText());
+		else if (!upstreamOffered) // a declined offer named this failure already
+			showError(tr("Push failed"), result.errorText());
 	};
 
 	Vcs::Job* job = setUpstream ? _repo->pushSetUpstream(onDone) : _repo->push(onDone);
@@ -786,12 +791,14 @@ void CommitWindow::showIncomingCommits(const std::vector<CommitRecord>& commits,
 
 void CommitWindow::closePushLogEntry(const ProcessResult& result)
 {
-	// Everything the push had to say is already in the log, streamed as it ran. What is left is what the
-	// process could not say for itself.
-	if (result.outcome != ProcessOutcome::Exited)
-		_pushLogView->appendNote(result.errorText());
-	else if (!_pushLogView->entryHasOutput())
-		_pushLogView->appendNote(tr("(no output; exit code %1)").arg(result.exitCode));
+	// Everything the push had to say is already in the log, streamed as it ran. What is left is the
+	// verdict, which its output nowhere states.
+	if (result.ok)
+		_pushLogView->appendNote(tr("Succeeded"), ConsoleLogView::NoteKind::Success);
+	else if (result.outcome == ProcessOutcome::Exited)
+		_pushLogView->appendNote(tr("Process failed with exit code %1").arg(result.exitCode), ConsoleLogView::NoteKind::Failure);
+	else // no exit code to report: it never started, or died without exiting
+		_pushLogView->appendNote(result.errorText(), ConsoleLogView::NoteKind::Failure);
 }
 
 void CommitWindow::showDiffForCurrentRow()

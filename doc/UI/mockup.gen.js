@@ -172,10 +172,12 @@ code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-siz
 
 /* ---------- push log ---------- */
 /* Open only while a push runs. A ConsoleLogView, so the progress meter's carriage returns rewrite one
-   line instead of filling the log. */
+   line instead of filling the log. Each entry opens with the command and closes with its verdict,
+   which the output itself nowhere states - red on a failure. */
 .plog { flex: 0 0 auto; border-top: 1px solid var(--border); background: var(--pane); }
 .plog .phead { display: flex; align-items: center; gap: 9px; padding: 6px 10px; background: var(--win-bg); border-bottom: 1px solid var(--border); font-size: 12px; }
 .plog pre { margin: 0; max-height: 170px; overflow: auto; padding: 6px 10px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; line-height: 1.5; color: var(--dim); }
+.plog .ok { color: var(--st-add); font-weight: 600; }
 
 /* ---------- buttons ---------- */
 .btn { font: inherit; font-size: 12.5px; padding: 5px 14px; background: var(--btn); color: var(--text); border: 1px solid var(--btn-border); border-radius: 4px; white-space: nowrap; }
@@ -348,7 +350,9 @@ const diffpane = (path, tag, lines) => `<div class="diff col" style="flex:1">
 const pushlog = () => `<div class="plog">
 			<div class="phead"><span>Push output</span><span class="grow"></span>
 				<button class="btn small">Hide</button></div>
-			<pre>${PUSH_LOG.map(l => esc(l)).join('\n')}</pre>
+			<pre>&gt; git push
+${PUSH_LOG.map(l => esc(l)).join('\n')}
+<span class="ok">Succeeded</span></pre>
 		</div>`;
 
 /* Left column width is set by the repo header row, the widest thing in the column: repo name, branch

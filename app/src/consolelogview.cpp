@@ -16,24 +16,21 @@ void ConsoleLogView::clearLog()
 {
 	clear();
 	resetStreamState();
-	_entryHasOutput = false;
 }
 
 void ConsoleLogView::beginEntry(const QString& label)
 {
 	resetStreamState();
-	_entryHasOutput = false;
 
 	if (blockCount() > 1) // an empty document still has one block
-		appendPlainText({});
-	appendPlainText(QStringLiteral("> ") + label);
+		appendBlock({}, {});
+	appendBlock(QStringLiteral("> ") + label, {});
 }
 
 void ConsoleLogView::appendOutput(const QByteArray& chunk)
 {
 	if (chunk.isEmpty())
 		return;
-	_entryHasOutput = true;
 
 	const QString text = _decoder(chunk); // the decoder returns a lazy proxy, not something iterable
 	for (const QChar c : text)
@@ -63,10 +60,14 @@ void ConsoleLogView::appendOutput(const QByteArray& chunk)
 		showPendingLine(); // a chunk ending mid-line still shows what it has
 }
 
-void ConsoleLogView::appendNote(const QString& text)
+void ConsoleLogView::appendNote(const QString& text, NoteKind kind)
 {
 	resetStreamState(); // a note is never a rewrite of the line the process left open
-	appendPlainText(text);
+
+	QTextCharFormat format;
+	format.setForeground(kind == NoteKind::Success ? activeTheme().stAdded : activeTheme().stDeleted);
+	format.setFontWeight(QFont::Bold);
+	appendBlock(text, format);
 }
 
 void ConsoleLogView::resetStreamState()
@@ -79,23 +80,44 @@ void ConsoleLogView::resetStreamState()
 
 void ConsoleLogView::showPendingLine()
 {
-	// Sampled before the edit: an edit at the end moves the maximum, and only a reader who was already
-	// at the bottom wants to be carried along
-	const bool wasAtBottom = verticalScrollBar()->value() >= verticalScrollBar()->maximum();
-
-	if (_lineOpen)
+	if (!_lineOpen)
 	{
-		QTextCursor cursor{ document() };
-		cursor.movePosition(QTextCursor::End);
-		cursor.movePosition(QTextCursor::StartOfBlock, QTextCursor::KeepAnchor);
-		cursor.insertText(_pendingLine); // over the selection: replaces the block's text, keeps the block
-	}
-	else
-	{
-		appendPlainText(_pendingLine);
+		appendBlock(_pendingLine, {});
 		_lineOpen = true;
+		return;
 	}
+
+	const bool wasAtBottom = atBottom();
+
+	QTextCursor cursor{ document() };
+	cursor.movePosition(QTextCursor::End);
+	cursor.movePosition(QTextCursor::StartOfBlock, QTextCursor::KeepAnchor);
+	cursor.insertText(_pendingLine, {}); // over the selection: replaces the block's text, keeps the block
 
 	if (wasAtBottom)
-		verticalScrollBar()->setValue(verticalScrollBar()->maximum());
+		scrollToBottom();
+}
+
+void ConsoleLogView::appendBlock(const QString& text, const QTextCharFormat& format)
+{
+	const bool wasAtBottom = atBottom();
+
+	QTextCursor cursor{ document() };
+	cursor.movePosition(QTextCursor::End);
+	if (!document()->isEmpty()) // the block a fresh document already has is the first line, not one before it
+		cursor.insertBlock();
+	cursor.insertText(text, format); // newlines within open further blocks, which a multi-line note needs
+
+	if (wasAtBottom)
+		scrollToBottom();
+}
+
+bool ConsoleLogView::atBottom() const
+{
+	return verticalScrollBar()->value() >= verticalScrollBar()->maximum();
+}
+
+void ConsoleLogView::scrollToBottom()
+{
+	verticalScrollBar()->setValue(verticalScrollBar()->maximum());
 }
