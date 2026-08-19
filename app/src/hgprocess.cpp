@@ -1,4 +1,5 @@
 #include "hgprocess.h"
+#include "hgcommandserver.h"
 #include "settings.h"
 
 namespace {
@@ -24,9 +25,11 @@ QStringList invariantArgs()
 }
 
 Vcs::Job* run(const QString& workDir, QStringList args, const QObject* context, Vcs::Callback callback,
-	QByteArray stdinData)
+	QByteArray stdinData, Transport transport)
 {
 	args = invariantArgs() + args; // global options come before the subcommand
+	if (transport == Transport::Server)
+		return HgServerPool::instance().run(hgTool(), workDir, std::move(args), context, std::move(callback), std::move(stdinData));
 	return Vcs::run(hgTool(), workDir, std::move(args), context, std::move(callback), std::move(stdinData));
 }
 

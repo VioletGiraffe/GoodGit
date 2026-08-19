@@ -1,11 +1,30 @@
 #include "vcsprocess.h"
 
+#include "timing/profiler.h"
+
 #include <QPointer>
 #include <QTemporaryFile>
 
 #include <deque>
 
 namespace {
+
+// The command as one log line, without the --config pairs every hg invocation carries - they are
+// invariant, so they say nothing about where the time went
+QString commandForLog(const QString& toolName, const QStringList& args)
+{
+	QString line = toolName;
+	for (qsizetype i = 0; i < args.size(); ++i)
+	{
+		if (args[i] == QLatin1String("--config"))
+		{
+			++i; // its value
+			continue;
+		}
+		line += QLatin1Char(' ') + args[i];
+	}
+	return line;
+}
 
 // Only the last state of a line a progress meter kept rewriting is text; a CRLF ends its line as an LF does
 QString collapseCarriageReturns(QString text)
@@ -40,19 +59,39 @@ QString ProcessResult::errorText() const
 
 namespace Vcs {
 
-static constexpr int MaxConcurrentProcesses = 8;
+static constexpr int MaxConcurrentProcesses = 24;
 static constexpr int KillWaitMs = 2000; // a killed process should be gone at once; this is only so the wait is bounded
+
+// The process transport: one QProcess per job, capped by the queue below
+class ProcessJob final : public Job
+{
+public:
+	ProcessJob(Tool tool, QString workDir, QStringList args, QByteArray stdinData, const QObject* context, Callback callback) :
+		Job{ std::move(tool), std::move(workDir), std::move(args), std::move(stdinData), context, std::move(callback) }
+	{}
+
+	void cancel() override;
+
+private:
+	void start();
+	void finishProcess(ProcessResult result); // releases the queue slot, then delivers
+
+private:
+	QProcess* _process = nullptr;
+
+	friend struct JobQueue;
+};
 
 struct JobQueue
 {
-	std::deque<Job*> pending;
+	std::deque<ProcessJob*> pending;
 	int running = 0;
 
 	void pump()
 	{
 		while (running < MaxConcurrentProcesses && !pending.empty())
 		{
-			Job* job = pending.front();
+			ProcessJob* job = pending.front();
 			pending.pop_front();
 
 			if (job->_hasContext && !job->_context)
@@ -66,7 +105,7 @@ struct JobQueue
 		}
 	}
 
-	void remove(Job* job)
+	void remove(ProcessJob* job)
 	{
 		std::erase(pending, job);
 	}
@@ -74,27 +113,30 @@ struct JobQueue
 
 static JobQueue s_queue;
 
+Job::Job(Tool tool, QString workDir, QStringList args, QByteArray stdinData, const QObject* context, Callback callback) :
+	_tool{ std::move(tool) },
+	_workDir{ std::move(workDir) },
+	_args{ std::move(args) },
+	_stdinData{ std::move(stdinData) },
+	_callback{ std::move(callback) },
+	_context{ context },
+	_hasContext{ context != nullptr }
+{
+}
+
 Job* run(const Tool& tool, const QString& workDir, QStringList args, const QObject* context, Callback callback, QByteArray stdinData)
 {
-	auto* job = new Job;
-	job->_tool = tool;
-	job->_workDir = workDir;
-	job->_args = std::move(args);
-	job->_stdinData = std::move(stdinData);
-	job->_callback = std::move(callback);
-	job->_context = context;
-	job->_hasContext = context != nullptr;
-
+	auto* job = new ProcessJob{ tool, workDir, std::move(args), std::move(stdinData), context, std::move(callback) };
 	s_queue.pending.push_back(job);
 	s_queue.pump();
 	return job;
 }
 
-void Job::cancel()
+void ProcessJob::cancel()
 {
 	_cancelled = true;
 	if (_process)
-		_process->kill(); // finish() runs from the finished/error signal and self-deletes
+		_process->kill(); // finishProcess() runs from the finished/error signal and self-deletes
 	else
 	{
 		s_queue.remove(this);
@@ -117,8 +159,9 @@ void Job::collect(const QByteArray& chunk, QByteArray& buffer)
 		_sink(chunk);
 }
 
-void Job::start()
+void ProcessJob::start()
 {
+	_queuedMs = int64_t(_sinceEnqueued.msElapsed());
 	_process = new QProcess(this);
 	_process->setWorkingDirectory(_workDir);
 	_process->setProcessEnvironment(_tool.environment);
@@ -141,7 +184,7 @@ void Job::start()
 		}
 		else
 			result.outcome = ProcessOutcome::Crashed; // the exit code a killed process carries describes the kill, not the command
-		finish(std::move(result));
+		finishProcess(std::move(result));
 	});
 	// Queued: start() emits this synchronously when the OS refuses the launch, and run()'s contract is a
 	// callback from the event loop - callers store the returned Job and count their outstanding ones.
@@ -150,7 +193,7 @@ void Job::start()
 			return; // crashes arrive via finished()
 		ProcessResult result;
 		result.outcome = ProcessOutcome::LaunchFailed;
-		finish(std::move(result));
+		finishProcess(std::move(result));
 	}, Qt::QueuedConnection);
 
 	_process->start(_tool.executable, _args);
@@ -165,6 +208,7 @@ void Job::start()
 
 ProcessResult runSync(const Tool& tool, const QString& workDir, QStringList args, int timeoutMs)
 {
+	const CTimeElapsed elapsed{ /*autoStart=*/true };
 	QProcess process;
 	process.setWorkingDirectory(workDir);
 	process.setProcessEnvironment(tool.environment);
@@ -198,6 +242,8 @@ ProcessResult runSync(const Tool& tool, const QString& workDir, QStringList args
 	// Whatever reached the pipes before it stopped, however it stopped
 	result.out = process.readAllStandardOutput();
 	result.err = process.readAllStandardError();
+	PROFILE_MARK(QStringLiteral("%1 (sync, ran %2ms)").arg(commandForLog(tool.displayName, args))
+		.arg(elapsed.msElapsed()).toUtf8().constData());
 	return result;
 }
 
@@ -235,13 +281,29 @@ void Job::finish(ProcessResult result)
 {
 	result.toolName = _tool.displayName;
 
-	--s_queue.running;
-	s_queue.pump();
+	QString note;
+	if (result.outcome == ProcessOutcome::LaunchFailed)
+		note = QStringLiteral(", launch failed");
+	else if (result.outcome == ProcessOutcome::Crashed)
+		note = QStringLiteral(", killed");
+	else if (result.exitCode != 0)
+		note = QStringLiteral(", exit %1").arg(result.exitCode);
+	PROFILE_MARK(QStringLiteral("%1 (%2queued %3ms, ran %4ms%5)").arg(commandForLog(_tool.displayName, _args))
+		.arg(_viaServer ? QStringLiteral("server, ") : QString{})
+		.arg(_queuedMs).arg(int64_t(_sinceEnqueued.msElapsed()) - _queuedMs).arg(note).toUtf8().constData());
 
 	if (!_cancelled && _callback && (!_hasContext || _context))
 		_callback(result);
 
 	deleteLater();
+}
+
+void ProcessJob::finishProcess(ProcessResult result)
+{
+	// The slot frees before the callback runs, so a job it enqueues starts without waiting on this one
+	--s_queue.running;
+	s_queue.pump();
+	finish(std::move(result));
 }
 
 } // namespace Vcs

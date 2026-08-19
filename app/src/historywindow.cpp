@@ -6,6 +6,7 @@
 #include "settings.h"
 #include "theme.h"
 
+#include "timing/profiler.h"
 #include "widgets/clabelelided.h"
 #include "widgets/cpersistentwindow.h"
 #include "widgets/widgetutils.h"
@@ -268,6 +269,7 @@ void HistoryWindow::reload()
 		}
 
 		std::vector<CommitRecord> commits = *std::move(result);
+		PROFILE_MARK(QStringLiteral("history log parsed (%1 commits)").arg(commits.size()).toUtf8().constData());
 		// Exactly the limit means the walk was cut short, not that history ends here
 		_logCapped = int(commits.size()) >= _query.maxCommits;
 		_loadMoreButton->setVisible(_logCapped);
@@ -276,6 +278,7 @@ void HistoryWindow::reload()
 		_logLoaded = true;
 		updateCountLabel();
 		selectLoadedCommit();
+		PROFILE_MARK("history populated");
 	});
 }
 

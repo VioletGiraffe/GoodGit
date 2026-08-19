@@ -44,6 +44,7 @@ HEADERS += \
 	src/gitparsers.h \
 	src/gitprocess.h \
 	src/gitrepository.h \
+	src/hgcommandserver.h \
 	src/hgparsers.h \
 	src/hgprocess.h \
 	src/hgrepository.h \
@@ -70,6 +71,7 @@ SOURCES += \
 	src/gitparsers.cpp \
 	src/gitprocess.cpp \
 	src/gitrepository.cpp \
+	src/hgcommandserver.cpp \
 	src/hgparsers.cpp \
 	src/hgprocess.cpp \
 	src/hgrepository.cpp \

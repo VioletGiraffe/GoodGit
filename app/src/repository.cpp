@@ -1,5 +1,7 @@
 #include "repository.h"
 
+#include "timing/profiler.h"
+
 #include <QFileInfo>
 
 #include <utility>
@@ -38,6 +40,7 @@ void Repository::refresh()
 		return;
 	}
 
+	PROFILE_MARK(QStringLiteral("refresh started: %1").arg(name()).toUtf8().constData());
 	_refreshing = true;
 	startRefresh();
 }
@@ -52,6 +55,7 @@ void Repository::completeRefresh(RepoState state, std::vector<FileEntry> files)
 	else
 		_state.readFailure = std::move(state.readFailure); // the rest of it is the last run that answered in full
 
+	PROFILE_MARK(QStringLiteral("refresh complete: %1").arg(name()).toUtf8().constData());
 	_refreshing = false;
 	emit refreshed();
 

@@ -486,8 +486,9 @@ void HgRepository::undoLastCommit(Vcs::Answer<void> onDone)
 
 Vcs::Job* HgRepository::push(Vcs::Callback onDone)
 {
+	// A process of its own: the push log streams from it, and cancelling mid-transfer must kill it
 	return Hg::run(path(), { QStringLiteral("push"), QStringLiteral("-r"), QStringLiteral(".") }, this,
-		tolerantOfEmptyResult(std::move(onDone)));
+		tolerantOfEmptyResult(std::move(onDone)), {}, Hg::Transport::Process);
 }
 
 Vcs::Job* HgRepository::pushSetUpstream(Vcs::Callback onDone)

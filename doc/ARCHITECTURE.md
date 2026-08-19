@@ -51,7 +51,8 @@ modified by design.
 | | |
 |---|---|
 | `vcstypes` | The vocabulary the windows and models speak and every backend answers in - the repository state, one file's change, one commit's record. Names no version control system |
-| `vcsprocess` | `Vcs::run()` - async `QProcess` jobs, at most 8 concurrent, cancellable, and scoped to a context `QObject` - once it dies the callback is skipped and a still-queued job is discarded unstarted. `Vcs::runSync()` - blocking variant for the one startup moment before the event loop exists. Knows no version control system: it is handed the executable to run and arguments that already carry whatever invariants their backend applies. `Vcs::Query` is what a read-only query is cancelled by, and follows it from one process to the next where a backend answers with several |
+| `vcsprocess` | `Vcs::Job` - one async invocation, whatever transports it: the result callback, streaming, cancellation, and the context `QObject` scoping - once the context dies the callback is skipped and a still-queued job is discarded unstarted. `Vcs::run()` - the process transport: one `QProcess` per job, concurrency capped. `Vcs::runSync()` - blocking variant for the one startup moment before the event loop exists. Knows no version control system: it is handed the executable to run and arguments that already carry whatever invariants their backend applies. `Vcs::Query` is what a read-only query is cancelled by, and follows it from one process to the next where a backend answers with several |
+| `hgcommandserver` | The hg transport: a pool of `hg serve --cmdserver pipe` connections, each a resident interpreter running one command per pipe request - the startup cost a fresh hg process pays on every call is paid once per server. Servers spawn lazily against demand, are bound to one repository and serve any other via `-R`, and the pool falls back to plain processes if hg cannot serve at all |
 | `queryround` | A set of queries launched together and what runs once the last has answered. Backend-agnostic: it counts, the backend launches |
 | `repository` | `Repository` - one repo: state, file entries, refresh, and every action, as the windows see them. The unit of the application, and the backend boundary. Its queries parse what they ran before they answer, so no command output crosses out of it, and each takes the object that will show the answer as its context - a query dies with its view rather than with the repo. It also owns the refresh policy every backend shares: re-entry coalesced, and a run applied whole or not at all |
 | `repositoryfactory` | `findRepository()` - what kind of repository a path is inside, and where its root is. `openRepository()` - one of that kind. The only place that names every backend |
@@ -143,9 +144,10 @@ commit pathspec, verbatim** - the window commits what it shows, and a stale list
 errors through the normal failure path, not silent re-scans.
 
 `GitRepository`'s refresh runs two phases of parallel queries - the base queries, then the ones their
-results call for. `HgRepository` has the same two: one `hg status` answers tracked changes, untracked files
-and rename sources together, and the second round asks what the first implies - the unpushed set, each
-subrepo's pointer and dirtiness, and the conflicted paths where a mergestate exists. Check state survives a refresh,
+results call for. `HgRepository`'s is a single parallel round - every hg invocation has a fixed cost, so
+nothing waits that does not have to: one `hg status` answers tracked changes, untracked files and rename
+sources together, alongside the unpushed set, each subrepo's pointer and dirtiness, and the conflicted
+paths where a mergestate exists. Check state survives a refresh,
 re-derived by path: persisting rows keep their state, new rows default to checked unless untracked.
 
 Some of those queries the state cannot be established without: the branch header, the gitlink list, the

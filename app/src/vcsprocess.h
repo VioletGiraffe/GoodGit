@@ -1,5 +1,7 @@
 #pragma once
 
+#include "timing/ctimeelapsed.h"
+
 #include <QByteArray>
 #include <QObject>
 #include <QPointer>
@@ -56,40 +58,42 @@ struct Tool
 
 using Callback = std::function<void(const ProcessResult&)>;
 
-// A queued asynchronous invocation. cancel() guarantees the callback will not fire.
-class Job final : public QObject
+// One queued asynchronous invocation, whatever transports it: a process of its own (Vcs::run), or a
+// command on a running hg command server (hgcommandserver). cancel() guarantees the callback will not fire.
+class Job : public QObject
 {
 public:
-	void cancel();
+	virtual void cancel() = 0;
 
 	// Delivers output to `sink` as it arrives, both channels in arrival order, on top of the complete
-	// output the result still carries. Attach it before returning to the event loop - QProcess reads
+	// output the result still carries. Attach it before returning to the event loop - output arrives
 	// only from there, so nothing has been read yet and nothing to come is missed. Like the result
 	// callback, the sink stops being called once `context` dies.
 	void streamTo(std::function<void(const QByteArray&)> sink);
 
-private:
-	friend Job* run(const Tool&, const QString&, QStringList, const QObject*, Callback, QByteArray);
-	explicit Job(QObject* parent = nullptr) : QObject(parent) {}
+protected:
+	Job(Tool tool, QString workDir, QStringList args, QByteArray stdinData, const QObject* context, Callback callback);
 
-	void start();
+	// Buffers a chunk of one output channel, forwarding it to the sink while the job is still wanted
 	void collect(const QByteArray& chunk, QByteArray& buffer);
+	// Delivers the result per the contract - skipped after cancel() or the context's death - and
+	// self-deletes. The transport is done with the job by the time it calls this.
 	void finish(ProcessResult result);
 
-private:
+protected:
 	Tool _tool;
 	QString _workDir;
 	QStringList _args;
 	QByteArray _stdinData;
 	Callback _callback;
 	std::function<void(const QByteArray&)> _sink;
-	QByteArray _out, _err; // filled as the process runs, so a sink and the result see the same bytes
+	QByteArray _out, _err; // filled as the command runs, so a sink and the result see the same bytes
 	QPointer<const QObject> _context;
 	bool _hasContext = false;
-	QProcess* _process = nullptr;
 	bool _cancelled = false;
-
-	friend struct JobQueue;
+	bool _viaServer = false; // profiling: names the transport
+	CTimeElapsed _sinceEnqueued{ /*autoStart=*/true }; // profiling: runs from creation, which is enqueueing
+	int64_t _queuedMs = 0; // profiling: how long the job waited; the transport snapshots it at dispatch
 };
 
 // How a query answers: what it was asked for, or why it cannot be had. Taken by value - the answer
