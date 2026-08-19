@@ -8,7 +8,8 @@ VERSION  = 0.1.0 # embedded in the exe's version resource; the installer reads i
 
 include(../global.pri)
 
-QT = core gui widgets
+QT = core gui widgets svg   # the qsvg imageformats plugin renders the QSS glyphs; windeployqt only ships it when Qt Svg is linked
+QT += core-private   # src/theme.cpp includes qtutils theme/cthemeiconhandler.h (private QAbstractFileEngineHandler)
 
 Release:OUTPUT_DIR=release/
 Debug:OUTPUT_DIR=debug/

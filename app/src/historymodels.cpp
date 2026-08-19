@@ -291,8 +291,8 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 	case Qt::ForegroundRole:
 		// Unpushed commits wear the same accent the commit window's ahead count does
 		if (index.column() == CommitColumn && unpushed)
-			return QBrush{ activeTheme().accent };
-		return index.column() == SubjectColumn ? QVariant{} : QVariant{ QBrush{ activeTheme().dim } };
+			return QBrush{ activeTheme().palette.accent };
+		return index.column() == SubjectColumn ? QVariant{} : QVariant{ QBrush{ activeTheme().palette.textDim } };
 	case Qt::ToolTipRole:
 	{
 		QString tooltip = commit.sha + QLatin1Char('\n') + commit.subject();

@@ -33,7 +33,7 @@ void DiffHighlighter::highlightBlock(const QString& text)
 		|| text.startsWith(QLatin1String("old mode")) || text.startsWith(QLatin1String("new mode"))
 		|| text.startsWith(QLatin1String("similarity ")) || text.startsWith(QLatin1String("rename ")))
 	{
-		format.setForeground(theme.dim);
+		format.setForeground(theme.palette.textDim);
 	}
 	else if (text[0] == QLatin1Char('+'))
 	{

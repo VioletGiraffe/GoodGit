@@ -1,10 +1,8 @@
 <RCC>
 	<qresource prefix="/theme">
-		<file>check-light.svg</file>
-		<file>check-dark.svg</file>
-		<file>dash-light.svg</file>
-		<file>dash-dark.svg</file>
-		<file>arrow-light.svg</file>
-		<file>arrow-dark.svg</file>
+		<file>check.svg</file>
+		<file>dash.svg</file>
+		<file>arrow.svg</file>
+		<file>folder.svg</file>
 	</qresource>
 </RCC>

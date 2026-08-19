@@ -1,10 +1,11 @@
 #include "changedfilesmodel.h"
 #include "theme.h"
 
+#include "theme/ctintedsvgiconengine.h"
+
 #include <QApplication>
 #include <QBrush>
 #include <QFont>
-#include <QStyle>
 
 #include <unordered_map>
 
@@ -67,7 +68,9 @@ QColor lineCountColor(bool added)
 
 QIcon submoduleIcon()
 {
-	return QApplication::style()->standardIcon(QStyle::SP_DirIcon);
+	// One cached instance suffices: the engine resolves the tint per render, so it follows theme switches
+	static const QIcon icon = tintedSvgIcon(QStringLiteral(":/theme/folder.svg"), [] { return activeTheme().stSubmodule; });
+	return icon;
 }
 
 ChangedFilesModel::ChangedFilesModel(QObject* parent) :

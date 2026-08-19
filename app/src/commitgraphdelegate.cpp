@@ -61,7 +61,7 @@ void CommitGraphDelegate::paint(QPainter* painter, const QStyleOptionViewItem& o
 	// crosses it. Round caps, or the dots draw as squares against the curve.
 	const bool unpushed = index.data(CommitLogModel::UnpushedRole).toBool();
 	const QColor nodeFill = unpushed
-		? (option.state.testFlag(QStyle::State_Selected) ? activeTheme().sel : activeTheme().pane)
+		? (option.state.testFlag(QStyle::State_Selected) ? activeTheme().palette.selectionBg : activeTheme().palette.surface)
 		: chainColor(row.chain);
 	const QPen ringPen{ chainColor(row.chain), thickness, Qt::DotLine, Qt::RoundCap };
 	painter->setPen(unpushed ? ringPen : QPen{ Qt::NoPen });

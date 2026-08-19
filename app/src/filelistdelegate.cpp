@@ -15,7 +15,10 @@ void FileListDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opti
 	QStyledItemDelegate::paint(painter, option, index);
 
 	if (index.column() == ChangedFilesModel::StateColumn && option.state.testFlag(QStyle::State_Selected))
-		painter->fillRect(QRect{ option.rect.left(), option.rect.top(), 2, option.rect.height() }, activeTheme().accent);
+	{
+		const Theme& t = activeTheme();
+		painter->fillRect(QRect{ option.rect.left(), option.rect.top(), t.metrics.selectionStripeWidth, option.rect.height() }, t.palette.accent);
+	}
 
 	if (const QFont font = qvariant_cast<QFont>(index.data(Qt::FontRole)); !font.strikeOut())
 		return;

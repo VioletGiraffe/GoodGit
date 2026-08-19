@@ -192,18 +192,19 @@ void CommitWindow::buildUi()
 	repoBarLayout->addWidget(_uncommitButton);
 	leftLayout->addWidget(repoBar);
 
-	const auto makeStrip = [](const QColor& background, const QColor& text) {
+	// Colored by the central stylesheet through the object names
+	const auto makeStrip = [](const char* objectName) {
 		auto* strip = new QLabel;
+		strip->setObjectName(QLatin1String(objectName));
 		strip->setWordWrap(true);
 		strip->setMargin(6);
-		strip->setStyleSheet(QStringLiteral("background-color: %1; color: %2;").arg(background.name(), text.name()));
 		strip->setVisible(false);
 		return strip;
 	};
 	// First: the strips below describe a state this one says could not be read
-	_readFailureStrip = makeStrip(activeTheme().errBg, activeTheme().errFg);
-	_opStrip = makeStrip(activeTheme().errBg, activeTheme().errFg);
-	_detachedStrip = makeStrip(activeTheme().warnBg, activeTheme().warnFg);
+	_readFailureStrip = makeStrip("errorStrip");
+	_opStrip = makeStrip("errorStrip");
+	_detachedStrip = makeStrip("warningStrip");
 	leftLayout->addWidget(_readFailureStrip);
 	leftLayout->addWidget(_opStrip);
 	leftLayout->addWidget(_detachedStrip);

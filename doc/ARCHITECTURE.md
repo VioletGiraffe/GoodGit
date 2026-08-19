@@ -62,7 +62,7 @@ modified by design.
 | `hgprocess`, `hgparsers`, `hgrepository` | The same three for Mercurial. The parsers read `-T json` throughout, so nothing needs unquoting or positional pairing |
 | `changedfilesmodel` | Checkable table over the entries; row styling comes from the theme as item data roles |
 | `filelistdelegate` | Paints the two file-list details item roles cannot express: the recolored deleted strikethrough and the selected-row accent stripe |
-| `theme` | The whole visual style in one place, mirroring the mockup's CSS variables. Applied once at startup; light or dark follows the system theme |
+| `theme` | The selectable themes and the stylesheet built from them, on qtutils' theming framework (`CThemeController` persists the scheme and per-polarity theme choice; `themeicon:/` serves runtime-tinted QSS glyphs). Reapplies live on any change; the system scheme is followed unless overridden |
 | `commitwindow` | One window = one repository. Owns a `Repository` and all user flows. Submodule rows open another `CommitWindow` on the submodule, same process; the child's `committed()` signal refreshes the parent |
 | `historywindow`, `historymodels` | The commit history, read-only: log above, the selected commit's file list beside that file's diff. The same window narrowed to one path is a file history. Owns its own `Repository`, so a submodule's history opens without a `CommitWindow` on that submodule |
 | `commitgraph` | The lane diagram behind the commit list: each row's lane, its first-parent chain, and the lines crossing it - from the records' parent links and nothing else. Backend- and UI-free, like the parsers |

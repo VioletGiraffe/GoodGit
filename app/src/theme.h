@@ -1,30 +1,39 @@
 #pragma once
 
-#include <QColor>
+#include "theme/cbasepalette.h"
+
+DISABLE_COMPILER_WARNINGS
 #include <QFont>
+#include <QString>
+RESTORE_COMPILER_WARNINGS
 
 #include <array>
+#include <vector>
 
 class QApplication;
 
-// The app's visual style, mirroring the CSS variables of doc/UI/mockup.html.
-// To restyle: edit or swap the palettes in theme.cpp. The check mark / arrow glyphs are SVGs in
-// res/ with their fill hardcoded to accentFg - touch them too if accentFg changes polarity.
-// Light or dark is picked once at startup from the system theme.
+// Geometry the stylesheet and custom painting share. Per theme, so a theme can reshape and not only
+// recolour; the defaults are the house values.
+struct ThemeMetrics
+{
+	int controlRadius = 4;        // buttons, branch chip, message editor
+	int checkboxSize = 13;        // the counter-bar box and the file-row indicators
+	int checkboxRadius = 3;
+	int scrollBarThickness = 12;
+	int scrollBarHandleRadius = 4;
+	int selectionStripeWidth = 2; // the accent stripe FileListDelegate paints on selected rows
+};
+
+// One selectable look, mirroring the design vocabulary of doc/UI/mockup.html. Pure data; the
+// identity is `name` (unique within its polarity). To restyle: edit or add themes in theme.cpp.
 struct Theme
 {
-	QColor winBg;      // window chrome: bars, gaps between panes
-	QColor pane;       // content panes: file list, diff, editors
-	QColor paneAlt;    // slightly offset pane: repo bar
-	QColor border;     // pane and bar separators
-	QColor borderSoft; // row separators
-	QColor text;
-	QColor dim;        // secondary text
-	QColor accent;     // primary action, selection stripe, checked boxes
-	QColor accentFg;   // text and glyphs on accent
-	QColor sel;        // selected row background
-	QColor btn;
-	QColor btnBorder;
+	QString name;
+	bool dark = false;
+
+	CBasePalette palette;
+	ThemeMetrics metrics;
+
 	QColor warnBg;     // blocked submodule rows, detached-HEAD strip
 	QColor warnFg;     // text on warnBg
 	QColor errBg;      // merge/cherry-pick/revert/rebase strip
@@ -42,11 +51,19 @@ struct Theme
 	// screen together on different colors.
 	std::array<QColor, 6> graphLanes;
 
+	QString qssFragment; // optional per-theme QSS, appended after the app sheet so it wins ties
+
 	QColor blockedRowTint() const; // warnBg, translucent so selection and the base show through
 };
 
+// Every selectable theme, both polarities.
+[[nodiscard]] const std::vector<Theme>& allThemes();
+
+// The theme in effect - a copy independent of allThemes() storage. Valid once applyTheme() ran.
 [[nodiscard]] const Theme& activeTheme();
+
 [[nodiscard]] QFont monospaceFont();
 
-// Palette + app-wide stylesheet; call once, right after constructing the QApplication
+// Installs the themeicon handler, applies the active theme, and reapplies whenever
+// CThemeController announces a change. Call once, right after constructing the QApplication.
 void applyTheme(QApplication& app);

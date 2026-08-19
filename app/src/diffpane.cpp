@@ -2,6 +2,7 @@
 #include "diffhighlighter.h"
 #include "theme.h"
 
+#include "theme/cthemecontroller.h"
 #include "widgets/clabelelided.h"
 
 #include <QFrame>
@@ -39,6 +40,9 @@ DiffPane::DiffPane(QWidget* parent) :
 	_view->setFont(monospaceFont());
 	_highlighter = new DiffHighlighter(_view->document());
 	layout->addWidget(_view, 1);
+
+	// QSyntaxHighlighter caches its formats in the document, so a theme switch must re-run it
+	connect(&CThemeController::instance(), &CThemeController::themeChanged, this, [this] { _highlighter->rehighlight(); });
 }
 
 void DiffPane::showDiff(const QString& pathLabel, const QString& tag, const QString& text)
