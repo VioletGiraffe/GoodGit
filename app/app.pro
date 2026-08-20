@@ -58,6 +58,7 @@ HEADERS += \
 	src/repositoryfactory.h \
 	src/settings.h \
 	src/settingspages.h \
+	src/stylesheet.h \
 	src/theme.h \
 	src/vcsprocess.h \
 	src/vcstypes.h

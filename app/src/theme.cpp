@@ -1,5 +1,6 @@
 #include "theme.h"
 #include "settings.h"
+#include "stylesheet.h"
 
 #include "assert/advanced_assert.h"
 #include "settings/csettings.h"
@@ -13,137 +14,12 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
-#include <utility>
 
 namespace {
 
 Theme s_active;
 
 QColor c(QRgb rgb) { return QColor::fromRgb(rgb); }
-
-// Hover / pressed shades are derived rather than stored, so they follow any base color swap
-QColor hoverShade(const QColor& base, bool dark) { return dark ? base.lighter(115) : base.darker(104); }
-QColor pressedShade(const QColor& base, bool dark) { return dark ? base.lighter(130) : base.darker(110); }
-
-QString buildStyleSheet(const Theme& t)
-{
-	QString qss = QStringLiteral(R"qss(
-QMainWindow, QDialog { background: @winBg@; }
-
-/* ---------- bars ---------- */
-QFrame#repoBar { background: @paneAlt@; border-bottom: 1px solid @border@; }
-QLabel#branchChip { background: @pane@; color: @text@; border: 1px solid @border@; border-radius: @controlRadius@px; padding: 1px 7px; }
-QLabel#aheadLabel { color: @accent@; font-weight: 600; }
-QFrame#counterBar { background: @winBg@; border-bottom: 1px solid @border@; }
-QFrame#diffHeader { background: @winBg@; border-bottom: 1px solid @border@; }
-QFrame#pushLogHeader { background: @winBg@; border-top: 1px solid @border@; border-bottom: 1px solid @border@; }
-QLabel#diffTagLabel { color: @dim@; }
-QWidget#messageHeader QLabel, QFrame#pushLogHeader QLabel { color: @dim@; }
-
-/* ---------- status strips ---------- */
-QLabel#errorStrip { background: @errBg@; color: @errFg@; }
-QLabel#warningStrip { background: @warnBg@; color: @warnFg@; }
-
-/* ---------- file list ---------- */
-QTreeView { background: @pane@; border: none; outline: none; }
-QTreeView::item { border-bottom: 1px solid @borderSoft@; padding: 2px 0; }
-QTreeView::item:selected { background: @sel@; }
-
-/* Check boxes: the counter-bar box and the file-row indicators share the look */
-QCheckBox { color: @dim@; spacing: 8px; }
-QCheckBox::indicator, QTreeView::indicator {
-	width: @checkboxSize@px; height: @checkboxSize@px;
-	border: 1px solid @btnBorder@; border-radius: @checkboxRadius@px; background: @pane@;
-}
-QCheckBox::indicator:checked, QTreeView::indicator:checked {
-	background: @accent@; border-color: @accent@; image: url(@checkIcon@);
-}
-QCheckBox::indicator:indeterminate {
-	background: @accent@; border-color: @accent@; image: url(@dashIcon@);
-}
-
-/* ---------- buttons ---------- */
-QPushButton { background: @btn@; color: @text@; border: 1px solid @btnBorder@; border-radius: @controlRadius@px; padding: 5px 14px; }
-QPushButton:hover { background: @btnHover@; }
-QPushButton:pressed { background: @btnPressed@; }
-QPushButton:disabled { background: @paneAlt@; color: @dim@; }
-QFrame#repoBar QPushButton, QFrame#counterBar QPushButton, QFrame#pushLogHeader QPushButton { padding: 3px 9px; }
-QPushButton#commitButton, QPushButton#commitPushButton { padding: 8px 14px; }
-QPushButton#commitButton { background: @accent@; color: @accentFg@; border-color: @accent@; font-weight: 600; }
-QPushButton#commitButton:hover { background: @accentHover@; }
-QPushButton#commitButton:pressed { background: @accentPressed@; }
-QPushButton#commitButton:disabled { background: @paneAlt@; color: @dim@; border-color: @btnBorder@; font-weight: 400; }
-
-/* ---------- editors ---------- */
-QPlainTextEdit { background: @pane@; color: @text@; border: none; }
-QPlainTextEdit#messageEdit { border: 1px solid @btnBorder@; border-radius: @controlRadius@px; }
-QPlainTextEdit#diffView { color: @diffCtx@; }
-
-QSplitter::handle { background: @border@; }
-
-/* Completion popup */
-QListView { background: @pane@; color: @text@; border: 1px solid @border@; outline: none; }
-
-/* ---------- menus ---------- */
-QMenuBar { background: @winBg@; color: @text@; border-bottom: 1px solid @border@; }
-QMenuBar::item { background: transparent; padding: 4px 10px; }
-QMenuBar::item:selected, QMenuBar::item:pressed { background: @sel@; }
-QMenu { background: @pane@; color: @text@; border: 1px solid @border@; padding: 4px 0; }
-QMenu::item { padding: 4px 24px 4px 12px; }
-QMenu::item:selected { background: @sel@; }
-QMenu::item:disabled { color: @dim@; }
-QMenu::separator { height: 1px; background: @borderSoft@; margin: 4px 0; }
-
-QToolTip { background: @pane@; color: @text@; border: 1px solid @border@; }
-
-/* ---------- scroll bars: flat, no step buttons ---------- */
-QScrollBar { background: transparent; }
-QScrollBar:vertical { width: @scrollBarThickness@px; }
-QScrollBar:horizontal { height: @scrollBarThickness@px; }
-QScrollBar::handle { background: @btnBorder@; border-radius: @scrollBarHandleRadius@px; }
-QScrollBar::handle:hover { background: @dim@; }
-QScrollBar::handle:vertical { min-height: 30px; margin: 2px 3px; }
-QScrollBar::handle:horizontal { min-width: 30px; margin: 3px 2px; }
-QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
-QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
-)qss");
-	qss += t.qssFragment; // last, so a theme's rules win equal-specificity ties; tokens work here too
-
-	const std::pair<QString, QString> tokens[] = {
-		{ QStringLiteral("@winBg@"), t.palette.windowBg.name() },
-		{ QStringLiteral("@pane@"), t.palette.surface.name() },
-		{ QStringLiteral("@paneAlt@"), t.palette.surfaceAlt.name() },
-		{ QStringLiteral("@border@"), t.palette.border.name() },
-		{ QStringLiteral("@borderSoft@"), t.palette.borderSubtle.name() },
-		{ QStringLiteral("@text@"), t.palette.text.name() },
-		{ QStringLiteral("@dim@"), t.palette.textDim.name() },
-		{ QStringLiteral("@accent@"), t.palette.accent.name() },
-		{ QStringLiteral("@accentFg@"), t.palette.accentFg.name() },
-		{ QStringLiteral("@sel@"), t.palette.selectionBg.name() },
-		{ QStringLiteral("@btn@"), t.palette.button.name() },
-		{ QStringLiteral("@btnBorder@"), t.palette.buttonBorder.name() },
-		{ QStringLiteral("@warnBg@"), t.warnBg.name() },
-		{ QStringLiteral("@warnFg@"), t.warnFg.name() },
-		{ QStringLiteral("@errBg@"), t.errBg.name() },
-		{ QStringLiteral("@errFg@"), t.errFg.name() },
-		{ QStringLiteral("@diffCtx@"), t.diffCtx.name() },
-		{ QStringLiteral("@btnHover@"), hoverShade(t.palette.button, t.dark).name() },
-		{ QStringLiteral("@btnPressed@"), pressedShade(t.palette.button, t.dark).name() },
-		{ QStringLiteral("@accentHover@"), hoverShade(t.palette.accent, t.dark).name() },
-		{ QStringLiteral("@accentPressed@"), pressedShade(t.palette.accent, t.dark).name() },
-		{ QStringLiteral("@controlRadius@"), QString::number(t.metrics.controlRadius) },
-		{ QStringLiteral("@checkboxSize@"), QString::number(t.metrics.checkboxSize) },
-		{ QStringLiteral("@checkboxRadius@"), QString::number(t.metrics.checkboxRadius) },
-		{ QStringLiteral("@scrollBarThickness@"), QString::number(t.metrics.scrollBarThickness) },
-		{ QStringLiteral("@scrollBarHandleRadius@"), QString::number(t.metrics.scrollBarHandleRadius) },
-		// Monochrome sources tinted per theme and served by CThemeIconHandler - QSS url() only takes a path
-		{ QStringLiteral("@checkIcon@"), themeIconUrl(QStringLiteral("check"), t.palette.accentFg) },
-		{ QStringLiteral("@dashIcon@"), themeIconUrl(QStringLiteral("dash"), t.palette.accentFg) },
-	};
-	for (const auto& [token, value] : tokens)
-		qss.replace(token, value);
-	return qss;
-}
 
 void selectActiveTheme()
 {
@@ -176,6 +52,22 @@ QColor Theme::blockedRowTint() const
 	QColor tint = warnBg;
 	tint.setAlpha(160);
 	return tint;
+}
+
+void applyTheme(QApplication& app)
+{
+	// Serves the tinted QSS glyphs; must exist before any stylesheet references themeicon:/ URLs
+	// and for the application's whole lifetime.
+	static const CThemeIconHandler iconHandler{ QStringLiteral(":/theme") };
+
+	QObject::connect(&CThemeController::instance(), &CThemeController::themeChanged, &app, &applyActiveTheme);
+	applyActiveTheme();
+}
+
+const Theme& activeTheme()
+{
+	assert_debug_only(!s_active.name.isEmpty()); // applyTheme() has not run yet
+	return s_active;
 }
 
 const std::vector<Theme>& allThemes()
@@ -229,12 +121,6 @@ const std::vector<Theme>& allThemes()
 	return themes;
 }
 
-const Theme& activeTheme()
-{
-	assert_debug_only(!s_active.name.isEmpty()); // applyTheme() has not run yet
-	return s_active;
-}
-
 QFont monospaceFont()
 {
 	const CSettings settings;
@@ -246,14 +132,4 @@ QFont monospaceFont()
 	if (const int pointSize = settings.value(Settings::MonospaceFontPointSizeKey).toInt(); pointSize > 0)
 		font.setPointSize(pointSize);
 	return font;
-}
-
-void applyTheme(QApplication& app)
-{
-	// Serves the tinted QSS glyphs; must exist before any stylesheet references themeicon:/ URLs
-	// and for the application's whole lifetime.
-	static const CThemeIconHandler iconHandler{ QStringLiteral(":/theme") };
-
-	QObject::connect(&CThemeController::instance(), &CThemeController::themeChanged, &app, &applyActiveTheme);
-	applyActiveTheme();
 }

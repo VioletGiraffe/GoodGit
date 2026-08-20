@@ -56,14 +56,14 @@ struct Theme
 	QColor blockedRowTint() const; // warnBg, translucent so selection and the base show through
 };
 
-// Every selectable theme, both polarities.
-[[nodiscard]] const std::vector<Theme>& allThemes();
+// Installs the themeicon handler, applies the active theme, and reapplies whenever
+// CThemeController announces a change. Call once, right after constructing the QApplication.
+void applyTheme(QApplication& app);
 
 // The theme in effect - a copy independent of allThemes() storage. Valid once applyTheme() ran.
 [[nodiscard]] const Theme& activeTheme();
 
-[[nodiscard]] QFont monospaceFont();
+// Every selectable theme, both polarities.
+[[nodiscard]] const std::vector<Theme>& allThemes();
 
-// Installs the themeicon handler, applies the active theme, and reapplies whenever
-// CThemeController announces a change. Call once, right after constructing the QApplication.
-void applyTheme(QApplication& app);
+[[nodiscard]] QFont monospaceFont();
