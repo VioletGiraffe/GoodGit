@@ -92,6 +92,7 @@ SOURCES += \
 RESOURCES += res/theme.qrc
 
 win32:RC_ICONS = res/goodgit.ico   # the exe's icon; the runtime window icon is the SVG in theme.qrc
+macx:ICON = res/goodgit-mac.icns   # built from res/goodgit-mac.svg (Apple icon grid variant), see that file
 
 ###################################################
 #                 LIBS

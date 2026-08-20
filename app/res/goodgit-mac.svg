@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+	<!-- macOS variant: the tile sits on Apple's icon grid (824px tile, 100px transparent margin,
+	     ~185px corner radius) instead of filling the canvas like goodgit.svg. Render the .iconset
+	     PNGs from this file; the full-bleed goodgit.svg serves the window icon and goodgit.ico. -->
+	<g transform="translate(100 100) scale(4.57778)">
+		<rect width="180" height="180" rx="40" fill="#ffc226"/>
+		<path d="M38 92 L78 142 L143 52" stroke="#2b1a45" stroke-width="20" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+		<circle cx="38" cy="92" r="20" fill="#ffc226" stroke="#2b1a45" stroke-width="11"/>
+		<circle cx="78" cy="142" r="20" fill="#ffc226" stroke="#2b1a45" stroke-width="11"/>
+		<circle cx="143" cy="52" r="20" fill="#ffc226" stroke="#2b1a45" stroke-width="11"/>
+	</g>
+</svg>
