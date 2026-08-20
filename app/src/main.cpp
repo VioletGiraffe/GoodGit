@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QDir>
+#include <QIcon>
 #include <QMessageBox>
 
 #include <algorithm>
@@ -39,6 +40,7 @@ int main(int argc, char* argv[])
 	QApplication app{ argc, argv };
 	QApplication::setOrganizationName(QStringLiteral("GoodGit"));
 	QApplication::setApplicationName(QStringLiteral("GoodGit"));
+	QApplication::setWindowIcon(QIcon{ QStringLiteral(":/goodgit.svg") });
 	applyTheme(app);
 
 	// Not argv, which on Windows arrives in the local codepage and mangles anything outside it

@@ -91,6 +91,8 @@ SOURCES += \
 
 RESOURCES += res/theme.qrc
 
+win32:RC_ICONS = res/goodgit.ico   # the exe's icon; the runtime window icon is the SVG in theme.qrc
+
 ###################################################
 #                 LIBS
 ###################################################

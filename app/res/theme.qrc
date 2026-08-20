@@ -5,4 +5,7 @@
 		<file>arrow.svg</file>
 		<file>folder.svg</file>
 	</qresource>
+	<qresource prefix="/">
+		<file>goodgit.svg</file>
+	</qresource>
 </RCC>
