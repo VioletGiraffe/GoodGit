@@ -1,10 +1,14 @@
 #include "diffpane.h"
 #include "diffhighlighter.h"
+#include "settings.h"
 #include "theme.h"
 
+#include "settings/csettings.h"
+#include "settingsui/csettingsdialog.h"
 #include "theme/cthemecontroller.h"
 #include "widgets/clabelelided.h"
 
+#include <QFontMetricsF>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -24,7 +28,6 @@ DiffPane::DiffPane(QWidget* parent) :
 	auto* headerLayout = new QHBoxLayout(header);
 	headerLayout->setContentsMargins(8, 6, 8, 6);
 	_pathLabel = new CLabelElided;
-	_pathLabel->setFont(monospaceFont());
 	// Eliding does not shrink a QLabel's minimum width, which would otherwise set the pane's
 	_pathLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 	_tagLabel = new QLabel;
@@ -37,9 +40,18 @@ DiffPane::DiffPane(QWidget* parent) :
 	_view->setObjectName(QStringLiteral("diffView"));
 	_view->setReadOnly(true);
 	_view->setLineWrapMode(QPlainTextEdit::WidgetWidth);
-	_view->setFont(monospaceFont());
 	_highlighter = new DiffHighlighter(_view->document());
 	layout->addWidget(_view, 1);
+
+	const auto applyFontSettings = [this] {
+		const QFont mono = monospaceFont();
+		_pathLabel->setFont(mono);
+		_view->setFont(mono);
+		const int tabWidthSpaces = CSettings{}.value(QLatin1String(Settings::DiffTabWidthKey), Settings::DiffTabWidthDefault).toInt();
+		_view->setTabStopDistance(tabWidthSpaces * QFontMetricsF{ mono }.horizontalAdvance(QLatin1Char(' ')));
+	};
+	applyFontSettings();
+	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, applyFontSettings);
 
 	// QSyntaxHighlighter caches its formats in the document, so a theme switch must re-run it
 	connect(&CThemeController::instance(), &CThemeController::themeChanged, this, [this] { _highlighter->rehighlight(); });

@@ -4,7 +4,8 @@
 
 TEMPLATE = app
 TARGET   = gg
-VERSION  = 0.1.0 # embedded in the exe's version resource; the installer reads its version from there
+VERSION  = 1.0.0 # embedded in the exe's version resource; the installer reads its version from there
+DEFINES += GG_VERSION=\\\"$$VERSION\\\"
 
 include(../global.pri)
 
@@ -56,6 +57,7 @@ HEADERS += \
 	src/repository.h \
 	src/repositoryfactory.h \
 	src/settings.h \
+	src/settingspages.h \
 	src/theme.h \
 	src/vcsprocess.h \
 	src/vcstypes.h
@@ -82,7 +84,7 @@ SOURCES += \
 	src/messageedit.cpp \
 	src/repository.cpp \
 	src/repositoryfactory.cpp \
-	src/settings.cpp \
+	src/settingspages.cpp \
 	src/theme.cpp \
 	src/vcsprocess.cpp
 

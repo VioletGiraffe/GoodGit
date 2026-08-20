@@ -1,6 +1,9 @@
 #include "changedfilesmodel.h"
+#include "settings.h"
 #include "theme.h"
 
+#include "settings/csettings.h"
+#include "settingsui/csettingsdialog.h"
 #include "theme/ctintedsvgiconengine.h"
 
 #include <QApplication>
@@ -76,6 +79,12 @@ QIcon submoduleIcon()
 ChangedFilesModel::ChangedFilesModel(QObject* parent) :
 	QAbstractTableModel(parent)
 {
+	// The count columns' font comes from the settings; layoutChanged (unlike dataChanged) also has the
+	// view recompute its cached uniform row height, and keeps selection where a reset would not
+	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] {
+		emit layoutAboutToBeChanged();
+		emit layoutChanged();
+	});
 }
 
 void ChangedFilesModel::setEntries(const std::vector<FileEntry>& entries, bool mergeMode)
@@ -86,6 +95,8 @@ void ChangedFilesModel::setEntries(const std::vector<FileEntry>& entries, bool m
 		if (row.entry.committable()) // an unchecked non-committable row records the block, not a user choice
 			previousChecks[row.entry.path] = row.checked;
 	}
+
+	const QString newRowCheckPolicy = CSettings{}.value(QLatin1String(Settings::NewRowCheckPolicyKey)).toString();
 
 	beginResetModel();
 	_rows.clear();
@@ -106,6 +117,10 @@ void ChangedFilesModel::setEntries(const std::vector<FileEntry>& entries, bool m
 			row.checked = false;
 		else if (const auto it = previousChecks.find(entry.path); it != previousChecks.end())
 			row.checked = it->second;
+		else if (newRowCheckPolicy == QLatin1String(Settings::NewRowCheckPolicyAll))
+			row.checked = true;
+		else if (newRowCheckPolicy == QLatin1String(Settings::NewRowCheckPolicyNone))
+			row.checked = false;
 		else
 			row.checked = entry.type != ChangeType::Untracked;
 

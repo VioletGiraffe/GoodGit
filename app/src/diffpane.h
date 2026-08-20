@@ -2,16 +2,11 @@
 
 #include <QString>
 #include <QWidget>
-#include <QtGlobal>
 
 class QLabel;
 class QPlainTextEdit;
 class CLabelElided;
 class DiffHighlighter;
-
-// The most a pane will render. Past it the window says so instead: laying out a multi-megabyte diff
-// costs seconds, and nobody reads one.
-inline constexpr qsizetype MaxDiffBytes = 2 * 1024 * 1024;
 
 // The pane both windows show one file's text in: a header naming what is shown and where it is from,
 // over a read-only monospace view. Which method put the text there decides whether it is highlighted as

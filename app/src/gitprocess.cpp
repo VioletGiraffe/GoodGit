@@ -1,6 +1,8 @@
 #include "gitprocess.h"
 #include "settings.h"
 
+#include "settings/csettings.h"
+
 namespace {
 
 void applyInvariants(QStringList& args, bool readOnlyQuery)
@@ -16,7 +18,10 @@ Vcs::Tool gitTool()
 	auto environment = QProcessEnvironment::systemEnvironment();
 	// A credential miss fails fast instead of hanging on a prompt nothing here would show
 	environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
-	return { Settings::gitExecutable(), QStringLiteral("git"), std::move(environment) };
+	QString executable = CSettings{}.value(QLatin1String(Settings::GitExecutableKey)).toString();
+	if (executable.isEmpty())
+		executable = QLatin1String(Settings::GitExecutableDefault);
+	return { std::move(executable), QStringLiteral("git"), std::move(environment) };
 }
 
 } // namespace

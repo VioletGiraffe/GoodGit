@@ -1,6 +1,8 @@
 #include "consolelogview.h"
 #include "theme.h"
 
+#include "settingsui/csettingsdialog.h"
+
 #include <QScrollBar>
 #include <QTextCursor>
 
@@ -9,6 +11,7 @@ ConsoleLogView::ConsoleLogView(QWidget* parent) :
 {
 	setReadOnly(true);
 	setFont(monospaceFont());
+	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] { setFont(monospaceFont()); });
 	setMaximumBlockCount(500); // bounds a chatty remote's hook output
 }
 

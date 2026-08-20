@@ -6,6 +6,8 @@
 #include "queryround.h"
 #include "settings.h"
 
+#include "settings/csettings.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -128,11 +130,15 @@ QString revsetOf(const std::vector<Hg::GrepMatch>& matches, int maxCommits)
 }
 
 // The diff of one changeset or of the working tree. --git names renames and binary files instead of
-// printing an add of every line; -Z is display only, the same choice as git's --ignore-cr-at-eol - the row
-// still lists as modified and still commits its working-tree content verbatim.
+// printing an add of every line. -Z is git's --ignore-cr-at-eol: whether a line-endings-only change
+// reads as a change is the user's display choice, and the line counts come from these same args, so
+// they always match the shown diff. Either way the row still commits its content verbatim.
 QStringList diffArgs()
 {
-	return { QStringLiteral("diff"), QStringLiteral("--git"), QStringLiteral("-Z") };
+	QStringList args = { QStringLiteral("diff"), QStringLiteral("--git") };
+	if (!CSettings{}.value(QLatin1String(Settings::ShowLineEndingOnlyChangesKey), Settings::ShowLineEndingOnlyChangesDefault).toBool())
+		args << QStringLiteral("-Z");
+	return args;
 }
 
 // The same diff with no context lines: an unchanged line is neither a word for the pool nor a line to count
@@ -585,8 +591,11 @@ Vcs::Query HgRepository::diffFile(const FileEntry& entry, const QObject* context
 
 Vcs::Query HgRepository::diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
-	// -Z, or a wholesale line-ending conversion floods the word pool with every line of the file
-	return runQuery(path(), contextFreeDiffArgs(), context, Vcs::answering(std::move(onDone), std::identity{}));
+	// -Z unconditionally, display setting or not: a wholesale line-ending conversion would flood the
+	// word pool with every line of the file
+	QStringList args = { QStringLiteral("diff"), QStringLiteral("--git"), QStringLiteral("-Z"),
+		QStringLiteral("-U"), QStringLiteral("0") };
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
 }
 
 Vcs::Query HgRepository::commitLog(const LogQuery& query, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone)
@@ -856,7 +865,10 @@ void HgRepository::launchExternalDiffTool(const QString& repoRelativePath) const
 {
 	// extdiff ships with hg but is off unless enabled, and which tool it starts is the user's `[extdiff]`
 	// configuration - exactly as which tool `git difftool` starts is theirs
-	QProcess::startDetached(Settings::hgExecutable(),
+	QString executable = CSettings{}.value(QLatin1String(Settings::HgExecutableKey)).toString();
+	if (executable.isEmpty())
+		executable = QLatin1String(Settings::HgExecutableDefault);
+	QProcess::startDetached(executable,
 		Hg::invariantArgs() + QStringList{ QStringLiteral("--config"), QStringLiteral("extensions.extdiff="),
 			QStringLiteral("extdiff"), QStringLiteral("--"), repoRelativePath },
 		path());

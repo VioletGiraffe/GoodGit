@@ -69,8 +69,9 @@ modified by design.
 | `commitgraphdelegate` | Paints that diagram in the log's first column, each line colored by the chain it belongs to |
 | `consolelogview` | The push log's view: raw process output rendered as a terminal renders it, so a progress meter's carriage returns rewrite one line instead of filling the log |
 | `diffhighlighter`, `messageedit` | Prefix-driven unified-diff highlighting; message editor with the 50-column subject guide and word completion fed by one `diff -U0 HEAD` per refresh |
-| `diffpane` | The pane both windows show one file's text in: the path and tag header over a read-only monospace view, and whether that text is highlighted as a diff. It neither reads nor caps what it is handed - `MaxDiffBytes` is the cap, and what to say instead is each window's own wording |
-| `settings` | Key vocabulary over qtutils `CSettings`. Window geometry is qtutils `CPersistenceEnabler`, one key per window kind - as the splitter positions are, and shared by every repository the same way |
+| `diffpane` | The pane both windows show one file's text in: the path and tag header over a read-only monospace view, and whether that text is highlighted as a diff. It neither reads nor caps what it is handed - the display size cap is a setting, and what to say instead is each window's own wording |
+| `settings` | Every storage key with its default beside it, one named constant each. The values are read and written where they are consumed, through qtutils `CSettings` directly; qtutils `CSettingsNotifier` is what has open windows re-apply fonts and cached layout once a settings dialog stores them. Window geometry is qtutils `CPersistenceEnabler`, one key per window kind - as the splitter positions are, and shared by every repository the same way |
+| `settingspages` | The two Preferences pages (Main, Theme & Font) for qtutils `CSettingsDialog`, opened from the commit window's menu. Theme choices go through `CThemeController` |
 
 ## Backends
 
@@ -118,9 +119,12 @@ file arrives as a base85 patch, where git prints one line. Queries ask for `-T j
 `-v`, which change the field set. Both the message and any long path list travel in temp files, the latter
 named to hg as `listfile0:<file>`.
 
-The diff shown in either window carries `--ignore-cr-at-eol` (`-Z` for hg), and so do the line counts, so a
-CRLF/LF-only change reads as no change and counts as no lines. That is a display choice and nothing more:
-the file still lists as modified and still commits its working-tree content byte for byte.
+By default the diff shown in either window carries `--ignore-cr-at-eol` (`-Z` for hg), and so do the line
+counts, so a CRLF/LF-only change reads as no change and counts as no lines; a setting shows such changes
+instead, and flips both together so the counts always match the shown diff. Either way it is a display
+choice and nothing more: the file still lists as modified and still commits its working-tree content byte
+for byte. The word-pool diff ignores line-endings-only changes regardless of the setting - a wholesale
+conversion would flood it with every line of the file.
 
 An untracked file is not a modification of anything, so no backend is asked to diff one: the window reads
 the file and shows what it holds, with the highlighting switched off - a leading `-` there is the file's
@@ -160,8 +164,8 @@ correctness, so they stay silent.
 
 ## History
 
-Read-only, and bounded rather than paged: one `log --max-count=N` builds the whole list, and "Load more"
-re-runs it with N doubled. A cold open runs that walk twice - a small batch for an instant list, then the
+Read-only, and bounded rather than paged: one `log --max-count=N` builds the whole list (N is a setting),
+and "Load more" re-runs it with N doubled. A cold open runs that walk twice - a small batch for an instant list, then the
 full limit in the background, appended in place: the shorter walk's result is a prefix of the longer's,
 which is verified, with a plain reset as the fallback when the repository changed in between. A file history is that same window with a path appended to the query and
 `--follow` set, so it traces the file across renames; everything else - search, marks, panes - is shared. **Such a walk has no resumable cursor** - continuing from the last

@@ -4,6 +4,8 @@
 #include "queryround.h"
 #include "settings.h"
 
+#include "settings/csettings.h"
+
 #include <QDir>
 #include <QFileInfo>
 #include <QPointer>
@@ -58,11 +60,18 @@ QStringList trackedChangesArgs(const QString& base)
 	return trackedDiffArgs(base, QStringLiteral("--name-status"));
 }
 
-// --ignore-cr-at-eol, so the counts are the ones the diff a row opens shows: that carries the flag too,
-// and a line-endings-only change reads as no change there.
+// Whether a line-endings-only change reads as a change is the user's display choice; the same flags go
+// into every shown diff and every line count, so the counts are always the ones the shown diff carries.
+// Either way the row still lists as modified and commits its working-tree content verbatim.
+QStringList eolDisplayFlags()
+{
+	return CSettings{}.value(QLatin1String(Settings::ShowLineEndingOnlyChangesKey), Settings::ShowLineEndingOnlyChangesDefault).toBool()
+		? QStringList{} : QStringList{ QStringLiteral("--ignore-cr-at-eol") };
+}
+
 QStringList trackedChangeCountsArgs(const QString& base)
 {
-	return trackedDiffArgs(base, QStringLiteral("--numstat"), { QStringLiteral("--ignore-cr-at-eol") });
+	return trackedDiffArgs(base, QStringLiteral("--numstat"), eolDisplayFlags());
 }
 
 // One commit's files, read out two ways as the file list's own delta is: the names, and the lines behind
@@ -702,10 +711,8 @@ QString GitRepository::diffBase() const
 
 Vcs::Query GitRepository::diffFile(const FileEntry& entry, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
-	// --ignore-cr-at-eol is display only - the row still lists as modified and commits its working-tree
-	// content verbatim
-	QStringList args = { QStringLiteral("diff"), QStringLiteral("--ignore-cr-at-eol"), QStringLiteral("-M"),
-		diffBase(), QStringLiteral("--"), entry.path };
+	QStringList args = QStringList{ QStringLiteral("diff") } + eolDisplayFlags();
+	args << QStringLiteral("-M") << diffBase() << QStringLiteral("--") << entry.path;
 	if (!entry.oldPath.isEmpty())
 		args.push_back(entry.oldPath);
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
@@ -713,7 +720,8 @@ Vcs::Query GitRepository::diffFile(const FileEntry& entry, const QObject* contex
 
 Vcs::Query GitRepository::diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
-	// --ignore-cr-at-eol, or a wholesale line-ending conversion floods the word pool with every line of the file
+	// --ignore-cr-at-eol unconditionally, display setting or not: a wholesale line-ending conversion
+	// would flood the word pool with every line of the file
 	QStringList args = { QStringLiteral("diff"), QStringLiteral("--ignore-cr-at-eol"), QStringLiteral("-U0"),
 		QStringLiteral("--ignore-submodules"), diffBase() };
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
@@ -755,15 +763,14 @@ Vcs::Query GitRepository::commitFiles(const QString& sha, const QObject* context
 
 Vcs::Query GitRepository::commitFileCounts(const QString& sha, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone)
 {
-	// --ignore-cr-at-eol as commitFileDiff carries it: a row's counts are the ones its own diff shows
-	return runQuery(path(), commitFilesArgs(sha, QStringLiteral("--numstat"), { QStringLiteral("--ignore-cr-at-eol") }),
+	return runQuery(path(), commitFilesArgs(sha, QStringLiteral("--numstat"), eolDisplayFlags()),
 		context, Vcs::answering(std::move(onDone), Git::parseNumstatZ));
 }
 
 Vcs::Query GitRepository::commitFileDiff(const QString& sha, const CommitFileChange& file, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
-	QStringList args = { QStringLiteral("show"), QStringLiteral("-M"), QStringLiteral("--ignore-cr-at-eol"),
-		QStringLiteral("--format="), sha, QStringLiteral("--"), file.path };
+	QStringList args = QStringList{ QStringLiteral("show"), QStringLiteral("-M") } + eolDisplayFlags();
+	args << QStringLiteral("--format=") << sha << QStringLiteral("--") << file.path;
 	if (!file.oldPath.isEmpty())
 		args.push_back(file.oldPath); // both sides, or the pathspec filters the rename out before -M can pair it up
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
@@ -832,7 +839,10 @@ QByteArray GitRepository::ignoreFileWithPatternAdded(QByteArray content, const I
 
 void GitRepository::launchExternalDiffTool(const QString& repoRelativePath) const
 {
-	QProcess::startDetached(Settings::gitExecutable(),
+	QString executable = CSettings{}.value(QLatin1String(Settings::GitExecutableKey)).toString();
+	if (executable.isEmpty())
+		executable = QLatin1String(Settings::GitExecutableDefault);
+	QProcess::startDetached(executable,
 		{ QStringLiteral("difftool"), QStringLiteral("-y"), QStringLiteral("HEAD"), QStringLiteral("--"), repoRelativePath },
 		path());
 }

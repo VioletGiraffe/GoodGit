@@ -2,6 +2,8 @@
 #include "hgcommandserver.h"
 #include "settings.h"
 
+#include "settings/csettings.h"
+
 namespace {
 
 Vcs::Tool hgTool()
@@ -9,7 +11,10 @@ Vcs::Tool hgTool()
 	auto environment = QProcessEnvironment::systemEnvironment();
 	// Plain output: no localisation, no user aliases, no defaults that would rewrite what the app asked for
 	environment.insert(QStringLiteral("HGPLAIN"), QStringLiteral("1"));
-	return { Settings::hgExecutable(), QStringLiteral("hg"), std::move(environment) };
+	QString executable = CSettings{}.value(QLatin1String(Settings::HgExecutableKey)).toString();
+	if (executable.isEmpty())
+		executable = QLatin1String(Settings::HgExecutableDefault);
+	return { std::move(executable), QStringLiteral("hg"), std::move(environment) };
 }
 
 } // namespace

@@ -2,6 +2,8 @@
 #include "changedfilesmodel.h"
 #include "theme.h"
 
+#include "settingsui/csettingsdialog.h"
+
 #include <QApplication>
 #include <QBrush>
 #include <QDateTime>
@@ -96,6 +98,12 @@ QString shortSha(const QString& sha)
 CommitLogModel::CommitLogModel(QObject* parent) :
 	QAbstractTableModel(parent)
 {
+	// The monospace columns' font comes from the settings; layoutChanged (unlike dataChanged) also has
+	// the view recompute its cached uniform row height, and keeps selection where a reset would not
+	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] {
+		emit layoutAboutToBeChanged();
+		emit layoutChanged();
+	});
 }
 
 void CommitLogModel::setCommits(std::vector<CommitRecord> commits)
@@ -335,6 +343,10 @@ QVariant CommitLogModel::headerData(int section, Qt::Orientation orientation, in
 CommitFilesModel::CommitFilesModel(QObject* parent) :
 	QAbstractTableModel(parent)
 {
+	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] {
+		emit layoutAboutToBeChanged();
+		emit layoutChanged();
+	});
 }
 
 void CommitFilesModel::setEntries(std::vector<CommitFileChange> entries)

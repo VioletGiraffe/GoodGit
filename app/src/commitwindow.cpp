@@ -7,9 +7,13 @@
 #include "messageedit.h"
 #include "repositoryfactory.h"
 #include "settings.h"
+#include "settingspages.h"
 #include "theme.h"
 
+#include "aboutdialog/caboutdialog.h"
 #include "dialogs/messagebox.h"
+#include "settings/csettings.h"
+#include "settingsui/csettingsdialog.h"
 #include "widgets/clabelelided.h"
 #include "widgets/cpersistentwindow.h"
 #include "widgets/widgetutils.h"
@@ -29,6 +33,7 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMenu>
+#include <QMenuBar>
 #include <QPlainTextEdit>
 #include <QProcess>
 #include <QPushButton>
@@ -45,7 +50,7 @@
 
 namespace {
 
-constexpr int LeftColumnWidth = 430; // sized so the 50-column subject guide fits the message editor
+constexpr int LeftColumnWidth = 430; // first-run default; fits the default 50-column subject guide, and the splitter position persists
 constexpr qsizetype BinarySniffBytes = 8000; // git's own threshold: a NUL this early means the file is not text
 constexpr int MaxListedPathsInDialog = 20;
 constexpr int MaxIncomingCommits = 200; // a peek, not a history window - that is what History is for
@@ -150,6 +155,16 @@ CommitWindow::CommitWindow(const RepositoryLocation& location) :
 
 void CommitWindow::buildUi()
 {
+	QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
+	fileMenu->addAction(tr("E&xit"), [] { QApplication::closeAllWindows(); }); // not quit(): closeEvent saves the layout state
+	QMenu* editMenu = menuBar()->addMenu(tr("&Edit"));
+	editMenu->addAction(tr("&Preferences..."), this, &CommitWindow::showPreferencesDialog);
+	QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
+	helpMenu->addAction(tr("&About"), this, [this] {
+		CAboutDialog aboutDialog{ QStringLiteral(GG_VERSION), this };
+		aboutDialog.exec();
+	});
+
 	auto* leftPane = new QWidget;
 	auto* leftLayout = new QVBoxLayout(leftPane);
 	leftLayout->setContentsMargins(0, 0, 0, 0);
@@ -309,7 +324,7 @@ void CommitWindow::buildUi()
 	_splitter->addWidget(rightPane);
 	_splitter->setStretchFactor(0, 0);
 	_splitter->setStretchFactor(1, 1);
-	if (const QByteArray state = Settings::splitterState(QStringLiteral("CommitWindow")); !state.isEmpty())
+	if (const QByteArray state = CSettings{}.value(QLatin1String(Settings::CommitWindowSplitterKey)).toByteArray(); !state.isEmpty())
 		_splitter->restoreState(state);
 	else
 		_splitter->setSizes({ LeftColumnWidth, 750 });
@@ -333,6 +348,12 @@ void CommitWindow::buildUi()
 	connect(_filesView, &QAbstractItemView::activated, this, &CommitWindow::onRowActivated);
 	connect(_filesView, &QWidget::customContextMenuRequested, this, &CommitWindow::showContextMenu);
 	connect(_filesView->selectionModel(), &QItemSelectionModel::currentChanged, this, &CommitWindow::showDiffForCurrentRow);
+
+	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] {
+		_branchLabel->setFont(monospaceFont());
+		if (_incomingView)
+			_incomingView->setFont(monospaceFont());
+	});
 
 	new QShortcut(QKeySequence(Qt::Key_F5), this, [this] { _repo->refresh(); });
 	new QShortcut(QKeySequence(Qt::Key_Escape), this, [this] { close(); });
@@ -360,7 +381,7 @@ void CommitWindow::buildUi()
 
 void CommitWindow::closeEvent(QCloseEvent* event)
 {
-	Settings::setSplitterState(QStringLiteral("CommitWindow"), _splitter->saveState());
+	CSettings{}.setValue(QLatin1String(Settings::CommitWindowSplitterKey), _splitter->saveState());
 	QMainWindow::closeEvent(event);
 }
 
@@ -872,7 +893,7 @@ void CommitWindow::showDiffForCurrentRow()
 	_diffQuery = _repo->diffFile(entry, this, [this, entry, tag](std::expected<QByteArray, QString> diff) {
 		if (!diff)
 			_diffPane->showDiff(entry.path, {}, diff.error());
-		else if (diff->size() > MaxDiffBytes)
+		else if (diff->size() > CSettings{}.value(QLatin1String(Settings::MaxShownDiffBytesKey), Settings::MaxShownDiffBytesDefault).toLongLong())
 			_diffPane->showDiff(entry.path, {}, tr("The diff is too large to display (%1 MB).").arg(double(diff->size()) / (1024 * 1024), 0, 'f', 1));
 		else if (diff->isEmpty())
 			_diffPane->showDiff(entry.path, {}, tr("No content changes (only the mode or the line endings differ, or the file matches HEAD)."));
@@ -885,7 +906,7 @@ void CommitWindow::showFileContents(const FileEntry& entry)
 {
 	const QString tag = tr("new file");
 	QFile file{ absolutePath(entry) };
-	if (file.size() > MaxDiffBytes)
+	if (file.size() > CSettings{}.value(QLatin1String(Settings::MaxShownDiffBytesKey), Settings::MaxShownDiffBytesDefault).toLongLong())
 	{
 		_diffPane->showDiff(entry.path, tag, tr("The file is too large to display (%1 MB).").arg(double(file.size()) / (1024 * 1024), 0, 'f', 1));
 		return;
@@ -943,6 +964,14 @@ void CommitWindow::showHistoryWindow()
 	_historyWindow->show();
 	_historyWindow->raise();
 	_historyWindow->activateWindow();
+}
+
+void CommitWindow::showPreferencesDialog()
+{
+	CSettingsDialog dialog{ this };
+	dialog.addSettingsPage(new MainSettingsPage, tr("Main"))
+		.addSettingsPage(new ThemeFontSettingsPage, tr("Theme & Font")); // a QListWidgetItem shows text verbatim, no mnemonic escaping
+	dialog.exec();
 }
 
 void CommitWindow::openSubmoduleWindow(const FileEntry& entry)

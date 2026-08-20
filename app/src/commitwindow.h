@@ -71,6 +71,7 @@ private:
 
 	void showHistoryWindow();
 	void undoLastCommit();
+	void showPreferencesDialog();
 
 	void showDiffForCurrentRow();
 	// An untracked file is nothing's modification, so the pane shows what it holds, unhighlighted

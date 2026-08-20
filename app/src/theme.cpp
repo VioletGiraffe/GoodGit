@@ -1,6 +1,8 @@
 #include "theme.h"
+#include "settings.h"
 
 #include "assert/advanced_assert.h"
+#include "settings/csettings.h"
 #include "theme/cthemecontroller.h"
 #include "theme/cthemeiconhandler.h"
 
@@ -83,6 +85,9 @@ QSplitter::handle { background: @border@; }
 QListView { background: @pane@; color: @text@; border: 1px solid @border@; outline: none; }
 
 /* ---------- menus ---------- */
+QMenuBar { background: @winBg@; color: @text@; border-bottom: 1px solid @border@; }
+QMenuBar::item { background: transparent; padding: 4px 10px; }
+QMenuBar::item:selected, QMenuBar::item:pressed { background: @sel@; }
 QMenu { background: @pane@; color: @text@; border: 1px solid @border@; padding: 4px 0; }
 QMenu::item { padding: 4px 24px 4px 12px; }
 QMenu::item:selected { background: @sel@; }
@@ -232,7 +237,15 @@ const Theme& activeTheme()
 
 QFont monospaceFont()
 {
-	return QFontDatabase::systemFont(QFontDatabase::FixedFont);
+	const CSettings settings;
+	const QString family = settings.value(QLatin1String(Settings::MonospaceFontFamilyKey)).toString();
+	if (family.isEmpty()) // no override stored
+		return QFontDatabase::systemFont(QFontDatabase::FixedFont);
+
+	QFont font{ family };
+	if (const int pointSize = settings.value(QLatin1String(Settings::MonospaceFontPointSizeKey)).toInt(); pointSize > 0)
+		font.setPointSize(pointSize);
+	return font;
 }
 
 void applyTheme(QApplication& app)

@@ -80,6 +80,9 @@ code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-siz
 .titlebar .wbtns { margin-left: auto; display: flex; }
 .titlebar .wbtns i { width: 44px; height: 32px; display: grid; place-items: center; font-style: normal; font-size: 11px; color: var(--dim); }
 
+.menubar { display: flex; padding: 0 6px; background: var(--win-bg); border-bottom: 1px solid var(--border); font-size: 12.5px; flex: 0 0 auto; }
+.menubar span { padding: 4px 10px; }
+
 .repobar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--pane-alt); border-bottom: 1px solid var(--border); flex: 0 0 auto; white-space: nowrap; }
 .repobar .repo { font-weight: 650; }
 .repobar .branch { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; background: var(--pane); border: 1px solid var(--border); border-radius: 4px; padding: 1px 7px; }
@@ -361,6 +364,7 @@ ${PUSH_LOG.map(l => esc(l)).join('\n')}
 const window_ = () => `<div class="win">
 	<div class="titlebar"><span class="tt">GoodGit [master] - GoodGit</span>
 		<span class="wbtns"><i>&#8210;</i><i>&#9633;</i><i>&#10005;</i></span></div>
+	<div class="menubar"><span>File</span><span>Edit</span><span>Help</span></div>
 	<div class="row">
 		<div class="col" style="flex:0 0 600px;border-right:1px solid var(--border)">
 			<div class="repobar">
@@ -403,8 +407,8 @@ const pickaxePopup = () => `<div class="popup">
 			<button class="btn small">Clear</button><button class="btn small">Find</button></div>
 	</div>`;
 
-/* Load more shows only once the log has hit its 20 000-commit cap, which is also what puts "more to
-   load" in the count. */
+/* Load more shows only once the log has hit its commit cap (20 000 by default), which is also what puts
+   "more to load" in the count. */
 const historyWindow_ = () => `<div class="win">
 	<div class="titlebar"><span class="tt">History - GoodGit - GoodGit</span>
 		<span class="wbtns"><i>&#8210;</i><i>&#9633;</i><i>&#10005;</i></span></div>

@@ -1,5 +1,9 @@
 #include "messageedit.h"
+#include "settings.h"
 #include "theme.h"
+
+#include "settings/csettings.h"
+#include "settingsui/csettingsdialog.h"
 
 #include <QAbstractItemView>
 #include <QCompleter>
@@ -10,13 +14,12 @@
 
 #include <algorithm>
 
-static constexpr int SubjectGuideColumn = 50;
-static constexpr int AutoPopupMinPrefixLength = 3;
-
 MessageEdit::MessageEdit(QWidget* parent) :
 	QPlainTextEdit(parent)
 {
 	setFont(monospaceFont());
+	// setFont alone relayouts; the update() is for a guide-column change under an unchanged font
+	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] { setFont(monospaceFont()); viewport()->update(); });
 	setTabChangesFocus(true);
 
 	_completerModel = new QStringListModel(this);
@@ -56,8 +59,13 @@ void MessageEdit::keyPressEvent(QKeyEvent* event)
 	if (event->text().isEmpty() && !_completer->popup()->isVisible())
 		return; // pure navigation - nothing typed, nothing shown to update
 
+	// With auto-popup off, a popup summoned by Ctrl+Space still follows further typing instead of closing on it
 	const QString prefix = wordUnderCursor();
-	if (prefix.length() >= AutoPopupMinPrefixLength)
+	const CSettings settings;
+	const bool follow = settings.value(QLatin1String(Settings::CompletionAutoPopupKey), Settings::CompletionAutoPopupDefault).toBool()
+		? prefix.length() >= settings.value(QLatin1String(Settings::CompletionMinPrefixLengthKey), Settings::CompletionMinPrefixLengthDefault).toInt()
+		: _completer->popup()->isVisible() && !prefix.isEmpty();
+	if (follow)
 		showCompletions(prefix);
 	else
 		_completer->popup()->hide();
@@ -136,7 +144,8 @@ void MessageEdit::paintEvent(QPaintEvent* event)
 	QPlainTextEdit::paintEvent(event);
 
 	const qreal x = contentOffset().x() + document()->documentMargin()
-		+ fontMetrics().horizontalAdvance(QLatin1Char('x')) * SubjectGuideColumn;
+		+ fontMetrics().horizontalAdvance(QLatin1Char('x'))
+			* CSettings{}.value(QLatin1String(Settings::SubjectGuideColumnKey), Settings::SubjectGuideColumnDefault).toInt();
 	if (x >= viewport()->width())
 		return;
 
