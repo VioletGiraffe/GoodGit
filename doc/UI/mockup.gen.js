@@ -7,14 +7,18 @@
 const fs = require('fs');
 const path = require('path');
 
-/* ============================ theme ============================ */
+/* ============================ themes ============================ */
+/* Mirrors allThemes() in app/src/theme.cpp: same names, same values, plus the page shadow.
+   Every window is rendered in both polarities; the page's selectors switch which theme each
+   polarity's windows wear. */
 
-const LIGHT_VARS = `
-	--page-bg:#e8eaed; --page-fg:#16181c; --page-dim:#5d636e;
+const THEMES = {
+	light: {
+		'Default': `
 	--win-bg:#f3f3f3; --pane:#ffffff; --pane-alt:#fafafa;
 	--border:#d0d3d8; --border-soft:#e3e5e9;
 	--text:#16181c; --dim:#6b7280;
-	--accent:#0d6bc4; --accent-fg:#ffffff;
+	--accent:#0d6bc4; --accent-fg:#ffffff; --accent-text:#0d6bc4;
 	--sel:#d6e8fb; --btn:#fdfdfd; --btn-border:#c2c6cc;
 	--warn-bg:#fff4d6;
 	--st-mod:#1668c4; --st-add:#12783c; --st-unt:#8a6a08; --st-del:#b8302a;
@@ -23,14 +27,28 @@ const LIGHT_VARS = `
 	--diff-del-bg:#fdeaea; --diff-del-fg:#8f2318;
 	--diff-hunk:#6a5fb0; --diff-ctx:#2b2f36;
 	--shadow:rgba(0,0,0,.14);
-`;
-
-const DARK_VARS = `
-	--page-bg:#14161a; --page-fg:#e6e8ec; --page-dim:#9aa1ad;
+`,
+		'Honey': `
+	--win-bg:#f7f0dd; --pane:#fffdf4; --pane-alt:#fbf6e7;
+	--border:#dfd3ae; --border-soft:#efe7cd;
+	--text:#221c0c; --dim:#857a58;
+	--accent:#e8a013; --accent-fg:#241a00; --accent-text:#8a6600;
+	--sel:#f5e6bb; --btn:#fdf9ec; --btn-border:#d4c79b;
+	--warn-bg:#ffe6c2;
+	--st-mod:#1668c4; --st-add:#0d9c3c; --st-unt:#0c7d84; --st-del:#dd2418;
+	--st-ren:#7345c0; --st-sub:#a15c00;
+	--diff-add-bg:#d1f2cf; --diff-add-fg:#07561f;
+	--diff-del-bg:#fcd9d2; --diff-del-fg:#96140c;
+	--diff-hunk:#6a5fb0; --diff-ctx:#322b18;
+	--shadow:rgba(0,0,0,.14);
+`,
+	},
+	dark: {
+		'Default': `
 	--win-bg:#1f2227; --pane:#191c21; --pane-alt:#1c1f24;
 	--border:#33383f; --border-soft:#282c32;
 	--text:#e6e8ec; --dim:#98a0ab;
-	--accent:#3b8fe0; --accent-fg:#06121f;
+	--accent:#3b8fe0; --accent-fg:#06121f; --accent-text:#3b8fe0;
 	--sel:#1e3c58; --btn:#262a30; --btn-border:#3c424a;
 	--warn-bg:#3a3013;
 	--st-mod:#6cb0f0; --st-add:#62c98a; --st-unt:#d4b352; --st-del:#ef8c82;
@@ -39,28 +57,47 @@ const DARK_VARS = `
 	--diff-del-bg:#3a1d1c; --diff-del-fg:#f0a79c;
 	--diff-hunk:#9b8fe0; --diff-ctx:#c9ced6;
 	--shadow:rgba(0,0,0,.5);
-`;
+`,
+		'Blackout Violet': `
+	--win-bg:#100a17; --pane:#09060c; --pane-alt:#0d0814;
+	--border:#241a36; --border-soft:#170f24;
+	--text:#e9e3f2; --dim:#9488a8;
+	--accent:#ffc226; --accent-fg:#1f1800; --accent-text:#ffc226;
+	--sel:#372d0d; --btn:#1a1128; --btn-border:#322447;
+	--warn-bg:#46280e;
+	--st-mod:#6cb0f0; --st-add:#38e07c; --st-unt:#45c9c0; --st-del:#ff6a5c;
+	--st-ren:#b394ef; --st-sub:#dda45c;
+	--diff-add-bg:#07150b; --diff-add-fg:#52ec92;
+	--diff-del-bg:#1b0a09; --diff-del-fg:#ff8d80;
+	--diff-hunk:#a795e8; --diff-ctx:#cec7dc;
+	--shadow:rgba(0,0,0,.55);
+`,
+	},
+};
+
+const themeClass = (polarity, name) => `t-${polarity}-${name.toLowerCase().replace(/ /g, '-')}`;
+
+const themeCss = () => Object.entries(THEMES).flatMap(([polarity, themes]) =>
+	Object.entries(themes).map(([name, vars]) => `.${themeClass(polarity, name)} { ${vars} }`)).join('\n');
 
 const CSS = `
-:root { ${LIGHT_VARS} }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { ${DARK_VARS} } }
-:root[data-theme="dark"] { ${DARK_VARS} }
+${themeCss()}
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
-	background: var(--page-bg); color: var(--page-fg);
+	background: #ffffff;
 	font: 14px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
 	padding-bottom: 60px;
 }
 .wrap { max-width: 1500px; margin: 0 auto; padding: 0 24px; }
-.masthead { padding: 30px 0 18px; }
-.masthead h1 { margin: 0 0 6px; font-size: 26px; font-weight: 650; letter-spacing: -0.01em; }
-.masthead p { margin: 0 0 8px; color: var(--page-dim); max-width: 92ch; }
-.sec { padding: 30px 0 14px; }
-.sec h2 { margin: 0 0 6px; font-size: 20px; font-weight: 640; }
-.sec p { margin: 0; color: var(--page-dim); max-width: 92ch; }
-code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: .92em; }
+
+/* ---------- theme pickers and polarity bands ---------- */
+.masthead { background: #000000; padding: 14px 0; }
+.pickers { display: flex; gap: 20px; font-size: 13px; color: #9aa1ad; }
+.pickers select { font: inherit; padding: 1px 4px; }
+.band { padding: 12px 0 30px; }
+.band.dark { background: #000000; }
 
 /* ---------- window shell ---------- */
 .win {
@@ -86,7 +123,7 @@ code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-siz
 .repobar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--pane-alt); border-bottom: 1px solid var(--border); flex: 0 0 auto; white-space: nowrap; }
 .repobar .repo { font-weight: 650; }
 .repobar .branch { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; background: var(--pane); border: 1px solid var(--border); border-radius: 4px; padding: 1px 7px; }
-.repobar .ab { color: var(--accent); font-size: 12px; font-weight: 600; }
+.repobar .ab { color: var(--accent-text); font-size: 12px; font-weight: 600; }
 .grow { flex: 1; }
 .row { display: flex; flex: 1; min-height: 0; }
 .col { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
@@ -156,7 +193,7 @@ code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-siz
 /* Sha, author and date are dim; the subject is not, being the one the eye scans for. An unpushed
    commit takes the accent on its sha - the same mark the commit window's ahead count wears. */
 .c-sha { flex: 0 0 72px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; color: var(--dim); }
-.c-sha.unpushed { color: var(--accent); font-weight: 600; }
+.c-sha.unpushed { color: var(--accent-text); font-weight: 600; }
 .c-subj { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .c-auth { flex: 0 0 96px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
 .c-date { flex: 0 0 232px; color: var(--dim); }
@@ -441,10 +478,14 @@ const historyWindow_ = () => `<div class="win">
 	${pickaxePopup()}
 </div>`;
 
-const section = (title, intro) => `<div class="sec">
-		<h2>${title}</h2>
-		<p>${intro}</p>
-	</div>`;
+/* Each window is rendered once per polarity, wrapped in a full-bleed band that carries the theme's
+   variables; the dark band paints the page black around its window. */
+const band = (polarity, content) => `<div class="band ${polarity} ${themeClass(polarity, 'Default')}">
+	<div class="wrap">${content}</div>
+</div>`;
+
+const options = polarity => Object.keys(THEMES[polarity])
+	.map(name => `<option value="${themeClass(polarity, name)}">${name}</option>`).join('');
 
 const html = `<!doctype html>
 <html lang="en">
@@ -456,23 +497,25 @@ const html = `<!doctype html>
 <style>${CSS}</style>
 </head>
 <body>
-<div class="wrap">
-	<div class="masthead">
-		<h1>GoodGit &mdash; window layouts</h1>
-		<p>Sample content only. Behaviour and the reasoning behind the design live in <code>doc/ARCHITECTURE.md</code>.</p>
-	</div>
-	${section('Commit window',
-		`The file list occupies the top of the left column, the message and the primary action sit beneath it,
-		 and the diff takes the remaining width, with the push log opening below it while a push runs.
-		 Every row state is populated at once so the styling of each is visible.`)}
-	${window_()}
-	${section('History window',
-		`The log fills the top half; below it the selected commit's files sit beside the selected file's diff,
-		 and the content-search popup is drawn open over both. Read-only throughout - no checkboxes, no
-		 primary action. The same window narrowed to one path is a file history, which adds that path to the
-		 header row and changes nothing else.`)}
-	${historyWindow_()}
+<div class="masthead">
+	<div class="wrap"><div class="pickers">
+		<label>Dark theme: <select id="darkSel">${options('dark')}</select></label>
+		<label>Light theme: <select id="lightSel">${options('light')}</select></label>
+	</div></div>
 </div>
+${band('dark', window_())}
+${band('light', window_())}
+${band('dark', historyWindow_())}
+${band('light', historyWindow_())}
+<script>
+/* Retheming only; with scripting off the page stays on the Default themes. */
+for (const polarity of ['light', 'dark']) {
+	document.getElementById(polarity + 'Sel').addEventListener('change', e => {
+		for (const band of document.querySelectorAll('.band.' + polarity))
+			band.className = 'band ' + polarity + ' ' + e.target.value;
+	});
+}
+</script>
 </body>
 </html>`;
 

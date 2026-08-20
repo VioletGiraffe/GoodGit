@@ -25,7 +25,7 @@ QMainWindow, QDialog { background: @windowBg@; }
 /* ---------- bars ---------- */
 QFrame#repoBar { background: @surfaceAlt@; border-bottom: 1px solid @border@; }
 QLabel#branchChip { background: @surface@; color: @text@; border: 1px solid @border@; border-radius: @controlRadius@px; padding: 1px 7px; }
-QLabel#aheadLabel { color: @accent@; font-weight: 600; }
+QLabel#aheadLabel { color: @accentText@; font-weight: 600; }
 QFrame#counterBar { background: @windowBg@; border-bottom: 1px solid @border@; }
 QFrame#diffHeader { background: @windowBg@; border-bottom: 1px solid @border@; }
 QFrame#pushLogHeader { background: @windowBg@; border-top: 1px solid @border@; border-bottom: 1px solid @border@; }
@@ -111,6 +111,7 @@ QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
 		{ QStringLiteral("@textDim@"), t.palette.textDim.name() },
 		{ QStringLiteral("@accent@"), t.palette.accent.name() },
 		{ QStringLiteral("@accentFg@"), t.palette.accentFg.name() },
+		{ QStringLiteral("@accentText@"), t.palette.accentText.name() },
 		{ QStringLiteral("@selectionBg@"), t.palette.selectionBg.name() },
 		{ QStringLiteral("@button@"), t.palette.button.name() },
 		{ QStringLiteral("@buttonBorder@"), t.palette.buttonBorder.name() },

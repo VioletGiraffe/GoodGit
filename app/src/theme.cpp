@@ -54,6 +54,19 @@ QColor Theme::blockedRowTint() const
 	return tint;
 }
 
+QFont monospaceFont()
+{
+	const CSettings settings;
+	const QString family = settings.value(Settings::MonospaceFontFamilyKey).toString();
+	if (family.isEmpty()) // no override stored
+		return QFontDatabase::systemFont(QFontDatabase::FixedFont);
+
+	QFont font{ family };
+	if (const int pointSize = settings.value(Settings::MonospaceFontPointSizeKey).toInt(); pointSize > 0)
+		font.setPointSize(pointSize);
+	return font;
+}
+
 void applyTheme(QApplication& app)
 {
 	// Serves the tinted QSS glyphs; must exist before any stylesheet references themeicon:/ URLs
@@ -118,19 +131,56 @@ const std::vector<Theme>& allThemes()
 		.graphLanes = { c(0x6cb0f0), c(0x62c98a), c(0xdda45c), c(0xb394ef), c(0x5ec8c8), c(0xef8c82) },
 	};
 
-	static const std::vector<Theme> themes{ light, dark };
+	// Warm cream chrome, amber accent. The accent fails as text on light surfaces, hence the
+	// authored accentText.
+	static const Theme honey{
+		.name = "Honey",
+		.dark = false,
+		.palette = {
+			.windowBg = c(0xf7f0dd), .surface = c(0xfffdf4), .surfaceAlt = c(0xfbf6e7),
+			.text = c(0x221c0c), .textDim = c(0x857a58),
+			.button = c(0xfdf9ec),
+			.accent = c(0xe8a013),
+			.selectionBg = c(0xf5e6bb), .selectionFg = c(0x221c0c),
+			.border = c(0xdfd3ae), .borderSubtle = c(0xefe7cd),
+			.accentFg = c(0x241a00), .accentText = c(0x8a6600),
+			.buttonBorder = c(0xd4c79b),
+		},
+		.warnBg = c(0xffe6c2), .warnFg = c(0x7a4a00),
+		.errBg = c(0xfce3da), .errFg = c(0x96140c),
+		.stModified = c(0x1668c4), .stAdded = c(0x0d9c3c), .stUntracked = c(0x0c7d84),
+		.stDeleted = c(0xdd2418), .stRenamed = c(0x7345c0), .stSubmodule = c(0xa15c00),
+		.diffAddBg = c(0xd1f2cf), .diffAddFg = c(0x07561f),
+		.diffDelBg = c(0xfcd9d2), .diffDelFg = c(0x96140c),
+		.diffHunk = c(0x6a5fb0), .diffCtx = c(0x322b18),
+		.graphLanes = { c(0x1668c4), c(0x0d9c3c), c(0xa15c00), c(0x7345c0), c(0x0c7d84), c(0xdd2418) },
+	};
+
+	// Near-black violet chrome, golden yellow accent. The diff tints sit a step above the surface on
+	// purpose: the brightness lives in the diff text, not the bands.
+	static const Theme blackoutViolet{
+		.name = "Blackout Violet",
+		.dark = true,
+		.palette = {
+			.windowBg = c(0x100a17), .surface = c(0x09060c), .surfaceAlt = c(0x0d0814),
+			.text = c(0xe9e3f2), .textDim = c(0x9488a8),
+			.button = c(0x1a1128),
+			.accent = c(0xffc226),
+			.selectionBg = c(0x372d0d), .selectionFg = c(0xe9e3f2),
+			.border = c(0x241a36), .borderSubtle = c(0x170f24),
+			.accentFg = c(0x1f1800),
+			.buttonBorder = c(0x322447),
+		},
+		.warnBg = c(0x46280e), .warnFg = c(0xe8a458),
+		.errBg = c(0x401412), .errFg = c(0xff8d80),
+		.stModified = c(0x6cb0f0), .stAdded = c(0x38e07c), .stUntracked = c(0x45c9c0),
+		.stDeleted = c(0xff6a5c), .stRenamed = c(0xb394ef), .stSubmodule = c(0xdda45c),
+		.diffAddBg = c(0x07150b), .diffAddFg = c(0x52ec92),
+		.diffDelBg = c(0x1b0a09), .diffDelFg = c(0xff8d80),
+		.diffHunk = c(0xa795e8), .diffCtx = c(0xcec7dc),
+		.graphLanes = { c(0x6cb0f0), c(0x38e07c), c(0xdda45c), c(0xb394ef), c(0x45c9c0), c(0xff6a5c) },
+	};
+
+	static const std::vector<Theme> themes{ light, dark, honey, blackoutViolet };
 	return themes;
-}
-
-QFont monospaceFont()
-{
-	const CSettings settings;
-	const QString family = settings.value(Settings::MonospaceFontFamilyKey).toString();
-	if (family.isEmpty()) // no override stored
-		return QFontDatabase::systemFont(QFontDatabase::FixedFont);
-
-	QFont font{ family };
-	if (const int pointSize = settings.value(Settings::MonospaceFontPointSizeKey).toInt(); pointSize > 0)
-		font.setPointSize(pointSize);
-	return font;
 }

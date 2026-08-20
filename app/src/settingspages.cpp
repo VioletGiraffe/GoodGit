@@ -138,6 +138,25 @@ ThemeFontSettingsPage::ThemeFontSettingsPage(QWidget* parent) :
 	});
 	layout->addRow(tr("Color scheme:"), _colorScheme);
 
+	// One combo per polarity; each holds that polarity's themes and applies as it is picked, like the scheme
+	const auto themeCombo = [this](bool dark, QString& nameOnEntry) {
+		nameOnEntry = CThemeController::instance().themeName(dark);
+		auto* combo = new QComboBox;
+		for (const Theme& theme : allThemes())
+			if (theme.dark == dark)
+				combo->addItem(theme.name);
+		// A stored name can be empty or outlive its theme; the combo then shows the polarity's first
+		// theme, matching what the resolver falls back to
+		if (const int storedIndex = combo->findText(nameOnEntry); storedIndex != -1)
+			combo->setCurrentIndex(storedIndex);
+		connect(combo, &QComboBox::currentTextChanged, this, [dark](const QString& name) {
+			CThemeController::instance().setThemeName(dark, name);
+		});
+		return combo;
+	};
+	layout->addRow(tr("Light theme:"), themeCombo(false, _lightThemeOnEntry));
+	layout->addRow(tr("Dark theme:"), themeCombo(true, _darkThemeOnEntry));
+
 	_systemFont = new QCheckBox{ tr("Use the system monospace font") };
 	// An empty stored family means no override, exactly as monospaceFont() reads it
 	_systemFont->setChecked(CSettings{}.value(Settings::MonospaceFontFamilyKey).toString().isEmpty());
@@ -170,7 +189,7 @@ ThemeFontSettingsPage::ThemeFontSettingsPage(QWidget* parent) :
 
 void ThemeFontSettingsPage::acceptSettings()
 {
-	// The scheme is not stored here: picking it applied and stored it
+	// The scheme and themes are not stored here: picking them applied and stored them
 	CSettings settings;
 	const bool systemFont = _systemFont->isChecked();
 	settings.setValue(Settings::MonospaceFontFamilyKey, systemFont ? QString{} : _fontFamily->currentFont().family());
@@ -180,5 +199,10 @@ void ThemeFontSettingsPage::acceptSettings()
 
 void ThemeFontSettingsPage::rejectSettings()
 {
-	CThemeController::instance().setSchemePreference(_schemeOnEntry); // a no-op when nothing was previewed
+	// All no-ops when nothing was previewed. Names first: restoring the scheme can flip the polarity,
+	// which re-resolves against whatever names are in force.
+	CThemeController& controller = CThemeController::instance();
+	controller.setThemeName(false, _lightThemeOnEntry);
+	controller.setThemeName(true, _darkThemeOnEntry);
+	controller.setSchemePreference(_schemeOnEntry);
 }

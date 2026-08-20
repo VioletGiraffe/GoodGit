@@ -44,6 +44,8 @@ private:
 	QFontComboBox* _fontFamily = nullptr;
 	QSpinBox* _fontSize = nullptr;
 	QSpinBox* _diffTabWidth = nullptr;
-	// The scheme applies as it is picked, so cancelling has to put back what was in force on entry
+	// The scheme and theme picks apply as they are made, so cancelling has to put back what was in force on entry
 	Qt::ColorScheme _schemeOnEntry = Qt::ColorScheme::Unknown;
+	QString _lightThemeOnEntry;
+	QString _darkThemeOnEntry;
 };
