@@ -96,7 +96,7 @@ void ChangedFilesModel::setEntries(const std::vector<FileEntry>& entries, bool m
 			previousChecks[row.entry.path] = row.checked;
 	}
 
-	const QString newRowCheckPolicy = CSettings{}.value(QLatin1String(Settings::NewRowCheckPolicyKey)).toString();
+	const QString newRowCheckPolicy = CSettings{}.value(Settings::NewRowCheckPolicyKey).toString();
 
 	beginResetModel();
 	_rows.clear();

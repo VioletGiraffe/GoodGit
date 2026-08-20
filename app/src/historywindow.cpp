@@ -51,7 +51,7 @@ HistoryWindow::HistoryWindow(const RepositoryLocation& location, QWidget* parent
 HistoryWindow::HistoryWindow(const RepositoryLocation& location, const QString& filePath, QWidget* parent) :
 	QMainWindow(parent, Qt::Window),
 	_repo{ openRepository(location) },
-	_query{ .maxCommits = CSettings{}.value(QLatin1String(Settings::HistoryMaxCommitsKey), Settings::HistoryMaxCommitsDefault).toInt(), .path = filePath }
+	_query{ .maxCommits = CSettings{}.value(Settings::HistoryMaxCommitsKey, Settings::HistoryMaxCommitsDefault).toInt(), .path = filePath }
 {
 	setAttribute(Qt::WA_DeleteOnClose);
 	setWindowTitle(_query.path.isEmpty()
@@ -160,7 +160,7 @@ void HistoryWindow::buildUi()
 	_detailSplitter->addWidget(_diffPane);
 	_detailSplitter->setStretchFactor(0, 0);
 	_detailSplitter->setStretchFactor(1, 1);
-	if (const QByteArray state = CSettings{}.value(QLatin1String(Settings::HistoryWindowDetailSplitterKey)).toByteArray(); !state.isEmpty())
+	if (const QByteArray state = CSettings{}.value(Settings::HistoryWindowDetailSplitterKey).toByteArray(); !state.isEmpty())
 		_detailSplitter->restoreState(state);
 	else
 		_detailSplitter->setSizes({ FileListWidth, 860 });
@@ -172,7 +172,7 @@ void HistoryWindow::buildUi()
 	_splitter->addWidget(_detailSplitter);
 	_splitter->setStretchFactor(0, 1);
 	_splitter->setStretchFactor(1, 1);
-	if (const QByteArray state = CSettings{}.value(QLatin1String(Settings::HistoryWindowSplitterKey)).toByteArray(); !state.isEmpty())
+	if (const QByteArray state = CSettings{}.value(Settings::HistoryWindowSplitterKey).toByteArray(); !state.isEmpty())
 		_splitter->restoreState(state);
 	else
 		_splitter->setSizes({ 340, 420 });
@@ -226,8 +226,8 @@ bool HistoryWindow::eventFilter(QObject* watched, QEvent* event)
 void HistoryWindow::closeEvent(QCloseEvent* event)
 {
 	CSettings settings;
-	settings.setValue(QLatin1String(Settings::HistoryWindowSplitterKey), _splitter->saveState());
-	settings.setValue(QLatin1String(Settings::HistoryWindowDetailSplitterKey), _detailSplitter->saveState());
+	settings.setValue(Settings::HistoryWindowSplitterKey, _splitter->saveState());
+	settings.setValue(Settings::HistoryWindowDetailSplitterKey, _detailSplitter->saveState());
 	QMainWindow::closeEvent(event);
 }
 
@@ -598,7 +598,7 @@ void HistoryWindow::showDiffForCurrentFile()
 	_diffQuery = _repo->commitFileDiff(sha, entry, this, [this, entry, tag](std::expected<QByteArray, QString> diff) {
 		if (!diff)
 			_diffPane->showDiff(entry.path, tag, diff.error());
-		else if (diff->size() > CSettings{}.value(QLatin1String(Settings::MaxShownDiffBytesKey), Settings::MaxShownDiffBytesDefault).toLongLong())
+		else if (diff->size() > CSettings{}.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong())
 			_diffPane->showDiff(entry.path, tag, tr("The diff is too large to display (%1 MB).").arg(double(diff->size()) / (1024 * 1024), 0, 'f', 1));
 		else if (diff->isEmpty())
 			_diffPane->showDiff(entry.path, tag, tr("No content changes (only the mode or the line endings differ, or a rename with identical content)."));

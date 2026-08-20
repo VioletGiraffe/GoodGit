@@ -26,7 +26,7 @@ QWidget* executableRow(QWidget* parent, QLineEdit*& edit, const char* settingsKe
 	auto* layout = new QHBoxLayout{ row };
 	layout->setContentsMargins(0, 0, 0, 0);
 	edit = new QLineEdit;
-	edit->setText(CSettings{}.value(QLatin1String(settingsKey)).toString());
+	edit->setText(CSettings{}.value(settingsKey).toString());
 	edit->setPlaceholderText(QLatin1String(defaultName));
 	auto* browseButton = new QPushButton{ MainSettingsPage::tr("Browse...") };
 	layout->addWidget(edit, 1);
@@ -63,42 +63,42 @@ MainSettingsPage::MainSettingsPage()
 	_historyDepth->setRange(100, 1'000'000);
 	_historyDepth->setSingleStep(1000);
 	_historyDepth->setGroupSeparatorShown(true);
-	_historyDepth->setValue(settings.value(QLatin1String(Settings::HistoryMaxCommitsKey), Settings::HistoryMaxCommitsDefault).toInt());
+	_historyDepth->setValue(settings.value(Settings::HistoryMaxCommitsKey, Settings::HistoryMaxCommitsDefault).toInt());
 	_historyDepth->setToolTip(tr("How many commits a history window loads. \"Load more\" doubles from here."));
 	layout->addRow(tr("History depth, commits:"), _historyDepth);
 
 	_maxDiffMb = new QSpinBox;
 	_maxDiffMb->setRange(1, 64);
 	_maxDiffMb->setSuffix(tr(" MB"));
-	_maxDiffMb->setValue(int(settings.value(QLatin1String(Settings::MaxShownDiffBytesKey), Settings::MaxShownDiffBytesDefault).toLongLong() / (1024 * 1024)));
+	_maxDiffMb->setValue(int(settings.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong() / (1024 * 1024)));
 	_maxDiffMb->setToolTip(tr("Diffs and files larger than this are reported instead of displayed."));
 	layout->addRow(tr("Largest diff to display:"), _maxDiffMb);
 
 	_showEolOnlyChanges = new QCheckBox{ tr("Show changes where only the line endings differ") };
-	_showEolOnlyChanges->setChecked(settings.value(QLatin1String(Settings::ShowLineEndingOnlyChangesKey), Settings::ShowLineEndingOnlyChangesDefault).toBool());
+	_showEolOnlyChanges->setChecked(settings.value(Settings::ShowLineEndingOnlyChangesKey, Settings::ShowLineEndingOnlyChangesDefault).toBool());
 	_showEolOnlyChanges->setToolTip(tr("Applies to the shown diffs and the line counts. Either way the file "
 		"lists as modified and commits its content byte for byte."));
 	layout->addRow(_showEolOnlyChanges);
 
 	_subjectGuideColumn = new QSpinBox;
 	_subjectGuideColumn->setRange(20, 200);
-	_subjectGuideColumn->setValue(settings.value(QLatin1String(Settings::SubjectGuideColumnKey), Settings::SubjectGuideColumnDefault).toInt());
+	_subjectGuideColumn->setValue(settings.value(Settings::SubjectGuideColumnKey, Settings::SubjectGuideColumnDefault).toInt());
 	layout->addRow(tr("Commit subject guide at column:"), _subjectGuideColumn);
 
 	_completionAutoPopup = new QCheckBox{ tr("Suggest message completions while typing") };
-	_completionAutoPopup->setChecked(settings.value(QLatin1String(Settings::CompletionAutoPopupKey), Settings::CompletionAutoPopupDefault).toBool());
+	_completionAutoPopup->setChecked(settings.value(Settings::CompletionAutoPopupKey, Settings::CompletionAutoPopupDefault).toBool());
 	_completionAutoPopup->setToolTip(tr("Ctrl+Space asks for completions either way."));
 	layout->addRow(_completionAutoPopup);
 	_completionMinPrefix = new QSpinBox;
 	_completionMinPrefix->setRange(1, 10);
-	_completionMinPrefix->setValue(settings.value(QLatin1String(Settings::CompletionMinPrefixLengthKey), Settings::CompletionMinPrefixLengthDefault).toInt());
+	_completionMinPrefix->setValue(settings.value(Settings::CompletionMinPrefixLengthKey, Settings::CompletionMinPrefixLengthDefault).toInt());
 	_completionMinPrefix->setEnabled(_completionAutoPopup->isChecked());
 	connect(_completionAutoPopup, &QCheckBox::toggled, _completionMinPrefix, &QWidget::setEnabled);
 	layout->addRow(tr("...after this many characters:"), _completionMinPrefix);
 
 	_newRowCheckPolicy = new QComboBox;
 	_newRowCheckPolicy->addItems({ tr("Unless untracked"), tr("Always"), tr("Never") });
-	const QString policy = settings.value(QLatin1String(Settings::NewRowCheckPolicyKey)).toString();
+	const QString policy = settings.value(Settings::NewRowCheckPolicyKey).toString();
 	_newRowCheckPolicy->setCurrentIndex(policy == QLatin1String(Settings::NewRowCheckPolicyAll) ? 1
 		: policy == QLatin1String(Settings::NewRowCheckPolicyNone) ? 2 : 0);
 	_newRowCheckPolicy->setToolTip(tr("Rows already listed keep their check state across a refresh; this is "
@@ -109,15 +109,15 @@ MainSettingsPage::MainSettingsPage()
 void MainSettingsPage::acceptSettings()
 {
 	CSettings settings;
-	settings.setValue(QLatin1String(Settings::GitExecutableKey), _gitExecutable->text().trimmed());
-	settings.setValue(QLatin1String(Settings::HgExecutableKey), _hgExecutable->text().trimmed());
-	settings.setValue(QLatin1String(Settings::HistoryMaxCommitsKey), _historyDepth->value());
-	settings.setValue(QLatin1String(Settings::MaxShownDiffBytesKey), qlonglong{ _maxDiffMb->value() } * 1024 * 1024);
-	settings.setValue(QLatin1String(Settings::ShowLineEndingOnlyChangesKey), _showEolOnlyChanges->isChecked());
-	settings.setValue(QLatin1String(Settings::SubjectGuideColumnKey), _subjectGuideColumn->value());
-	settings.setValue(QLatin1String(Settings::CompletionAutoPopupKey), _completionAutoPopup->isChecked());
-	settings.setValue(QLatin1String(Settings::CompletionMinPrefixLengthKey), _completionMinPrefix->value());
-	settings.setValue(QLatin1String(Settings::NewRowCheckPolicyKey), QLatin1String(NewRowCheckPolicyByIndex[_newRowCheckPolicy->currentIndex()]));
+	settings.setValue(Settings::GitExecutableKey, _gitExecutable->text().trimmed());
+	settings.setValue(Settings::HgExecutableKey, _hgExecutable->text().trimmed());
+	settings.setValue(Settings::HistoryMaxCommitsKey, _historyDepth->value());
+	settings.setValue(Settings::MaxShownDiffBytesKey, qlonglong{ _maxDiffMb->value() } * 1024 * 1024);
+	settings.setValue(Settings::ShowLineEndingOnlyChangesKey, _showEolOnlyChanges->isChecked());
+	settings.setValue(Settings::SubjectGuideColumnKey, _subjectGuideColumn->value());
+	settings.setValue(Settings::CompletionAutoPopupKey, _completionAutoPopup->isChecked());
+	settings.setValue(Settings::CompletionMinPrefixLengthKey, _completionMinPrefix->value());
+	settings.setValue(Settings::NewRowCheckPolicyKey, QLatin1String(NewRowCheckPolicyByIndex[_newRowCheckPolicy->currentIndex()]));
 }
 
 ThemeFontSettingsPage::ThemeFontSettingsPage()
@@ -137,7 +137,7 @@ ThemeFontSettingsPage::ThemeFontSettingsPage()
 
 	_systemFont = new QCheckBox{ tr("Use the system monospace font") };
 	// An empty stored family means no override, exactly as monospaceFont() reads it
-	_systemFont->setChecked(CSettings{}.value(QLatin1String(Settings::MonospaceFontFamilyKey)).toString().isEmpty());
+	_systemFont->setChecked(CSettings{}.value(Settings::MonospaceFontFamilyKey).toString().isEmpty());
 	layout->addRow(_systemFont);
 
 	const QFont currentMono = monospaceFont();
@@ -161,7 +161,7 @@ ThemeFontSettingsPage::ThemeFontSettingsPage()
 	_diffTabWidth = new QSpinBox;
 	_diffTabWidth->setRange(1, 16);
 	_diffTabWidth->setSuffix(tr(" spaces"));
-	_diffTabWidth->setValue(CSettings{}.value(QLatin1String(Settings::DiffTabWidthKey), Settings::DiffTabWidthDefault).toInt());
+	_diffTabWidth->setValue(CSettings{}.value(Settings::DiffTabWidthKey, Settings::DiffTabWidthDefault).toInt());
 	layout->addRow(tr("Tab width in diffs:"), _diffTabWidth);
 }
 
@@ -173,7 +173,7 @@ void ThemeFontSettingsPage::acceptSettings()
 
 	CSettings settings;
 	const bool systemFont = _systemFont->isChecked();
-	settings.setValue(QLatin1String(Settings::MonospaceFontFamilyKey), systemFont ? QString{} : _fontFamily->currentFont().family());
-	settings.setValue(QLatin1String(Settings::MonospaceFontPointSizeKey), systemFont ? 0 : _fontSize->value());
-	settings.setValue(QLatin1String(Settings::DiffTabWidthKey), _diffTabWidth->value());
+	settings.setValue(Settings::MonospaceFontFamilyKey, systemFont ? QString{} : _fontFamily->currentFont().family());
+	settings.setValue(Settings::MonospaceFontPointSizeKey, systemFont ? 0 : _fontSize->value());
+	settings.setValue(Settings::DiffTabWidthKey, _diffTabWidth->value());
 }

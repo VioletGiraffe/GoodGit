@@ -238,12 +238,12 @@ const Theme& activeTheme()
 QFont monospaceFont()
 {
 	const CSettings settings;
-	const QString family = settings.value(QLatin1String(Settings::MonospaceFontFamilyKey)).toString();
+	const QString family = settings.value(Settings::MonospaceFontFamilyKey).toString();
 	if (family.isEmpty()) // no override stored
 		return QFontDatabase::systemFont(QFontDatabase::FixedFont);
 
 	QFont font{ family };
-	if (const int pointSize = settings.value(QLatin1String(Settings::MonospaceFontPointSizeKey)).toInt(); pointSize > 0)
+	if (const int pointSize = settings.value(Settings::MonospaceFontPointSizeKey).toInt(); pointSize > 0)
 		font.setPointSize(pointSize);
 	return font;
 }

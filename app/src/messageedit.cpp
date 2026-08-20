@@ -62,8 +62,8 @@ void MessageEdit::keyPressEvent(QKeyEvent* event)
 	// With auto-popup off, a popup summoned by Ctrl+Space still follows further typing instead of closing on it
 	const QString prefix = wordUnderCursor();
 	const CSettings settings;
-	const bool follow = settings.value(QLatin1String(Settings::CompletionAutoPopupKey), Settings::CompletionAutoPopupDefault).toBool()
-		? prefix.length() >= settings.value(QLatin1String(Settings::CompletionMinPrefixLengthKey), Settings::CompletionMinPrefixLengthDefault).toInt()
+	const bool follow = settings.value(Settings::CompletionAutoPopupKey, Settings::CompletionAutoPopupDefault).toBool()
+		? prefix.length() >= settings.value(Settings::CompletionMinPrefixLengthKey, Settings::CompletionMinPrefixLengthDefault).toInt()
 		: _completer->popup()->isVisible() && !prefix.isEmpty();
 	if (follow)
 		showCompletions(prefix);
@@ -145,7 +145,7 @@ void MessageEdit::paintEvent(QPaintEvent* event)
 
 	const qreal x = contentOffset().x() + document()->documentMargin()
 		+ fontMetrics().horizontalAdvance(QLatin1Char('x'))
-			* CSettings{}.value(QLatin1String(Settings::SubjectGuideColumnKey), Settings::SubjectGuideColumnDefault).toInt();
+			* CSettings{}.value(Settings::SubjectGuideColumnKey, Settings::SubjectGuideColumnDefault).toInt();
 	if (x >= viewport()->width())
 		return;
 

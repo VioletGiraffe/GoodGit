@@ -18,7 +18,7 @@ Vcs::Tool gitTool()
 	auto environment = QProcessEnvironment::systemEnvironment();
 	// A credential miss fails fast instead of hanging on a prompt nothing here would show
 	environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
-	QString executable = CSettings{}.value(QLatin1String(Settings::GitExecutableKey)).toString();
+	QString executable = CSettings{}.value(Settings::GitExecutableKey).toString();
 	if (executable.isEmpty())
 		executable = QLatin1String(Settings::GitExecutableDefault);
 	return { std::move(executable), QStringLiteral("git"), std::move(environment) };

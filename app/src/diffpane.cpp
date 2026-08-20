@@ -47,7 +47,7 @@ DiffPane::DiffPane(QWidget* parent) :
 		const QFont mono = monospaceFont();
 		_pathLabel->setFont(mono);
 		_view->setFont(mono);
-		const int tabWidthSpaces = CSettings{}.value(QLatin1String(Settings::DiffTabWidthKey), Settings::DiffTabWidthDefault).toInt();
+		const int tabWidthSpaces = CSettings{}.value(Settings::DiffTabWidthKey, Settings::DiffTabWidthDefault).toInt();
 		_view->setTabStopDistance(tabWidthSpaces * QFontMetricsF{ mono }.horizontalAdvance(QLatin1Char(' ')));
 	};
 	applyFontSettings();

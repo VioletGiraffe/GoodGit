@@ -136,7 +136,7 @@ QString revsetOf(const std::vector<Hg::GrepMatch>& matches, int maxCommits)
 QStringList diffArgs()
 {
 	QStringList args = { QStringLiteral("diff"), QStringLiteral("--git") };
-	if (!CSettings{}.value(QLatin1String(Settings::ShowLineEndingOnlyChangesKey), Settings::ShowLineEndingOnlyChangesDefault).toBool())
+	if (!CSettings{}.value(Settings::ShowLineEndingOnlyChangesKey, Settings::ShowLineEndingOnlyChangesDefault).toBool())
 		args << QStringLiteral("-Z");
 	return args;
 }
@@ -865,7 +865,7 @@ void HgRepository::launchExternalDiffTool(const QString& repoRelativePath) const
 {
 	// extdiff ships with hg but is off unless enabled, and which tool it starts is the user's `[extdiff]`
 	// configuration - exactly as which tool `git difftool` starts is theirs
-	QString executable = CSettings{}.value(QLatin1String(Settings::HgExecutableKey)).toString();
+	QString executable = CSettings{}.value(Settings::HgExecutableKey).toString();
 	if (executable.isEmpty())
 		executable = QLatin1String(Settings::HgExecutableDefault);
 	QProcess::startDetached(executable,

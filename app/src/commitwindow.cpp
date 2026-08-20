@@ -324,7 +324,7 @@ void CommitWindow::buildUi()
 	_splitter->addWidget(rightPane);
 	_splitter->setStretchFactor(0, 0);
 	_splitter->setStretchFactor(1, 1);
-	if (const QByteArray state = CSettings{}.value(QLatin1String(Settings::CommitWindowSplitterKey)).toByteArray(); !state.isEmpty())
+	if (const QByteArray state = CSettings{}.value(Settings::CommitWindowSplitterKey).toByteArray(); !state.isEmpty())
 		_splitter->restoreState(state);
 	else
 		_splitter->setSizes({ LeftColumnWidth, 750 });
@@ -381,7 +381,7 @@ void CommitWindow::buildUi()
 
 void CommitWindow::closeEvent(QCloseEvent* event)
 {
-	CSettings{}.setValue(QLatin1String(Settings::CommitWindowSplitterKey), _splitter->saveState());
+	CSettings{}.setValue(Settings::CommitWindowSplitterKey, _splitter->saveState());
 	QMainWindow::closeEvent(event);
 }
 
@@ -893,7 +893,7 @@ void CommitWindow::showDiffForCurrentRow()
 	_diffQuery = _repo->diffFile(entry, this, [this, entry, tag](std::expected<QByteArray, QString> diff) {
 		if (!diff)
 			_diffPane->showDiff(entry.path, {}, diff.error());
-		else if (diff->size() > CSettings{}.value(QLatin1String(Settings::MaxShownDiffBytesKey), Settings::MaxShownDiffBytesDefault).toLongLong())
+		else if (diff->size() > CSettings{}.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong())
 			_diffPane->showDiff(entry.path, {}, tr("The diff is too large to display (%1 MB).").arg(double(diff->size()) / (1024 * 1024), 0, 'f', 1));
 		else if (diff->isEmpty())
 			_diffPane->showDiff(entry.path, {}, tr("No content changes (only the mode or the line endings differ, or the file matches HEAD)."));
@@ -906,7 +906,7 @@ void CommitWindow::showFileContents(const FileEntry& entry)
 {
 	const QString tag = tr("new file");
 	QFile file{ absolutePath(entry) };
-	if (file.size() > CSettings{}.value(QLatin1String(Settings::MaxShownDiffBytesKey), Settings::MaxShownDiffBytesDefault).toLongLong())
+	if (file.size() > CSettings{}.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong())
 	{
 		_diffPane->showDiff(entry.path, tag, tr("The file is too large to display (%1 MB).").arg(double(file.size()) / (1024 * 1024), 0, 'f', 1));
 		return;

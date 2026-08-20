@@ -65,7 +65,7 @@ QStringList trackedChangesArgs(const QString& base)
 // Either way the row still lists as modified and commits its working-tree content verbatim.
 QStringList eolDisplayFlags()
 {
-	return CSettings{}.value(QLatin1String(Settings::ShowLineEndingOnlyChangesKey), Settings::ShowLineEndingOnlyChangesDefault).toBool()
+	return CSettings{}.value(Settings::ShowLineEndingOnlyChangesKey, Settings::ShowLineEndingOnlyChangesDefault).toBool()
 		? QStringList{} : QStringList{ QStringLiteral("--ignore-cr-at-eol") };
 }
 
@@ -839,7 +839,7 @@ QByteArray GitRepository::ignoreFileWithPatternAdded(QByteArray content, const I
 
 void GitRepository::launchExternalDiffTool(const QString& repoRelativePath) const
 {
-	QString executable = CSettings{}.value(QLatin1String(Settings::GitExecutableKey)).toString();
+	QString executable = CSettings{}.value(Settings::GitExecutableKey).toString();
 	if (executable.isEmpty())
 		executable = QLatin1String(Settings::GitExecutableDefault);
 	QProcess::startDetached(executable,
