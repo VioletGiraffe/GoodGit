@@ -21,6 +21,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 UninstallDisplayIcon={app}\{#MyAppExeName}
+SetupIconFile=app\res\goodgit.ico
 
 ; The install dir is appended to the system PATH (gg is meant to be launched from a terminal in a repo);
 ; this makes the installer broadcast the environment change so new shells pick it up without a reboot
