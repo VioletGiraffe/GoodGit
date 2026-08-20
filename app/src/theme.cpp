@@ -19,7 +19,7 @@ namespace {
 
 Theme s_active;
 
-QColor c(QRgb rgb) { return QColor::fromRgb(rgb); }
+inline QColor c(QRgb rgb) { return QColor::fromRgb(rgb); }
 
 void selectActiveTheme()
 {
@@ -73,7 +73,7 @@ const Theme& activeTheme()
 const std::vector<Theme>& allThemes()
 {
 	static const Theme light{
-		.name = QStringLiteral("Default"),
+		.name = "Default",
 		.dark = false,
 		.palette = {
 			.windowBg = c(0xf3f3f3), .surface = c(0xffffff), .surfaceAlt = c(0xfafafa),
@@ -94,8 +94,9 @@ const std::vector<Theme>& allThemes()
 		.diffHunk = c(0x6a5fb0), .diffCtx = c(0x2b2f36),
 		.graphLanes = { c(0x1668c4), c(0x12783c), c(0xa15c00), c(0x7345c0), c(0x0f8a8a), c(0xb8302a) },
 	};
+
 	static const Theme dark{
-		.name = QStringLiteral("Default"),
+		.name = "Default",
 		.dark = true,
 		.palette = {
 			.windowBg = c(0x1f2227), .surface = c(0x191c21), .surfaceAlt = c(0x1c1f24),
