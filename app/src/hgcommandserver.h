@@ -30,8 +30,9 @@ private:
 	void deliverOutput(const QByteArray& chunk) { collect(chunk, _out); }
 	void deliverError(const QByteArray& chunk) { collect(chunk, _err); }
 	void completed(int exitCode);
-	// The server died under the command, or never came up at all; its own stderr is the only diagnosis there is
-	void failed(ProcessOutcome outcome, const QByteArray& serverStderr);
+	// The server died under the command, or never came up at all; its own stderr, or the OS's refusal to
+	// start it, is the only diagnosis there is
+	void failed(ProcessOutcome outcome, const QByteArray& serverStderr, const QString& launchError);
 
 	[[nodiscard]] bool abandonedWhileQueued() const { return _hasContext && !_context; }
 
@@ -103,7 +104,7 @@ private:
 	void removeQueued(Hg::ServerJob* job);
 	void serverReady(HgCommandServer* server);
 	void serverFreed(HgCommandServer* server);
-	void serverDied(HgCommandServer* server, ProcessOutcome outcome);
+	void serverDied(HgCommandServer* server, ProcessOutcome outcome, const QString& launchError);
 
 private:
 	static constexpr int MaxServers = 4;

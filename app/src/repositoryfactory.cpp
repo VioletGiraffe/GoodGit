@@ -8,55 +8,45 @@
 
 namespace {
 
-// What one kind was asked and answered. A kind whose tool never started is not installed, and saying so
-// where the question was "is this a repository?" would answer something nobody asked.
+// What one kind was asked, and what came of asking it
 struct Claim
 {
-	QString root; // empty: this kind does not claim the path
-	QString error; // why not, or empty where the tool itself never ran
+	QString root; // empty: this kind does not claim the path, for whichever of the reasons `result` gives
+	ProcessResult result;
 };
 
 Claim claimedByGit(const QString& startPath)
 {
-	const ProcessResult result = Git::runSync(startPath, { QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel") });
-	if (result.ok)
-		return { QString::fromUtf8(result.out.trimmed()), {} };
-	return { {}, result.outcome == ProcessOutcome::LaunchFailed ? QString{} : result.errorText() };
+	ProcessResult result = Git::runSync(startPath, { QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel") });
+	QString root = result.ok ? QString::fromUtf8(result.out.trimmed()) : QString{};
+	return { std::move(root), std::move(result) };
 }
 
 Claim claimedByMercurial(const QString& startPath)
 {
-	const ProcessResult result = Hg::runSync(startPath, { QStringLiteral("root") });
-	if (result.ok) // hg prints a native path, and everything downstream is forward-slashed
-		return { QDir::fromNativeSeparators(QString::fromUtf8(result.out.trimmed())), {} };
-	return { {}, result.outcome == ProcessOutcome::LaunchFailed ? QString{} : result.errorText() };
+	ProcessResult result = Hg::runSync(startPath, { QStringLiteral("root") });
+	// hg prints a native path, and everything downstream is forward-slashed
+	QString root = result.ok ? QDir::fromNativeSeparators(QString::fromUtf8(result.out.trimmed())) : QString{};
+	return { std::move(root), std::move(result) };
 }
 
 } // namespace
 
-std::expected<RepositoryLocation, QString> findRepository(const QString& startPath)
+std::expected<RepositoryLocation, std::vector<ProcessResult>> findRepository(const QString& startPath)
 {
 	// Asked in turn rather than both at once: git is the cheaper process and the common answer, and one
 	// that claims the path settles the question. The cost is that an hg repository nested inside a git one
 	// resolves to the outer git root - the other way round, which is what a git subrepo of an hg parent
 	// looks like, is found correctly.
-	const Claim git = claimedByGit(startPath);
+	Claim git = claimedByGit(startPath);
 	if (!git.root.isEmpty())
-		return RepositoryLocation{ VcsKind::Git, git.root };
+		return RepositoryLocation{ VcsKind::Git, std::move(git.root) };
 
-	const Claim hg = claimedByMercurial(startPath);
+	Claim hg = claimedByMercurial(startPath);
 	if (!hg.root.isEmpty())
-		return RepositoryLocation{ VcsKind::Mercurial, hg.root };
+		return RepositoryLocation{ VcsKind::Mercurial, std::move(hg.root) };
 
-	QStringList reasons;
-	for (const QString& reason : { git.error, hg.error })
-	{
-		if (!reason.isEmpty())
-			reasons << reason;
-	}
-	if (reasons.isEmpty())
-		return std::unexpected(QStringLiteral("Neither git nor hg could be started. Check that one of them is installed and on PATH."));
-	return std::unexpected(reasons.join(QStringLiteral("\n\n")));
+	return std::unexpected(std::vector<ProcessResult>{ std::move(git.result), std::move(hg.result) });
 }
 
 std::unique_ptr<Repository> openRepository(const RepositoryLocation& location)

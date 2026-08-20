@@ -39,13 +39,14 @@ void ServerJob::completed(int exitCode)
 	finish(std::move(result));
 }
 
-void ServerJob::failed(ProcessOutcome outcome, const QByteArray& serverStderr)
+void ServerJob::failed(ProcessOutcome outcome, const QByteArray& serverStderr, const QString& launchError)
 {
 	_runningOn = nullptr;
 	ProcessResult result;
 	result.out = std::move(_out);
 	result.err = _err + serverStderr;
 	result.outcome = outcome;
+	result.launchError = launchError;
 	finish(std::move(result));
 }
 
@@ -218,11 +219,12 @@ void HgCommandServer::died()
 		return;
 	_dead = true;
 
-	const ProcessOutcome outcome = _process->error() == QProcess::FailedToStart
-		? ProcessOutcome::LaunchFailed : ProcessOutcome::Crashed;
+	const bool launchFailed = _process->error() == QProcess::FailedToStart;
+	const ProcessOutcome outcome = launchFailed ? ProcessOutcome::LaunchFailed : ProcessOutcome::Crashed;
+	const QString launchError = launchFailed ? _process->errorString() : QString{};
 	if (Hg::ServerJob* job = std::exchange(_currentJob, nullptr))
-		job->failed(outcome, _ownStderr);
-	_pool.serverDied(this, outcome);
+		job->failed(outcome, _ownStderr, launchError);
+	_pool.serverDied(this, outcome, launchError);
 }
 
 HgServerPool& HgServerPool::instance()
@@ -301,7 +303,7 @@ void HgServerPool::serverFreed(HgCommandServer* /*server*/)
 	dispatch();
 }
 
-void HgServerPool::serverDied(HgCommandServer* server, ProcessOutcome outcome)
+void HgServerPool::serverDied(HgCommandServer* server, ProcessOutcome outcome, const QString& launchError)
 {
 	const QByteArray serverStderr = server->ownStderr();
 
@@ -324,5 +326,5 @@ void HgServerPool::serverDied(HgCommandServer* server, ProcessOutcome outcome)
 	const std::deque<Hg::ServerJob*> stranded = std::move(_queue);
 	_queue.clear();
 	for (Hg::ServerJob* job : stranded)
-		job->failed(outcome, serverStderr);
+		job->failed(outcome, serverStderr, launchError);
 }

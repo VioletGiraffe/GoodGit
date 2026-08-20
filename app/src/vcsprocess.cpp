@@ -1,5 +1,7 @@
 #include "vcsprocess.h"
 
+#include <QDir>
+#include <QFileInfo>
 #include <QPointer>
 #include <QTemporaryFile>
 
@@ -24,8 +26,19 @@ QString collapseCarriageReturns(QString text)
 
 QString ProcessResult::errorText() const
 {
+	// Nothing ran, so there is no stderr: the OS's refusal is the whole account of it
 	if (outcome == ProcessOutcome::LaunchFailed)
-		return QStringLiteral("Failed to launch %1. Check that %1 is installed and on PATH.").arg(toolName); // nothing ran, so there is no stderr
+	{
+		const bool bareName = QFileInfo{ executable }.fileName() == executable; // looked up on PATH rather than given as a path
+		const QString what = bareName
+			? QStringLiteral("Failed to launch %1: %2").arg(toolName, launchError)
+			: QStringLiteral("Failed to launch %1 from \"%2\": %3").arg(toolName, executable, launchError);
+		const QString where = QStringLiteral("Working directory: %1").arg(QDir::toNativeSeparators(workDir));
+		const QString advice = bareName
+			? QStringLiteral("Check that %1 is installed and on PATH, or set its full path in Preferences.").arg(toolName)
+			: QStringLiteral("Check the %1 path set in Preferences.").arg(toolName);
+		return QStringList{ what, where, advice }.join(QLatin1Char('\n'));
+	}
 
 	const QString stderrText = collapseCarriageReturns(QString::fromUtf8(err)).trimmed();
 	if (outcome == ProcessOutcome::Exited)
@@ -173,6 +186,7 @@ void ProcessJob::start()
 			return; // crashes arrive via finished()
 		ProcessResult result;
 		result.outcome = ProcessOutcome::LaunchFailed;
+		result.launchError = _process->errorString();
 		finishProcess(std::move(result));
 	}, Qt::QueuedConnection);
 
@@ -196,12 +210,15 @@ ProcessResult runSync(const Tool& tool, const QString& workDir, QStringList args
 
 	ProcessResult result;
 	result.toolName = tool.displayName;
+	result.executable = tool.executable;
+	result.workDir = workDir;
 	if (!process.waitForFinished(timeoutMs))
 	{
 		// The wait fails just the same when there was never a process to wait for
 		if (process.error() == QProcess::FailedToStart)
 		{
 			result.outcome = ProcessOutcome::LaunchFailed;
+			result.launchError = process.errorString();
 			return result;
 		}
 		// Or ~QProcess does it instead, from a destructor and after printing a warning of its own
@@ -257,6 +274,8 @@ std::shared_ptr<QTemporaryFile> openTempFile(const QByteArray& contents, const Q
 void Job::finish(ProcessResult result)
 {
 	result.toolName = _tool.displayName;
+	result.executable = _tool.executable;
+	result.workDir = _workDir;
 
 	if (!_cancelled && _callback && (!_hasContext || _context))
 		_callback(result);

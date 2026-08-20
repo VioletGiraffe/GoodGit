@@ -37,6 +37,13 @@ struct ProcessResult
 	// Names the program in the sentences errorText() composes itself. Every result a process produced
 	// carries it; a synthesised one carries stderr of its own instead, which is what errorText then returns.
 	QString toolName;
+	// What was launched under that name: a bare name looked up on PATH, or the path configured for it
+	QString executable;
+	// The directory it was to run in. Named in a launch failure, which can be about this as readily as
+	// about the executable, and the OS's reason names neither.
+	QString workDir;
+	// The OS's account of refusing to start it. Carried with LaunchFailed, where there is no stderr to have.
+	QString launchError;
 
 	// stderr as text; a process that did not exit normally says so first, since its stderr cannot
 	// account for the output that never came
