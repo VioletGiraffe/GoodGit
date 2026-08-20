@@ -181,6 +181,198 @@ const std::vector<Theme>& allThemes()
 		.graphLanes = { c(0x6cb0f0), c(0x38e07c), c(0xdda45c), c(0xb394ef), c(0x45c9c0), c(0xff6a5c) },
 	};
 
-	static const std::vector<Theme> themes{ light, dark, honey, blackoutViolet };
+	// Warm-gray paper, taxicab-yellow accent - the same fill/text split as Honey, one step louder.
+	static const Theme taxicabLight{
+		.name = "Taxicab",
+		.dark = false,
+		.palette = {
+			.windowBg = c(0xf4f2ec), .surface = c(0xfffef9), .surfaceAlt = c(0xfbf9f2),
+			.text = c(0x1c1a12), .textDim = c(0x7c7866),
+			.button = c(0xfbf9f2),
+			.accent = c(0xf5c518),
+			.selectionBg = c(0xf7ecc0), .selectionFg = c(0x1c1a12),
+			.border = c(0xd9d4c4), .borderSubtle = c(0xece8da),
+			.accentFg = c(0x221b00), .accentText = c(0x8a6d00),
+			.buttonBorder = c(0xcfc9b6),
+		},
+		.warnBg = c(0xffe4c0), .warnFg = c(0x7a4a00),
+		.errBg = c(0xfce3da), .errFg = c(0x96140c),
+		.stModified = c(0x1668c4), .stAdded = c(0x0d9c3c), .stUntracked = c(0x0c7d84),
+		.stDeleted = c(0xdd2418), .stRenamed = c(0x7345c0), .stSubmodule = c(0xa15c00),
+		.diffAddBg = c(0xd1f2cf), .diffAddFg = c(0x07561f),
+		.diffDelBg = c(0xfcd9d2), .diffDelFg = c(0x96140c),
+		.diffHunk = c(0x6a5fb0), .diffCtx = c(0x2a2820),
+		.graphLanes = { c(0x1668c4), c(0x0d9c3c), c(0xa15c00), c(0x7345c0), c(0x0c7d84), c(0xdd2418) },
+	};
+
+	// Neutral ink chrome, bright taxicab yellow.
+	static const Theme taxicabDark{
+		.name = "Taxicab",
+		.dark = true,
+		.palette = {
+			.windowBg = c(0x1c1c1a), .surface = c(0x151514), .surfaceAlt = c(0x1a1a18),
+			.text = c(0xe9e7e0), .textDim = c(0x9c9a8f),
+			.button = c(0x26251f),
+			.accent = c(0xf8ce1c),
+			.selectionBg = c(0x3f3a10), .selectionFg = c(0xe9e7e0),
+			.border = c(0x3a392f), .borderSubtle = c(0x262620),
+			.accentFg = c(0x1f1800),
+			.buttonBorder = c(0x3f3e33),
+		},
+		.warnBg = c(0x44290f), .warnFg = c(0xe8a458),
+		.errBg = c(0x3d1815), .errFg = c(0xff8d80),
+		.stModified = c(0x6cb0f0), .stAdded = c(0x38e07c), .stUntracked = c(0x45c9c0),
+		.stDeleted = c(0xff6a5c), .stRenamed = c(0xb394ef), .stSubmodule = c(0xdda45c),
+		.diffAddBg = c(0x122718), .diffAddFg = c(0x52ec92),
+		.diffDelBg = c(0x2f1412), .diffDelFg = c(0xff8d80),
+		.diffHunk = c(0x9b8fe0), .diffCtx = c(0xccc9c0),
+		.graphLanes = { c(0x6cb0f0), c(0x38e07c), c(0xdda45c), c(0xb394ef), c(0x45c9c0), c(0xff6a5c) },
+	};
+
+	// Navy chrome, hot orange accent. Dark only: the light rendition reads as stock Ubuntu.
+	static const Theme forge{
+		.name = "Forge",
+		.dark = true,
+		.palette = {
+			.windowBg = c(0x1a2233), .surface = c(0x141b29), .surfaceAlt = c(0x172030),
+			.text = c(0xe4e8f0), .textDim = c(0x8e9ab2),
+			.button = c(0x232d42),
+			.accent = c(0xf2683f),
+			.selectionBg = c(0x3d2a20), .selectionFg = c(0xe4e8f0),
+			.border = c(0x303d56), .borderSubtle = c(0x222c40),
+			.accentFg = c(0xffffff),
+			.buttonBorder = c(0x3a4763),
+		},
+		.warnBg = c(0x3a3116), .warnFg = c(0xd8b45a),
+		.errBg = c(0x3f1b1a), .errFg = c(0xf79a8d),
+		.stModified = c(0x6cb0f0), .stAdded = c(0x38e07c), .stUntracked = c(0x45c9c0),
+		.stDeleted = c(0xff6a5c), .stRenamed = c(0xb394ef), .stSubmodule = c(0xdda45c),
+		.diffAddBg = c(0x1b3324), .diffAddFg = c(0x52ec92),
+		.diffDelBg = c(0x3f2023), .diffDelFg = c(0xff8d80),
+		.diffHunk = c(0x9f93e8), .diffCtx = c(0xcbd2e0),
+		.graphLanes = { c(0x6cb0f0), c(0x38e07c), c(0xdda45c), c(0xb394ef), c(0x45c9c0), c(0xff6a5c) },
+	};
+
+	// Teal patina on warm sand / dark bronze. The teal accent frees amber for untracked here.
+	static const Theme verdigrisLight{
+		.name = "Verdigris",
+		.dark = false,
+		.palette = {
+			.windowBg = c(0xf3ead9), .surface = c(0xfffcf5), .surfaceAlt = c(0xfaf4e6),
+			.text = c(0x231e14), .textDim = c(0x8a7d63),
+			.button = c(0xfaf4e6),
+			.accent = c(0x0d8577),
+			.selectionBg = c(0xd6ebde), .selectionFg = c(0x231e14),
+			.border = c(0xddd0b8), .borderSubtle = c(0xeee5d2),
+			.accentFg = c(0xffffff),
+			.buttonBorder = c(0xd5c8a8),
+		},
+		.warnBg = c(0xffe3bd), .warnFg = c(0x7a4a00),
+		.errBg = c(0xfbe2d9), .errFg = c(0x96140c),
+		.stModified = c(0x1668c4), .stAdded = c(0x0d9c3c), .stUntracked = c(0x8a6a08),
+		.stDeleted = c(0xdd2418), .stRenamed = c(0x7345c0), .stSubmodule = c(0xa15c00),
+		.diffAddBg = c(0xdff0d5), .diffAddFg = c(0x07561f),
+		.diffDelBg = c(0xf8e2da), .diffDelFg = c(0x96140c),
+		.diffHunk = c(0x6a5fb0), .diffCtx = c(0x2f2a1e),
+		.graphLanes = { c(0x1668c4), c(0x0d9c3c), c(0xa15c00), c(0x7345c0), c(0x0c7d84), c(0xdd2418) },
+	};
+
+	static const Theme verdigrisDark{
+		.name = "Verdigris",
+		.dark = true,
+		.palette = {
+			.windowBg = c(0x262019), .surface = c(0x1d1813), .surfaceAlt = c(0x221c15),
+			.text = c(0xece6da), .textDim = c(0xa89c88),
+			.button = c(0x322a20),
+			.accent = c(0x2fbfa4),
+			.selectionBg = c(0x14453a), .selectionFg = c(0xece6da),
+			.border = c(0x453a2c), .borderSubtle = c(0x2e261d),
+			.accentFg = c(0x03231c),
+			.buttonBorder = c(0x4a3e2e),
+		},
+		.warnBg = c(0x46300f), .warnFg = c(0xe0ac55),
+		.errBg = c(0x401a15), .errFg = c(0xff8d80),
+		.stModified = c(0x6cb0f0), .stAdded = c(0x38e07c), .stUntracked = c(0xd4b352),
+		.stDeleted = c(0xff6a5c), .stRenamed = c(0xb394ef), .stSubmodule = c(0xdda45c),
+		.diffAddBg = c(0x14301d), .diffAddFg = c(0x52ec92),
+		.diffDelBg = c(0x3a1c17), .diffDelFg = c(0xff8d80),
+		.diffHunk = c(0x9b8fe0), .diffCtx = c(0xd6cfc2),
+		.graphLanes = { c(0x6cb0f0), c(0x38e07c), c(0xdda45c), c(0xb394ef), c(0x45c9c0), c(0xff6a5c) },
+	};
+
+	// Chartreuse signal in green woods. In light mode the accent splits like Taxicab's:
+	// bright fills, olive accentText.
+	static const Theme fireflyLight{
+		.name = "Firefly",
+		.dark = false,
+		.palette = {
+			.windowBg = c(0xeff3e8), .surface = c(0xfdfff7), .surfaceAlt = c(0xf7faee),
+			.text = c(0x181d10), .textDim = c(0x717d64),
+			.button = c(0xf7faee),
+			.accent = c(0xc8dc28),
+			.selectionBg = c(0xeef2bd), .selectionFg = c(0x181d10),
+			.border = c(0xd3dcc2), .borderSubtle = c(0xe5ecd6),
+			.accentFg = c(0x1c2000), .accentText = c(0x5f7000),
+			.buttonBorder = c(0xc8d3b2),
+		},
+		.warnBg = c(0xffe4c0), .warnFg = c(0x7a4a00),
+		.errBg = c(0xfce3da), .errFg = c(0x96140c),
+		.stModified = c(0x1668c4), .stAdded = c(0x0d9c3c), .stUntracked = c(0x0c7d84),
+		.stDeleted = c(0xdd2418), .stRenamed = c(0x7345c0), .stSubmodule = c(0xa15c00),
+		.diffAddBg = c(0xe3f0cc), .diffAddFg = c(0x07561f),
+		.diffDelBg = c(0xf8e3da), .diffDelFg = c(0x96140c),
+		.diffHunk = c(0x6a5fb0), .diffCtx = c(0x2a2f1e),
+		.graphLanes = { c(0x1668c4), c(0x0d9c3c), c(0xa15c00), c(0x7345c0), c(0x0c7d84), c(0xdd2418) },
+	};
+
+	static const Theme fireflyDark{
+		.name = "Firefly",
+		.dark = true,
+		.palette = {
+			.windowBg = c(0x1c2418), .surface = c(0x161d13), .surfaceAlt = c(0x192015),
+			.text = c(0xe6ebe1), .textDim = c(0x93a189),
+			.button = c(0x242e1e),
+			.accent = c(0xc8e224),
+			.selectionBg = c(0x39420f), .selectionFg = c(0xe6ebe1),
+			.border = c(0x33402c), .borderSubtle = c(0x232c1d),
+			.accentFg = c(0x1c2000),
+			.buttonBorder = c(0x44543a),
+		},
+		.warnBg = c(0x44290f), .warnFg = c(0xe8a458),
+		.errBg = c(0x3d1815), .errFg = c(0xff8d80),
+		.stModified = c(0x6cb0f0), .stAdded = c(0x38e07c), .stUntracked = c(0x45c9c0),
+		.stDeleted = c(0xff6a5c), .stRenamed = c(0xb394ef), .stSubmodule = c(0xdda45c),
+		.diffAddBg = c(0x1e3322), .diffAddFg = c(0x52ec92),
+		.diffDelBg = c(0x3e2320), .diffDelFg = c(0xff8d80),
+		.diffHunk = c(0x9b8fe0), .diffCtx = c(0xccd3c6),
+		.graphLanes = { c(0x6cb0f0), c(0x38e07c), c(0xdda45c), c(0xb394ef), c(0x45c9c0), c(0xff6a5c) },
+	};
+
+	// Sunset orange on plum. Dark only, like Forge.
+	static const Theme afterglow{
+		.name = "Afterglow",
+		.dark = true,
+		.palette = {
+			.windowBg = c(0x261b28), .surface = c(0x1e1420), .surfaceAlt = c(0x221824),
+			.text = c(0xece4ee), .textDim = c(0xa794ab),
+			.button = c(0x332338),
+			.accent = c(0xf2683f),
+			.selectionBg = c(0x472823), .selectionFg = c(0xece4ee),
+			.border = c(0x443048), .borderSubtle = c(0x2e2031),
+			.accentFg = c(0xffffff),
+			.buttonBorder = c(0x4a3650),
+		},
+		.warnBg = c(0x3e2f12), .warnFg = c(0xd8b45a),
+		.errBg = c(0x421a1c), .errFg = c(0xf79a8d),
+		.stModified = c(0x6cb0f0), .stAdded = c(0x38e07c), .stUntracked = c(0x45c9c0),
+		.stDeleted = c(0xff6a5c), .stRenamed = c(0xb394ef), .stSubmodule = c(0xdda45c),
+		.diffAddBg = c(0x243325), .diffAddFg = c(0x52ec92),
+		.diffDelBg = c(0x43211f), .diffDelFg = c(0xff8d80),
+		.diffHunk = c(0xa795e8), .diffCtx = c(0xd5cdd8),
+		.graphLanes = { c(0x6cb0f0), c(0x38e07c), c(0xdda45c), c(0xb394ef), c(0x45c9c0), c(0xff6a5c) },
+	};
+
+	static const std::vector<Theme> themes{ light, dark, honey, blackoutViolet, taxicabLight, taxicabDark,
+		forge, verdigrisLight, verdigrisDark, fireflyLight, fireflyDark, afterglow };
 	return themes;
 }
