@@ -85,8 +85,10 @@ const Theme& activeTheme()
 
 const std::vector<Theme>& allThemes()
 {
-	static const Theme light{
-		.name = "Default",
+	// The order matters: the first theme of each polarity is the default - what a fresh install
+	// resolves to and what the settings combo shows for an unset selection.
+	static const Theme classicLight{
+		.name = "Classic",
 		.dark = false,
 		.palette = {
 			.windowBg = c(0xf3f3f3), .surface = c(0xffffff), .surfaceAlt = c(0xfafafa),
@@ -108,8 +110,8 @@ const std::vector<Theme>& allThemes()
 		.graphLanes = { c(0x1668c4), c(0x12783c), c(0xa15c00), c(0x7345c0), c(0x0f8a8a), c(0xb8302a) },
 	};
 
-	static const Theme dark{
-		.name = "Default",
+	static const Theme classicDark{
+		.name = "Classic",
 		.dark = true,
 		.palette = {
 			.windowBg = c(0x1f2227), .surface = c(0x191c21), .surfaceAlt = c(0x1c1f24),
@@ -372,7 +374,7 @@ const std::vector<Theme>& allThemes()
 		.graphLanes = { c(0x6cb0f0), c(0x38e07c), c(0xdda45c), c(0xb394ef), c(0x45c9c0), c(0xff6a5c) },
 	};
 
-	static const std::vector<Theme> themes{ light, dark, honey, blackoutViolet, taxicabLight, taxicabDark,
-		forge, verdigrisLight, verdigrisDark, fireflyLight, fireflyDark, afterglow };
+	static const std::vector<Theme> themes{ honey, blackoutViolet, classicLight, classicDark,
+		taxicabLight, taxicabDark, forge, verdigrisLight, verdigrisDark, fireflyLight, fireflyDark, afterglow };
 	return themes;
 }

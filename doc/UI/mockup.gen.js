@@ -14,20 +14,6 @@ const path = require('path');
 
 const THEMES = {
 	light: {
-		'Default': `
-	--win-bg:#f3f3f3; --pane:#ffffff; --pane-alt:#fafafa;
-	--border:#d0d3d8; --border-soft:#e3e5e9;
-	--text:#16181c; --dim:#6b7280;
-	--accent:#0d6bc4; --accent-fg:#ffffff; --accent-text:#0d6bc4;
-	--sel:#d6e8fb; --btn:#fdfdfd; --btn-border:#c2c6cc;
-	--warn-bg:#fff4d6;
-	--st-mod:#1668c4; --st-add:#12783c; --st-unt:#8a6a08; --st-del:#b8302a;
-	--st-ren:#7345c0; --st-sub:#a15c00;
-	--diff-add-bg:#e3f7e8; --diff-add-fg:#0f5f2e;
-	--diff-del-bg:#fdeaea; --diff-del-fg:#8f2318;
-	--diff-hunk:#6a5fb0; --diff-ctx:#2b2f36;
-	--shadow:rgba(0,0,0,.14);
-`,
 		'Honey': `
 	--win-bg:#f7f0dd; --pane:#fffdf4; --pane-alt:#fbf6e7;
 	--border:#dfd3ae; --border-soft:#efe7cd;
@@ -40,6 +26,20 @@ const THEMES = {
 	--diff-add-bg:#d1f2cf; --diff-add-fg:#07561f;
 	--diff-del-bg:#fcd9d2; --diff-del-fg:#96140c;
 	--diff-hunk:#6a5fb0; --diff-ctx:#322b18;
+	--shadow:rgba(0,0,0,.14);
+`,
+		'Classic': `
+	--win-bg:#f3f3f3; --pane:#ffffff; --pane-alt:#fafafa;
+	--border:#d0d3d8; --border-soft:#e3e5e9;
+	--text:#16181c; --dim:#6b7280;
+	--accent:#0d6bc4; --accent-fg:#ffffff; --accent-text:#0d6bc4;
+	--sel:#d6e8fb; --btn:#fdfdfd; --btn-border:#c2c6cc;
+	--warn-bg:#fff4d6;
+	--st-mod:#1668c4; --st-add:#12783c; --st-unt:#8a6a08; --st-del:#b8302a;
+	--st-ren:#7345c0; --st-sub:#a15c00;
+	--diff-add-bg:#e3f7e8; --diff-add-fg:#0f5f2e;
+	--diff-del-bg:#fdeaea; --diff-del-fg:#8f2318;
+	--diff-hunk:#6a5fb0; --diff-ctx:#2b2f36;
 	--shadow:rgba(0,0,0,.14);
 `,
 		'Taxicab': `
@@ -86,20 +86,6 @@ const THEMES = {
 `,
 	},
 	dark: {
-		'Default': `
-	--win-bg:#1f2227; --pane:#191c21; --pane-alt:#1c1f24;
-	--border:#33383f; --border-soft:#282c32;
-	--text:#e6e8ec; --dim:#98a0ab;
-	--accent:#3b8fe0; --accent-fg:#06121f; --accent-text:#3b8fe0;
-	--sel:#1e3c58; --btn:#262a30; --btn-border:#3c424a;
-	--warn-bg:#3a3013;
-	--st-mod:#6cb0f0; --st-add:#62c98a; --st-unt:#d4b352; --st-del:#ef8c82;
-	--st-ren:#b394ef; --st-sub:#dda45c;
-	--diff-add-bg:#16341f; --diff-add-fg:#8fdca8;
-	--diff-del-bg:#3a1d1c; --diff-del-fg:#f0a79c;
-	--diff-hunk:#9b8fe0; --diff-ctx:#c9ced6;
-	--shadow:rgba(0,0,0,.5);
-`,
 		'Blackout Violet': `
 	--win-bg:#100a17; --pane:#09060c; --pane-alt:#0d0814;
 	--border:#241a36; --border-soft:#170f24;
@@ -113,6 +99,20 @@ const THEMES = {
 	--diff-del-bg:#1b0a09; --diff-del-fg:#ff8d80;
 	--diff-hunk:#a795e8; --diff-ctx:#cec7dc;
 	--shadow:rgba(0,0,0,.55);
+`,
+		'Classic': `
+	--win-bg:#1f2227; --pane:#191c21; --pane-alt:#1c1f24;
+	--border:#33383f; --border-soft:#282c32;
+	--text:#e6e8ec; --dim:#98a0ab;
+	--accent:#3b8fe0; --accent-fg:#06121f; --accent-text:#3b8fe0;
+	--sel:#1e3c58; --btn:#262a30; --btn-border:#3c424a;
+	--warn-bg:#3a3013;
+	--st-mod:#6cb0f0; --st-add:#62c98a; --st-unt:#d4b352; --st-del:#ef8c82;
+	--st-ren:#b394ef; --st-sub:#dda45c;
+	--diff-add-bg:#16341f; --diff-add-fg:#8fdca8;
+	--diff-del-bg:#3a1d1c; --diff-del-fg:#f0a79c;
+	--diff-hunk:#9b8fe0; --diff-ctx:#c9ced6;
+	--shadow:rgba(0,0,0,.5);
 `,
 		'Taxicab': `
 	--win-bg:#1c1c1a; --pane:#151514; --pane-alt:#1a1a18;
@@ -592,7 +592,7 @@ const historyWindow_ = () => `<div class="win">
 
 /* Each window is rendered once per polarity, wrapped in a full-bleed band that carries the theme's
    variables; the dark band paints the page black around its window. */
-const band = (polarity, content) => `<div class="band ${polarity} ${themeClass(polarity, 'Default')}">
+const band = (polarity, content) => `<div class="band ${polarity} ${themeClass(polarity, Object.keys(THEMES[polarity])[0])}">
 	<div class="wrap">${content}</div>
 </div>`;
 
