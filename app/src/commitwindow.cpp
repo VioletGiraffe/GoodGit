@@ -158,7 +158,8 @@ void CommitWindow::buildUi()
 	QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
 	fileMenu->addAction(tr("E&xit"), [] { QApplication::closeAllWindows(); }); // not quit(): closeEvent saves the layout state
 	QMenu* editMenu = menuBar()->addMenu(tr("&Edit"));
-	editMenu->addAction(tr("&Preferences..."), this, &CommitWindow::showPreferencesDialog);
+	editMenu->addAction(tr("&Preferences..."), this, &CommitWindow::showPreferencesDialog)
+		->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_P));
 	QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
 	helpMenu->addAction(tr("&About"), this, [this] {
 		CAboutDialog aboutDialog{ QStringLiteral(GG_VERSION), this };
