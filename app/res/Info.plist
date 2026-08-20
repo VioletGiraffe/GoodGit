@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Replaces qmake's default template, which omits CFBundleName and the version keys.
+     The ${...} tokens are substituted by qmake from the values in app.pro and global.pri. -->
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>GoodGit</string>
+	<key>CFBundleExecutable</key>
+	<string>${EXECUTABLE_NAME}</string>
+	<!-- Fixed install identity: must never change, or macOS stops recognizing an update as the same app -->
+	<key>CFBundleIdentifier</key>
+	<string>com.violetgiraffe.GoodGit</string>
+	<key>CFBundleShortVersionString</key>
+	<string>${QMAKE_SHORT_VERSION}</string>
+	<key>CFBundleVersion</key>
+	<string>${QMAKE_FULL_VERSION}</string>
+	<key>CFBundleIconFile</key>
+	<string>${ASSETCATALOG_COMPILER_APPICON_NAME}</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleSignature</key>
+	<string>${QMAKE_PKGINFO_TYPEINFO}</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>${MACOSX_DEPLOYMENT_TARGET}</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleAllowMixedLocalizations</key>
+	<true/>
+</dict>
+</plist>

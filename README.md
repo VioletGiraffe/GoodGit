@@ -22,7 +22,7 @@ Qt 6 and a C++23 compiler. Clone with submodules:
 git clone --recurse-submodules https://github.com/VioletGiraffe/GoodGit.git
 ```
 
-Then build the top-level `app.pro` with qmake (or open it in Qt Creator). The binary is `bin/<config>/gg`.
+Then build the top-level `app.pro` with qmake (or open it in Qt Creator). The binary is `bin/<config>/gg`, and `bin/<config>/GoodGit.app` on macOS.
 
 ## Usage
 

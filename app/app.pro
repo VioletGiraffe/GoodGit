@@ -4,6 +4,8 @@
 
 TEMPLATE = app
 TARGET   = gg
+macx:QMAKE_APPLICATION_BUNDLE_NAME = GoodGit   # the .app bundle is what the user sees on macOS; the binary inside it stays gg
+macx:QMAKE_INFO_PLIST = res/Info.plist   # qmake generates a plist with no CFBundleName and no version keys
 VERSION  = 1.0.0 # embedded in the exe's version resource; the installer reads its version from there
 DEFINES += GG_VERSION=\\\"$$VERSION\\\"
 
@@ -111,5 +113,5 @@ mac*|linux*|freebsd*{
 mac*{
 	LIBS += -framework AppKit
 
-	QMAKE_POST_LINK = cp -f -p $${DESTDIR}/*.dylib $${DESTDIR}/$${TARGET}.app/Contents/MacOS/ || true
+	QMAKE_POST_LINK = cp -f -p $${DESTDIR}/*.dylib $${DESTDIR}/$${QMAKE_APPLICATION_BUNDLE_NAME}.app/Contents/MacOS/ || true
 }

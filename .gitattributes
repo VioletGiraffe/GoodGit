@@ -1,0 +1,5 @@
+# CI runs these on macOS and Linux, where CRLF breaks the shebang line
+*.sh text eol=lf
+
+# cmd.exe mis-parses LF-only batch files
+*.bat text eol=crlf
