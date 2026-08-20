@@ -25,14 +25,14 @@ public:
 	void commit(const QString& message, const QStringList& pathspec, const QStringList& untrackedPaths, Vcs::Answer<void> onDone) override;
 	void commitMergeState(const QString& message, const QStringList& untrackedPaths, Vcs::Answer<void> onDone) override;
 
-	// `-r .` is the current changeset and its ancestors, which still recurses into subrepos
 	void undoLastCommit(Vcs::Answer<void> onDone) override;
 
-	Vcs::Job* push(Vcs::Callback onDone) override;
-	// Mercurial has no per-branch upstream to set, so this is the same push. The window offers it only after
-	// a failure message that is git's, so it is never reached here.
-	Vcs::Job* pushSetUpstream(Vcs::Callback onDone) override;
-	[[nodiscard]] QString pushCommandLabel(bool setUpstream) const override;
+	// `hg push -r .` sends the current changeset and its ancestors and recurses into subrepositories itself,
+	// so a plan here is this repository and nothing else. Mercurial also has no per-branch upstream to set:
+	// the window offers that only after a failure message that is git's, so `setUpstream` never arrives true.
+	void planPush(Vcs::Answer<std::vector<PushStep>> onDone) override;
+	Vcs::Job* runPushStep(const PushStep& step, bool setUpstream, Vcs::Callback onDone) override;
+	[[nodiscard]] QString pushCommandLabel(const PushStep& step, bool setUpstream) const override;
 
 	void fetch(Vcs::Answer<void> onDone) override;
 

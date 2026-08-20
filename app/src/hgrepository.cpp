@@ -484,19 +484,22 @@ void HgRepository::undoLastCommit(Vcs::Answer<void> onDone)
 		this, Vcs::reporting(std::move(onDone)));
 }
 
-Vcs::Job* HgRepository::push(Vcs::Callback onDone)
+void HgRepository::planPush(Vcs::Answer<std::vector<PushStep>> onDone)
+{
+	// Answered from the event loop, as every other operation answers
+	QTimer::singleShot(0, this, [onDone = std::move(onDone), root = path()] {
+		onDone(std::vector<PushStep>{ { .workDir = root } });
+	});
+}
+
+Vcs::Job* HgRepository::runPushStep(const PushStep& step, bool /*setUpstream*/, Vcs::Callback onDone)
 {
 	// A process of its own: the push log streams from it, and cancelling mid-transfer must kill it
-	return Hg::run(path(), { QStringLiteral("push"), QStringLiteral("-r"), QStringLiteral(".") }, this,
+	return Hg::run(step.workDir, { QStringLiteral("push"), QStringLiteral("-r"), QStringLiteral(".") }, this,
 		tolerantOfEmptyResult(std::move(onDone)), {}, Hg::Transport::Process);
 }
 
-Vcs::Job* HgRepository::pushSetUpstream(Vcs::Callback onDone)
-{
-	return push(std::move(onDone));
-}
-
-QString HgRepository::pushCommandLabel(bool /*setUpstream*/) const
+QString HgRepository::pushCommandLabel(const PushStep& /*step*/, bool /*setUpstream*/) const
 {
 	return QStringLiteral("hg push -r .");
 }

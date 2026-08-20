@@ -220,6 +220,28 @@ QStringList parseGitlinkPaths(const QByteArray& lsFilesOutput)
 	return paths;
 }
 
+std::vector<GitlinkEntry> parseGitlinkEntries(const QByteArray& lsTreeOutput)
+{
+	// Record format: <mode> <type> <sha>\t<path>, mode 160000 being a gitlink
+	std::vector<GitlinkEntry> entries;
+	for (const QByteArray& record : lsTreeOutput.split('\0'))
+	{
+		if (!record.startsWith("160000"))
+			continue;
+
+		const int tab = record.indexOf('\t');
+		if (tab <= 0)
+			continue;
+
+		const QList<QByteArray> fields = record.left(tab).simplified().split(' ');
+		if (fields.size() < 3)
+			continue;
+
+		entries.push_back({ .path = QString::fromUtf8(record.mid(tab + 1)), .sha = QString::fromUtf8(fields[2]) });
+	}
+	return entries;
+}
+
 std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput)
 {
 	std::vector<CommitRecord> commits;

@@ -133,8 +133,8 @@ sink (`Job::streamTo`), attached before control returns to the event loop or the
 Push is the one command that streams: it carries `--progress`, because into a pipe git prints nothing at all
 until it finishes. The meter arrives as carriage returns rewriting a single line - `ConsoleLogView` renders
 that as a terminal would, and
-`ProcessResult::errorText()` collapses it so error dialogs read as before. A submodule push announces itself
-(`Pushing submodule 'x'`) but does not inherit `--progress`, so its own phases stay silent.
+`ProcessResult::errorText()` collapses it so error dialogs read as before. Every step of a push is a process
+of its own and so streams its own meter.
 
 ## Refresh
 
@@ -245,9 +245,23 @@ reached by re-running the walk from that commit instead (`LogQuery::startRevisio
 row. The two are not interchangeable, which is why the selection is tried first: a walk started at the
 commit cannot show what came after it.
 
-Push is `git push --recurse-submodules=on-demand`, passed explicitly (machine config varies): git pushes
-referenced submodule commits first, which is a correctness requirement, not a preference - a superproject
-commit referencing an unpushed submodule commit is unfetchable.
+A superproject commit referencing an unpublished submodule commit is unfetchable, so those submodules have
+to be pushed first. Git's own `--recurse-submodules=on-demand` does that, but only where every submodule is
+on a branch named as the superproject's is: it resolves the superproject's refspec and then demands that
+same ref inside each submodule (`submodule--helper push-check`), which fails outright on a name mismatch.
+
+So the plan is the app's. `planPush` walks the gitlinks in HEAD, recursing into each whose recorded commit
+no remote reaches (git's own on-demand test, `rev-list -n 1 <sha> --not --remotes`), and returns one step
+per submodule needing a push, innermost first, with this repository's own step last. Each step is a plain
+push inside its own working directory, so each resolves its own upstream and no name has to match. Steps
+run one after another and the first failure ends the push, nothing being published past a step that could
+not be. The superproject's step still carries `--recurse-submodules=on-demand` as a backstop, while a
+submodule's step carries `--recurse-submodules=no`: the plan has already ordered its nested pushes ahead of
+it, and letting git recurse there would reintroduce the mismatch. Both are passed explicitly because
+machine config varies (`submodule.recurse`).
+
+A submodule that needs pushing but cannot be - not on a branch, or checked out where its recorded commit is
+not on the branch it is on - is refused by `planPush` before any step runs, and named in the refusal.
 
 ## Fetching
 

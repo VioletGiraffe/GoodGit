@@ -51,6 +51,17 @@ struct BranchHeader
 // Input: `ls-files --stage -z` output. Returns the paths of the gitlink entries - that is, the submodules
 [[nodiscard]] QStringList parseGitlinkPaths(const QByteArray& lsFilesOutput);
 
+// One gitlink: the submodule's path, and the commit a tree records for it
+struct GitlinkEntry
+{
+	QString path;
+	QString sha;
+};
+
+// Input: `ls-tree -r -z <rev>` output - that revision's gitlinks, where the listing above reads the
+// index's. A push has to publish what the commits record, not what is staged.
+[[nodiscard]] std::vector<GitlinkEntry> parseGitlinkEntries(const QByteArray& lsTreeOutput);
+
 // Input: `status --porcelain -z` output (v1 format)
 [[nodiscard]] WorktreeDirtiness parsePorcelainDirtiness(const QByteArray& statusOutput);
 

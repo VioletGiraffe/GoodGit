@@ -317,7 +317,7 @@ void CommitWindow::buildUi()
 	resize(1180, 740);
 
 	connect(_refreshButton, &QPushButton::clicked, _repo.get(), &Repository::refresh);
-	connect(_pushButton, &QPushButton::clicked, this, [this] { doPush(/*setUpstream=*/false); });
+	connect(_pushButton, &QPushButton::clicked, this, &CommitWindow::startPush);
 	connect(_peekButton, &QPushButton::clicked, this, &CommitWindow::peekIncoming);
 	connect(_historyButton, &QPushButton::clicked, this, &CommitWindow::showHistoryWindow);
 	connect(_uncommitButton, &QPushButton::clicked, this, &CommitWindow::undoLastCommit);
@@ -339,7 +339,7 @@ void CommitWindow::buildUi()
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_H), this, [this] { showHistoryWindow(); });
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_P), this, [this] {
 		if (_pushButton->isEnabled())
-			doPush(/*setUpstream=*/false);
+			startPush();
 	});
 	const auto commitShortcut = [this] {
 		if (_commitButton->isEnabled())
@@ -671,7 +671,7 @@ void CommitWindow::doCommit(bool pushAfterwards)
 		emit committed();
 		_repo->refresh();
 		if (pushAfterwards)
-			doPush(/*setUpstream=*/false);
+			startPush();
 	};
 
 	if (_repo->state().operationInProgress())
@@ -680,45 +680,77 @@ void CommitWindow::doCommit(bool pushAfterwards)
 		_repo->commit(message, pathspec, untracked, onDone);
 }
 
-void CommitWindow::doPush(bool setUpstream)
+void CommitWindow::startPush()
 {
 	_pushButton->setEnabled(false);
-	_pushLogView->clearLog(); // the set-upstream retry replaces the attempt it follows rather than adding to it
+	_pushLogView->clearLog(); // this push replaces the last one's log rather than adding to it
 
-	_pushLogPane->show(); // before the entry: the log's scrolling needs a laid-out viewport
-	_pushLogView->beginEntry(_repo->pushCommandLabel(setUpstream));
-
-	const auto onDone = [this, setUpstream](const ProcessResult& result) {
-		_pushButton->setEnabled(true);
-
-		// A push with nowhere to go is not over until the offer to give it one is answered
-		const bool upstreamOffered = !result.ok && !setUpstream && QString::fromUtf8(result.err).contains(QLatin1String("no upstream"));
-		if (upstreamOffered)
+	_repo->planPush([this](std::expected<std::vector<PushStep>, QString> steps) {
+		if (!steps)
 		{
-			const auto answer = MessageBox::question(this, tr("No upstream branch"),
-				tr("The current branch has no upstream configured. Push it to 'origin' and set the upstream?"),
-				{ tr("Push and set upstream") });
-			if (answer == 0)
-			{
-				doPush(/*setUpstream=*/true); // the retry ends the push, so the verdict is the retry's to give
-				return;
-			}
+			_pushButton->setEnabled(true);
+			showError(tr("Cannot push"), steps.error());
+			return;
 		}
 
+		_pushSteps = std::move(*steps);
+		runPushStep(0, /*setUpstream=*/false);
+	});
+}
+
+void CommitWindow::runPushStep(size_t index, bool setUpstream)
+{
+	assert(index < _pushSteps.size());
+	const PushStep& step = _pushSteps[index];
+
+	_pushLogPane->show(); // before the entry: the log's scrolling needs a laid-out viewport
+	_pushLogView->beginEntry(_repo->pushCommandLabel(step, setUpstream));
+
+	const auto onDone = [this, index, setUpstream](const ProcessResult& result) {
 		closePushLogEntry(result);
 
 		if (result.ok)
 		{
+			if (index + 1 < _pushSteps.size())
+			{
+				runPushStep(index + 1, /*setUpstream=*/false);
+				return;
+			}
+			_pushButton->setEnabled(true);
 			_repo->refresh();
 			emit pushed();
+			return;
 		}
-		else if (!upstreamOffered) // a declined offer named this failure already
+
+		// A push with nowhere to go is not over until the offer to give it one is answered
+		const bool upstreamOffered = !setUpstream && QString::fromUtf8(result.err).contains(QLatin1String("no upstream"));
+		if (upstreamOffered && offerUpstreamThenRetry(index))
+			return;
+
+		_pushButton->setEnabled(true);
+		if (!upstreamOffered) // a declined offer named this failure already
 			showError(tr("Push failed"), result.errorText());
 	};
 
-	Vcs::Job* job = setUpstream ? _repo->pushSetUpstream(onDone) : _repo->push(onDone);
+	Vcs::Job* job = _repo->runPushStep(step, setUpstream, onDone);
 	// Before the event loop runs again, so the first chunk is not missed
 	job->streamTo([this](const QByteArray& chunk) { _pushLogView->appendOutput(chunk); });
+}
+
+bool CommitWindow::offerUpstreamThenRetry(size_t index)
+{
+	const PushStep& step = _pushSteps[index];
+	const QString upstream = QStringLiteral("origin/") + step.branch;
+	const QString text = step.subject.isEmpty()
+		? tr("The branch '%1' has no upstream configured. Push it to '%2' and set the upstream?").arg(step.branch, upstream)
+		: tr("Submodule '%1' is on branch '%2', which has no upstream configured. Push it to '%3' and set the upstream?")
+			.arg(step.subject, step.branch, upstream);
+
+	if (MessageBox::question(this, tr("No upstream branch"), text, { tr("Push and set upstream") }) != 0)
+		return false;
+
+	runPushStep(index, /*setUpstream=*/true);
+	return true;
 }
 
 void CommitWindow::peekIncoming()

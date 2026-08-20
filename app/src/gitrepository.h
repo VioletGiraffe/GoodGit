@@ -18,15 +18,17 @@ public:
 	void commit(const QString& message, const QStringList& pathspec, const QStringList& untrackedPaths, Vcs::Answer<void> onDone) override;
 	void commitMergeState(const QString& message, const QStringList& untrackedPaths, Vcs::Answer<void> onDone) override;
 
-	// Both carry --progress, because into a pipe git prints nothing at all until it finishes; the meter
-	// arrives as carriage returns rewriting a single line. Both also carry
-	// --recurse-submodules=on-demand, passed explicitly because machine config varies: a superproject
-	// commit referencing an unpushed submodule commit is unfetchable, so those go first.
 	void undoLastCommit(Vcs::Answer<void> onDone) override;
 
-	Vcs::Job* push(Vcs::Callback onDone) override;
-	Vcs::Job* pushSetUpstream(Vcs::Callback onDone) override;
-	[[nodiscard]] QString pushCommandLabel(bool setUpstream) const override;
+	// Every step carries --progress, because into a pipe git prints nothing at all until it finishes; the
+	// meter arrives as carriage returns rewriting a single line. Every step also states its recursion
+	// explicitly, machine config varying: this repository's own push recurses on demand as a backstop,
+	// while a planned submodule push must not recurse at all - the plan has already ordered every nested
+	// push ahead of it, and git's own recursion cannot push a submodule whose branch differs in name from
+	// the superproject's.
+	void planPush(Vcs::Answer<std::vector<PushStep>> onDone) override;
+	Vcs::Job* runPushStep(const PushStep& step, bool setUpstream, Vcs::Callback onDone) override;
+	[[nodiscard]] QString pushCommandLabel(const PushStep& step, bool setUpstream) const override;
 
 	void fetch(Vcs::Answer<void> onDone) override;
 

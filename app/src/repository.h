@@ -24,6 +24,15 @@ struct RepositoryLocation
 	QString root; // absolute
 };
 
+// One command of a push. Usually a push is just the repository's own, but a superproject commit
+// referencing an unpublished submodule commit is unfetchable, so those submodules are pushed first.
+struct PushStep
+{
+	QString workDir; // absolute
+	QString subject; // empty for the repository itself, else the submodule's path relative to it
+	QString branch;  // what this step pushes, for the offer to give it an upstream. Empty where the backend has no such notion
+};
+
 // One repository, of whatever kind: its state, its file entries, and every action on it. The unit of
 // the whole application - a submodule is simply another Repository in another window.
 //
@@ -63,14 +72,18 @@ public:
 	// refusals are decided; a backend that refuses more of its own accord reports that like any failure.
 	virtual void undoLastCommit(Vcs::Answer<void> onDone) = 0;
 
-	// The one command reported as a process rather than as an answer: the push log is a console view of
-	// one, and shows the exit code when it had nothing to say for itself. Both return the job, so the
-	// caller can stream the output into that log while the push runs.
-	virtual Vcs::Job* push(Vcs::Callback onDone) = 0;
-	virtual Vcs::Job* pushSetUpstream(Vcs::Callback onDone) = 0;
+	// The commands this push needs, in the order they must run - this repository's own is the last of
+	// them. Refusing here costs nothing, no step having run yet, so a submodule that could not be pushed
+	// is reported as a refusal rather than left to fail halfway through.
+	virtual void planPush(Vcs::Answer<std::vector<PushStep>> onDone) = 0;
+	// One planned step, reported as a process rather than as an answer: the push log is a console view of
+	// one, and shows the exit code when it had nothing to say for itself. Returns the job, so the caller
+	// can stream the output into that log while the step runs. `setUpstream` retries a step that reported
+	// having nowhere to push to.
+	virtual Vcs::Job* runPushStep(const PushStep& step, bool setUpstream, Vcs::Callback onDone) = 0;
 	// What the push log names as the command it is showing the output of. Not the literal argument list:
 	// the invocation invariants and the progress flags are noise there.
-	[[nodiscard]] virtual QString pushCommandLabel(bool setUpstream) const = 0;
+	[[nodiscard]] virtual QString pushCommandLabel(const PushStep& step, bool setUpstream) const = 0;
 
 	// Brings whatever local state the behind count is read from up to date with the remote, which is why
 	// Peek runs this before it refreshes. A backend that keeps no such state has nothing to do and succeeds

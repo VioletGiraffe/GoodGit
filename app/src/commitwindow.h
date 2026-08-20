@@ -58,7 +58,13 @@ private:
 	// Always reports back, refusal included: the caller is mid-commit and has to end its flow either way
 	void reattachHead(std::function<void(bool reattached)> onDone);
 	void doCommit(bool pushAfterwards);
-	void doPush(bool setUpstream);
+	// A push is however many commands the repository plans for it, run one after another and logged as one
+	// console session. The first failure ends it, so nothing is published past a step that could not be.
+	void startPush();
+	void runPushStep(size_t index, bool setUpstream);
+	// The offer to give a step's branch an upstream, and the retry if it is taken. Answers whether the push
+	// goes on: a declined offer ends it.
+	bool offerUpstreamThenRetry(size_t index);
 	void peekIncoming();
 	void showIncomingCommits(const std::vector<CommitRecord>& commits, bool capped);
 	void closePushLogEntry(const ProcessResult& result);
@@ -124,6 +130,8 @@ private:
 	QFrame* _incomingPopup = nullptr; // built on the first peek; Qt::Popup, so it closes on a click outside
 	QLabel* _incomingHeaderLabel = nullptr;
 	QPlainTextEdit* _incomingView = nullptr;
+
+	std::vector<PushStep> _pushSteps; // the running push's plan, replaced wholesale when the next one is planned
 
 	QPointer<HistoryWindow> _historyWindow; // at most one per repo window, raised again on a second click
 	Vcs::Query _diffQuery; // whatever fills the diff pane: a file's diff, or a submodule's incoming commits

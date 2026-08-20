@@ -132,12 +132,106 @@ Vcs::Query runQuery(const QString& workDir, QStringList args, const QObject* con
 	return Vcs::Query{ Git::run(workDir, std::move(args), context, std::move(callback), {}, /*readOnlyQuery=*/true) };
 }
 
-// Every refresh query: read-only, and scoped to the repository that asked
-QueryRound::Launcher refreshQueries(const QObject* repo)
+// Queries that only read, scoped to the repository that asked - what a refresh and a push plan are made of
+QueryRound::Launcher readOnlyQueries(const QObject* repo)
 {
 	return [repo](const QString& workDir, QStringList args, Vcs::Callback onResult) {
 		Git::run(workDir, std::move(args), repo, std::move(onResult), {}, /*readOnlyQuery=*/true);
 	};
+}
+
+// A submodule the push plan visits: where it is, what the log calls it, and what it holds. Filled as the
+// scan answers and read only once every query has, so the plan does not depend on the order they finished in.
+struct SubmoduleScan
+{
+	QString workDir;
+	QString displayPath; // relative to the repository the push was asked of
+	QString branch;      // what a push inside it would publish; read only for a submodule that needs one
+	bool needsPush = false;
+	std::vector<std::shared_ptr<SubmoduleScan>> children;
+};
+
+struct PushPlanRun
+{
+	std::shared_ptr<SubmoduleScan> root = std::make_shared<SubmoduleScan>();
+	QString refusal; // why no plan can be formed; the first one stands, the rest describe the same repository
+
+	void refuse(const QString& reason)
+	{
+		if (refusal.isEmpty())
+			refusal = reason;
+	}
+};
+
+// Children before their parent: a parent's tree records commits that live in its children, so those have
+// to reach their remotes first.
+void appendPushSteps(const SubmoduleScan& node, std::vector<PushStep>& steps)
+{
+	for (const std::shared_ptr<SubmoduleScan>& child : node.children)
+		appendPushSteps(*child, steps);
+
+	if (node.needsPush)
+		steps.push_back({ .workDir = node.workDir, .subject = node.displayPath, .branch = node.branch });
+}
+
+// What a submodule holding unpublished commits has to satisfy for a plain push inside it to publish them:
+// a branch to push, and one that actually contains the commit its superproject recorded.
+void requirePushableBranch(const std::shared_ptr<PushPlanRun>& run, const std::shared_ptr<SubmoduleScan>& node,
+	const QString& recordedSha, QueryRound round)
+{
+	round.launch(node->workDir, { QStringLiteral("symbolic-ref"), QStringLiteral("--short"), QStringLiteral("-q"), QStringLiteral("HEAD") },
+		[run, node](const ProcessResult& r) {
+			node->branch = QString::fromUtf8(r.out.trimmed());
+			if (!r.ok || node->branch.isEmpty())
+				run->refuse(QStringLiteral("Submodule '%1' has commits to push but is not on a branch.\n"
+					"Open it and check out a branch first.").arg(node->displayPath));
+		});
+	round.launch(node->workDir, { QStringLiteral("merge-base"), QStringLiteral("--is-ancestor"), recordedSha, QStringLiteral("HEAD") },
+		[run, node](const ProcessResult& r) {
+			if (!r.ok)
+				run->refuse(QStringLiteral("Submodule '%1' is checked out at a commit that does not contain the one recorded "
+					"for it, so pushing the branch it is on would not publish that commit.\n"
+					"Open it and check out the branch that has it.").arg(node->displayPath));
+		});
+}
+
+// Every gitlink in `parent`'s HEAD, and inside each one holding commits no remote has, the same scan again.
+// A submodule whose recorded commit a remote already has needs no push, and nothing nested in it can either:
+// that commit could not have been published while what it referenced was not.
+void scanSubmodulesForPush(const std::shared_ptr<PushPlanRun>& run, const std::shared_ptr<SubmoduleScan>& parent, QueryRound round)
+{
+	round.launch(parent->workDir, { QStringLiteral("ls-tree"), QStringLiteral("-r"), QStringLiteral("-z"), QStringLiteral("HEAD") },
+		[run, parent, round](const ProcessResult& lsTree) mutable {
+			if (!lsTree.ok)
+				return; // an unborn HEAD records no gitlinks, and has no commit of its own to push either
+
+			for (const Git::GitlinkEntry& gitlink : Git::parseGitlinkEntries(lsTree.out))
+			{
+				const QString workDir = parent->workDir + QLatin1Char('/') + gitlink.path;
+				// Never initialized: there is no repository there, so nothing of it to publish
+				if (!QFileInfo::exists(workDir + QStringLiteral("/.git")))
+					continue;
+
+				auto node = std::make_shared<SubmoduleScan>();
+				node->workDir = workDir;
+				node->displayPath = parent->displayPath.isEmpty() ? gitlink.path
+					: parent->displayPath + QLatin1Char('/') + gitlink.path;
+				parent->children.push_back(node);
+
+				// git's own on-demand test: the recorded commit is unpublished if no remote reaches it
+				round.launch(workDir, { QStringLiteral("rev-list"), QStringLiteral("-n"), QStringLiteral("1"),
+						gitlink.sha, QStringLiteral("--not"), QStringLiteral("--remotes") },
+					[run, node, round, sha = gitlink.sha](const ProcessResult& revList) {
+						// A recorded commit this clone does not have came from a remote, which therefore has it
+						if (!revList.ok || revList.out.trimmed().isEmpty())
+							return;
+
+						node->needsPush = true;
+						requirePushableBranch(run, node, sha, round);
+						scanSubmodulesForPush(run, node, round);
+					});
+			}
+		});
 }
 
 // Glob metacharacters in a file name must stay literal; '#' and '!' are special at line start
@@ -197,7 +291,7 @@ void GitRepository::startRefresh()
 
 	// The independent base queries, plus the one-time per-repository resolutions. Whatever their
 	// answers call for is asked once they are all in.
-	QueryRound round{ refreshQueries(this), [self = QPointer<GitRepository>{ this }, run] {
+	QueryRound round{ readOnlyQueries(this), [self = QPointer<GitRepository>{ this }, run] {
 		if (self)
 			self->startDependentQueries(run);
 	} };
@@ -273,7 +367,7 @@ void GitRepository::startRefresh()
 // per-submodule dirtiness, the unpushed subjects. All independent of each other.
 void GitRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run)
 {
-	QueryRound round{ refreshQueries(this), [self = QPointer<GitRepository>{ this }] {
+	QueryRound round{ readOnlyQueries(this), [self = QPointer<GitRepository>{ this }] {
 		if (self)
 			self->finishRefresh();
 	} };
@@ -519,22 +613,44 @@ void GitRepository::undoLastCommit(Vcs::Answer<void> onDone)
 		this, Vcs::reporting(std::move(onDone)));
 }
 
-Vcs::Job* GitRepository::push(Vcs::Callback onDone)
+void GitRepository::planPush(Vcs::Answer<std::vector<PushStep>> onDone)
 {
-	return Git::run(path(), { QStringLiteral("push"), QStringLiteral("--recurse-submodules=on-demand"),
-		QStringLiteral("--progress") }, this, std::move(onDone));
+	auto run = std::make_shared<PushPlanRun>();
+	run->root->workDir = path();
+
+	QueryRound round{ readOnlyQueries(this), [run, onDone = std::move(onDone), self = QPointer<GitRepository>{ this }] {
+		if (!self)
+			return; // the round ends when the context dies too, and there is nobody left to answer
+
+		if (!run->refusal.isEmpty())
+		{
+			onDone(std::unexpected(run->refusal));
+			return;
+		}
+
+		std::vector<PushStep> steps;
+		appendPushSteps(*run->root, steps);
+		steps.push_back({ .workDir = self->path(), .branch = self->state().branch });
+		onDone(std::move(steps));
+	} };
+
+	scanSubmodulesForPush(run, run->root, round);
 }
 
-Vcs::Job* GitRepository::pushSetUpstream(Vcs::Callback onDone)
+Vcs::Job* GitRepository::runPushStep(const PushStep& step, bool setUpstream, Vcs::Callback onDone)
 {
-	return Git::run(path(), { QStringLiteral("push"), QStringLiteral("--recurse-submodules=on-demand"),
-		QStringLiteral("--progress"), QStringLiteral("--set-upstream"), QStringLiteral("origin"), QStringLiteral("HEAD") },
-		this, std::move(onDone));
+	QStringList args = { QStringLiteral("push"), QStringLiteral("--progress"),
+		step.subject.isEmpty() ? QStringLiteral("--recurse-submodules=on-demand") : QStringLiteral("--recurse-submodules=no") };
+	if (setUpstream)
+		args << QStringLiteral("--set-upstream") << QStringLiteral("origin") << QStringLiteral("HEAD");
+
+	return Git::run(step.workDir, std::move(args), this, std::move(onDone));
 }
 
-QString GitRepository::pushCommandLabel(bool setUpstream) const
+QString GitRepository::pushCommandLabel(const PushStep& step, bool setUpstream) const
 {
-	return setUpstream ? QStringLiteral("git push --set-upstream origin HEAD") : QStringLiteral("git push");
+	const QString command = setUpstream ? QStringLiteral("push --set-upstream origin HEAD") : QStringLiteral("push");
+	return step.subject.isEmpty() ? QStringLiteral("git ") + command : QStringLiteral("git -C %1 %2").arg(step.subject, command);
 }
 
 void GitRepository::fetch(Vcs::Answer<void> onDone)
