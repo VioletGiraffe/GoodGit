@@ -51,7 +51,8 @@ constexpr const char* NewRowCheckPolicyByIndex[] = {
 
 } // namespace
 
-MainSettingsPage::MainSettingsPage()
+MainSettingsPage::MainSettingsPage(QWidget* parent) :
+	CSettingsPage(parent)
 {
 	const CSettings settings;
 	auto* layout = new QFormLayout{ this };
@@ -120,19 +121,21 @@ void MainSettingsPage::acceptSettings()
 	settings.setValue(Settings::NewRowCheckPolicyKey, QLatin1String(NewRowCheckPolicyByIndex[_newRowCheckPolicy->currentIndex()]));
 }
 
-ThemeFontSettingsPage::ThemeFontSettingsPage()
+ThemeFontSettingsPage::ThemeFontSettingsPage(QWidget* parent) :
+	CSettingsPage(parent)
 {
 	auto* layout = new QFormLayout{ this };
 
 	_colorScheme = new QComboBox;
-	// Index order matches the acceptSettings() mapping below
-	_colorScheme->addItems({ tr("System"), tr("Light"), tr("Dark") });
-	switch (CThemeController::instance().schemePreference())
-	{
-	case Qt::ColorScheme::Unknown: _colorScheme->setCurrentIndex(0); break;
-	case Qt::ColorScheme::Light: _colorScheme->setCurrentIndex(1); break;
-	case Qt::ColorScheme::Dark: _colorScheme->setCurrentIndex(2); break;
-	}
+	_colorScheme->addItem(tr("System"), int(Qt::ColorScheme::Unknown));
+	_colorScheme->addItem(tr("Light"), int(Qt::ColorScheme::Light));
+	_colorScheme->addItem(tr("Dark"), int(Qt::ColorScheme::Dark));
+	_schemeOnEntry = CThemeController::instance().schemePreference();
+	_colorScheme->setCurrentIndex(_colorScheme->findData(int(_schemeOnEntry)));
+	// Applied as it is picked, so the choice is judged against the real windows rather than a swatch
+	connect(_colorScheme, &QComboBox::currentIndexChanged, this, [this] {
+		CThemeController::instance().setSchemePreference(Qt::ColorScheme(_colorScheme->currentData().toInt()));
+	});
 	layout->addRow(tr("Color scheme:"), _colorScheme);
 
 	_systemFont = new QCheckBox{ tr("Use the system monospace font") };
@@ -167,13 +170,15 @@ ThemeFontSettingsPage::ThemeFontSettingsPage()
 
 void ThemeFontSettingsPage::acceptSettings()
 {
-	static constexpr Qt::ColorScheme schemeByIndex[] = {
-		Qt::ColorScheme::Unknown, Qt::ColorScheme::Light, Qt::ColorScheme::Dark };
-	CThemeController::instance().setSchemePreference(schemeByIndex[_colorScheme->currentIndex()]);
-
+	// The scheme is not stored here: picking it applied and stored it
 	CSettings settings;
 	const bool systemFont = _systemFont->isChecked();
 	settings.setValue(Settings::MonospaceFontFamilyKey, systemFont ? QString{} : _fontFamily->currentFont().family());
 	settings.setValue(Settings::MonospaceFontPointSizeKey, systemFont ? 0 : _fontSize->value());
 	settings.setValue(Settings::DiffTabWidthKey, _diffTabWidth->value());
+}
+
+void ThemeFontSettingsPage::rejectSettings()
+{
+	CThemeController::instance().setSchemePreference(_schemeOnEntry); // a no-op when nothing was previewed
 }

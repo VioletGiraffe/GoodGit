@@ -969,8 +969,8 @@ void CommitWindow::showHistoryWindow()
 void CommitWindow::showPreferencesDialog()
 {
 	CSettingsDialog dialog{ this };
-	dialog.addSettingsPage(new MainSettingsPage, tr("Main"))
-		.addSettingsPage(new ThemeFontSettingsPage, tr("Theme & Font")); // a QListWidgetItem shows text verbatim, no mnemonic escaping
+	dialog.addSettingsPage(new MainSettingsPage{ &dialog }, tr("Main"))
+		.addSettingsPage(new ThemeFontSettingsPage{ &dialog }, tr("Theme & Font")); // a QListWidgetItem shows text verbatim, no mnemonic escaping
 	dialog.exec();
 }
 

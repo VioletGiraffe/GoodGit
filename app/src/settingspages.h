@@ -2,6 +2,8 @@
 
 #include "settingsui/csettingspage.h"
 
+#include <Qt>
+
 class QCheckBox;
 class QComboBox;
 class QFontComboBox;
@@ -14,7 +16,7 @@ class QSpinBox;
 class MainSettingsPage final : public CSettingsPage
 {
 public:
-	MainSettingsPage();
+	explicit MainSettingsPage(QWidget* parent = nullptr);
 	void acceptSettings() override;
 
 private:
@@ -32,8 +34,9 @@ private:
 class ThemeFontSettingsPage final : public CSettingsPage
 {
 public:
-	ThemeFontSettingsPage();
+	explicit ThemeFontSettingsPage(QWidget* parent = nullptr);
 	void acceptSettings() override;
+	void rejectSettings() override;
 
 private:
 	QComboBox* _colorScheme = nullptr;
@@ -41,4 +44,6 @@ private:
 	QFontComboBox* _fontFamily = nullptr;
 	QSpinBox* _fontSize = nullptr;
 	QSpinBox* _diffTabWidth = nullptr;
+	// The scheme applies as it is picked, so cancelling has to put back what was in force on entry
+	Qt::ColorScheme _schemeOnEntry = Qt::ColorScheme::Unknown;
 };
