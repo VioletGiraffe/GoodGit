@@ -42,7 +42,18 @@ QString ProcessResult::errorText() const
 
 	const QString stderrText = collapseCarriageReturns(QString::fromUtf8(err)).trimmed();
 	if (outcome == ProcessOutcome::Exited)
-		return stderrText.isEmpty() ? QStringLiteral("%1 exited with code %2").arg(toolName).arg(exitCode) : stderrText;
+	{
+		if (!stderrText.isEmpty())
+			return stderrText;
+
+		// A tool that treats a refusal as a normal outcome reports it on stdout, leaving stderr empty:
+		// git answers "nothing to commit" there, and that is then the whole account of the failure.
+		const QString stdoutText = collapseCarriageReturns(QString::fromUtf8(out)).trimmed();
+		if (!stdoutText.isEmpty())
+			return stdoutText;
+
+		return QStringLiteral("%1 exited with code %2").arg(toolName).arg(exitCode);
+	}
 
 	// Died mid-run: whatever it managed to say still stands, but on its own it would read as the whole story
 	const QString note = outcome == ProcessOutcome::Crashed

@@ -45,8 +45,9 @@ struct ProcessResult
 	// The OS's account of refusing to start it. Carried with LaunchFailed, where there is no stderr to have.
 	QString launchError;
 
-	// stderr as text; a process that did not exit normally says so first, since its stderr cannot
-	// account for the output that never came
+	// The failure as text: stderr, or stdout where the tool reported its refusal there and left stderr empty.
+	// A process that did not exit normally says so first, since its stderr cannot account for the output that
+	// never came.
 	[[nodiscard]] QString errorText() const;
 };
 

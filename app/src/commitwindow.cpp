@@ -1372,7 +1372,7 @@ void CommitWindow::addPatternToIgnoreFile(const IgnorePattern& pattern)
 
 void CommitWindow::showError(const QString& title, const QString& details)
 {
-	// The command's own stderr, verbatim - hook output is the only thing that makes a rejected commit diagnosable
+	// The command's own output, verbatim - hook output is the only thing that makes a rejected commit diagnosable
 	MessageBox::notice(this, title, title + QLatin1Char('.'), details);
 }
 
