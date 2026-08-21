@@ -265,6 +265,18 @@ void RecentRepositoriesPanel::setFilter(const QString& text)
 	applyFilter();
 }
 
+// Goes through _expandedRoots rather than the row: a rebuild while the menu is open destroys the row.
+// applyFilter() then re-applies the state to whatever rows exist.
+void RecentRepositoriesPanel::setRepositoryExpanded(const QString& root, bool expanded)
+{
+	if (expanded)
+		_expandedRoots.insert(root);
+	else
+		_expandedRoots.remove(root);
+
+	applyFilter();
+}
+
 // Records only while unfiltered: what a filter expanded is not the user's choice
 void RecentRepositoriesPanel::rememberExpansion()
 {
@@ -339,8 +351,16 @@ void RecentRepositoriesPanel::showContextMenu(const QPoint& pos)
 
 	QMenu menu{ this };
 	menu.addAction(tr("&Open"), this, [this, root, parentRoot] { openRepository(root, parentRoot); });
-	if (parentRoot.isEmpty())
+	if (parentRoot.isEmpty()) // a subrepo has no rows under it, and only its parent is listed
+	{
+		if (item->childCount() > 0)
+		{
+			const bool expanded = item->isExpanded();
+			menu.addAction(expanded ? tr("&Hide subrepos") : tr("&Show subrepos"), this,
+				[this, root, expanded] { setRepositoryExpanded(root, !expanded); });
+		}
 		menu.addAction(tr("&Remove from list"), this, [root] { RecentRepositories::forget(root); });
+	}
 	menu.exec(viewport()->mapToGlobal(pos));
 }
 

@@ -25,6 +25,7 @@ protected:
 
 private:
 	void rebuild();
+	void setRepositoryExpanded(const QString& root, bool expanded);
 	void rememberExpansion();
 	void applyFilter();
 	[[nodiscard]] bool matchesFilter(const QTreeWidgetItem* item) const;
