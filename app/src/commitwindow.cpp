@@ -173,8 +173,8 @@ void CommitWindow::refreshRepository()
 void CommitWindow::buildUi()
 {
 	QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
-	fileMenu->addAction(tr("&Open Repository..."), this, [this] { browseForRepository(this); })
-		->setShortcut(QKeySequence::Open);
+	QAction* openRepositoryAction = fileMenu->addAction(tr("&Open Repository..."), this, [this] { browseForRepository(this); });
+	openRepositoryAction->setShortcut(QKeySequence::Open);
 	fileMenu->addSeparator();
 #ifdef Q_OS_MACOS
 	fileMenu->addAction(tr("Install 'gg' Command Line Tool..."), this, [this] {
@@ -190,6 +190,11 @@ void CommitWindow::buildUi()
 		->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_P));
 	QMenu* viewMenu = menuBar()->addMenu(tr("&View"));
 	viewMenu->addAction(buildRecentRepositoriesDock());
+	QMenu* repositoryMenu = menuBar()->addMenu(tr("&Repository"));
+	repositoryMenu->addAction(openRepositoryAction); // the same action as in File, where Ctrl+O is looked for
+	repositoryMenu->addSeparator();
+	repositoryMenu->addAction(tr("&Refresh"), _repo.get(), &Repository::refresh)->setShortcut(QKeySequence::Refresh);
+	_uncommitAction = repositoryMenu->addAction(tr("&Undo Last Commit"), this, &CommitWindow::undoLastCommit);
 	QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
 	helpMenu->addAction(tr("&About"), this, [this] {
 		CAboutDialog aboutDialog{ QStringLiteral(GG_VERSION), this };
@@ -206,13 +211,15 @@ void CommitWindow::buildUi()
 	repoBar->setObjectName(QStringLiteral("repoBar"));
 	auto* repoBarLayout = new QHBoxLayout(repoBar);
 	repoBarLayout->setContentsMargins(8, 6, 8, 6);
-	_repoNameLabel = new QLabel;
+	// Both elided: the bar's minimum width would otherwise follow the repository and branch names
+	_repoNameLabel = new CLabelElided;
+	_repoNameLabel->setElideMode(Qt::ElideRight); // a name reads from its start
 	{
 		QFont bold = _repoNameLabel->font();
 		bold.setBold(true);
 		_repoNameLabel->setFont(bold);
 	}
-	_branchLabel = new QLabel;
+	_branchLabel = new CLabelElided; // ElideMiddle, the default: both ends of a branch path carry meaning
 	_branchLabel->setObjectName(QStringLiteral("branchChip"));
 	_branchLabel->setFont(monospaceFont());
 	_aheadLabel = new QLabel;
@@ -220,22 +227,15 @@ void CommitWindow::buildUi()
 	_pushButton = new QPushButton(tr("Push"));
 	_peekButton = new QPushButton(tr("Peek"));
 	_peekButton->setToolTip(tr("Ask the upstream what it has that this branch does not"));
-	_refreshButton = new QPushButton(tr("Refresh"));
-	_refreshButton->setToolTip(QStringLiteral("F5"));
 	_historyButton = new QPushButton(tr("History"));
 	_historyButton->setToolTip(QStringLiteral("Ctrl+H"));
-	_uncommitButton = new QPushButton(tr("Uncommit"));
-	_uncommitButton->setToolTip(tr("Undo the last commit, keeping its changes here as uncommitted ones. "
-		"Offered only for a commit that has not been pushed, is not a merge, and is not the first one."));
 	repoBarLayout->addWidget(_repoNameLabel);
 	repoBarLayout->addWidget(_branchLabel);
 	repoBarLayout->addWidget(_aheadLabel);
 	repoBarLayout->addStretch();
 	repoBarLayout->addWidget(_pushButton);
 	repoBarLayout->addWidget(_peekButton);
-	repoBarLayout->addWidget(_refreshButton);
 	repoBarLayout->addWidget(_historyButton);
-	repoBarLayout->addWidget(_uncommitButton);
 	leftLayout->addWidget(repoBar);
 
 	// Colored by the stylesheet through the object names
@@ -362,16 +362,14 @@ void CommitWindow::buildUi()
 	setCentralWidget(_splitter);
 	resize(1180 + RecentRepositoriesDockWidth, 740); // the dock is beside the two panes, not carved out of them
 
-	connect(_refreshButton, &QPushButton::clicked, _repo.get(), &Repository::refresh);
 	connect(_pushButton, &QPushButton::clicked, this, &CommitWindow::startPush);
 	connect(_peekButton, &QPushButton::clicked, this, &CommitWindow::peekIncoming);
 	connect(_historyButton, &QPushButton::clicked, this, &CommitWindow::showHistoryWindow);
-	connect(_uncommitButton, &QPushButton::clicked, this, &CommitWindow::undoLastCommit);
 	connect(hidePushLogButton, &QPushButton::clicked, _pushLogPane, &QWidget::hide);
 	connect(_commitButton, &QPushButton::clicked, this, [this] { startCommit(false); });
 	connect(_commitPushButton, &QPushButton::clicked, this, [this] { startCommit(true); });
-	connect(_messageEdit, &QPlainTextEdit::textChanged, this, &CommitWindow::updateButtons);
-	connect(&_filesModel, &ChangedFilesModel::checksChanged, this, &CommitWindow::updateButtons);
+	connect(_messageEdit, &QPlainTextEdit::textChanged, this, &CommitWindow::updateControlStates);
+	connect(&_filesModel, &ChangedFilesModel::checksChanged, this, &CommitWindow::updateControlStates);
 	connect(_checkAllBox, &QCheckBox::clicked, this, [this] {
 		_filesModel.setAllChecked(_filesModel.checkedCount() < _filesModel.checkableCount());
 	});
@@ -386,7 +384,6 @@ void CommitWindow::buildUi()
 			_incomingView->setFont(monospaceFont());
 	});
 
-	new QShortcut(QKeySequence(Qt::Key_F5), this, [this] { _repo->refresh(); });
 	new QShortcut(QKeySequence(Qt::Key_Escape), this, [this] { close(); });
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_H), this, [this] { showHistoryWindow(); });
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_P), this, [this] {
@@ -406,7 +403,7 @@ void CommitWindow::buildUi()
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Return), this, commitPushShortcut);
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Enter), this, commitPushShortcut);
 
-	updateButtons();
+	updateControlStates();
 	_messageEdit->setFocus();
 }
 
@@ -480,7 +477,7 @@ void CommitWindow::onRefreshed()
 
 	updateHeader();
 	updateStrips();
-	updateButtons();
+	updateControlStates();
 
 	restoreSelectionByPath(selection);
 	// Even if the current row did not move: the list may have emptied, or the content changed underneath
@@ -573,7 +570,7 @@ void CommitWindow::updateStrips()
 	_detachedStrip->setVisible(!detachedText.isEmpty());
 }
 
-void CommitWindow::updateButtons()
+void CommitWindow::updateControlStates()
 {
 	const RepoState& state = _repo->state();
 	const int checkedCount = _filesModel.checkedCount();
@@ -603,7 +600,8 @@ void CommitWindow::updateButtons()
 		: tr("Commit %1 file(s)").arg(checkedCount));
 
 	_peekButton->setEnabled(!state.upstream.isEmpty() && !_peekInFlight);
-	_uncommitButton->setEnabled(state.lastCommitUndoable() && canActOnList());
+	// undoLastCommit() reports every refusal, so only a write in flight disables this
+	_uncommitAction->setEnabled(canActOnList());
 }
 
 bool CommitWindow::canActOnList() const
@@ -615,13 +613,13 @@ void CommitWindow::beginMutation()
 {
 	assert(!_mutationInFlight);
 	_mutationInFlight = true;
-	updateButtons();
+	updateControlStates();
 }
 
 void CommitWindow::endMutation()
 {
 	_mutationInFlight = false;
-	updateButtons();
+	updateControlStates();
 }
 
 void CommitWindow::startCommit(bool pushAfterwards)
@@ -838,11 +836,11 @@ bool CommitWindow::offerUpstreamThenRetry(size_t index)
 void CommitWindow::peekIncoming()
 {
 	_peekInFlight = true;
-	updateButtons();
+	updateControlStates();
 
 	_repo->fetch([this](std::expected<void, QString> fetchResult) {
 		_peekInFlight = false;
-		updateButtons();
+		updateControlStates();
 
 		if (!fetchResult)
 		{
@@ -1353,6 +1351,30 @@ void CommitWindow::undoLastCommit()
 		return;
 
 	const RepoState& state = _repo->state();
+	const UndoRefusal refusal = state.lastCommitUndoRefusal();
+	if (refusal != UndoRefusal::None)
+	{
+		const auto reason = [&state, refusal] {
+			switch (refusal)
+			{
+			case UndoRefusal::Unborn: return tr("There is nothing to undo: this repository has no commits yet.");
+			case UndoRefusal::Detached:
+				return tr("HEAD is detached, so there is no upstream to tell an unpushed commit from a pushed one.");
+			case UndoRefusal::OperationInProgress:
+				return tr("A merge, rebase, cherry-pick or revert is in progress and holds HEAD. Finish or abort it first.");
+			case UndoRefusal::MergeCommit: return tr("The last commit is a merge, and undoing it would leave the merge half done.");
+			case UndoRefusal::RootCommit:
+				return tr("The last commit is the first one in this repository, so there is nothing to move back to.");
+			case UndoRefusal::AlreadyPushed:
+				return tr("The last commit is already on %1. Undoing it would rewrite history the upstream has.").arg(state.upstream);
+			case UndoRefusal::None: break;
+			}
+			return QString{};
+		}();
+		MessageBox::notice(this, tr("Cannot undo the last commit"), reason, {}, QMessageBox::Information);
+		return;
+	}
+
 	const auto answer = MessageBox::question(this, tr("Undo the last commit?"),
 		tr("'%1' will be undone. Everything it took comes back to this list as uncommitted changes; nothing "
 			"in the working tree changes.").arg(state.headSubject),

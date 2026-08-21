@@ -37,10 +37,11 @@ Deliberate consequences:
 
 ## Undoing the last commit
 
-`RepoState::lastCommitUndoable()` decides whether the window offers it, and every refusal lives there
-rather than in a backend: a commit the upstream already has, a merge, a root commit, an operation in
-progress, or a detached HEAD (where pushed cannot be told from unpushed). Both backends leave the changes
-in the working tree, where the list shows them as uncommitted again.
+`RepoState::lastCommitUndoRefusal()` names why the last commit cannot be undone, and every refusal lives
+there rather than in a backend: a commit the upstream already has, a merge, a root commit, an operation in
+progress, or a detached HEAD (where pushed cannot be told from unpushed). The menu item stays enabled for
+all of them and reports which one applies. Both backends leave the changes in the working tree, where the
+list shows them as uncommitted again.
 
 Git uses `reset --soft`, not `--mixed`: the commit was assembled in the index, so leaving the index alone
 restores exactly the state the commit was made from. Mercurial uses `uncommit`, not `rollback`, which

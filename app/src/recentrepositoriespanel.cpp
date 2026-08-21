@@ -78,6 +78,7 @@ public:
 		opt.text.clear(); // the base paints only the row separator; every glyph is painted here
 
 		// The view is NoSelection, so State_Selected never arrives
+		// The mouse-over is drawn for visual feedback, current item rect is for keyboard navigation
 		const Theme& theme = activeTheme();
 		if (opt.state.testFlag(QStyle::State_MouseOver) || opt.state.testFlag(QStyle::State_HasFocus))
 			painter->fillRect(option.rect, theme.palette.selectionBg);

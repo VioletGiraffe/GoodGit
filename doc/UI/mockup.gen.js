@@ -554,7 +554,7 @@ const recentDock = () => `<div class="dock col">
 const window_ = () => `<div class="win">
 	<div class="titlebar"><span class="tt">GoodGit [master] - GoodGit</span>
 		<span class="wbtns"><i>&#8210;</i><i>&#9633;</i><i>&#10005;</i></span></div>
-	<div class="menubar"><span>File</span><span>Edit</span><span>View</span><span>Help</span></div>
+	<div class="menubar"><span>File</span><span>Edit</span><span>View</span><span>Repository</span><span>Help</span></div>
 	<div class="row">
 		${recentDock()}
 		<div class="col" style="flex:0 0 600px;border-right:1px solid var(--border)">
@@ -563,7 +563,7 @@ const window_ = () => `<div class="win">
 				<span class="ab">3 to push to origin/master</span>
 				<span class="grow"></span>
 				<button class="btn small">Push</button><button class="btn small">Peek</button>
-				<button class="btn small">Refresh</button><button class="btn small">History</button>
+				<button class="btn small">History</button>
 			</div>
 			${filelist()}
 			<div style="border-top:1px solid var(--border)">

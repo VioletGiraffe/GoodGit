@@ -60,12 +60,25 @@ struct CommitRecord
 
 enum class RepoOp : uint8_t { None, Merge, CherryPick, Revert, Rebase };
 
+// Why the last commit cannot be undone. Decided here rather than in a backend: git and Mercurial refuse on
+// the same grounds.
+enum class UndoRefusal : uint8_t
+{
+	None,
+	Unborn,              // no commit to undo
+	Detached,            // no upstream to tell a pushed commit from an unpushed one
+	OperationInProgress, // owns HEAD
+	MergeCommit,         // would be left half undone
+	RootCommit,          // nothing to move back to
+	AlreadyPushed,       // the upstream would have the commit rewritten out from under it
+};
+
 struct RepoState
 {
 	QString branch;      // empty when detached
 	QString headSha;     // full sha of HEAD; empty when unborn
 	QString headSubject; // subject line of HEAD; empty when unborn
-	int headParentCount = 0; // 0 for a root commit, more than one for a merge; read by lastCommitUndoable()
+	int headParentCount = 0; // 0 for a root commit, more than one for a merge; read by lastCommitUndoRefusal()
 	QString upstream;    // empty if none configured
 	int ahead = 0; // commits one push would send
 	int behind = 0;
@@ -91,17 +104,22 @@ struct RepoState
 	[[nodiscard]] bool known() const { return readFailure.isEmpty(); }
 	[[nodiscard]] bool operationInProgress() const { return op != RepoOp::None; }
 
-	// Every refusal is decided here rather than in a backend:
-	//   pushed - the upstream would have the commit rewritten out from under it
-	//   merge - would be left half undone
-	//   root commit - nothing to move back to
-	//   operation in progress - owns HEAD
-	//   detached - no upstream to tell pushed from unpushed
-	// No upstream at all means nothing can have been pushed.
-	[[nodiscard]] bool lastCommitUndoable() const
+	[[nodiscard]] UndoRefusal lastCommitUndoRefusal() const
 	{
-		return !unborn && !detached && !operationInProgress() && headParentCount == 1
-			&& (upstream.isEmpty() || ahead > 0);
+		if (unborn)
+			return UndoRefusal::Unborn;
+		if (detached)
+			return UndoRefusal::Detached;
+		if (operationInProgress())
+			return UndoRefusal::OperationInProgress;
+		if (headParentCount > 1)
+			return UndoRefusal::MergeCommit;
+		if (headParentCount == 0)
+			return UndoRefusal::RootCommit;
+		if (!upstream.isEmpty() && ahead == 0) // no upstream at all means nothing can have been pushed
+			return UndoRefusal::AlreadyPushed;
+
+		return UndoRefusal::None;
 	}
 };
 

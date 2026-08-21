@@ -51,7 +51,7 @@ private:
 	void onRefreshed();
 	void updateHeader();
 	void updateStrips();
-	void updateButtons();
+	void updateControlStates();
 
 	// Every flow that writes to the index or the working tree brackets itself with these; they disable the
 	// controls that would start a second one
@@ -112,14 +112,13 @@ private:
 	ChangedFilesModel _filesModel;
 
 	QSplitter* _splitter = nullptr;
-	QLabel* _repoNameLabel = nullptr;
-	QLabel* _branchLabel = nullptr;
+	CLabelElided* _repoNameLabel = nullptr;
+	CLabelElided* _branchLabel = nullptr;
 	QLabel* _aheadLabel = nullptr;
 	QPushButton* _pushButton = nullptr;
 	QPushButton* _peekButton = nullptr;
-	QPushButton* _refreshButton = nullptr;
 	QPushButton* _historyButton = nullptr;
-	QPushButton* _uncommitButton = nullptr;
+	QAction* _uncommitAction = nullptr;
 	QLabel* _readFailureStrip = nullptr;
 	QLabel* _opStrip = nullptr;
 	QLabel* _detachedStrip = nullptr;

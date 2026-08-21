@@ -68,7 +68,7 @@ public:
 	virtual void commitMergeState(const QString& message, const QStringList& untrackedPaths, Vcs::Answer<void> onDone) = 0;
 
 	// Undoes the last commit, leaving its changes as uncommitted changes.
-	// Only called when RepoState::lastCommitUndoable() allows it; every refusal is decided there.
+	// Only called when RepoState::lastCommitUndoRefusal() returns None; every refusal is decided there.
 	// A backend that refuses anyway reports it like any failure.
 	virtual void undoLastCommit(Vcs::Answer<void> onDone) = 0;
 
