@@ -10,7 +10,6 @@
 #include <QMenu>
 #include <QPainter>
 #include <QResizeEvent>
-#include <QSet>
 #include <QStyledItemDelegate>
 
 #include <algorithm>
@@ -221,13 +220,7 @@ void RecentRepositoriesPanel::resizeEvent(QResizeEvent* event)
 
 void RecentRepositoriesPanel::rebuild()
 {
-	QSet<QString> expandedRoots;
-	for (int i = 0; i < topLevelItemCount(); ++i)
-	{
-		if (topLevelItem(i)->isExpanded())
-			expandedRoots.insert(topLevelItem(i)->data(0, RootRole).toString());
-	}
-
+	rememberExpansion(); // clear() is about to destroy the rows holding it
 	clear();
 
 	for (const RecentRepository& repository : RecentRepositories::list())
@@ -255,9 +248,63 @@ void RecentRepositoriesPanel::rebuild()
 			subrepoItem->setData(0, CurrentRole, sameRepositoryPath(root, _currentRoot));
 			subrepoItem->setToolTip(0, QDir::toNativeSeparators(root));
 		}
-
-		item->setExpanded(expandedRoots.contains(repository.root));
 	}
+
+	applyFilter(); // also sets each row's expansion
+}
+
+void RecentRepositoriesPanel::setFilter(const QString& text)
+{
+	QString filter = text.trimmed();
+	filter.replace(QLatin1Char('\\'), QLatin1Char('/'));
+	if (filter == _filter)
+		return;
+
+	rememberExpansion(); // applyFilter() is about to expand whatever the filter matches
+	_filter = filter;
+	applyFilter();
+}
+
+// Records only while unfiltered: what a filter expanded is not the user's choice
+void RecentRepositoriesPanel::rememberExpansion()
+{
+	if (!_filter.isEmpty())
+		return;
+
+	_expandedRoots.clear();
+	for (int i = 0; i < topLevelItemCount(); ++i)
+	{
+		if (topLevelItem(i)->isExpanded())
+			_expandedRoots.insert(rootOf(topLevelItem(i)));
+	}
+}
+
+void RecentRepositoriesPanel::applyFilter()
+{
+	for (int i = 0; i < topLevelItemCount(); ++i)
+	{
+		QTreeWidgetItem* item = topLevelItem(i);
+		// A repository that matches brings its subrepos with it: they are part of what was matched
+		const bool repositoryMatches = matchesFilter(item);
+
+		int shownSubrepos = 0;
+		for (int child = 0; child < item->childCount(); ++child)
+		{
+			const bool show = repositoryMatches || matchesFilter(item->child(child));
+			item->child(child)->setHidden(!show);
+			shownSubrepos += show ? 1 : 0;
+		}
+
+		item->setHidden(!repositoryMatches && shownSubrepos == 0);
+		// A match inside a repository has to be unfolded to be seen; one on the repository itself does not
+		const bool matchIsInside = !repositoryMatches && shownSubrepos > 0;
+		item->setExpanded(matchIsInside || _expandedRoots.contains(rootOf(item)));
+	}
+}
+
+bool RecentRepositoriesPanel::matchesFilter(const QTreeWidgetItem* item) const
+{
+	return _filter.isEmpty() || rootOf(item).contains(_filter, Qt::CaseInsensitive);
 }
 
 void RecentRepositoriesPanel::openRepository(const QString& root, const QString& parentRoot)

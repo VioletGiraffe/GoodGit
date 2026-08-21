@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QSet>
 #include <QTreeWidget>
 
 // The recent repositories dock: one row per repository, expanding to the subrepos its last refresh found (one level).
@@ -14,12 +15,19 @@ public:
 	// `currentRepositoryRoot` is the repository of the window this panel belongs to, marked in the list
 	explicit RecentRepositoriesPanel(QString currentRepositoryRoot, QWidget* parent = nullptr);
 
+	// Keeps the rows whose absolute path contains `text`, plus the parent of every subrepo kept, and
+	// expands those parents. An empty filter keeps everything and restores the expansion the user left.
+	void setFilter(const QString& text);
+
 protected:
 	// Row heights depend on the width the paths wrap into
 	void resizeEvent(QResizeEvent* event) override;
 
 private:
 	void rebuild();
+	void rememberExpansion();
+	void applyFilter();
+	[[nodiscard]] bool matchesFilter(const QTreeWidgetItem* item) const;
 	// `parentRoot` is empty for a listed repository, set for a subrepo of one. By root rather than item:
 	// opening a repository rebuilds this tree, so no row survives it.
 	void openRepository(const QString& root, const QString& parentRoot);
@@ -28,4 +36,6 @@ private:
 
 private:
 	const QString _currentRoot;
+	QString _filter; // forward slashes, so a typed backslash matches a stored root
+	QSet<QString> _expandedRoots; // what the user left expanded, re-applied on every rebuild
 };

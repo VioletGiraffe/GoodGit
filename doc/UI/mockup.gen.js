@@ -240,8 +240,10 @@ body {
 .row { display: flex; flex: 1; min-height: 0; }
 
 /* ---------- recent repositories dock ---------- */
-.dock { flex: 0 0 210px; background: var(--pane); border-right: 1px solid var(--border); }
+.dock { flex: 0 0 175px; background: var(--pane); border-right: 1px solid var(--border); }
 .dock .dhead { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: var(--pane-alt); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--dim); }
+.dock .filter { padding: 6px 8px; }
+.dock .filter span { display: block; background: var(--pane); color: var(--dim); border: 1px solid var(--btn-border); border-radius: 3px; padding: 3px 7px; font-size: 12px; }
 .rrow { position: relative; padding: 4px 10px; border-bottom: 1px solid var(--border-soft); line-height: 1.35; }
 .rrow.cur { background: var(--pane-alt); }
 .rrow.cur::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--accent); }
@@ -545,6 +547,7 @@ const subrow = s => `<div class="rrow sub"><span class="ico">&#128193;</span>${e
 const recentDock = () => `<div class="dock col">
 			<div class="dhead"><span>Recent</span><span class="grow"></span>
 				<button class="btn small">Open...</button><button class="btn small">Hide</button></div>
+			<div class="filter"><span>Filter</span></div>
 			${RECENT.map(r => [rrow(r), ...(r.open ? r.subs.map(subrow) : [])].join('\n\t\t\t')).join('\n\t\t\t')}
 		</div>`;
 

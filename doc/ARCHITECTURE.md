@@ -60,7 +60,7 @@ ships with hg but is off by default, so the command enables it for itself.
 | `repositoryfactory` | `findRepository()`: which kind of repository a path is inside and where its root is. `openRepository()`: a `Repository` of that kind. The only place that names every backend |
 | `repositorywindows` | Opening a repository in a window, from wherever the request comes: resolves the path, reports one nothing claims, raises the window already on that repository or creates one, records the open. The only place a top-level `CommitWindow` is constructed |
 | `recentrepositories` | The stored list of repositories opened before, each with the subrepos its last refresh found. Capped, and announced on every write so every open panel rebuilds |
-| `recentrepositoriespanel` | That list as the dock beside a commit window: one row per repository, one level of subrepos under it |
+| `recentrepositoriespanel` | That list as the dock beside a commit window: one row per repository, one level of subrepos under it, narrowed by the filter field above |
 | `gitprocess` | `Git::run()`, `Git::runSync()`: the git executable and the invocation invariants, over `vcsprocess` |
 | `gitparsers` | Parsers for the git outputs the app consumes. UI- and process-free, so they can be tested directly |
 | `gitrepository` | The git backend: every `Repository` operation as `git` subprocesses plus parsing |

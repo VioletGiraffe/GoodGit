@@ -7,7 +7,7 @@
 
 namespace {
 
-constexpr qsizetype MaxRecentRepositories = 10;
+constexpr qsizetype MaxRecentRepositories = 100;
 
 [[nodiscard]] QString kindText(VcsKind kind)
 {

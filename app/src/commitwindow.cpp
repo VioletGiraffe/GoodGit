@@ -39,6 +39,7 @@
 #include <QItemSelectionModel>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
 #include <QPlainTextEdit>
@@ -57,7 +58,7 @@
 
 namespace {
 
-constexpr int RecentRepositoriesDockWidth = 210; // first-run default; persists with the window state
+constexpr int RecentRepositoriesDockWidth = 175; // first-run default; persists with the window state
 constexpr int LeftColumnWidth = 430; // first-run default, fits the default 50-column subject guide; persists with the splitter
 constexpr qsizetype BinarySniffBytes = 8000; // git's own threshold: a NUL this early means the file is not text
 constexpr int MaxListedPathsInDialog = 20;
@@ -429,7 +430,28 @@ QAction* CommitWindow::buildRecentRepositoriesDock()
 	headerLayout->addWidget(hideButton);
 	dock->setTitleBarWidget(header);
 
-	dock->setWidget(new RecentRepositoriesPanel{ _repo->path(), dock });
+	// Its own row rather than the header's: the header row's buttons are what hold the dock's minimum width,
+	// and a field beside them would add to it
+	auto* filterEdit = new QLineEdit;
+	filterEdit->setPlaceholderText(tr("Filter"));
+	filterEdit->setToolTip(tr("Matches anywhere in a repository's path; the rest are hidden"));
+	filterEdit->setClearButtonEnabled(true);
+	auto* filterRow = new QWidget;
+	auto* filterRowLayout = new QHBoxLayout(filterRow);
+	filterRowLayout->setContentsMargins(8, 6, 8, 6);
+	filterRowLayout->addWidget(filterEdit);
+
+	auto* panel = new RecentRepositoriesPanel{ _repo->path() };
+	connect(filterEdit, &QLineEdit::textChanged, panel, &RecentRepositoriesPanel::setFilter);
+
+	auto* dockContents = new QWidget;
+	auto* dockContentsLayout = new QVBoxLayout(dockContents);
+	dockContentsLayout->setContentsMargins(0, 0, 0, 0); // the list runs to the dock's edges; only the filter is inset
+	dockContentsLayout->setSpacing(0);
+	dockContentsLayout->addWidget(filterRow);
+	dockContentsLayout->addWidget(panel);
+
+	dock->setWidget(dockContents);
 	addDockWidget(Qt::LeftDockWidgetArea, dock);
 	resizeDocks({ dock }, { RecentRepositoriesDockWidth }, Qt::Horizontal);
 
