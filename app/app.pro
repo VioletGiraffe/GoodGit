@@ -120,5 +120,5 @@ mac*{
 	LIBS += -framework AppKit
 
 	HEADERS += src/commandlinetool_mac.h
-	SOURCES += src/commandlinetool_mac.cpp
+	OBJECTIVE_SOURCES += src/commandlinetool_mac.mm
 }

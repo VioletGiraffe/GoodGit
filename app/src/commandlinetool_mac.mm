@@ -3,7 +3,8 @@
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
-#include <QProcess>
+
+#import <Foundation/Foundation.h>
 
 #include <cerrno>
 #include <cstring>
@@ -35,27 +36,29 @@ QString appleScriptQuoted(const QString& text)
 
 enum class Elevated { Ran, Cancelled };
 
+constexpr NSInteger UserCancelledError = -128; // userCanceledErr
+
 // Runs one /bin/sh command as root. Credentials are entered only in the dialog macOS raises; nothing here
 // sees a password. Blocks until the dialog is dismissed.
+// In-process, not via the osascript binary: the authorization dialog identifies the requesting process.
 std::expected<Elevated, QString> runAsAdministrator(const QString& shellCommand)
 {
-	const QString script = QStringLiteral("do shell script %1 with administrator privileges")
+	const QString source = QStringLiteral("do shell script %1 with administrator privileges")
 		.arg(appleScriptQuoted(shellCommand));
 
-	QProcess osascript;
-	osascript.start(QStringLiteral("/usr/bin/osascript"), { QStringLiteral("-e"), script });
-	if (!osascript.waitForStarted() || !osascript.waitForFinished(-1))
-		return std::unexpected(osascript.errorString());
+	NSAppleScript* script = [[NSAppleScript alloc] initWithSource:source.toNSString()];
+	NSDictionary* scriptError = nil;
+	const bool ran = [script executeAndReturnError:&scriptError] != nil;
+	[script release];
 
-	if (osascript.exitStatus() == QProcess::NormalExit && osascript.exitCode() == 0)
+	if (ran)
 		return Elevated::Ran;
 
-	const QString error = QString::fromLocal8Bit(osascript.readAllStandardError()).trimmed();
-	// -128 is userCanceledErr
-	if (error.contains(QLatin1String("-128")))
+	if ([scriptError[NSAppleScriptErrorNumber] integerValue] == UserCancelledError)
 		return Elevated::Cancelled;
 
-	return std::unexpected(error.isEmpty() ? QStringLiteral("osascript failed.") : error);
+	NSString* message = scriptError[NSAppleScriptErrorBriefMessage];
+	return std::unexpected(message ? QString::fromNSString(message) : QStringLiteral("AppleScript failed."));
 }
 
 }
