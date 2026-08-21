@@ -107,9 +107,12 @@ mac*|linux*|freebsd*{
 }
 
 ###################################################
-#    Platform-specific compiler options and libs
+#    Platform-specific sources, compiler options and libs
 ###################################################
 
 mac*{
 	LIBS += -framework AppKit
+
+	HEADERS += src/commandlinetool_mac.h
+	SOURCES += src/commandlinetool_mac.cpp
 }

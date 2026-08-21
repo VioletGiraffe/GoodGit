@@ -1,4 +1,7 @@
 #include "commitwindow.h"
+#ifdef Q_OS_MACOS
+#include "commandlinetool_mac.h"
+#endif
 #include "consolelogview.h"
 #include "diffpane.h"
 #include "filelistdelegate.h"
@@ -156,6 +159,14 @@ CommitWindow::CommitWindow(const RepositoryLocation& location) :
 void CommitWindow::buildUi()
 {
 	QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
+#ifdef Q_OS_MACOS
+	fileMenu->addAction(tr("Install 'gg' Command Line Tool..."), this, [this] {
+		const auto result = installCommandLineTool();
+		MessageBox::notice(this, tr("Command line tool"), result ? *result : result.error(), {},
+			result ? QMessageBox::Information : QMessageBox::Warning);
+	});
+	fileMenu->addSeparator();
+#endif
 	fileMenu->addAction(tr("E&xit"), [] { QApplication::closeAllWindows(); }); // not quit(): closeEvent saves the layout state
 	QMenu* editMenu = menuBar()->addMenu(tr("&Edit"));
 	editMenu->addAction(tr("&Preferences..."), this, &CommitWindow::showPreferencesDialog)
