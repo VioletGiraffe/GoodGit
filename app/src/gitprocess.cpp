@@ -3,6 +3,8 @@
 
 #include "settings/csettings.h"
 
+#include <QVersionNumber>
+
 namespace {
 
 void applyInvariants(QStringList& args, bool readOnlyQuery)
@@ -39,6 +41,22 @@ ProcessResult runSync(const QString& workDir, QStringList args, int timeoutMs)
 {
 	applyInvariants(args, /*readOnlyQuery=*/true);
 	return Vcs::runSync(gitTool(), workDir, std::move(args), timeoutMs);
+}
+
+std::optional<QString> versionProblem(const QString& workDir)
+{
+	// --pathspec-from-file and --pathspec-file-nul, which staging, un-staging and discarding all pass, arrived in git 2.25
+	const QVersionNumber minimum{ 2, 25 };
+
+	const ProcessResult result = runSync(workDir, { QStringLiteral("--version") });
+	// "git version 2.37.1.windows.1": fromString reads the leading numbers and ignores a vendor's extra fields
+	const QStringList fields = QString::fromUtf8(result.out).trimmed().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+	const QVersionNumber version = fields.size() >= 3 ? QVersionNumber::fromString(fields[2]) : QVersionNumber{};
+	if (version.isNull() || version >= minimum)
+		return {};
+
+	return QStringLiteral("This git is version %1, but %2 or newer is required.\n\nStaging and discarding changes pass the file list to git in a form older versions reject.")
+		.arg(version.toString(), minimum.toString());
 }
 
 } // namespace Git

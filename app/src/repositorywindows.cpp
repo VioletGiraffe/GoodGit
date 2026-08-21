@@ -1,5 +1,6 @@
 #include "repositorywindows.h"
 #include "commitwindow.h"
+#include "gitprocess.h"
 #include "recentrepositories.h"
 #include "repositoryfactory.h"
 
@@ -11,6 +12,7 @@
 #include <QFileInfo>
 
 #include <algorithm>
+#include <optional>
 
 namespace {
 
@@ -55,8 +57,17 @@ CommitWindow* repositoryWindow(const QString& root)
 	return nullptr;
 }
 
-CommitWindow* openRepositoryWindow(const RepositoryLocation& location)
+CommitWindow* openRepositoryWindow(const RepositoryLocation& location, QWidget* dialogParent)
 {
+	if (location.kind == VcsKind::Git)
+	{
+		if (const std::optional<QString> problem = Git::versionProblem(location.root))
+		{
+			MessageBox::notice(dialogParent, QApplication::applicationName(), *problem, {}, QMessageBox::Critical);
+			return nullptr;
+		}
+	}
+
 	RecentRepositories::recordOpen(location);
 
 	// Two windows on one repository would commit the same changes through both
@@ -76,7 +87,7 @@ CommitWindow* openRepositoryWindowAt(const QString& path, QWidget* dialogParent)
 {
 	const std::expected<RepositoryLocation, std::vector<ProcessResult>> location = findRepository(path);
 	if (location)
-		return openRepositoryWindow(*location);
+		return openRepositoryWindow(*location, dialogParent);
 
 	MessageBox::notice(dialogParent, QApplication::applicationName(), noRepositoryMessage(path, location.error()), {}, QMessageBox::Critical);
 	return nullptr;
@@ -86,7 +97,7 @@ CommitWindow* openRecentRepository(const QString& root, QWidget* dialogParent)
 {
 	const std::expected<RepositoryLocation, std::vector<ProcessResult>> location = findRepository(root);
 	if (location)
-		return openRepositoryWindow(*location);
+		return openRepositoryWindow(*location, dialogParent);
 
 	// Keep is the default: an unmounted drive looks exactly like a deleted repository
 	const std::optional<int> answer = MessageBox::question(dialogParent, QApplication::applicationName(),

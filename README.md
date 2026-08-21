@@ -7,6 +7,11 @@
 
 Design and component overview: [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md).
 
+## Requirements
+
+Git: 2.25 or newer (January 2020)\
+Mercurial: no known floor
+
 ## Building
 
 Qt 6 and a C++23 compiler. Clone with submodules:

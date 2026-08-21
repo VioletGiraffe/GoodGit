@@ -25,14 +25,12 @@ int main(int argc, char* argv[])
 	// The current directory is only the first guess: started from a shortcut it is wherever that pointed,
 	// and the last repository worked on is the better guess then
 	if (const std::expected<RepositoryLocation, std::vector<ProcessResult>> location = findRepository(QDir::currentPath()))
-		openRepositoryWindow(*location);
-	else
-	{
-		const std::vector<RecentRepository> recent = RecentRepositories::list();
-		const bool opened = !recent.empty() && openRecentRepository(recent.front().root, nullptr) != nullptr;
-		if (!opened && !browseForRepository(nullptr))
-			return 0; // nothing to show, and nothing chosen
-	}
+		return openRepositoryWindow(*location) ? QApplication::exec() : 1;
+
+	const std::vector<RecentRepository> recent = RecentRepositories::list();
+	const bool opened = !recent.empty() && openRecentRepository(recent.front().root, nullptr) != nullptr;
+	if (!opened && !browseForRepository(nullptr))
+		return 0; // nothing to show, and nothing chosen
 
 	return QApplication::exec();
 }
