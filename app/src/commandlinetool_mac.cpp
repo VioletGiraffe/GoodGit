@@ -19,7 +19,7 @@ constexpr const char* LinkDirectory = "/usr/local/bin";
 QString shellQuoted(const QString& text)
 {
 	QString quoted = text;
-	quoted.replace(QLatin1Char('\''), QLatin1String("'\''"));
+	quoted.replace(QLatin1Char('\''), QLatin1String("'\\''"));
 	return QLatin1Char('\'') + quoted + QLatin1Char('\'');
 }
 
@@ -28,7 +28,7 @@ QString shellQuoted(const QString& text)
 QString appleScriptQuoted(const QString& text)
 {
 	QString quoted = text;
-	quoted.replace(QLatin1Char('\'), QLatin1String("\\\\"));
+	quoted.replace(QLatin1Char('\\'), QLatin1String("\\\\"));
 	quoted.replace(QLatin1Char('"'), QLatin1String("\\\""));
 	return QLatin1Char('"') + quoted + QLatin1Char('"');
 }
