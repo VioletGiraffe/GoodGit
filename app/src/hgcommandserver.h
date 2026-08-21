@@ -11,10 +11,9 @@ class HgServerPool;
 
 namespace Hg {
 
-// One command on a running hg command server: the same contract as a process job - result callback,
-// streaming, cancel - without the interpreter startup a fresh process pays. The protocol has no
-// per-command cancel, so cancelling a running command suppresses its delivery immediately and lets it
-// finish; only if it overstays a grace period is its server killed and respawned on demand.
+// One command on a running hg command server, with the same contract as a process job.
+// The protocol has no per-command cancel: cancelling suppresses delivery and lets the command finish.
+// A cancelled command that overstays a grace period gets its server killed; the pool respawns on demand.
 class ServerJob final : public Vcs::Job
 {
 public:
@@ -26,12 +25,12 @@ private:
 	friend class ::HgCommandServer;
 	friend class ::HgServerPool;
 
-	// The protocol events, translated to the Job contract by whichever server runs this
+	// The protocol events, called by the server running this
 	void deliverOutput(const QByteArray& chunk) { collect(chunk, _out); }
 	void deliverError(const QByteArray& chunk) { collect(chunk, _err); }
 	void completed(int exitCode);
-	// The server died under the command, or never came up at all; its own stderr, or the OS's refusal to
-	// start it, is the only diagnosis there is
+	// The server died under the command, or never came up; its own stderr or the OS's launch error is the
+	// only diagnosis there is
 	void failed(ProcessOutcome outcome, const QByteArray& serverStderr, const QString& launchError);
 
 	[[nodiscard]] bool abandonedWhileQueued() const { return _hasContext && !_context; }
@@ -42,11 +41,11 @@ private:
 
 } // namespace Hg
 
-// One connection to `hg serve --cmdserver pipe`, bound to the repository it was started in: the
-// interpreter, the config and that repository load once, then each request runs one command over the
-// pipe. Framing is 1 channel byte + u32 BE length; 'o'/'e' carry the command's output, 'r' its exit
-// code, and 'I'/'L' request input, always answered empty here - ui.interactive=False means nothing
-// should ask, and an unanswered request would deadlock the pipe.
+// One `hg serve --cmdserver pipe` process: the interpreter, the config and the bound repository load once,
+// then each request runs one command over the pipe.
+// Framing: 1 channel byte + u32 BE length. 'o'/'e' carry output, 'r' the exit code, 'I'/'L' request input.
+// Input requests are always answered empty: ui.interactive=False means nothing should ask, and an
+// unanswered request would deadlock the pipe.
 class HgCommandServer final : public QObject
 {
 public:
@@ -58,41 +57,40 @@ public:
 	[[nodiscard]] Hg::ServerJob* currentJob() const { return _currentJob; }
 	[[nodiscard]] const QByteArray& ownStderr() const { return _ownStderr; }
 
-	// Sends the job's command; the server must be idle. A command for a repository other than the bound
-	// one carries -R and --cwd, paying a fresh repo open there but no interpreter start.
+	// The server must be idle. A command for another repository carries -R and --cwd, paying a repo open
+	// there but no interpreter start.
 	void execute(Hg::ServerJob* job);
 
-	// The escape hatch for a command that outstayed its cancellation: fails it, and the pool respawns on demand
+	// Fails the current command; the pool respawns on demand
 	void killServer();
 
 private:
 	void consumeChunks();
 	void handleChunk(char channel, const QByteArray& payload);
 	void readHello(const QByteArray& payload);
-	void died(); // the process is gone, however that happened: fail the current command, tell the pool
+	void died(); // fails the current command, tells the pool
 
 private:
 	HgServerPool& _pool;
 	const QString _bindRoot;
 	QProcess* _process = nullptr;
 	QByteArray _buffer;    // stdout bytes not yet consumed as chunks
-	QByteArray _ownStderr; // the server process's own stderr - extension warnings and crash text, no command's output
+	QByteArray _ownStderr; // the server's own stderr (extension warnings, crash text), never a command's output
 	Hg::ServerJob* _currentJob = nullptr;
 	bool _helloSeen = false;
 	bool _dead = false;
 };
 
-// Up to MaxServers connections, spawned lazily against demand and each bound to the repository of the
-// command that was waiting when it spawned. Jobs queue FIFO; a free server prefers a job for its own
-// repository's root. If no server ever becomes ready - hg missing or too old - the pool marks itself
-// unavailable and routes everything through ordinary processes instead.
+// Up to MaxServers servers, spawned on demand, each bound to the repository of the job waiting at the time.
+// Jobs queue FIFO; a free server prefers a job for its own repository.
+// If no server ever becomes ready (hg missing or too old), the pool routes everything through plain processes.
 class HgServerPool final
 {
 public:
 	static HgServerPool& instance();
 
-	// The same contract as Vcs::run. Commands with stdin data go to the process transport - no hg call
-	// site sends any, and the input channels are answered empty.
+	// The same contract as Vcs::run. Commands with stdin data go to the process transport, since the server's
+	// input channels are answered empty (no hg call site sends any).
 	Vcs::Job* run(const Vcs::Tool& tool, const QString& workDir, QStringList args, const QObject* context,
 		Vcs::Callback callback, QByteArray stdinData);
 
@@ -111,6 +109,6 @@ private:
 
 	std::vector<std::unique_ptr<HgCommandServer>> _servers;
 	std::deque<Hg::ServerJob*> _queue;
-	bool _everReady = false;   // one server coming up proves the executable can serve
-	bool _unavailable = false; // none ever did: this hg cannot, so stop trying
+	bool _everReady = false;   // one server coming up proves this hg can serve
+	bool _unavailable = false; // none ever did
 };

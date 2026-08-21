@@ -53,7 +53,7 @@ void ConsoleLogView::appendOutput(const QByteArray& chunk)
 		else
 		{
 			if (_pendingCr)
-				_pendingLine.clear(); // the meter is redrawing the line from its start
+				_pendingLine.clear(); // the line is being redrawn from its start
 			_pendingLine += c;
 		}
 		_pendingCr = false;
@@ -65,7 +65,7 @@ void ConsoleLogView::appendOutput(const QByteArray& chunk)
 
 void ConsoleLogView::appendNote(const QString& text, NoteKind kind)
 {
-	resetStreamState(); // a note is never a rewrite of the line the process left open
+	resetStreamState(); // a note never rewrites the line the process left open
 
 	QTextCharFormat format;
 	format.setForeground(kind == NoteKind::Success ? activeTheme().stAdded : activeTheme().stDeleted);
@@ -95,7 +95,7 @@ void ConsoleLogView::showPendingLine()
 	QTextCursor cursor{ document() };
 	cursor.movePosition(QTextCursor::End);
 	cursor.movePosition(QTextCursor::StartOfBlock, QTextCursor::KeepAnchor);
-	cursor.insertText(_pendingLine, {}); // over the selection: replaces the block's text, keeps the block
+	cursor.insertText(_pendingLine, {}); // replaces the selected block text, keeps the block
 
 	if (wasAtBottom)
 		scrollToBottom();
@@ -107,9 +107,9 @@ void ConsoleLogView::appendBlock(const QString& text, const QTextCharFormat& for
 
 	QTextCursor cursor{ document() };
 	cursor.movePosition(QTextCursor::End);
-	if (!document()->isEmpty()) // the block a fresh document already has is the first line, not one before it
+	if (!document()->isEmpty()) // a fresh document already has one block, which becomes the first line
 		cursor.insertBlock();
-	cursor.insertText(text, format); // newlines within open further blocks, which a multi-line note needs
+	cursor.insertText(text, format); // newlines within open further blocks, as a multi-line note needs
 
 	if (wasAtBottom)
 		scrollToBottom();

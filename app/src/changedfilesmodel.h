@@ -9,25 +9,19 @@
 #include <functional>
 #include <vector>
 
-// How a change type reads in a file list. Shared with the history window's list so a Modified row
-// looks the same whichever list it is in.
+// Shared with the history window's file list, so a row looks the same in both
 [[nodiscard]] QString changeTypeText(ChangeType type);
 [[nodiscard]] QColor changeTypeColor(ChangeType type);
 
-// The same for the two line-count columns, `added` picking which one: a file with no counts to show
-// leaves an empty cell rather than claiming a zero.
+// For the two line-count columns; a file without counts gets an empty cell rather than a zero
 [[nodiscard]] QString lineCountText(const std::optional<LineCounts>& counts, bool added);
 [[nodiscard]] QColor lineCountColor(bool added);
 
-// The marker a submodule row carries, in either list
 [[nodiscard]] QIcon submoduleIcon();
 
-// The checkable file list. Columns: checkbox + icon + state text, the lines added and removed, the path.
-// The counts take a column each so that a data role can color them; one "+12 -3" cell would need the
-// delegate to paint two colors into one string.
-// Row styling comes from the theme via item data roles (per-state colors, fonts, the folder icon,
-// the blocked-row tint); FileListDelegate paints what roles cannot express - the red recolor of the
-// deleted strikethrough and the selected-row accent stripe.
+// The checkable file list. Columns: checkbox + icon + state text, lines added, lines removed, path.
+// The counts take a column each so that a data role can color them.
+// Row styling comes from the theme via item data roles; FileListDelegate paints what roles cannot express.
 class ChangedFilesModel final : public QAbstractTableModel
 {
 	Q_OBJECT
@@ -37,10 +31,9 @@ public:
 
 	explicit ChangedFilesModel(QObject* parent = nullptr);
 
-	// Rebuilds the rows. Check state is re-derived by path: persisting rows keep their state, new rows
-	// default to checked unless untracked. A row that was not committable counts as new - its unchecked
-	// state was the block, not a choice. In merge mode all tracked rows are forced on and not
-	// user-changeable (B1).
+	// Rebuilds the rows. Check state is carried over by path; new rows follow the NewRowCheckPolicy setting.
+	// A row that was not committable counts as new: its unchecked state was the block, not a choice.
+	// In merge mode all tracked rows are forced on and not user-changeable.
 	void setEntries(const std::vector<FileEntry>& entries, bool mergeMode);
 
 	[[nodiscard]] const FileEntry& entryAt(int row) const { return _rows[size_t(row)].entry; }
@@ -49,12 +42,11 @@ public:
 
 	[[nodiscard]] int checkedCount() const;
 	[[nodiscard]] int checkableCount() const;
-	// The lines added and removed across the checked rows, or nothing when none of them has counts to add
-	// up. Rows without counts are left out rather than read as zero, exactly as their own cells are - an
-	// untracked file is in no diff and a binary one has no lines, whichever backend answered.
+	// Across the checked rows; nothing when none of them has counts. Rows without counts are left out rather
+	// than counted as zero, as their own cells are.
 	[[nodiscard]] std::optional<LineCounts> checkedLineTotals() const;
 
-	// All checked paths as a commit pathspec - includes both sides of every rename
+	// Includes both sides of every rename
 	[[nodiscard]] QStringList checkedPathspec() const;
 	[[nodiscard]] QStringList checkedUntrackedPaths() const;
 

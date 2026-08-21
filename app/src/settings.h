@@ -2,18 +2,16 @@
 
 #include <QtGlobal> // qlonglong
 
-// The settings vocabulary: every storage key, with its default beside it. The values themselves are
-// read and written through qtutils CSettings directly at the consumption sites.
+// Every storage key with its default. The values are read and written through CSettings at the use sites.
 namespace Settings {
 
-// The executables also read empty as the default: that is what a cleared Preferences field stores
+// An empty stored value (a cleared Preferences field) also means the default
 inline constexpr const char* GitExecutableKey = "GitExecutable";
 inline constexpr const char* GitExecutableDefault = "git"; // from PATH
 inline constexpr const char* HgExecutableKey = "HgExecutable";
 inline constexpr const char* HgExecutableDefault = "hg";
 
-// An empty family means no override - the system fixed font, at its own size - and a size of 0 leaves
-// the family's default size
+// An empty family means no override (the system fixed font at its own size); a size of 0 keeps the family's default size
 inline constexpr const char* MonospaceFontFamilyKey = "MonospaceFontFamily";
 inline constexpr const char* MonospaceFontPointSizeKey = "MonospaceFontPointSize";
 
@@ -34,8 +32,8 @@ inline constexpr bool CompletionAutoPopupDefault = true;
 inline constexpr const char* CompletionMinPrefixLengthKey = "CompletionMinPrefixLength";
 inline constexpr int CompletionMinPrefixLengthDefault = 3;
 
-// Stored as text rather than an enum's number, so a reorder could never silently repoint an existing
-// user's setting. Tracked is the default, and what unknown text reads as.
+// Stored as text rather than an enum value, so reordering the enum cannot repoint stored settings. Tracked
+// is the default, and what unknown text reads as.
 inline constexpr const char* NewRowCheckPolicyKey = "NewRowCheckPolicy";
 inline constexpr const char* NewRowCheckPolicyTracked = "tracked";
 inline constexpr const char* NewRowCheckPolicyAll = "all";
@@ -44,19 +42,18 @@ inline constexpr const char* NewRowCheckPolicyNone = "none";
 inline constexpr const char* DiffTabWidthKey = "DiffTabWidth";
 inline constexpr int DiffTabWidthDefault = 4;
 
-// The repositories a window was opened on, most recent first: a QSettings array whose elements carry the
-// keys below. The kinds are stored as text rather than an enum's number, so a reorder could never silently
-// repoint an existing user's entry - as the check policy above is.
+// A QSettings array, most recent first, whose elements carry the keys below. Kinds are stored as text for
+// the same reason as the check policy.
 inline constexpr const char* RecentRepositoriesKey = "RecentRepositories";
 inline constexpr const char* RecentRepositoryRootKey = "root";
 inline constexpr const char* RecentRepositoryKindKey = "kind";
-// The subrepos the last refresh of that repository found: two lists of equal length, one path per kind
+// Two parallel lists
 inline constexpr const char* RecentRepositorySubrepoPathsKey = "subrepoPaths";
 inline constexpr const char* RecentRepositorySubrepoKindsKey = "subrepoKinds";
 inline constexpr const char* VcsKindGit = "git";
 inline constexpr const char* VcsKindMercurial = "hg";
 
-// One key per window kind, shared by every repository, as the window geometry beside them is
+// One key per window kind, shared by every repository, like the window geometry
 inline constexpr const char* CommitWindowSplitterKey = "CommitWindow/splitterState";
 inline constexpr const char* HistoryWindowSplitterKey = "HistoryWindow/splitterState";
 inline constexpr const char* HistoryWindowDetailSplitterKey = "HistoryWindowDetail/splitterState";

@@ -8,7 +8,7 @@ class DiffHighlighter final : public QSyntaxHighlighter
 public:
 	explicit DiffHighlighter(QTextDocument* document);
 
-	// Off for text that only looks like a diff - a commit message body opens lines with '-' for bullets
+	// Off for text that only looks like a diff, e.g. a commit message with '-' bullets
 	void setEnabled(bool enabled);
 
 protected:

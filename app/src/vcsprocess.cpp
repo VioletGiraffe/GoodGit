@@ -9,7 +9,7 @@
 
 namespace {
 
-// Only the last state of a line a progress meter kept rewriting is text; a CRLF ends its line as an LF does
+// Keeps only the final state of lines a progress meter rewrote with CR
 QString collapseCarriageReturns(QString text)
 {
 	QStringList lines = text.split(QLatin1Char('\n'));
@@ -26,10 +26,9 @@ QString collapseCarriageReturns(QString text)
 
 QString ProcessResult::errorText() const
 {
-	// Nothing ran, so there is no stderr: the OS's refusal is the whole account of it
 	if (outcome == ProcessOutcome::LaunchFailed)
 	{
-		const bool bareName = QFileInfo{ executable }.fileName() == executable; // looked up on PATH rather than given as a path
+		const bool bareName = QFileInfo{ executable }.fileName() == executable; // looked up on PATH
 		const QString what = bareName
 			? QStringLiteral("Failed to launch %1: %2").arg(toolName, launchError)
 			: QStringLiteral("Failed to launch %1 from \"%2\": %3").arg(toolName, executable, launchError);
@@ -46,8 +45,7 @@ QString ProcessResult::errorText() const
 		if (!stderrText.isEmpty())
 			return stderrText;
 
-		// A tool that treats a refusal as a normal outcome reports it on stdout, leaving stderr empty:
-		// git answers "nothing to commit" there, and that is then the whole account of the failure.
+		// Some refusals go to stdout with stderr left empty, e.g. git's "nothing to commit"
 		const QString stdoutText = collapseCarriageReturns(QString::fromUtf8(out)).trimmed();
 		if (!stdoutText.isEmpty())
 			return stdoutText;
@@ -55,7 +53,6 @@ QString ProcessResult::errorText() const
 		return QStringLiteral("%1 exited with code %2").arg(toolName).arg(exitCode);
 	}
 
-	// Died mid-run: whatever it managed to say still stands, but on its own it would read as the whole story
 	const QString note = outcome == ProcessOutcome::Crashed
 		? QStringLiteral("%1 terminated abnormally.").arg(toolName)
 		: QStringLiteral("%1 did not finish within the time allowed and was stopped.").arg(toolName);
@@ -65,9 +62,9 @@ QString ProcessResult::errorText() const
 namespace Vcs {
 
 static constexpr int MaxConcurrentProcesses = 24;
-static constexpr int KillWaitMs = 2000; // a killed process should be gone at once; this is only so the wait is bounded
+static constexpr int KillWaitMs = 2000; // only bounds the wait; a killed process should be gone at once
 
-// The process transport: one QProcess per job, capped by the queue below
+// The process transport: one QProcess per job, capped by JobQueue
 class ProcessJob final : public Job
 {
 public:
@@ -101,7 +98,7 @@ struct JobQueue
 
 			if (job->_hasContext && !job->_context)
 			{
-				job->deleteLater(); // nothing left to deliver the result to; starting the process would only hold a slot
+				job->deleteLater(); // nobody left to deliver to
 				continue;
 			}
 
@@ -174,7 +171,7 @@ void ProcessJob::start()
 	QObject::connect(_process, &QProcess::readyReadStandardError, this, [this] { collect(_process->readAllStandardError(), _err); });
 
 	QObject::connect(_process, &QProcess::finished, this, [this](int exitCode, QProcess::ExitStatus status) {
-		collect(_process->readAllStandardOutput(), _out); // whatever exit raced past the last readyRead
+		collect(_process->readAllStandardOutput(), _out); // whatever arrived after the last readyRead
 		collect(_process->readAllStandardError(), _err);
 
 		ProcessResult result;
@@ -187,11 +184,11 @@ void ProcessJob::start()
 			result.ok = exitCode == 0;
 		}
 		else
-			result.outcome = ProcessOutcome::Crashed; // the exit code a killed process carries describes the kill, not the command
+			result.outcome = ProcessOutcome::Crashed; // a killed process's exit code describes the kill, not the command
 		finishProcess(std::move(result));
 	});
-	// Queued: start() emits this synchronously when the OS refuses the launch, and run()'s contract is a
-	// callback from the event loop - callers store the returned Job and count their outstanding ones.
+	// Queued: start() emits this synchronously when the OS refuses the launch, and run() promises a callback
+	// from the event loop - callers store the returned Job first
 	QObject::connect(_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
 		if (error != QProcess::FailedToStart)
 			return; // crashes arrive via finished()
@@ -202,9 +199,8 @@ void ProcessJob::start()
 	}, Qt::QueuedConnection);
 
 	_process->start(_tool.executable, _args);
-	// Refused synchronously: the write channel is closed, and the queued errorOccurred handler owns the result
 	if (_process->state() == QProcess::NotRunning)
-		return;
+		return; // launch refused; the queued errorOccurred handler delivers the result
 
 	if (!_stdinData.isEmpty())
 		_process->write(_stdinData);
@@ -225,14 +221,14 @@ ProcessResult runSync(const Tool& tool, const QString& workDir, QStringList args
 	result.workDir = workDir;
 	if (!process.waitForFinished(timeoutMs))
 	{
-		// The wait fails just the same when there was never a process to wait for
+		// The wait also fails when the process never started
 		if (process.error() == QProcess::FailedToStart)
 		{
 			result.outcome = ProcessOutcome::LaunchFailed;
 			result.launchError = process.errorString();
 			return result;
 		}
-		// Or ~QProcess does it instead, from a destructor and after printing a warning of its own
+		// Otherwise ~QProcess kills it, with a warning
 		process.kill();
 		process.waitForFinished(KillWaitMs);
 		result.outcome = ProcessOutcome::TimedOut;
@@ -246,7 +242,6 @@ ProcessResult runSync(const Tool& tool, const QString& workDir, QStringList args
 	else
 		result.outcome = ProcessOutcome::Crashed;
 
-	// Whatever reached the pipes before it stopped, however it stopped
 	result.out = process.readAllStandardOutput();
 	result.err = process.readAllStandardError();
 	return result;
@@ -270,15 +265,14 @@ std::shared_ptr<QTemporaryFile> openTempFile(const QByteArray& contents, const Q
 	if (!file->open())
 	{
 		QMetaObject::invokeMethod(context, [onFailure, description] {
-			// The default outcome is Exited, which is what makes errorText() report this err rather than
-			// a process failure the app never had
+			// The default outcome, Exited, makes errorText() return this err
 			onFailure(ProcessResult{ .err = QStringLiteral("Failed to create the %1 temp file").arg(description).toUtf8() });
 		}, Qt::QueuedConnection);
 		return nullptr;
 	}
 
 	file->write(contents);
-	file->close(); // release the handle for the tool; the file lives as long as this pointer does
+	file->close(); // releases the handle for the tool; the file lives as long as the QTemporaryFile does
 	return file;
 }
 
@@ -296,7 +290,7 @@ void Job::finish(ProcessResult result)
 
 void ProcessJob::finishProcess(ProcessResult result)
 {
-	// The slot frees before the callback runs, so a job it enqueues starts without waiting on this one
+	// The slot is freed before the callback runs, so a job the callback enqueues starts at once
 	--s_queue.running;
 	s_queue.pump();
 	finish(std::move(result));

@@ -19,9 +19,9 @@ QString countedUnit(int count, const char* unit)
 	return text;
 }
 
-// Age at two units of granularity, coarsening as it grows. The calendar parts go through QDate, so
-// "2 months" is two calendar months rather than sixty days. A date ahead of the clock - skew, or a
-// rebased commit keeping its author date - reads as "just now" rather than as a negative count.
+// Two units of granularity, coarsening with age.
+// Calendar arithmetic goes through QDate: "2 months" is two calendar months, not sixty days.
+// A date ahead of the clock (skew, or a rebased commit keeping its author date) reads as "just now".
 QString ageText(const QDateTime& when, const QDateTime& now)
 {
 	const qint64 minutes = when.secsTo(now) / 60;
@@ -65,14 +65,13 @@ QString subjectText(const CommitRecord& commit)
 	return commit.refs.isEmpty() ? subject : QStringLiteral("(%1) %2").arg(commit.refs, subject);
 }
 
-// What the row is labelled by: the system's own number for the commit where there is one, the abbreviated
-// sha where there is not. Never both - a numbered commit's sha is on the row's tooltip and in the pane below.
+// A numbered commit's sha is in the tooltip and the pane below
 QString commitIdText(const CommitRecord& commit)
 {
 	return commit.revision ? QString::number(*commit.revision) : shortSha(commit.sha);
 }
 
-// Cheapest fields first: || stops before scanning the message, which is far the longest of them
+// Cheapest fields first; the message is by far the longest
 bool matchesSearch(const CommitRecord& commit, const QString& text)
 {
 	return commit.sha.contains(text, Qt::CaseInsensitive)
@@ -98,8 +97,8 @@ QString shortSha(const QString& sha)
 CommitLogModel::CommitLogModel(QObject* parent) :
 	QAbstractTableModel(parent)
 {
-	// The monospace columns' font comes from the settings; layoutChanged (unlike dataChanged) also has
-	// the view recompute its cached uniform row height, and keeps selection where a reset would not
+	// The monospace font comes from the settings. layoutChanged, unlike dataChanged, makes the view recompute
+	// its cached uniform row height, and unlike a reset keeps the selection.
 	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] {
 		emit layoutAboutToBeChanged();
 		emit layoutChanged();
@@ -111,8 +110,8 @@ void CommitLogModel::setCommits(std::vector<CommitRecord> commits)
 	beginResetModel();
 	_commits = std::move(commits);
 
-	// Formatted once, against one clock reading: parsing the date per paint costs more than the whole
-	// list is worth, and rows sharing an instant is what makes their ages comparable
+	// Formatted once, against one clock reading: parsing per paint is too slow, and one instant keeps the
+	// ages comparable
 	const QDateTime now = QDateTime::currentDateTime();
 	_displayedDates.clear();
 	_displayedDates.reserve(_commits.size());
@@ -137,8 +136,7 @@ bool CommitLogModel::extendCommits(std::vector<CommitRecord> commits)
 	if (commits.size() == _commits.size())
 		return true;
 
-	// The tail's visible rows form one block at the end: every appended commit indexes after every
-	// loaded one, and _visible is in index order
+	// The appended commits' visible rows form one block at the end, since _visible is in index order
 	const size_t firstNew = _commits.size();
 	int appendedVisible = 0;
 	for (size_t i = firstNew; i < commits.size(); ++i)
@@ -154,14 +152,14 @@ bool CommitLogModel::extendCommits(std::vector<CommitRecord> commits)
 	const QDateTime now = QDateTime::currentDateTime();
 	for (size_t i = firstNew; i < commits.size(); ++i)
 		_displayedDates.push_back(displayedDate(commits[i].date, now));
-	_commits = std::move(commits); // wholesale: the prefix is the same commits, at worst with fresher refs
+	_commits = std::move(commits); // the prefix is the same commits, at worst with fresher refs
 	_graph = buildCommitGraph(_commits);
 	rebuildVisible();
 
 	if (appendedVisible > 0)
 		endInsertRows();
-	// Deeper history can extend lines through rows already shown - a lane dangling at the old bottom
-	// now continues - and the lane count can grow, so the whole column repaints
+	// Deeper history can extend lanes through rows already shown and grow the lane count, so the whole
+	// column repaints
 	if (!_visible.empty())
 		emit dataChanged(index(0, GraphColumn), index(int(_visible.size()) - 1, GraphColumn));
 	return true;
@@ -267,15 +265,14 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 		switch (index.column())
 		{
 		case CommitColumn:  return commitIdText(commit);
-		// The mark rides the subject because the commit column already carries the unpushed one, and a
-		// commit can be both
+		// On the subject, since the commit column already carries the unpushed mark and a commit can be both
 		case SubjectColumn: return addsOrRemoves ? QStringLiteral("± ") + subjectText(commit) : subjectText(commit);
 		case AuthorColumn:  return commit.author;
 		case DateColumn:    return _displayedDates[size_t(commitIndexAt(index.row()))];
 		}
 		return {};
 	case Qt::TextAlignmentRole:
-		// A number reads by magnitude, so it lines up on the right; a sha reads by its leading characters
+		// Numbers align right, shas left
 		if (index.column() == CommitColumn && commit.revision)
 			return int(Qt::AlignRight | Qt::AlignVCenter);
 		return {};
@@ -297,7 +294,7 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 		return font;
 	}
 	case Qt::ForegroundRole:
-		// Unpushed commits wear the same accent the commit window's ahead count does
+		// The same accent as the commit window's ahead count
 		if (index.column() == CommitColumn && unpushed)
 			return QBrush{ activeTheme().palette.accentText };
 		return index.column() == SubjectColumn ? QVariant{} : QVariant{ QBrush{ activeTheme().palette.textDim } };
@@ -316,7 +313,7 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 	case GraphRole:
 		return QVariant::fromValue(graphRowAt(index.row()));
 	case GraphLaneCountRole:
-		// The unfiltered width in either case, so typing in the search box does not resize the column
+		// The unfiltered width, so typing in the search box does not resize the column
 		return _graph.laneCount;
 	case UnpushedRole:
 		return unpushed;
@@ -359,7 +356,7 @@ void CommitFilesModel::setEntries(std::vector<CommitFileChange> entries)
 void CommitFilesModel::setLineCounts(std::map<QString, LineCounts> counts)
 {
 	_lineCounts = std::move(counts);
-	if (!_entries.empty()) // repaint rather than reset: a reset here would drop the file the user picked
+	if (!_entries.empty()) // repaint rather than reset, which would drop the picked file
 		emit dataChanged(index(0, AddedColumn), index(int(_entries.size()) - 1, RemovedColumn), { Qt::DisplayRole });
 }
 
@@ -432,7 +429,7 @@ QVariant CommitFilesModel::data(const QModelIndex& index, int role) const
 			font.setStrikeOut(entry.type == ChangeType::Deleted);
 			return font;
 		}
-		return monospaceFont(); // the counts, where digits of one width line up down the column
+		return monospaceFont(); // the counts line up down the column
 	case Qt::ToolTipRole:
 		return pathText(entry);
 	default:

@@ -2,8 +2,8 @@
 
 #include <QStyledItemDelegate>
 
-// Paints the commit graph column: the lines crossing a row and the row's own node, read from the model's
-// GraphRole. Its width follows the lane count the same model reports, so it fits the whole list at once.
+// Paints the commit graph column from the model's GraphRole. The width follows the model's lane count, so
+// it fits the whole list at once.
 class CommitGraphDelegate final : public QStyledItemDelegate
 {
 public:

@@ -5,9 +5,8 @@
 class QCompleter;
 class QStringListModel;
 
-// Commit message editor: monospace, subject-length guide line at 50 columns (the width the left column
-// of the window was sized for), and word completion over a pool the window supplies.
-// Auto-popup while typing, Ctrl+Space forces the popup, Tab accepts - Enter always stays a newline.
+// Commit message editor: monospace, a subject-length guide line, and word completion over a pool the window
+// supplies. Auto-popup while typing, Ctrl+Space forces the popup, Tab accepts; Enter always stays a newline.
 class MessageEdit final : public QPlainTextEdit
 {
 public:

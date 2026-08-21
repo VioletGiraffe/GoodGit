@@ -6,13 +6,10 @@
 #include <map>
 #include <memory>
 
-// The Mercurial backend: every Repository operation as one or more `hg` subprocesses, and the parsing of
-// what they print. No reimplemented hg logic.
-//
-// Two shapes differ from the git backend rather than merely being spelled differently. There is no index,
-// so "added but not committed" is hg's own `A` state and nothing is staged on the way to a commit; and
-// there are no remote-tracking refs, so what the upstream holds is only ever known from a network query -
-// see fetch() and incomingCommits().
+// The Mercurial backend: every Repository operation as `hg` subprocesses plus parsing. No reimplemented hg logic.
+// Two structural differences from git:
+//   No index: "added but not committed" is hg's own `A` state, and nothing is staged on the way to a commit.
+//   No remote-tracking refs: what the upstream holds is only known from a network query (fetch(), incomingCommits()).
 class HgRepository final : public Repository
 {
 	Q_OBJECT
@@ -27,9 +24,8 @@ public:
 
 	void undoLastCommit(Vcs::Answer<void> onDone) override;
 
-	// `hg push -r .` sends the current changeset and its ancestors and recurses into subrepositories itself,
-	// so a plan here is this repository and nothing else. Mercurial also has no per-branch upstream to set:
-	// the window offers that only after a failure message that is git's, so `setUpstream` never arrives true.
+	// `hg push -r .` recurses into subrepositories itself, so the plan is this repository alone.
+	// `setUpstream` never arrives true: the window offers it only after a git-specific failure message.
 	void planPush(Vcs::Answer<std::vector<PushStep>> onDone) override;
 	Vcs::Job* runPushStep(const PushStep& step, bool setUpstream, Vcs::Callback onDone) override;
 	[[nodiscard]] QString pushCommandLabel(const PushStep& step, bool setUpstream) const override;
@@ -41,8 +37,8 @@ public:
 	void discardChanges(const QStringList& pathspec, Vcs::Answer<void> onDone) override;
 
 	void checkoutBranch(const QString& branch, Vcs::Answer<void> onDone) override;
-	// Mercurial has no remote-tracking branches to create a local one from. Reached only from the
-	// reattachment flow, which a backend without a detached state never enters.
+	// Always fails: Mercurial has no remote-tracking branches. Only reached from the reattachment flow, which
+	// a backend without a detached state never enters.
 	void createTrackingBranch(const QString& localName, const QString& remoteBranch, Vcs::Answer<void> onDone) override;
 	void localBranchExists(const QString& name, const QObject* context, std::function<void(bool)> onDone) override;
 
@@ -62,8 +58,8 @@ public:
 
 	[[nodiscard]] QString ignoreFileName() const override;
 	[[nodiscard]] std::vector<IgnorePattern> ignorePatternsFor(const QString& repoRelativePath) const override;
-	// hg reads the file in sections, each introduced by a `syntax:` line and regular expressions until the
-	// first of them, so a pattern belongs in the section its scope is written in - not merely at the end.
+	// .hgignore is read in sections, each introduced by a `syntax:` line (regular expressions before the
+	// first), so a pattern goes into the section matching its scope rather than at the end
 	[[nodiscard]] QByteArray ignoreFileWithPatternAdded(QByteArray content, const IgnorePattern& pattern) const override;
 
 	void launchExternalDiffTool(const QString& repoRelativePath) const override;
@@ -78,25 +74,24 @@ private:
 	[[nodiscard]] std::vector<FileEntry> filesFromRun(const RefreshRun& run) const;
 	[[nodiscard]] RepoState stateFromRun(const RefreshRun& run) const;
 
-	// Every refresh query, run by whichever tool owns the directory it is pointed at: a subrepo of an hg
-	// repository may be a git one, and its arguments are then git's.
+	// Runs a refresh query with whichever tool owns the directory: a subrepo of an hg repository may be a
+	// git one, and the arguments are then git's
 	[[nodiscard]] QueryRound::Launcher refreshQueries();
 
 	// Whether .hgsub names this subrepo's source as a git repository
 	[[nodiscard]] bool isGitSubrepo(const QString& subrepoPath) const;
-	// A pathspec as hg takes one: a temp file of NUL-separated paths, named as `listfile0:<name>`. Null if
-	// the file could not be created, `onFailure` already on its way with the reason.
+	// A temp file of NUL-separated paths, to pass as `listfile0:<name>`. Null if the file could not be
+	// created; `onFailure` is then already queued with the reason.
 	[[nodiscard]] std::shared_ptr<QTemporaryFile> openPathspecFile(const QStringList& paths, const Vcs::Callback& onFailure);
 
 private:
-	// The parent's own record of its subrepos, re-read from disk at the start of every refresh: the recorded
-	// node per path, and where each one comes from - which is what names the kind a subrepo window opens on.
+	// .hgsubstate and .hgsub, re-read at the start of every refresh: the recorded node per subrepo path, and
+	// each one's source, which names the kind a subrepo window opens on
 	std::map<QString, QString> _subrepoNodes;
 	std::map<QString, QString> _subrepoSources;
 
-	// What the last incoming query found. Mercurial keeps no local ref for a refresh to read this from, so
-	// it is as current as the last Peek - which is what git's behind count is too, being as current as the
-	// last fetch.
+	// From the last incoming query. Mercurial keeps no local ref to read this from, so it is as current as
+	// the last Peek - as git's is as current as the last fetch.
 	int _behind = 0;
 
 	std::shared_ptr<RefreshRun> _run; // shared with the async callbacks; reset invalidates stragglers

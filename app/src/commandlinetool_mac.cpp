@@ -11,11 +11,11 @@
 
 namespace {
 
-// On the default PATH via /etc/paths, and unlike /usr/bin not protected by SIP, so root can write here.
+// On the default PATH via /etc/paths, and unlike /usr/bin not protected by SIP, so root can write here
 constexpr const char* LinkPath = "/usr/local/bin/gg";
 constexpr const char* LinkDirectory = "/usr/local/bin";
 
-// Wraps `text` in single quotes for /bin/sh, escaping any single quote it contains.
+// Single-quotes `text` for /bin/sh
 QString shellQuoted(const QString& text)
 {
 	QString quoted = text;
@@ -23,8 +23,8 @@ QString shellQuoted(const QString& text)
 	return QLatin1Char('\'') + quoted + QLatin1Char('\'');
 }
 
-// Escapes `text` for an AppleScript double-quoted string literal. Backslashes first, or the ones this
-// adds for the quotes would be escaped in turn.
+// Double-quotes `text` for AppleScript. Backslashes first, or the ones added for the quotes would be
+// escaped in turn.
 QString appleScriptQuoted(const QString& text)
 {
 	QString quoted = text;
@@ -35,8 +35,8 @@ QString appleScriptQuoted(const QString& text)
 
 enum class Elevated { Ran, Cancelled };
 
-// Runs one /bin/sh command as root. The dialog macOS raises is the only place credentials are entered:
-// nothing here sees a password. Blocks until the dialog is dismissed.
+// Runs one /bin/sh command as root. Credentials are entered only in the dialog macOS raises; nothing here
+// sees a password. Blocks until the dialog is dismissed.
 std::expected<Elevated, QString> runAsAdministrator(const QString& shellCommand)
 {
 	const QString script = QStringLiteral("do shell script %1 with administrator privileges")
@@ -51,7 +51,7 @@ std::expected<Elevated, QString> runAsAdministrator(const QString& shellCommand)
 		return Elevated::Ran;
 
 	const QString error = QString::fromLocal8Bit(osascript.readAllStandardError()).trimmed();
-	// -128 is userCanceledErr: the dialog was dismissed, which is a decision and not a failure.
+	// -128 is userCanceledErr
 	if (error.contains(QLatin1String("-128")))
 		return Elevated::Cancelled;
 
@@ -71,11 +71,11 @@ std::expected<QString, QString> installCommandLineTool()
 		if (link.symLinkTarget() == target)
 			return QStringLiteral("%1 already points at this copy of GoodGit.").arg(linkPath);
 
-		if (link.exists()) // exists() follows the link: something is on the other end, so it is not ours to take
+		if (link.exists()) // exists() follows the link: it points at something that is not ours to take
 			return std::unexpected(QStringLiteral("%1 already points at %2.\n\nRemove it first if you want it to launch GoodGit.")
 				.arg(linkPath, link.symLinkTarget()));
 
-		// Dangling, so replacing it takes nothing away - and symlink() below will not overwrite.
+		// Dangling, so replacing it takes nothing away; symlink() below will not overwrite
 		::unlink(LinkPath);
 	}
 	else if (link.exists())
@@ -86,12 +86,12 @@ std::expected<QString, QString> installCommandLineTool()
 
 	if (::symlink(QFile::encodeName(target).constData(), LinkPath) != 0)
 	{
-		// The directory is not writable, or does not exist at all on a Mac that never had one; both are
-		// what administrator credentials are for. Anything else is not something more privilege would fix.
+		// The directory is not writable, or does not exist on a Mac that never had one: both are what
+		// administrator credentials fix. Anything else is not.
 		if (errno != EACCES && errno != EPERM && errno != ENOENT)
 			return std::unexpected(QStringLiteral("Could not create %1: %2").arg(linkPath, QString::fromLocal8Bit(std::strerror(errno))));
 
-		// -f replaces a dangling link that the unprivileged unlink() above was not allowed to remove.
+		// -f replaces a dangling link the unprivileged unlink() above was not allowed to remove
 		const QString command = QStringLiteral("mkdir -p %1 && ln -sfn %2 %3")
 			.arg(shellQuoted(QString::fromLatin1(LinkDirectory)), shellQuoted(target), shellQuoted(linkPath));
 

@@ -10,8 +10,8 @@ class QFontComboBox;
 class QLineEdit;
 class QSpinBox;
 
-// The Preferences pages. Each loads the current values in its constructor and stores them in
-// acceptSettings(); CSettingsNotifier is what re-applies them to open windows.
+// Each page loads the current values in its constructor and stores them in acceptSettings();
+// CSettingsNotifier re-applies them to open windows.
 
 class MainSettingsPage final : public CSettingsPage
 {
@@ -44,7 +44,7 @@ private:
 	QFontComboBox* _fontFamily = nullptr;
 	QSpinBox* _fontSize = nullptr;
 	QSpinBox* _diffTabWidth = nullptr;
-	// The scheme and theme picks apply as they are made, so cancelling has to put back what was in force on entry
+	// The scheme and theme picks apply immediately, so cancelling has to restore these
 	Qt::ColorScheme _schemeOnEntry = Qt::ColorScheme::Unknown;
 	QString _lightThemeOnEntry;
 	QString _darkThemeOnEntry;

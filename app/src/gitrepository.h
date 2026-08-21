@@ -4,8 +4,8 @@
 
 #include <memory>
 
-// The git backend: every Repository operation as one or more `git` subprocesses, and the parsing of
-// what they print. No libgit2, no reimplemented git logic.
+// The git backend: every Repository operation as one or more `git` subprocesses plus parsing of their
+// output. No libgit2, no reimplemented git logic.
 class GitRepository final : public Repository
 {
 	Q_OBJECT
@@ -20,12 +20,11 @@ public:
 
 	void undoLastCommit(Vcs::Answer<void> onDone) override;
 
-	// Every step carries --progress, because into a pipe git prints nothing at all until it finishes; the
-	// meter arrives as carriage returns rewriting a single line. Every step also states its recursion
-	// explicitly, machine config varying: this repository's own push recurses on demand as a backstop,
-	// while a planned submodule push must not recurse at all - the plan has already ordered every nested
-	// push ahead of it, and git's own recursion cannot push a submodule whose branch differs in name from
-	// the superproject's.
+	// Every step passes --progress: into a pipe git prints nothing until it finishes.
+	// Every step states its recursion explicitly: submodule.recurse varies by machine.
+	// The repository's own step recurses on demand, as a backstop.
+	// A submodule step never recurses: the plan already ordered its nested pushes, and git's own recursion
+	// cannot push a submodule whose branch name differs from the superproject's.
 	void planPush(Vcs::Answer<std::vector<PushStep>> onDone) override;
 	Vcs::Job* runPushStep(const PushStep& step, bool setUpstream, Vcs::Callback onDone) override;
 	[[nodiscard]] QString pushCommandLabel(const PushStep& step, bool setUpstream) const override;
@@ -65,19 +64,18 @@ protected:
 
 private:
 	struct RefreshRun;
-	// The refresh's second round: the queries the base ones' answers call for. Runs once they have all answered.
+	// The second round of the refresh: queries that depend on the first round's answers
 	void startDependentQueries(const std::shared_ptr<RefreshRun>& run);
 	void finishRefresh();
-	// A completed run's answers as the state and the rows they describe. Only ever called for a run that
-	// answered in full.
+	// Only called for a run that answered in full
 	[[nodiscard]] std::vector<FileEntry> filesFromRun(const RefreshRun& run) const;
 	[[nodiscard]] RepoState stateFromRun(const RefreshRun& run) const;
-	// What every diff in this repository is taken against: HEAD, or the empty tree while there is no HEAD
+	// HEAD, or the empty tree while there is no HEAD
 	[[nodiscard]] QString diffBase() const;
 
 private:
 	QString _gitDir; // absolute; resolved on first refresh. In a submodule .git is a file pointing here.
-	QString _emptyTreeSha; // resolved on first refresh; empty only if that one query failed
+	QString _emptyTreeSha; // resolved on first refresh; empty only if that query failed
 
 	std::shared_ptr<RefreshRun> _run; // shared with the async callbacks; reset invalidates stragglers
 };

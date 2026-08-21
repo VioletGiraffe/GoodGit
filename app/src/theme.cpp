@@ -31,11 +31,11 @@ void selectActiveTheme()
 	const std::vector<Theme>& themes = allThemes();
 	const auto matchesStored = [&](const Theme& t) { return t.dark == dark && t.name == storedName; };
 	auto it = std::find_if(themes.begin(), themes.end(), matchesStored);
-	if (it == themes.end()) // the stored name can outlive its theme in the settings
+	if (it == themes.end()) // the stored name can outlive its theme
 		it = std::find_if(themes.begin(), themes.end(), [dark](const Theme& t) { return t.dark == dark; });
-	assert_r(it != themes.end()); // no theme of this polarity at all - a defective theme table
+	assert_r(it != themes.end()); // no theme of this polarity at all
 
-	s_active = *it; // a copy, so nothing dangles if the table is ever rebuilt
+	s_active = *it;
 	s_active.palette = resolvedPalette(s_active.palette);
 }
 
@@ -59,7 +59,7 @@ QFont monospaceFont()
 {
 	const CSettings settings;
 	const QString family = settings.value(Settings::MonospaceFontFamilyKey).toString();
-	if (family.isEmpty()) // no override stored
+	if (family.isEmpty())
 		return QFontDatabase::systemFont(QFontDatabase::FixedFont);
 
 	QFont font{ family };
@@ -70,15 +70,15 @@ QFont monospaceFont()
 
 QIcon submoduleIcon()
 {
-	// One cached instance suffices: the engine resolves the tint per render, so it follows theme switches
+	// One cached instance: the engine resolves the tint per render, so it follows theme switches
 	static const QIcon icon = tintedSvgIcon(QStringLiteral(":/theme/folder.svg"), [] { return activeTheme().stSubmodule; });
 	return icon;
 }
 
 void applyTheme(QApplication& app)
 {
-	// Serves the tinted QSS glyphs; must exist before any stylesheet references themeicon:/ URLs
-	// and for the application's whole lifetime.
+	// Serves the tinted QSS glyphs; must exist before any stylesheet references themeicon:/ URLs, and for the
+	// application's whole lifetime
 	static const CThemeIconHandler iconHandler{ QStringLiteral(":/theme") };
 
 	QObject::connect(&CThemeController::instance(), &CThemeController::themeChanged, &app, &applyActiveTheme);
@@ -93,8 +93,8 @@ const Theme& activeTheme()
 
 const std::vector<Theme>& allThemes()
 {
-	// The order matters: the first theme of each polarity is the default - what a fresh install
-	// resolves to and what the settings combo shows for an unset selection.
+	// The first theme of each polarity is the default: what a fresh install resolves to and what the settings
+	// combo shows for an unset selection
 	static const Theme classicLight{
 		.name = "Classic",
 		.dark = false,
@@ -141,8 +141,7 @@ const std::vector<Theme>& allThemes()
 		.graphLanes = { c(0x6cb0f0), c(0x62c98a), c(0xdda45c), c(0xb394ef), c(0x5ec8c8), c(0xef8c82) },
 	};
 
-	// Warm cream chrome, amber accent. The accent fails as text on light surfaces, hence the
-	// authored accentText.
+	// Warm cream, amber accent. The accent fails as text on light surfaces, hence the explicit accentText.
 	static const Theme honey{
 		.name = "Honey",
 		.dark = false,
@@ -166,8 +165,8 @@ const std::vector<Theme>& allThemes()
 		.graphLanes = { c(0x1668c4), c(0x0d9c3c), c(0xa15c00), c(0x7345c0), c(0x0c7d84), c(0xdd2418) },
 	};
 
-	// Near-black violet chrome, golden yellow accent. The diff tints sit a step above the surface on
-	// purpose: the brightness lives in the diff text, not the bands.
+	// Near-black violet, golden yellow accent. The diff tints sit only a step above the surface: the
+	// brightness is in the diff text, not the bands.
 	static const Theme blackoutViolet{
 		.name = "Blackout Violet",
 		.dark = true,
@@ -191,7 +190,7 @@ const std::vector<Theme>& allThemes()
 		.graphLanes = { c(0x6cb0f0), c(0x38e07c), c(0xdda45c), c(0xb394ef), c(0x45c9c0), c(0xff6a5c) },
 	};
 
-	// Warm-gray paper, taxicab-yellow accent - the same fill/text split as Honey, one step louder.
+	// Warm-gray paper, taxicab-yellow accent; the same fill/text split as Honey, one step louder
 	static const Theme taxicabLight{
 		.name = "Taxicab",
 		.dark = false,
@@ -215,7 +214,7 @@ const std::vector<Theme>& allThemes()
 		.graphLanes = { c(0x1668c4), c(0x0d9c3c), c(0xa15c00), c(0x7345c0), c(0x0c7d84), c(0xdd2418) },
 	};
 
-	// Neutral ink chrome, bright taxicab yellow.
+	// Neutral ink, bright taxicab yellow
 	static const Theme taxicabDark{
 		.name = "Taxicab",
 		.dark = true,
@@ -239,7 +238,7 @@ const std::vector<Theme>& allThemes()
 		.graphLanes = { c(0x6cb0f0), c(0x38e07c), c(0xdda45c), c(0xb394ef), c(0x45c9c0), c(0xff6a5c) },
 	};
 
-	// Navy chrome, hot orange accent. Dark only: the light rendition reads as stock Ubuntu.
+	// Navy, hot orange accent. Dark only: the light rendition reads as stock Ubuntu.
 	static const Theme forge{
 		.name = "Forge",
 		.dark = true,
@@ -263,7 +262,7 @@ const std::vector<Theme>& allThemes()
 		.graphLanes = { c(0x6cb0f0), c(0x38e07c), c(0xdda45c), c(0xb394ef), c(0x45c9c0), c(0xff6a5c) },
 	};
 
-	// Teal patina on warm sand / dark bronze. The teal accent frees amber for untracked here.
+	// Teal patina on warm sand / dark bronze. The teal accent frees amber for untracked.
 	static const Theme verdigrisLight{
 		.name = "Verdigris",
 		.dark = false,
@@ -310,8 +309,7 @@ const std::vector<Theme>& allThemes()
 		.graphLanes = { c(0x6cb0f0), c(0x38e07c), c(0xdda45c), c(0xb394ef), c(0x45c9c0), c(0xff6a5c) },
 	};
 
-	// Chartreuse signal in green woods. In light mode the accent splits like Taxicab's:
-	// bright fills, olive accentText.
+	// Chartreuse on green. In light mode the accent splits like Taxicab's: bright fills, olive accentText.
 	static const Theme fireflyLight{
 		.name = "Firefly",
 		.dark = false,
@@ -358,7 +356,7 @@ const std::vector<Theme>& allThemes()
 		.graphLanes = { c(0x6cb0f0), c(0x38e07c), c(0xdda45c), c(0xb394ef), c(0x45c9c0), c(0xff6a5c) },
 	};
 
-	// Sunset orange on plum. Dark only, like Forge.
+	// Sunset orange on plum. Dark only.
 	static const Theme afterglow{
 		.name = "Afterglow",
 		.dark = true,

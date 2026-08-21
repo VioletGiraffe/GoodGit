@@ -9,7 +9,7 @@ namespace {
 Vcs::Tool hgTool()
 {
 	auto environment = QProcessEnvironment::systemEnvironment();
-	// Plain output: no localisation, no user aliases, no defaults that would rewrite what the app asked for
+	// No localisation, user aliases or defaults rewriting the command
 	environment.insert(QStringLiteral("HGPLAIN"), QStringLiteral("1"));
 	QString executable = CSettings{}.value(Settings::HgExecutableKey).toString();
 	if (executable.isEmpty())
@@ -23,8 +23,8 @@ namespace Hg {
 
 QStringList invariantArgs()
 {
-	// diff.nobinary: a binary file's diff is the one-line note git prints by default, rather than the base85
-	// patch hg's --git mode would otherwise carry into a diff pane and into every line count
+	// diff.nobinary: a binary file's diff is a one-line note (as with git) rather than the base85 patch --git
+	// mode would otherwise put into the diff pane and every line count
 	return { QStringLiteral("--config"), QStringLiteral("ui.interactive=False"),
 		QStringLiteral("--config"), QStringLiteral("diff.nobinary=True") };
 }

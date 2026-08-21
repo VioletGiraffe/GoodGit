@@ -10,10 +10,10 @@ RESTORE_COMPILER_WARNINGS
 
 #include <utility>
 
-// The application-wide stylesheet, built from a Theme. @token@ placeholders are named after the
-// Theme / CBasePalette fields they substitute. Detail header of theme.cpp, not part of the theme API.
+// The application-wide stylesheet, built from a Theme. @token@ placeholders are named after the Theme /
+// CBasePalette fields they substitute. Detail header of theme.cpp, not part of the theme API.
 
-// Hover / pressed shades are derived rather than stored, so they follow any base color swap
+// Derived rather than stored, so they follow any base color change
 inline QColor hoverShade(const QColor& base, bool dark) { return dark ? base.lighter(115) : base.darker(104); }
 inline QColor pressedShade(const QColor& base, bool dark) { return dark ? base.lighter(130) : base.darker(110); }
 
@@ -101,7 +101,7 @@ QScrollBar::handle:horizontal { min-width: 30px; margin: 3px 2px; }
 QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
 QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
 )qss");
-	qss += t.qssFragment; // last, so a theme's rules win equal-specificity ties; tokens work here too
+	qss += t.qssFragment; // last, so a theme's rules win equal-specificity ties; tokens are substituted here too
 
 	const std::pair<QString, QString> tokens[] = {
 		{ QStringLiteral("@windowBg@"), t.palette.windowBg.name() },
@@ -131,7 +131,7 @@ QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
 		{ QStringLiteral("@checkboxRadius@"), QString::number(t.metrics.checkboxRadius) },
 		{ QStringLiteral("@scrollBarThickness@"), QString::number(t.metrics.scrollBarThickness) },
 		{ QStringLiteral("@scrollBarHandleRadius@"), QString::number(t.metrics.scrollBarHandleRadius) },
-		// Monochrome sources tinted per theme and served by CThemeIconHandler - QSS url() only takes a path
+		// Monochrome SVGs tinted per theme and served by CThemeIconHandler, since QSS url() only takes a path
 		{ QStringLiteral("@checkIcon@"), themeIconUrl(QStringLiteral("check"), t.palette.accentFg) },
 		{ QStringLiteral("@dashIcon@"), themeIconUrl(QStringLiteral("dash"), t.palette.accentFg) },
 	};

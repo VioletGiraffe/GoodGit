@@ -6,13 +6,11 @@
 #include <optional>
 #include <stdint.h>
 
-// What the windows and the models speak, and what every backend answers in. Nothing here names a
-// particular version control system, and nothing here is a parse of any one command's output.
+// The VCS-neutral types the windows and models work with and every backend answers in
 
 enum class ChangeType : uint8_t { Modified, Added, Untracked, Deleted, Renamed, TypeChanged, Conflicted };
 
-// What ignoring a path would mean. Each backend renders one of these into its own syntax, and knows
-// where in its own ignore file that syntax belongs.
+// Each backend renders a scope into its own ignore syntax and knows where in its ignore file it belongs
 enum class IgnoreScope : uint8_t
 {
 	ExactPath, // this one file, at this one place in the tree
@@ -21,7 +19,7 @@ enum class IgnoreScope : uint8_t
 	Directory, // this directory and everything under it
 };
 
-// One offered way to exclude a path: what the menu shows and what gets written, and what it means
+// One offered way to exclude a path: what the menu shows and what gets written
 struct IgnorePattern
 {
 	QString text;
@@ -41,16 +39,15 @@ struct CommitFileChange
 	QString path;    // the new path for renames
 	QString oldPath; // renames only
 	bool isSubmodule = false; // a submodule pointer rather than file content, so its diff is not the path's own
-	// Submodule rows only: the commit the pointer names, which is where its own history opens. The one it
-	// moved to, or the one it held before where the change removed the submodule.
+	// Submodule rows only: the commit the pointer moved to (or held before, if the change removed the
+	// submodule). Where the submodule's own history opens.
 	QString submoduleSha;
 };
 
 struct CommitRecord
 {
 	QString sha;
-	// What the system's own commands take for this commit, where it has such a thing: Mercurial's revision
-	// number, local to the clone and shifted by anything that rewrites history. Git has none and leaves it absent.
+	// Mercurial's revision number: local to the clone and shifted by history rewrites. Git has none.
 	std::optional<int> revision;
 	QStringList parents; // more than one is a merge
 	QString author;
@@ -68,11 +65,9 @@ struct RepoState
 	QString branch;      // empty when detached
 	QString headSha;     // full sha of HEAD; empty when unborn
 	QString headSubject; // subject line of HEAD; empty when unborn
-	// HEAD's own shape, for the one action that cares what undoing it would leave behind: none means a root
-	// commit with nothing to move back to, more than one means a merge.
-	int headParentCount = 0;
+	int headParentCount = 0; // 0 for a root commit, more than one for a merge; read by lastCommitUndoable()
 	QString upstream;    // empty if none configured
-	int ahead = 0; // commits one push would send, so what the push button offers to do
+	int ahead = 0; // commits one push would send
 	int behind = 0;
 	bool detached = false;
 	bool unborn = false;
@@ -86,22 +81,23 @@ struct RepoState
 	QStringList unpushedSubjects;
 
 	// Every subrepo this repository declares, repo-relative and in path order - not only the ones with a
-	// row of their own, which is all the file list carries. What kind each one is stays the backend's to
-	// answer, through submoduleLocation().
+	// file list row. Their kind is the backend's to answer, through submoduleLocation().
 	QStringList submodules;
 
-	// Why the last refresh could not establish this state - empty when it could. Everything above is then
-	// the last refresh that did, held rather than half-replaced, and nothing may be acted on.
+	// Why the last refresh could not establish this state; empty when it could. When set, everything above
+	// is from the last successful refresh and nothing may be acted on.
 	QString readFailure;
 
 	[[nodiscard]] bool known() const { return readFailure.isEmpty(); }
 	[[nodiscard]] bool operationInProgress() const { return op != RepoOp::None; }
 
-	// Whether undoing the last commit is offered at all. Every refusal is here rather than in a backend:
-	// a commit the upstream already has would be rewritten out from under it; a merge would be left half
-	// taken apart, and a root commit has nothing to move back to; an operation in progress owns HEAD until
-	// it finishes; and a detached HEAD has no upstream to tell pushed from unpushed. No upstream at all
-	// means nothing can have been pushed.
+	// Every refusal is decided here rather than in a backend:
+	//   pushed - the upstream would have the commit rewritten out from under it
+	//   merge - would be left half undone
+	//   root commit - nothing to move back to
+	//   operation in progress - owns HEAD
+	//   detached - no upstream to tell pushed from unpushed
+	// No upstream at all means nothing can have been pushed.
 	[[nodiscard]] bool lastCommitUndoable() const
 	{
 		return !unborn && !detached && !operationInProgress() && headParentCount == 1
@@ -109,14 +105,14 @@ struct RepoState
 	}
 };
 
-// What a worktree holds beyond the commit it is on, as a status of that worktree reports it
+// What a status command reports a worktree holds beyond the commit it is on
 struct WorktreeDirtiness
 {
 	bool dirtyTracked = false; // any entry that is not purely untracked
 	bool untracked = false;
 };
 
-// What a submodule's own worktree holds, as far as the parent was able to determine
+// What a submodule's own worktree holds, as far as the parent could determine
 enum class SubmoduleContent : uint8_t
 {
 	Clean,        // also the never-initialized case: an empty directory has nothing inside to lose
@@ -125,8 +121,6 @@ enum class SubmoduleContent : uint8_t
 	Unknown,      // the status query inside failed; it may be dirty, so it counts as dirty
 };
 
-// A status that could not be run answers nothing about the worktree it was pointed at, and the parent may
-// not act on the pointer without that answer - so it is the dirty case, not the clean one.
 [[nodiscard]] inline SubmoduleContent submoduleContentOf(bool statusRead, WorktreeDirtiness dirtiness)
 {
 	if (!statusRead)
@@ -136,24 +130,22 @@ enum class SubmoduleContent : uint8_t
 	return dirtiness.untracked ? SubmoduleContent::Untracked : SubmoduleContent::Clean;
 }
 
-// One row of the file list: the working tree's delta from the last commit, one path at a time
+// One row of the file list: one path's delta from the last commit
 struct FileEntry
 {
 	QString path;    // repo-relative, forward slashes; the new path for renames
 	QString oldPath; // renames only
 	ChangeType type = ChangeType::Modified;
 
-	// Absent wherever the counts are not available for the row: an untracked file is not in the tracked
-	// diff, a binary one has no line count, and a submodule's one-line pointer change is not a count of
-	// anything. A backend that cannot count lines at all leaves every row without them.
+	// Absent for untracked files, binary files and submodule pointer changes, and for every row when the
+	// backend cannot count lines at all
 	std::optional<LineCounts> lineCounts;
 
 	bool isSubmodule = false;
 	bool pointerMoved = false; // the recorded commit differs from HEAD's
 	SubmoduleContent content = SubmoduleContent::Clean;
 
-	// Committing the pointer and discarding it both walk over whatever is inside, so the same content
-	// stops either one
+	// Committing the pointer and discarding it both walk over whatever is inside, so the same content blocks both
 	[[nodiscard]] bool contentBlocksPointer() const
 	{
 		return content == SubmoduleContent::DirtyTracked || content == SubmoduleContent::Unknown;

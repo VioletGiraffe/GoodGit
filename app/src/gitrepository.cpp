@@ -17,17 +17,16 @@
 
 namespace {
 
-constexpr int MaxUnpushedLogEntries = 30; // tooltip fodder; state.ahead carries the true count
+constexpr int MaxUnpushedLogEntries = 30; // for the tooltip; state.ahead carries the true count
 
-// The commit message travels in a temp file - it is the one argument with no bound on its length
+// In a temp file: the message is the one argument with no bound on its length
 std::shared_ptr<QTemporaryFile> openMessageFile(const QString& message, QObject* context, const Vcs::Callback& onDone)
 {
 	return Vcs::openTempFile(message.toUtf8(), QStringLiteral("commit message"), context, onDone);
 }
 
-// A commit that failed after its untracked paths were added leaves them staged, and the rows would then
-// read Added rather than Untracked. The reported result stays the commit's: the reset's says nothing about
-// why the commit was refused.
+// A failed commit would leave the untracked paths staged, and their rows would read Added instead of
+// Untracked. The commit's result is what gets reported; the reset's says nothing about why the commit failed.
 void rollBackAddThenReport(const QString& workDir, const QObject* context, const QStringList& untrackedPaths,
 	const ProcessResult& commitResult, const Vcs::Callback& onDone)
 {
@@ -42,10 +41,10 @@ void rollBackAddThenReport(const QString& workDir, const QObject* context, const
 		[onDone, commitResult](const ProcessResult&) { onDone(commitResult); }, Vcs::nulJoined(untrackedPaths));
 }
 
-// What a commit of `pathspec` has to clear from the index first: `git commit` takes the whole of it.
-// `savedModes` are `update-index --index-info` records for the cleared entries the working tree could not
-// put back - with core.filemode off nothing but the index records a mode. An entry only added or deleted
-// there is not saved: its content is on disk either way.
+// What a commit of `pathspec` has to clear from the index first: `git commit` takes all of it.
+// `savedModes`: `update-index --index-info` records for cleared entries whose mode re-adding from the working
+// tree would lose (with core.filemode off, only the index records a mode).
+// Entries only added or deleted in the index are not saved: their content is on disk either way.
 struct IndexReset
 {
 	QStringList paths;
@@ -69,10 +68,8 @@ IndexReset plannedIndexReset(const std::vector<Git::StagedEntry>& staged, const 
 	return reset;
 }
 
-// The tracked half of the file list, read out two ways: the names, and the lines behind them. The pairing
-// and the baseline are shared, or a count would answer for a row that is not in the list. Identical
-// whatever it is taken against, so an unborn HEAD changes the baseline and nothing else.
-// `extraFlags` join the others, ahead of the base that closes the list.
+// Shared by the name listing and the line counts of the tracked changes: rename pairing and baseline must
+// match, or a count could answer for a row that is not in the list
 QStringList trackedDiffArgs(const QString& base, const QString& outputFormat, const QStringList& extraFlags = {})
 {
 	QStringList args = { QStringLiteral("diff"), outputFormat, QStringLiteral("-M"),
@@ -87,8 +84,8 @@ QStringList trackedChangesArgs(const QString& base)
 	return trackedDiffArgs(base, QStringLiteral("--name-status"));
 }
 
-// Whether a line-endings-only change reads as a change is the user's display choice; the same flags go
-// into every shown diff and every line count, so the counts are always the ones the shown diff carries.
+// Whether a line-endings-only change shows as a change is a display setting.
+// The same flags go into every shown diff and every line count, so they agree.
 // Either way the row still lists as modified and commits its working-tree content verbatim.
 QStringList eolDisplayFlags()
 {
@@ -101,9 +98,7 @@ QStringList trackedChangeCountsArgs(const QString& base)
 	return trackedDiffArgs(base, QStringLiteral("--numstat"), eolDisplayFlags());
 }
 
-// One commit's files, read out two ways as the file list's own delta is: the names, and the lines behind
-// them. The rename detection is shared, or a count would answer for a row that is not in the list.
-// `extraFlags` join the others, ahead of the revision that closes the list.
+// Shared by the name listing and the line counts of one commit's files, for the same reason as trackedDiffArgs
 QStringList commitFilesArgs(const QString& sha, const QString& outputFormat, const QStringList& extraFlags)
 {
 	QStringList args = { QStringLiteral("show"), outputFormat, QStringLiteral("-M"), QStringLiteral("-z"),
@@ -113,10 +108,9 @@ QStringList commitFilesArgs(const QString& sha, const QString& outputFormat, con
 	return args;
 }
 
-// The base of every commit-listing query; the walk itself is whatever the caller appends. --topo-order is what
-// the graph beside the listing is drawable from: it alone promises no commit is listed above any of its
-// children, and it keeps each line of history contiguous instead of interleaving them by date. The default
-// order promises that only against the child a commit was first reached through, which is not enough.
+// The base of every commit-listing query; the caller appends the walk.
+// --topo-order: no commit above any of its children, and each line of history contiguous, which the graph
+// needs. The default order only guarantees the former against the child a commit was first reached through.
 QStringList commitLogArgs(int maxCommits)
 {
 	return { QStringLiteral("log"), QStringLiteral("-z"), QStringLiteral("--topo-order"),
@@ -124,8 +118,8 @@ QStringList commitLogArgs(int maxCommits)
 		QStringLiteral("--format=") + QLatin1String(Git::CommitLogFormat) };
 }
 
-// -S counts occurrences and takes the term literally; -G matches patch lines and takes a regex, which
-// --fixed-strings does not reach, so `foo(` would abort the whole query unescaped
+// -S counts occurrences and takes the term literally. -G matches patch lines and takes a regex that
+// --fixed-strings does not apply to, so the term has to be escaped (an unescaped `foo(` aborts the query).
 void appendPickaxe(QStringList& args, const Repository::LogQuery& query, bool countChangesOnly)
 {
 	if (query.contentSearch.isEmpty())
@@ -137,21 +131,20 @@ void appendPickaxe(QStringList& args, const Repository::LogQuery& query, bool co
 		args << QStringLiteral("-i");
 }
 
-// Where the walk starts; git's own default is HEAD. Before the path limit, which closes the list.
+// When empty, git defaults to HEAD
 void appendStartRevision(QStringList& args, const Repository::LogQuery& query)
 {
 	if (!query.startRevision.isEmpty())
 		args << query.startRevision;
 }
 
-// The pathspec closes the argument list, so everything else has to be in place first
+// Must come last: the pathspec closes the argument list
 void appendPathLimit(QStringList& args, const Repository::LogQuery& query)
 {
 	if (!query.path.isEmpty())
-		args << QStringLiteral("--follow") << QStringLiteral("--") << query.path; // --follow takes the one path we ever pass
+		args << QStringLiteral("--follow") << QStringLiteral("--") << query.path; // --follow requires exactly one path
 }
 
-// The shas a listing command printed, as the set the log view marks its rows from
 QSet<QString> shaSet(const QByteArray& output)
 {
 	const QStringList shas = Git::parseLineList(output);
@@ -168,7 +161,7 @@ Vcs::Query runQuery(const QString& workDir, QStringList args, const QObject* con
 	return Vcs::Query{ Git::run(workDir, std::move(args), context, std::move(callback), {}, /*readOnlyQuery=*/true) };
 }
 
-// Queries that only read, scoped to the repository that asked - what a refresh and a push plan are made of
+// Read-only queries scoped to the repository; what a refresh and a push plan are made of
 QueryRound::Launcher readOnlyQueries(const QObject* repo)
 {
 	return [repo](const QString& workDir, QStringList args, Vcs::Callback onResult) {
@@ -176,8 +169,8 @@ QueryRound::Launcher readOnlyQueries(const QObject* repo)
 	};
 }
 
-// A submodule the push plan visits: where it is, what the log calls it, and what it holds. Filled as the
-// scan answers and read only once every query has, so the plan does not depend on the order they finished in.
+// A submodule the push plan visits. Filled as the scan answers and read only once every query has, so the
+// plan does not depend on the order they finished in.
 struct SubmoduleScan
 {
 	QString workDir;
@@ -190,7 +183,7 @@ struct SubmoduleScan
 struct PushPlanRun
 {
 	std::shared_ptr<SubmoduleScan> root = std::make_shared<SubmoduleScan>();
-	QString refusal; // why no plan can be formed; the first one stands, the rest describe the same repository
+	QString refusal; // why no plan can be formed; the first one stands
 
 	void refuse(const QString& reason)
 	{
@@ -199,8 +192,7 @@ struct PushPlanRun
 	}
 };
 
-// Children before their parent: a parent's tree records commits that live in its children, so those have
-// to reach their remotes first.
+// Children before their parent: the parent's tree references commits that live in its children
 void appendPushSteps(const SubmoduleScan& node, std::vector<PushStep>& steps)
 {
 	for (const std::shared_ptr<SubmoduleScan>& child : node.children)
@@ -210,8 +202,8 @@ void appendPushSteps(const SubmoduleScan& node, std::vector<PushStep>& steps)
 		steps.push_back({ .workDir = node.workDir, .subject = node.displayPath, .branch = node.branch });
 }
 
-// What a submodule holding unpublished commits has to satisfy for a plain push inside it to publish them:
-// a branch to push, and one that actually contains the commit its superproject recorded.
+// For a plain push inside a submodule to publish its recorded commit, it must be on a branch, and that branch
+// must contain the commit
 void requirePushableBranch(const std::shared_ptr<PushPlanRun>& run, const std::shared_ptr<SubmoduleScan>& node,
 	const QString& recordedSha, QueryRound round)
 {
@@ -231,22 +223,21 @@ void requirePushableBranch(const std::shared_ptr<PushPlanRun>& run, const std::s
 		});
 }
 
-// Every gitlink in `parent`'s HEAD, and inside each one holding commits no remote has, the same scan again.
-// A submodule whose recorded commit a remote already has needs no push, and nothing nested in it can either:
-// that commit could not have been published while what it referenced was not.
+// Scans every gitlink in `parent`'s HEAD, recursing into those whose recorded commit no remote has.
+// A submodule whose recorded commit is published needs no push, and neither does anything nested in it: the
+// commit could not have been published while what it references was not.
 void scanSubmodulesForPush(const std::shared_ptr<PushPlanRun>& run, const std::shared_ptr<SubmoduleScan>& parent, QueryRound round)
 {
 	round.launch(parent->workDir, { QStringLiteral("ls-tree"), QStringLiteral("-r"), QStringLiteral("-z"), QStringLiteral("HEAD") },
 		[run, parent, round](const ProcessResult& lsTree) mutable {
 			if (!lsTree.ok)
-				return; // an unborn HEAD records no gitlinks, and has no commit of its own to push either
+				return; // unborn HEAD: no gitlinks, and nothing to push
 
 			for (const Git::GitlinkEntry& gitlink : Git::parseGitlinkEntries(lsTree.out))
 			{
 				const QString workDir = parent->workDir + QLatin1Char('/') + gitlink.path;
-				// Never initialized: there is no repository there, so nothing of it to publish
 				if (!QFileInfo::exists(workDir + QStringLiteral("/.git")))
-					continue;
+					continue; // never initialized
 
 				auto node = std::make_shared<SubmoduleScan>();
 				node->workDir = workDir;
@@ -258,7 +249,7 @@ void scanSubmodulesForPush(const std::shared_ptr<PushPlanRun>& run, const std::s
 				round.launch(workDir, { QStringLiteral("rev-list"), QStringLiteral("-n"), QStringLiteral("1"),
 						gitlink.sha, QStringLiteral("--not"), QStringLiteral("--remotes") },
 					[run, node, round, sha = gitlink.sha](const ProcessResult& revList) {
-						// A recorded commit this clone does not have came from a remote, which therefore has it
+						// A recorded commit this clone does not have came from a remote, so a remote has it
 						if (!revList.ok || revList.out.trimmed().isEmpty())
 							return;
 
@@ -303,9 +294,9 @@ struct GitRepository::RefreshRun
 	QStringList conflicted; // paths with unmerged index entries
 	int headParentCount = 0;
 
-	// Why this run cannot become the state. The tracked-changes query keeps its own slot: on an unborn HEAD
-	// its attempt against HEAD is meant to fail, and the re-run against the empty tree answers in its place.
-	QString failure;
+	QString failure; // why this run cannot become the state
+	// Separate from `failure`: on an unborn HEAD the tracked-changes query against HEAD is expected to fail,
+	// and the re-run against the empty tree answers in its place
 	QString trackedError;
 
 	void noteFailure(const ProcessResult& result)
@@ -325,8 +316,7 @@ void GitRepository::startRefresh()
 	auto run = std::make_shared<RefreshRun>();
 	_run = run;
 
-	// The independent base queries, plus the one-time per-repository resolutions. Whatever their
-	// answers call for is asked once they are all in.
+	// The independent base queries, plus the one-time per-repository resolutions
 	QueryRound round{ readOnlyQueries(this), [self = QPointer<GitRepository>{ this }, run] {
 		if (self)
 			self->startDependentQueries(run);
@@ -344,13 +334,13 @@ void GitRepository::startRefresh()
 	}
 	if (_emptyTreeSha.isEmpty())
 	{
-		// Stands in for HEAD where there is none. Its name follows from the repository's hash algorithm
-		// alone, and git keeps the object itself resolvable everywhere, so nothing has to be written.
+		// Stands in for HEAD where there is none. The sha depends only on the hash algorithm, and git resolves
+		// the object in every repository, so nothing has to be written.
 		round.launch(path(), { QStringLiteral("hash-object"), QStringLiteral("-t"), QStringLiteral("tree"), QStringLiteral("--stdin") },
 			[this](const ProcessResult& r) { _emptyTreeSha = QString::fromUtf8(r.out.trimmed()); });
 	}
-	// The branch header and the unmerged entries are what this is parsed for, so the flags keep git from
-	// scanning the working tree and recursing into submodules to produce entries nobody reads
+	// Only the branch header and the unmerged entries are read, so the flags keep git from scanning the
+	// working tree and recursing into submodules
 	round.launch(path(), { QStringLiteral("status"), QStringLiteral("--porcelain=v2"), QStringLiteral("--branch"),
 			QStringLiteral("--untracked-files=no"), QStringLiteral("--ignore-submodules=all"), QStringLiteral("-z") },
 		[run](const ProcessResult& r) {
@@ -360,11 +350,12 @@ void GitRepository::startRefresh()
 				run->conflicted = Git::parseUnmergedPaths(r.out);
 			}
 			else
-				run->noteFailure(r); // an unread header parses as "on a branch, born", the two things nothing may assume
+				run->noteFailure(r); // an unread header would parse as "on a branch, born"
 		});
-	// Names HEAD in the message header, and counts its parents for the undo action. An unborn branch has no
-	// commit to name, and fails here by design. The parents come first because %s is a single line and this
-	// one is not: a root commit's empty %P would otherwise be indistinguishable from a missing subject.
+	// HEAD's subject for the message header, and its parent count for the undo action.
+	// Fails on an unborn branch, by design.
+	// Parents first: %s is a single line and %P is not, so a root commit's empty %P would otherwise be
+	// indistinguishable from a missing subject.
 	round.launch(path(), { QStringLiteral("log"), QStringLiteral("-1"), QStringLiteral("--format=%P%n%s") },
 		[run](const ProcessResult& r) {
 			const QList<QByteArray> lines = r.out.split('\n');
@@ -380,27 +371,27 @@ void GitRepository::startRefresh()
 			if (r.ok)
 				run->diffEntries = Git::parseNameStatusZ(r.out);
 			else
-				run->trackedError = r.errorText(); // an unborn HEAD fails here by design; the empty-tree re-run asks again
+				run->trackedError = r.errorText(); // fails on an unborn HEAD by design; the empty-tree re-run answers instead
 		});
-	// Losing this costs the rows their counts, which is a shorter answer rather than a wrong one
+	// Failure costs the rows their counts, which is a shorter answer rather than a wrong one
 	round.launch(path(), trackedChangeCountsArgs(QStringLiteral("HEAD")),
 		[run](const ProcessResult& r) { run->changeCounts = Git::parseNumstatZ(r.out); });
-	// Losing these costs untracked rows, which is a shorter list rather than a wrong one
+	// Failure costs the untracked rows, which is a shorter list rather than a wrong one
 	round.launch(path(), { QStringLiteral("ls-files"), QStringLiteral("--others"), QStringLiteral("--exclude-standard"), QStringLiteral("-z") },
 		[run](const ProcessResult& r) { run->untracked = Git::parseZList(r.out); });
-	// The submodule list is read out of the index, not from `git submodule status`: that one is a shell script in
-	// Git for Windows and costs more than every other refresh query combined
+	// Submodules are read from the index rather than `git submodule status`: that is a shell script in Git
+	// for Windows and costs more than every other refresh query combined
 	round.launch(path(), { QStringLiteral("ls-files"), QStringLiteral("--stage"), QStringLiteral("-z") },
 		[run](const ProcessResult& r) {
 			if (r.ok)
 				run->submodules = Git::parseGitlinkPaths(r.out);
 			else
-				run->noteFailure(r); // unread, every gitlink demotes to an ordinary file that discarding may overwrite
+				run->noteFailure(r); // unread, every gitlink would become an ordinary file that discarding may overwrite
 		});
 }
 
-// The queries the base ones' answers call for - the unborn fallback, the detached-HEAD branch tips,
-// per-submodule dirtiness, the unpushed subjects. All independent of each other.
+// The unborn fallback, the detached-HEAD branch tips, per-submodule dirtiness, the unpushed subjects. All
+// independent of each other.
 void GitRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run)
 {
 	QueryRound round{ readOnlyQueries(this), [self = QPointer<GitRepository>{ this }] {
@@ -408,8 +399,7 @@ void GitRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run
 			self->finishRefresh();
 	} };
 
-	// The base query needed a HEAD to compare against. Re-run it against the empty tree, which is
-	// what an unborn branch will commit on top of anyway.
+	// Unborn: re-run the tracked-changes queries against the empty tree, the first commit's parent tree anyway
 	if (run->header.oid == QLatin1String("(initial)"))
 	{
 		if (_emptyTreeSha.isEmpty())
@@ -424,7 +414,7 @@ void GitRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run
 						return;
 					}
 					run->diffEntries = Git::parseNameStatusZ(r.out);
-					run->trackedError.clear(); // the earlier attempt only failed for want of a HEAD, and this answered instead
+					run->trackedError.clear(); // the first-round failure was the expected one
 				});
 			round.launch(path(), trackedChangeCountsArgs(_emptyTreeSha),
 				[run](const ProcessResult& r) { run->changeCounts = Git::parseNumstatZ(r.out); });
@@ -451,7 +441,7 @@ void GitRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run
 	{
 		const QString workDir = path() + QLatin1Char('/') + subPath;
 		if (!QFileInfo::exists(workDir + QLatin1String("/.git")))
-			continue; // never initialized: the directory is empty, there is nothing inside to query
+			continue; // never initialized: the directory is empty
 		round.launch(workDir, { QStringLiteral("status"), QStringLiteral("--porcelain"), QStringLiteral("-z") },
 			[run, subPath](const ProcessResult& r) {
 				run->submoduleContent[subPath] = submoduleContentOf(r.ok, Git::parsePorcelainDirtiness(r.out));
@@ -470,7 +460,6 @@ void GitRepository::finishRefresh()
 {
 	const RefreshRun& run = *_run;
 
-	// Only the tracked-changes slot can still hold a failure the second round was the one to answer
 	const QString failure = !run.failure.isEmpty() ? run.failure : run.trackedError;
 
 	RepoState state;
@@ -522,13 +511,13 @@ std::vector<FileEntry> GitRepository::filesFromRun(const RefreshRun& run) const
 {
 	std::vector<FileEntry> files;
 
-	// A submodule the second round never queried was never initialized, and an empty directory holds nothing
+	// Not queried means never initialized, and an empty directory holds nothing
 	const auto contentOf = [&run](const QString& path) {
 		const auto it = run.submoduleContent.find(path);
 		return it != run.submoduleContent.end() ? it->second : SubmoduleContent::Clean;
 	};
 
-	// Tracked changes; a diff row whose path is a submodule becomes a moved-pointer submodule row
+	// Tracked changes; a diff row at a submodule path is a moved pointer
 	for (const CommitFileChange& diffEntry : run.diffEntries)
 	{
 		FileEntry entry;
@@ -543,7 +532,7 @@ std::vector<FileEntry> GitRepository::filesFromRun(const RefreshRun& run) const
 		}
 		else
 		{
-			// The diff that named this row cannot tell a conflict from an edit; the unmerged index entries can
+			// The diff cannot tell a conflict from an edit; the unmerged index entries can
 			if (run.conflicted.contains(diffEntry.path))
 				entry.type = ChangeType::Conflicted;
 			if (const auto it = run.changeCounts.find(diffEntry.path); it != run.changeCounts.end())
@@ -555,8 +544,8 @@ std::vector<FileEntry> GitRepository::filesFromRun(const RefreshRun& run) const
 	for (const QString& path : run.untracked)
 		files.push_back({ .path = path, .type = ChangeType::Untracked });
 
-	// Submodules whose pointer has not moved but whose content would stop it moving: shown so the state
-	// is visible and the row double-clickable. Untracked-only content inside does not earn a row.
+	// Submodules with an unmoved pointer but blocking content get a row too, so the state is visible and the
+	// row double-clickable. Untracked-only content does not earn a row.
 	for (const QString& subPath : run.submodules)
 	{
 		FileEntry entry{ .path = subPath, .isSubmodule = true, .content = contentOf(subPath) };
@@ -571,25 +560,24 @@ std::vector<FileEntry> GitRepository::filesFromRun(const RefreshRun& run) const
 
 void GitRepository::commit(const QString& message, const QStringList& pathspec, const QStringList& untrackedPaths, Vcs::Answer<void> onDone)
 {
-	// Converted once, here: the steps below pass process results between them, the rollback reporting
-	// the commit's rather than its own
+	// The steps below pass ProcessResults between them (the rollback reports the commit's result, not its
+	// own), so the conversion to an Answer happens once, here
 	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
 	const auto messageFile = openMessageFile(message, this, report);
 	if (!messageFile)
 		return;
 
-	// The index is where a commit is assembled and nothing else, so it is made to hold exactly this commit
-	// and then left as it was found.
+	// The index is made to hold exactly this commit, then restored to what it was
 	const auto prepareIndexThenCommit = [this, messageFile, pathspec, untrackedPaths, report](const ProcessResult& stagedResult) {
 		if (!stagedResult.ok)
 		{
-			report(stagedResult); // nothing has been touched yet, so there is nothing to put back
+			report(stagedResult); // nothing touched yet, nothing to restore
 			return;
 		}
 
 		const IndexReset reset = plannedIndexReset(Git::parseStagedRawZ(stagedResult.out), pathspec);
 
-		// Where every step from the reset on ends, carrying whichever result ended the commit
+		// Every step from the reset on ends here, with whichever result ended the commit
 		const auto restoreThenReport = [this, untrackedPaths, savedModes = reset.savedModes, report](const ProcessResult& result) {
 			if (savedModes.isEmpty())
 			{
@@ -603,7 +591,7 @@ void GitRepository::commit(const QString& message, const QStringList& pathspec, 
 		};
 
 		const auto runCommit = [this, messageFile, restoreThenReport] {
-			// The callback holds the message file open until git has read it
+			// The callback keeps the message file alive until git has read it
 			Git::run(path(), { QStringLiteral("commit"), QStringLiteral("-F"), messageFile->fileName() }, this,
 				[messageFile, restoreThenReport](const ProcessResult& result) { restoreThenReport(result); });
 		};
@@ -648,8 +636,8 @@ void GitRepository::commitMergeState(const QString& message, const QStringList& 
 		// No pathspec: the index already holds the merge result, and staging conflicted files marks them resolved
 		Git::run(path(), { QStringLiteral("commit"), QStringLiteral("-F"), messageFile->fileName() }, this,
 			[this, messageFile, untrackedPaths, report](const ProcessResult& result) {
-				// Only the untracked add is rolled back: `add -u` marked conflicted paths resolved, and
-				// resetting one of those would drop the resolution the user just made
+				// Only the untracked add is rolled back: resetting a path `add -u` marked resolved would drop
+				// the user's resolution
 				rollBackAddThenReport(path(), this, untrackedPaths, result, report);
 			});
 	};
@@ -680,9 +668,8 @@ void GitRepository::commitMergeState(const QString& message, const QStringList& 
 
 void GitRepository::undoLastCommit(Vcs::Answer<void> onDone)
 {
-	// --soft rather than git's default --mixed: a path-limited commit never used the index, so leaving it
-	// alone restores exactly the state the commit was made from - and does not discard what another tool
-	// staged, which this app promises never to touch.
+	// --soft rather than the default --mixed: a path-limited commit never used the index, so leaving it alone
+	// restores exactly the state the commit was made from, and keeps whatever another tool staged
 	Git::run(path(), { QStringLiteral("reset"), QStringLiteral("--soft"), QStringLiteral("HEAD~1") },
 		this, Vcs::reporting(std::move(onDone)));
 }
@@ -694,7 +681,7 @@ void GitRepository::planPush(Vcs::Answer<std::vector<PushStep>> onDone)
 
 	QueryRound round{ readOnlyQueries(this), [run, onDone = std::move(onDone), self = QPointer<GitRepository>{ this }] {
 		if (!self)
-			return; // the round ends when the context dies too, and there is nobody left to answer
+			return; // the round also ends when its context dies
 
 		if (!run->refusal.isEmpty())
 		{
@@ -729,7 +716,7 @@ QString GitRepository::pushCommandLabel(const PushStep& step, bool setUpstream) 
 
 void GitRepository::fetch(Vcs::Answer<void> onDone)
 {
-	// Not a read-only query despite reading from the network: it writes the remote-tracking refs
+	// Not a read-only query: it writes the remote-tracking refs
 	Git::run(path(), { QStringLiteral("fetch") }, this, Vcs::reporting(std::move(onDone)));
 }
 
@@ -785,8 +772,8 @@ Vcs::Query GitRepository::diffFile(const FileEntry& entry, const QObject* contex
 
 Vcs::Query GitRepository::diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
-	// --ignore-cr-at-eol unconditionally, display setting or not: a wholesale line-ending conversion
-	// would flood the word pool with every line of the file
+	// --ignore-cr-at-eol regardless of the display setting: a line-ending conversion would flood the word
+	// pool with every line of the file
 	QStringList args = { QStringLiteral("diff"), QStringLiteral("--ignore-cr-at-eol"), QStringLiteral("-U0"),
 		QStringLiteral("--ignore-submodules"), diffBase() };
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
@@ -820,8 +807,8 @@ Vcs::Query GitRepository::incomingCommits(int maxCommits, const QObject* context
 
 Vcs::Query GitRepository::commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone)
 {
-	// --raw rather than --name-status for the modes and the object names: they are what marks a row as a
-	// submodule and names the commit its pointer moved to. --no-abbrev, as those shas are opened as revisions.
+	// --raw rather than --name-status for the modes and object names, which identify submodule rows and the
+	// commit their pointer moved to. --no-abbrev because those shas are opened as revisions.
 	return runQuery(path(), commitFilesArgs(sha, QStringLiteral("--raw"), { QStringLiteral("--no-abbrev") }),
 		context, Vcs::answering(std::move(onDone), Git::parseRawZ));
 }
@@ -837,7 +824,7 @@ Vcs::Query GitRepository::commitFileDiff(const QString& sha, const CommitFileCha
 	QStringList args = QStringList{ QStringLiteral("show"), QStringLiteral("-M") } + eolDisplayFlags();
 	args << QStringLiteral("--format=") << sha << QStringLiteral("--") << file.path;
 	if (!file.oldPath.isEmpty())
-		args.push_back(file.oldPath); // both sides, or the pathspec filters the rename out before -M can pair it up
+		args.push_back(file.oldPath); // both sides, or the pathspec filters the rename out before -M can pair it
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
 }
 
@@ -851,7 +838,6 @@ Vcs::Query GitRepository::submodulePointerLog(const QString& repoRelativePath, c
 {
 	const QString subPath = path() + QLatin1Char('/') + repoRelativePath;
 	Vcs::Query query;
-	// A callback only runs while its context lives, so this one can hand the same context to the second query
 	query.attach(Git::run(path(), { QStringLiteral("rev-parse"), QStringLiteral("HEAD:") + repoRelativePath }, context,
 		[query, subPath, context, onDone = std::move(onDone)](const ProcessResult& revResult) mutable {
 			if (!revResult.ok)
@@ -868,7 +854,7 @@ Vcs::Query GitRepository::submodulePointerLog(const QString& repoRelativePath, c
 
 RepositoryLocation GitRepository::submoduleLocation(const QString& repoRelativePath) const
 {
-	return { VcsKind::Git, path() + QLatin1Char('/') + repoRelativePath }; // a git submodule is a git repository
+	return { VcsKind::Git, path() + QLatin1Char('/') + repoRelativePath }; // a git submodule is always a git repository
 }
 
 QString GitRepository::ignoreFileName() const
@@ -893,7 +879,7 @@ std::vector<IgnorePattern> GitRepository::ignorePatternsFor(const QString& repoR
 	return patterns;
 }
 
-// Every pattern is legal on any line of a .gitignore, so the scope decides nothing about where it goes
+// .gitignore has no sections, so the pattern always goes at the end
 QByteArray GitRepository::ignoreFileWithPatternAdded(QByteArray content, const IgnorePattern& pattern) const
 {
 	const QByteArray eol = content.contains("\r\n") ? QByteArrayLiteral("\r\n") : QByteArrayLiteral("\n");

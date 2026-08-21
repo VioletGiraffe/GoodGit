@@ -13,8 +13,7 @@ RESTORE_COMPILER_WARNINGS
 
 class QApplication;
 
-// Geometry the stylesheet and custom painting share. Per theme, so a theme can reshape and not only
-// recolour; the defaults are the house values.
+// Geometry the stylesheet and custom painting share. Per theme, so a theme can reshape and not only recolor.
 struct ThemeMetrics
 {
 	int controlRadius = 4;        // buttons, branch chip, message editor
@@ -25,8 +24,8 @@ struct ThemeMetrics
 	int selectionStripeWidth = 2; // the accent stripe FileListDelegate paints on selected rows
 };
 
-// One selectable look, mirroring the design vocabulary of doc/UI/mockup.html. Pure data; the
-// identity is `name` (unique within its polarity). To restyle: edit or add themes in theme.cpp.
+// One selectable look, mirroring the design vocabulary of doc/UI/mockup.html. Pure data; `name` is unique
+// within its polarity. Themes are defined in theme.cpp.
 struct Theme
 {
 	QString name;
@@ -48,8 +47,8 @@ struct Theme
 	QColor diffCtx; // context lines in the diff view
 
 	// The commit graph's lines, cycled by line of history rather than by lane, so a branch and the one that
-	// reuses its lane still differ. Chains are numbered as the walk meets them, which keeps the lines on
-	// screen together on different colors.
+	// reuses its lane still differ. Chains are numbered as the walk meets them, so lines near each other on
+	// screen get different colors.
 	std::array<QColor, 6> graphLanes;
 
 	QString qssFragment; // optional per-theme QSS, appended after the app sheet so it wins ties
@@ -59,16 +58,14 @@ struct Theme
 
 [[nodiscard]] QFont monospaceFont();
 
-// The folder glyph in the submodule colour, wherever a submodule row is drawn - the file list, the
-// recent repositories. Tinted per render, so it follows a theme change like the rest.
+// The folder glyph in the submodule color. Tinted per render, so it follows a theme change.
 [[nodiscard]] QIcon submoduleIcon();
 
-// Installs the themeicon handler, applies the active theme, and reapplies whenever
-// CThemeController announces a change. Call once, right after constructing the QApplication.
+// Installs the themeicon handler, applies the active theme, and reapplies whenever CThemeController
+// announces a change. Call once, right after constructing the QApplication.
 void applyTheme(QApplication& app);
 
-// The theme in effect - a copy independent of allThemes() storage. Valid once applyTheme() ran.
+// Valid once applyTheme() ran
 [[nodiscard]] const Theme& activeTheme();
 
-// Every selectable theme, both polarities.
 [[nodiscard]] const std::vector<Theme>& allThemes();

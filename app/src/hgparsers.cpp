@@ -13,9 +13,8 @@
 
 namespace {
 
-// `incoming` and `outgoing` print "comparing with ..." before their JSON, and print no JSON at all when
-// they found nothing. The array starts a line of its own, which is what keeps a bracket inside the chatter
-// - a remote path may hold one - from being mistaken for it.
+// `incoming` and `outgoing` print "comparing with ..." before their JSON, and no JSON at all when they found
+// nothing. The array starts on a line of its own, which distinguishes it from a bracket in a remote path.
 QJsonArray jsonRecords(const QByteArray& output)
 {
 	qsizetype start = 0;
@@ -39,15 +38,14 @@ QString isoDate(const QJsonValue& value)
 	return QDateTime::fromSecsSinceEpoch(parts.at(0).toInteger(), QTimeZone{ -parts.at(1).toInt() }).toString(Qt::ISODate);
 }
 
-// `user` is a whole "Name <email>"; the list shows the name alone, as it does for git
+// `user` is "Name <email>"; the list shows the name alone, as for git
 QString authorName(const QString& user)
 {
 	const qsizetype bracket = user.indexOf(QLatin1String(" <"));
 	return bracket < 0 ? user : user.left(bracket);
 }
 
-// What this changeset is known by besides its node. "tip" is left out: it names whichever changeset is
-// newest and so says nothing about this one.
+// Bookmarks, tags and a non-default branch. "tip" is left out: it names whichever changeset is newest.
 QString refsOf(const QJsonObject& record)
 {
 	QStringList refs;
@@ -73,7 +71,7 @@ QStringList nodeList(const QJsonValue& value)
 	return nodes;
 }
 
-// Each half of a "path = source" or "node path" line, or nothing for a line that is neither
+// Splits at the first separator; empty for blank and comment lines
 std::pair<QString, QString> splitAt(const QByteArray& line, QChar separator)
 {
 	const QString text = QString::fromUtf8(line).trimmed();
@@ -132,12 +130,12 @@ std::vector<CommitFileChange> parseStatus(const QByteArray& statusOutput)
 		case 'A': entry.type = source.isEmpty() ? ChangeType::Added : ChangeType::Renamed; break;
 		case 'R':
 			if (renameSources.contains(path))
-				continue; // the same file leaving its old path, already listed as the rename
+				continue; // the old path of a rename, already listed as the rename
 			entry.type = ChangeType::Deleted;
 			break;
 		case '!': entry.type = ChangeType::Deleted; break;
 		case '?': entry.type = ChangeType::Untracked; break;
-		default: continue; // clean and ignored records, which the app never asks for
+		default: continue; // clean and ignored records, never requested
 		}
 		entries.push_back(std::move(entry));
 	}
@@ -157,7 +155,7 @@ WorktreeDirtiness parseDirtiness(const QByteArray& statusOutput)
 		{
 		case 'M': case 'A': case 'R': case '!': dirtiness.dirtyTracked = true; break;
 		case '?': dirtiness.untracked = true; break;
-		default: break; // clean and ignored records, which the app never asks for
+		default: break; // clean and ignored records, never requested
 		}
 	}
 	return dirtiness;
@@ -165,14 +163,14 @@ WorktreeDirtiness parseDirtiness(const QByteArray& statusOutput)
 
 std::map<QString, LineCounts> parseDiffCounts(const QByteArray& diffOutput)
 {
-	// `diff --git` is the one line that cannot also be diff content, every line inside a hunk carrying a
-	// '+', '-' or ' ' prefix of its own. The path is read off the `---`/`+++` pair rather than that line,
-	// where a space in a path is no problem; a rename names its new path there, as the row does.
+	// A `diff --git` line cannot be diff content: every hunk line carries a '+', '-' or ' ' prefix.
+	// The path is read from the `---`/`+++` pair rather than that line: there a space in a path is unambiguous,
+	// and a rename names its new path, as the row does.
 	std::map<QString, LineCounts> counts;
 	QString path;
 	bool inHunks = false;
 
-	// The name half of `--- a/<path>` or `+++ b/<path>`, or nothing for the /dev/null half of an add or a removal
+	// The path of `--- a/<path>` or `+++ b/<path>`; empty for the /dev/null side of an add or a removal
 	const auto headerPath = [](const QByteArray& line) {
 		const QByteArray name = line.mid(4);
 		return name.startsWith("a/") || name.startsWith("b/") ? QString::fromUtf8(name.mid(2)) : QString{};
@@ -231,9 +229,9 @@ std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput)
 		CommitRecord commit;
 		commit.sha = record.value(QLatin1String("node")).toString();
 		if (const QJsonValue rev = record.value(QLatin1String("rev")); rev.isDouble())
-			commit.revision = rev.toInt(); // tested for rather than defaulted: revision 0 is a real one
+			commit.revision = rev.toInt(); // revision 0 is a real one, so presence is tested rather than defaulted
 		commit.parents = nodeList(record.value(QLatin1String("parents")));
-		commit.parents.removeAll(QString::fromLatin1(NullNode)); // a root changeset has no parent the app can name
+		commit.parents.removeAll(QString::fromLatin1(NullNode)); // a root changeset's parent
 		commit.author = authorName(record.value(QLatin1String("user")).toString());
 		commit.date = isoDate(record.value(QLatin1String("date")));
 		commit.refs = refsOf(record);
@@ -283,7 +281,7 @@ std::map<QString, QString> parseSubrepoState(const QByteArray& content)
 	std::map<QString, QString> nodes;
 	for (const QByteArray& line : content.split('\n'))
 	{
-		// "<node> <path>", and a path may hold spaces of its own - only the first one separates
+		// "<node> <path>"; the path may contain spaces
 		const auto [node, path] = splitAt(line, QLatin1Char(' '));
 		if (!path.isEmpty())
 			nodes[path] = node;
@@ -293,8 +291,8 @@ std::map<QString, QString> parseSubrepoState(const QByteArray& content)
 
 std::vector<SubrepoPointerChange> parseSubstateDiff(const QByteArray& diffOutput)
 {
-	// Every hunk line is a "<node> <path>" leaving or entering the file; the only other lines starting
-	// with '-' or '+' are the `---`/`+++` header pair
+	// Every hunk line is a "<node> <path>" leaving or entering the file; the only other lines starting with
+	// '-' or '+' are the `---`/`+++` header pair
 	std::map<QString, SubrepoPointerChange> byPath;
 	for (const QByteArray& line : diffOutput.split('\n'))
 	{

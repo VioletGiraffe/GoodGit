@@ -17,13 +17,11 @@
 
 namespace {
 
-// What a row is, beside the name it displays. The root is absolute for every level: a subrepo row opens
-// a window like any other.
 enum ItemRole
 {
-	RootRole = Qt::UserRole,
+	RootRole = Qt::UserRole, // absolute for subrepo rows too
 	PathRole,     // the line under the name, in native separators; empty where the name says it all
-	BadgeRole,    // the kind, where naming it tells the reader something; empty otherwise
+	BadgeRole,    // the kind, where worth showing; empty otherwise
 	CurrentRole,  // this window's own repository
 };
 
@@ -45,9 +43,8 @@ constexpr int MinimumTextWidth = 40;
 	return font;
 }
 
-// `path` across at most two lines: as many whole components as the first line takes, the rest below it,
-// elided in the middle where even that does not fit. A path that fits stays one line, and one with
-// nothing to break on is elided where it is.
+// Splits `path` across at most two lines at a component boundary, eliding the second in the middle if
+// needed. A path that fits stays on one line, one with nothing to break on is elided as is.
 [[nodiscard]] QStringList pathLines(const QString& path, const QFontMetrics& metrics, int width)
 {
 	if (metrics.horizontalAdvance(path) <= width)
@@ -68,8 +65,7 @@ constexpr int MinimumTextWidth = 40;
 	return { path.left(split + 1), metrics.elidedText(path.mid(split + 1), Qt::ElideMiddle, width) };
 }
 
-// Two lines per row where the path needs them, an icon on the subrepo rows, and the kind where it is
-// worth naming - none of which item roles can express on their own.
+// Two-line rows, a subrepo icon and a kind badge: none of which item roles can express
 class RecentRepositoryDelegate final : public QStyledItemDelegate
 {
 public:
@@ -79,15 +75,15 @@ public:
 	{
 		QStyleOptionViewItem opt = option;
 		initStyleOption(&opt, index);
-		opt.text.clear(); // the row separator; every glyph below is ours
+		opt.text.clear(); // the base paints only the row separator; every glyph is painted here
 
-		// The view is NoSelection, so State_Selected never arrives: these two are every background a row has
+		// The view is NoSelection, so State_Selected never arrives
 		const Theme& theme = activeTheme();
 		if (opt.state.testFlag(QStyle::State_MouseOver) || opt.state.testFlag(QStyle::State_HasFocus))
 			painter->fillRect(option.rect, theme.palette.selectionBg);
 		else if (index.data(CurrentRole).toBool())
 			painter->fillRect(option.rect, theme.palette.surfaceAlt);
-		// Over the fill, so the separator the sheet draws survives it
+		// After the fill, so the stylesheet's separator survives it
 		opt.widget->style()->drawControl(QStyle::CE_ItemViewItem, &opt, painter, opt.widget);
 
 		// Over the padding rather than beside it, so the text sits where it does on every other row
@@ -114,19 +110,19 @@ public:
 			const QFontMetrics badgeMetrics{ badgeFont };
 			const QSize badgeSize{ badgeMetrics.horizontalAdvance(badge) + 2 * BadgeTextPadding,
 				badgeMetrics.height() + 2 * BadgeVerticalPadding };
-			// Centred on the name's line rather than sharing its top, the two fonts being different sizes
+			// Centred on the name's line, the two fonts being different sizes
 			const QRect badgeRect{ nameRight - badgeSize.width(), y + (nameMetrics.height() - badgeSize.height()) / 2,
 				badgeSize.width(), badgeSize.height() };
 
 			painter->save();
-			painter->setRenderHint(QPainter::Antialiasing); // the corners are rounded
+			painter->setRenderHint(QPainter::Antialiasing);
 			painter->setPen(theme.palette.border);
-			painter->setBrush(Qt::NoBrush); // whatever the row's background was drawn with is still set
+			painter->setBrush(Qt::NoBrush); // the row background's brush is still set
 			painter->setFont(badgeFont);
 			// Half a pixel in, so the one-pixel pen lands on a pixel instead of across two
 			painter->drawRoundedRect(QRectF{ badgeRect }.adjusted(0.5, 0.5, -0.5, -0.5),
 				theme.metrics.controlRadius, theme.metrics.controlRadius);
-			painter->setPen(theme.palette.accentText); // accent as text on a plain surface, not the fill
+			painter->setPen(theme.palette.accentText);
 			painter->drawText(badgeRect, Qt::AlignCenter, badge);
 			painter->restore();
 
@@ -168,8 +164,8 @@ public:
 	}
 
 private:
-	// What the text has to fit into. Read off the viewport rather than the item's rect, which is not the
-	// row's width when a size is being asked for; painting uses this same width, so both agree.
+	// From the viewport rather than the item's rect, which is not the row's width while a size hint is being
+	// asked for. Painting uses the same width, so both agree.
 	[[nodiscard]] int textWidth(const QModelIndex& index) const
 	{
 		const bool subrepo = index.parent().isValid();
@@ -199,9 +195,9 @@ RecentRepositoriesPanel::RecentRepositoriesPanel(QString currentRepositoryRoot, 
 	setRootIsDecorated(true);
 	setIndentation(14);
 	setAllColumnsShowFocus(true);
-	// A row is opened, never selected: what the keyboard is on still shows, but only while this has focus
+	// A row is opened, never selected; the keyboard focus still shows while the panel has focus
 	setSelectionMode(QAbstractItemView::NoSelection);
-	setExpandsOnDoubleClick(false); // a double click opens the repository, whether or not the row also folds
+	setExpandsOnDoubleClick(false); // a double click opens the repository
 	setContextMenuPolicy(Qt::CustomContextMenu);
 	setItemDelegate(new RecentRepositoryDelegate{ this });
 
@@ -209,7 +205,6 @@ RecentRepositoriesPanel::RecentRepositoriesPanel(QString currentRepositoryRoot, 
 		openRepository(rootOf(itemFromIndex(index)), rootOf(itemFromIndex(index.parent())));
 	});
 	connect(this, &QWidget::customContextMenuRequested, this, &RecentRepositoriesPanel::showContextMenu);
-	// Another window opening a repository writes the list this shows, and there is no other way to hear of it
 	connect(&RecentRepositories::Notifier::instance(), &RecentRepositories::Notifier::changed,
 		this, &RecentRepositoriesPanel::rebuild);
 
@@ -252,10 +247,9 @@ void RecentRepositoriesPanel::rebuild()
 			auto* subrepoItem = new QTreeWidgetItem{ item };
 			subrepoItem->setText(0, name);
 			subrepoItem->setData(0, RootRole, root);
-			// The parent's path is right above, and a subrepo directly under it adds nothing by repeating
-			// its own name; one further down is worth placing
+			// Only shown for a subrepo deeper than the parent's root directory
 			subrepoItem->setData(0, PathRole, name == subrepo.path ? QString{} : QDir::toNativeSeparators(subrepo.path));
-			// The kind is the parent's unless it isn't, and that is the case worth pointing out
+			// Only shown where the kind differs from the parent's
 			subrepoItem->setData(0, BadgeRole, subrepo.kind == repository.kind ? QString{} : kindLabel(subrepo.kind));
 			subrepoItem->setData(0, CurrentRole, sameRepositoryPath(root, _currentRoot));
 			subrepoItem->setToolTip(0, QDir::toNativeSeparators(root));
@@ -280,7 +274,7 @@ void RecentRepositoriesPanel::openRepository(const QString& root, const QString&
 	if (!window)
 		return;
 
-	// The parent shows this subrepo's pointer as a row of its own, which a commit in here moves
+	// A commit in the subrepo moves the pointer row in the parent
 	if (CommitWindow* parentWindow = repositoryWindow(parentRoot))
 		connect(window, &CommitWindow::committed, parentWindow, &CommitWindow::refreshRepository, Qt::UniqueConnection);
 }
@@ -291,8 +285,7 @@ void RecentRepositoriesPanel::showContextMenu(const QPoint& pos)
 	if (!item)
 		return;
 
-	// The roots travel into the actions by value: opening one of these repositories rebuilds this tree
-	// from the list it just wrote, and every item here is gone by the time the action returns
+	// By value: opening a repository rebuilds this tree, and the items are gone by the time the action returns
 	const QString root = rootOf(item);
 	const QString parentRoot = rootOf(item->parent());
 

@@ -2,10 +2,9 @@
 
 #include <QStyledItemDelegate>
 
-// Paints the two file-list details that item data roles cannot express: the accent stripe on the
-// selected row's left edge, and the deleted-file strikethrough recolored to the deleted-state color
-// (a QFont strike always draws in the text color, which makes it near-invisible).
-// Serves both file lists - the commit window's and the history window's - which share a column layout.
+// Paints what item data roles cannot express: the accent stripe on the selected row's left edge, and the
+// deleted-file strikethrough in the deleted-state color (a QFont strike draws in the text color, near-invisible).
+// Serves both file lists, which share a column layout.
 class FileListDelegate final : public QStyledItemDelegate
 {
 public:

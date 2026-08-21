@@ -5,14 +5,11 @@
 #include <functional>
 #include <memory>
 
-// A set of queries launched together, and what happens once the last of them has answered. Every query
-// holds a reference to the round's end, and the launching scope holds one of its own - so a round that
-// launched nothing ends as that scope does, and one that launched anything ends from the final callback.
-// A skipped callback is still a destroyed one, so `then` also runs when the context dies mid-round and
-// has to check for that.
-//
-// Running a query is the backend's - it is what knows the executable, the invariants and the context to
-// scope the job to. Everything here is the counting.
+// A set of queries launched together; `then` runs once the last has answered.
+// Every query and the launching scope hold a reference to the round's end: a round that launched nothing
+// ends with the scope, one that launched anything ends from the final callback.
+// `then` also runs when the context dies mid-round (a skipped callback is still destroyed), and must check for that.
+// The backend supplies the launcher: it knows the executable, the invariants and the context.
 class QueryRound
 {
 	struct End
@@ -36,7 +33,7 @@ public:
 		_launcher(workDir, std::move(args),
 			[end = _end, onResult = std::move(onResult)](const ProcessResult& result) mutable {
 				onResult(result);
-				end.reset(); // a delivered result is done with the round here, not at the job's later deletion
+				end.reset(); // now, not at the job's later deletion
 			});
 	}
 

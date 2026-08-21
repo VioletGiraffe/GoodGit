@@ -55,7 +55,7 @@ void Repository::completeRefresh(RepoState state, std::vector<FileEntry> files)
 		_files = std::move(files);
 	}
 	else
-		_state.readFailure = std::move(state.readFailure); // the rest of it is the last run that answered in full
+		_state.readFailure = std::move(state.readFailure); // the rest stays from the last successful run
 
 	_refreshing = false;
 	emit refreshed();

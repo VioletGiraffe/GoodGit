@@ -28,7 +28,7 @@ DiffPane::DiffPane(QWidget* parent) :
 	auto* headerLayout = new QHBoxLayout(header);
 	headerLayout->setContentsMargins(8, 6, 8, 6);
 	_pathLabel = new CLabelElided;
-	// Eliding does not shrink a QLabel's minimum width, which would otherwise set the pane's
+	// Eliding does not shrink a QLabel's minimum width, which would otherwise become the pane's
 	_pathLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 	_tagLabel = new QLabel;
 	_tagLabel->setObjectName(QStringLiteral("diffTagLabel"));

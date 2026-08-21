@@ -33,11 +33,11 @@
 
 namespace {
 
-// A cold open lists the first batch as soon as that little is read, then extends to the full depth in
-// the background - the walk's cost is proportional to how much of history it covers
+// A cold open lists this many first, then extends to the full depth in the background: the walk's cost is
+// proportional to its depth
 constexpr int InitialCommitBatch = 500;
 constexpr int FileListWidth = 320;
-constexpr int MaxFilePathLabelWidth = 420; // beyond this the path elides rather than crowding the bar
+constexpr int MaxFilePathLabelWidth = 420; // beyond this the path elides
 constexpr int PickaxeEditWidth = 320;
 constexpr qsizetype MaxShownPickaxeTerm = 24;
 
@@ -59,7 +59,7 @@ HistoryWindow::HistoryWindow(const RepositoryLocation& location, const QString& 
 		: tr("History of %1 - %2 - GoodGit").arg(_query.path, _repo->name()));
 	buildUi();
 
-	// One geometry for every history window, keyed like the splitters beside it
+	// One geometry for every history window
 	installEventFilter(new CPersistenceEnabler(QStringLiteral("HistoryWindow"), this));
 
 	reload();
@@ -114,7 +114,7 @@ void HistoryWindow::buildUi()
 	_logView->setSelectionBehavior(QAbstractItemView::SelectRows);
 	_logView->setContextMenuPolicy(Qt::CustomContextMenu);
 	_logView->setItemDelegateForColumn(CommitLogModel::GraphColumn, new CommitGraphDelegate{ _logView });
-	_logView->header()->setStretchLastSection(false); // it would override Date's resize mode, and Subject is the one to grow
+	_logView->header()->setStretchLastSection(false); // Subject is the column to grow, not Date
 	_logView->header()->setSectionResizeMode(CommitLogModel::GraphColumn, QHeaderView::ResizeToContents);
 	_logView->header()->setSectionResizeMode(CommitLogModel::CommitColumn, QHeaderView::ResizeToContents);
 	_logView->header()->setSectionResizeMode(CommitLogModel::SubjectColumn, QHeaderView::Stretch);
@@ -201,7 +201,7 @@ void HistoryWindow::buildUi()
 		if (_searchEdit->text().isEmpty())
 			close();
 		else
-			_searchEdit->clear(); // closing the window out from under a search in progress would be a surprise
+			_searchEdit->clear();
 	});
 
 	_logView->setFocus(); // the search box would otherwise take it, being first in the tab order
@@ -209,8 +209,8 @@ void HistoryWindow::buildUi()
 
 bool HistoryWindow::eventFilter(QObject* watched, QEvent* event)
 {
-	// Down and Enter hand the search box over to the list, closing the Ctrl+F - type - navigate loop.
-	// applySearch has already made the first match current, so the arrows work straight away.
+	// Down and Enter move focus from the search box to the list. applySearch has already made the first
+	// match current, so the arrows work straight away.
 	if (watched == _searchEdit && event->type() == QEvent::KeyPress)
 	{
 		const int key = static_cast<QKeyEvent*>(event)->key();
@@ -235,14 +235,14 @@ void HistoryWindow::refreshUnpushedMarks()
 {
 	_unpushedQuery.cancel();
 	_unpushedQuery = _repo->unpushedCommits(this, [this](std::expected<QSet<QString>, QString> shas) {
-		// A failure is the ordinary "no upstream to compare against", and marks nothing
+		// A failure is the ordinary "no upstream to compare against"
 		_logModel.setUnpushedShas(std::move(shas).value_or(QSet<QString>{}));
 	});
 }
 
 void HistoryWindow::reload()
 {
-	_logQuery.cancel(); // a pending full-depth phase with it
+	_logQuery.cancel(); // including a pending full-depth phase
 	_pickaxeQuery.cancel();
 
 	refreshUnpushedMarks();
@@ -250,12 +250,10 @@ void HistoryWindow::reload()
 	_fullLoadPending = false;
 	_countLabel->setText(tr("Loading..."));
 
-	// The diagram needs a listing holding every commit between the ones it draws. A path limit prunes them
-	// and a content search names a scattered handful, so neither walk leaves lines that could be drawn.
+	// The diagram needs every commit between the ones it draws; a path limit or a content search leaves gaps
 	_logView->setColumnHidden(CommitLogModel::GraphColumn, !_query.path.isEmpty() || !_query.contentSearch.isEmpty());
 
-	// The narrower -S half runs beside the listing, marking within it rather than producing a list of
-	// its own; the two are independent walks, so they overlap instead of queueing behind each other
+	// The narrower half of the search runs in parallel with the listing and marks rows within it
 	_logModel.setAddingOrRemovingShas({});
 	if (!_query.contentSearch.isEmpty())
 	{
@@ -265,9 +263,8 @@ void HistoryWindow::reload()
 		});
 	}
 
-	// A cold open pays for the walk in proportion to its limit, so it starts with a small batch and
-	// extends to the full depth in the background. A window already showing rows re-runs in one phase:
-	// resetting it down to the batch just to grow back would make every refresh a visible collapse.
+	// A cold open starts with a small batch and extends to the full depth in the background. A window already
+	// showing rows re-runs in one phase: shrinking to the batch and growing back would be a visible collapse.
 	Repository::LogQuery firstQuery = _query;
 	if (_logModel.totalCount() == 0 && _query.contentSearch.isEmpty())
 		firstQuery.maxCommits = std::min(_query.maxCommits, InitialCommitBatch);
@@ -277,7 +274,7 @@ void HistoryWindow::reload()
 		if (!result)
 		{
 			_logCapped = false;
-			_logModel.setCommits({}); // resetting the model clears the panes below through currentChanged
+			_logModel.setCommits({}); // the reset clears the panes below through currentChanged
 			_countLabel->clear();
 			_loadMoreButton->setVisible(false);
 			_diffPane->showDiff({}, {}, result.error());
@@ -285,13 +282,13 @@ void HistoryWindow::reload()
 		}
 
 		std::vector<CommitRecord> commits = *std::move(result);
-		// Exactly the limit means the walk was cut short, not that history ends here
+		// Reaching the limit means the walk was cut short
 		const bool capped = int(commits.size()) >= phase1Limit;
 		_fullLoadPending = capped && phase1Limit < _query.maxCommits;
 		_logCapped = capped && !_fullLoadPending;
 		_loadMoreButton->setVisible(_logCapped);
 
-		_logModel.setCommits(std::move(commits)); // re-applies the active search to the new records
+		_logModel.setCommits(std::move(commits)); // re-applies the active search
 		_logLoaded = true;
 		updateCountLabel();
 		selectLoadedCommit();
@@ -307,7 +304,7 @@ void HistoryWindow::loadRemainingCommits()
 		_fullLoadPending = false;
 		if (!result)
 		{
-			// The batch on show stands; what failed is only the depth behind it, and the button offers it again
+			// The shown batch stands; only the depth behind it failed, and the button offers it again
 			_logCapped = true;
 			_loadMoreButton->setVisible(true);
 			updateCountLabel();
@@ -319,9 +316,9 @@ void HistoryWindow::loadRemainingCommits()
 		_loadMoreButton->setVisible(_logCapped);
 
 		if (!_logModel.extendCommits(std::move(commits)))
-			selectLoadedCommit(); // the extension fell back to a reset, and the selection went with it
+			selectLoadedCommit(); // the extension fell back to a reset, which dropped the selection
 		else if (!_revealSha.isEmpty())
-			selectLoadedCommit(); // a reveal the first batch missed; never re-selects over the user otherwise
+			selectLoadedCommit(); // a reveal the first batch missed; otherwise the user's selection stands
 		updateCountLabel();
 	});
 }
@@ -330,7 +327,7 @@ void HistoryWindow::revealCommit(const QString& sha)
 {
 	_revealSha = sha;
 	if (_logLoaded)
-		selectLoadedCommit(); // already listed, so nothing is coming to carry the reveal
+		selectLoadedCommit(); // otherwise the listing's completion does it
 }
 
 void HistoryWindow::selectLoadedCommit()
@@ -341,20 +338,20 @@ void HistoryWindow::selectLoadedCommit()
 		{
 			const QModelIndex index = _logModel.index(row, CommitLogModel::CommitColumn);
 			_revealSha.clear();
-			_logView->setCurrentIndex(index); // carries the panes below with it, through currentChanged
+			_logView->setCurrentIndex(index); // updates the panes below through currentChanged
 			_logView->scrollTo(index, QAbstractItemView::PositionAtCenter);
 			return;
 		}
 		if (_fullLoadPending)
-			return; // the full depth is still coming and may list it; decided when it lands
+			return; // the full depth may list it; decided when it lands
 		if (_query.startRevision != _revealSha)
 		{
-			// Not on the line of history the walk covered, so the walk has to start at the commit itself
+			// Not on the line of history the walk covered, so walk from the commit itself
 			_query.startRevision = _revealSha;
 			reload();
 			return;
 		}
-		_revealSha.clear(); // walked from it and it is still not listed; the newest row is all that is left
+		_revealSha.clear(); // walked from it and still not listed
 	}
 
 	if (_logModel.rowCount() > 0)
@@ -384,7 +381,7 @@ void HistoryWindow::applySearch()
 	_logModel.setSearchText(_searchEdit->text());
 	updateCountLabel();
 
-	// Land on the first match, so typing walks the list and the arrows step between matches from there
+	// Land on the first match, so the arrows step between matches from there
 	if (_logModel.rowCount() > 0)
 		_logView->setCurrentIndex(_logModel.index(0, CommitLogModel::CommitColumn));
 }
@@ -392,13 +389,13 @@ void HistoryWindow::applySearch()
 void HistoryWindow::updateCountLabel()
 {
 	if (!_logLoaded)
-		return; // the marks can arrive first, and their counts would be measured against an empty list
+		return; // the marks can arrive first, and their counts mean nothing against an empty list
 
 	const int shown = _logModel.rowCount();
 	const int total = _logModel.totalCount();
 
 	QString text = shown == total ? tr("%1 commits").arg(total) : tr("%1 of %2 commits").arg(shown).arg(total);
-	// Kept visible during a search too: finding nothing may only mean the commit is older than the limit
+	// Also during a search: finding nothing may only mean the commit is older than the limit
 	if (_fullLoadPending)
 		text = tr("%1, loading more...").arg(text);
 	else if (_logCapped)
@@ -407,7 +404,7 @@ void HistoryWindow::updateCountLabel()
 	if (!_query.contentSearch.isEmpty())
 	{
 		text = tr("%1, %2 adding or removing it").arg(text).arg(_logModel.addingOrRemovingCount());
-		// -S reaches into binary files, which -G cannot list for want of patch text to match
+		// -S reaches into binary files, which -G cannot list for want of patch text
 		if (const int unlisted = _logModel.addingOrRemovingNotListedCount(); unlisted > 0)
 			text = tr("%1 (+%2 in binary files, not listed)").arg(text).arg(unlisted);
 	}
@@ -447,14 +444,14 @@ void HistoryWindow::showPickaxePopup()
 		connect(_pickaxeEdit, &QLineEdit::returnPressed, this, find);
 		connect(clearButton, &QPushButton::clicked, this, [this] {
 			_pickaxeEdit->clear();
-			runPickaxe({}, _pickaxeIgnoreCaseBox->isChecked()); // clearing the term is not a reason to undo the choice
+			runPickaxe({}, _pickaxeIgnoreCaseBox->isChecked());
 		});
 	}
 
 	_pickaxeEdit->setText(_query.contentSearch);
 	_pickaxeIgnoreCaseBox->setChecked(_query.ignoreCase);
 	_pickaxePopup->adjustSize();
-	WidgetUtils::placeCenteredOn(_pickaxePopup, this); // its button is in the top-right corner, too far out to read from
+	WidgetUtils::placeCenteredOn(_pickaxePopup, this); // its button is in the top-right corner, too far out
 	_pickaxePopup->show();
 	_pickaxeEdit->setFocus();
 	_pickaxeEdit->selectAll();
@@ -463,16 +460,16 @@ void HistoryWindow::showPickaxePopup()
 void HistoryWindow::runPickaxe(const QString& text, bool ignoreCase)
 {
 	_pickaxePopup->hide();
-	_logView->setFocus(); // the results are what the user turns to next, and the popup restores focus to its button
+	_logView->setFocus(); // the popup would otherwise restore focus to its button
 
 	if (_query.contentSearch == text && _query.ignoreCase == ignoreCase)
-		return; // re-running the identical walk would cost seconds and change nothing
+		return; // the identical walk would cost seconds and change nothing
 
 	_query.contentSearch = text;
 	_query.ignoreCase = ignoreCase;
 
-	// The button doubles as the indicator that a content search is narrowing the list, so it carries the
-	// term - clipped, since a whole pasted line would push the rest of the bar off the window
+	// The button doubles as the indicator that a content search is active, so it carries the term - clipped,
+	// since a whole pasted line would push the rest of the bar off the window
 	const QString shown = text.size() > MaxShownPickaxeTerm ? text.left(MaxShownPickaxeTerm) + QStringLiteral("...") : text;
 	_pickaxeButton->setText(text.isEmpty() ? tr("Find in contents...") : tr("Contents: %1").arg(shown));
 	_pickaxeButton->setToolTip(text.isEmpty() ? tr("Re-read the log, keeping only the commits whose diff touches the text") : text);
@@ -485,8 +482,7 @@ void HistoryWindow::showCommitContextMenu(const QPoint& pos)
 	if (!index.isValid() || index.row() >= _logModel.rowCount())
 		return;
 
-	// Read before exec() spins an event loop: a log query finishing then resets the model, and the
-	// row index would no longer name this commit.
+	// Read before exec() spins an event loop, in which a finishing log query could reset the model
 	const QString sha = _logModel.commitAt(index.row()).sha;
 
 	QMenu menu{ this };
@@ -501,14 +497,13 @@ void HistoryWindow::showFileContextMenu(const QPoint& pos)
 	if (!index.isValid() || index.row() >= _filesModel.rowCount())
 		return;
 
-	// Read before exec() spins an event loop, which a completing query could reset the model under
+	// Read before exec() spins an event loop, in which a completing query could reset the model
 	const CommitFileChange entry = _filesModel.entryAt(index.row());
 
 	QMenu menu{ this };
 	if (entry.isSubmodule)
 	{
-		// A submodule's history is its own repository's; the parent's log of that path holds only the
-		// pointer moves. Same window the row opens on activation.
+		// The parent's log of a submodule path holds only the pointer moves
 		menu.addAction(tr("View commit history"), this, [this, entry] { openSubmoduleHistory(entry); });
 	}
 	else
@@ -541,9 +536,8 @@ void HistoryWindow::showFilesForCurrentCommit()
 
 	const CommitRecord& commit = _logModel.commitAt(current.row());
 
-	// Neither the file list nor the pane may outlive the commit they describe, so both are replaced
-	// before the queries go out. The message is what a freshly selected commit shows; picking a file
-	// from the list below swaps it for that file's diff.
+	// Both replaced before the queries go out, so neither outlives the commit it describes. The pane shows
+	// the message until a file is picked from the list.
 	_filesModel.clear();
 	showCommitMessage(commit);
 
@@ -553,7 +547,7 @@ void HistoryWindow::showFilesForCurrentCommit()
 		: QString{});
 	if (isMerge)
 	{
-		_fileCountLabel->setText(tr("merge commit")); // git shows no diff for one without --cc
+		_fileCountLabel->setText(tr("merge commit"));
 		return;
 	}
 
@@ -572,7 +566,7 @@ void HistoryWindow::showFilesForCurrentCommit()
 		_filesModel.setEntries(*std::move(result));
 		_fileCountLabel->setText(fileCount == 1 ? tr("1 file") : tr("%1 files").arg(fileCount));
 	});
-	// Its own query, so the rows may appear before their counts do; failing costs the counts and nothing else
+	// A separate query, so the rows may appear before their counts; a failure costs only the counts
 	_fileCountsQuery = _repo->commitFileCounts(sha, this, [this](std::expected<std::map<QString, LineCounts>, QString> counts) {
 		_filesModel.setLineCounts(std::move(counts).value_or(std::map<QString, LineCounts>{}));
 	});
@@ -587,7 +581,7 @@ void HistoryWindow::showDiffForCurrentFile()
 	if (!currentFile.isValid() || currentFile.row() >= _filesModel.rowCount()
 		|| !currentCommit.isValid() || currentCommit.row() >= _logModel.rowCount())
 	{
-		return; // no file picked: the pane keeps the commit message showFilesForCurrentCommit put there
+		return; // no file picked: the pane keeps the commit message
 	}
 
 	const CommitFileChange entry = _filesModel.entryAt(currentFile.row());

@@ -31,14 +31,13 @@ class CommitWindow final : public QMainWindow
 public:
 	explicit CommitWindow(const RepositoryLocation& location);
 
-	// Which repository this window is showing - how a second request to open one finds it already open
 	[[nodiscard]] const QString& repositoryPath() const;
-	// For the window whose submodule another window is showing: that window's commit moves a pointer here
+	// Called by a submodule's window after committing there, which moves a pointer here
 	void refreshRepository();
 
 signals:
-	void committed(); // a commit succeeded here; the parent window refreshes its gitlink row off this
-	void pushed();    // a push succeeded here; the history window's unpushed marks are stale until it hears this
+	void committed(); // the parent window refreshes its gitlink row off this
+	void pushed();    // the history window's unpushed marks are stale until it hears this
 
 protected:
 	bool eventFilter(QObject* watched, QEvent* event) override;
@@ -46,7 +45,7 @@ protected:
 
 private:
 	void buildUi();
-	// The recent repositories dock, added to the window; answers with the action that shows and hides it
+	// Returns the action that shows and hides the dock
 	[[nodiscard]] QAction* buildRecentRepositoriesDock();
 
 	void onRefreshed();
@@ -54,8 +53,8 @@ private:
 	void updateStrips();
 	void updateButtons();
 
-	// Every flow that writes to the index or the working tree brackets itself with these, and they drive
-	// the controls that would otherwise start a second one
+	// Every flow that writes to the index or the working tree brackets itself with these; they disable the
+	// controls that would start a second one
 	void beginMutation();
 	void endMutation();
 	// False while a write is in flight, and while the rows are only the last state that could be read
@@ -63,15 +62,15 @@ private:
 
 	void startCommit(bool pushAfterwards);
 	void confirmUntrackedThenCommit(bool pushAfterwards);
-	// Always reports back, refusal included: the caller is mid-commit and has to end its flow either way
+	// Always calls back, refusal included: the caller is mid-commit and has to end its flow either way
 	void reattachHead(std::function<void(bool reattached)> onDone);
 	void doCommit(bool pushAfterwards);
-	// A push is however many commands the repository plans for it, run one after another and logged as one
-	// console session. The first failure ends it, so nothing is published past a step that could not be.
+	// Runs the steps the repository plans one after another, logged as one console session. The first
+	// failure ends the push.
 	void startPush();
 	void runPushStep(size_t index, bool setUpstream);
-	// The offer to give a step's branch an upstream, and the retry if it is taken. Answers whether the push
-	// goes on: a declined offer ends it.
+	// Offers to set an upstream for the step's branch and retries if accepted. Returns whether the push
+	// goes on.
 	bool offerUpstreamThenRetry(size_t index);
 	void peekIncoming();
 	void showIncomingCommits(const std::vector<CommitRecord>& commits, bool capped);
@@ -82,14 +81,13 @@ private:
 	void showPreferencesDialog();
 
 	void showDiffForCurrentRow();
-	// An untracked file is nothing's modification, so the pane shows what it holds, unhighlighted
+	// For an untracked file, which has no diff: the pane shows the file itself, unhighlighted
 	void showFileContents(const FileEntry& entry);
 	void onRowActivated(const QModelIndex& index);
 	void openSubmoduleWindow(const FileEntry& entry);
 	void showContextMenu(const QPoint& pos);
 
-	// A refresh resets the model, so row numbers do not survive it. The selection travels by path
-	// instead - the same identity the check state is re-derived from.
+	// A refresh resets the model, so the selection is carried across it by path
 	struct SelectionByPath
 	{
 		QSet<QString> paths;
@@ -140,14 +138,13 @@ private:
 	QLabel* _incomingHeaderLabel = nullptr;
 	QPlainTextEdit* _incomingView = nullptr;
 
-	std::vector<PushStep> _pushSteps; // the running push's plan, replaced wholesale when the next one is planned
+	std::vector<PushStep> _pushSteps; // the running push's plan
 
 	QPointer<HistoryWindow> _historyWindow; // at most one per repo window, raised again on a second click
 	Vcs::Query _diffQuery; // whatever fills the diff pane: a file's diff, or a submodule's incoming commits
 	Vcs::Query _wordPoolQuery;
-	// Held for a whole writing flow, dialogs and the asynchronous reattach included - not just while a git
-	// process runs. Two of them would meet at index.lock, and the second would commit a pathspec the first
-	// has already taken.
+	// Held for a whole writing flow, dialogs and the asynchronous reattach included, not just while a process
+	// runs: two flows would meet at index.lock, and the second would commit a pathspec the first already took
 	bool _mutationInFlight = false;
 	bool _peekInFlight = false; // a fetch is slow, and a refresh landing meanwhile must not re-enable the button
 };

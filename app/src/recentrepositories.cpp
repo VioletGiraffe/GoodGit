@@ -14,7 +14,7 @@ constexpr qsizetype MaxRecentRepositories = 10;
 	return QLatin1String(kind == VcsKind::Mercurial ? Settings::VcsKindMercurial : Settings::VcsKindGit);
 }
 
-// Anything but Mercurial's own text reads as git, this being a stored value the app may meet in any state
+// Anything but Mercurial's text reads as git: the stored value may be anything
 [[nodiscard]] VcsKind kindFromText(const QString& text)
 {
 	return text == QLatin1String(Settings::VcsKindMercurial) ? VcsKind::Mercurial : VcsKind::Git;
@@ -34,8 +34,7 @@ constexpr qsizetype MaxRecentRepositories = 10;
 void save(const std::vector<RecentRepository>& repositories)
 {
 	CSettings settings;
-	// Written whole: beginWriteArray only records the new size, leaving any longer previous array's tail
-	// behind as entries nothing reads and nothing removes
+	// beginWriteArray only records the new size, leaving a longer previous array's tail behind
 	settings.remove(QLatin1String(Settings::RecentRepositoriesKey));
 
 	settings.beginWriteArray(QLatin1String(Settings::RecentRepositoriesKey), int(repositories.size()));
@@ -85,8 +84,7 @@ std::vector<RecentRepository> list()
 		const QStringList kinds = settings.value(QLatin1String(Settings::RecentRepositorySubrepoKindsKey)).toStringList();
 		for (qsizetype subrepo = 0; subrepo < paths.size(); ++subrepo)
 		{
-			// The two lists are written together and read apart, so a kind that is not there is the
-			// parent's - the common case even when both lists are intact
+			// A missing kind defaults to the parent's
 			const VcsKind kind = subrepo < kinds.size() ? kindFromText(kinds[subrepo]) : repository.kind;
 			repository.subrepos.push_back({ paths[subrepo], kind });
 		}
@@ -105,13 +103,12 @@ void recordOpen(const RepositoryLocation& location)
 		std::rotate(repositories.begin(), entry, entry + 1);
 	};
 
-	// A subrepo is opened as part of working on what holds it, so that is what the list records
 	const auto parent = std::ranges::find_if(repositories,
 		[&](const RecentRepository& repository) { return holdsSubrepoAt(repository, location.root); });
 	if (parent != repositories.end())
 	{
 		if (parent == repositories.begin())
-			return; // already the newest, and nothing else about it changes
+			return; // already the newest
 
 		moveToFront(parent);
 		save(repositories);
@@ -123,7 +120,7 @@ void recordOpen(const RepositoryLocation& location)
 	if (existing != repositories.end())
 	{
 		existing->kind = location.kind;
-		existing->root = location.root; // the spelling of the path that was actually opened
+		existing->root = location.root; // the spelling that was actually opened
 		moveToFront(existing);
 	}
 	else
@@ -150,7 +147,7 @@ void setSubrepos(const Repository& repository)
 		subrepos.push_back({ path, repository.submoduleLocation(path).kind });
 
 	if (subrepos == entry->subrepos)
-		return; // a refresh that found what the last one did writes nothing, and announces nothing
+		return; // nothing to write or announce
 
 	entry->subrepos = std::move(subrepos);
 	save(repositories);

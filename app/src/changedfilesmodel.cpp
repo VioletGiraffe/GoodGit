@@ -71,8 +71,8 @@ QColor lineCountColor(bool added)
 ChangedFilesModel::ChangedFilesModel(QObject* parent) :
 	QAbstractTableModel(parent)
 {
-	// The count columns' font comes from the settings; layoutChanged (unlike dataChanged) also has the
-	// view recompute its cached uniform row height, and keeps selection where a reset would not
+	// The monospace font comes from the settings. layoutChanged, unlike dataChanged, makes the view recompute
+	// its cached uniform row height, and unlike a reset keeps the selection.
 	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] {
 		emit layoutAboutToBeChanged();
 		emit layoutChanged();
@@ -84,7 +84,7 @@ void ChangedFilesModel::setEntries(const std::vector<FileEntry>& entries, bool m
 	std::unordered_map<QString, bool> previousChecks;
 	for (const Row& row : _rows)
 	{
-		if (row.entry.committable()) // an unchecked non-committable row records the block, not a user choice
+		if (row.entry.committable()) // a non-committable row's unchecked state is the block, not a user choice
 			previousChecks[row.entry.path] = row.checked;
 	}
 
@@ -169,7 +169,7 @@ QStringList ChangedFilesModel::checkedPathspec() const
 			continue;
 		paths.push_back(row.entry.path);
 		if (!row.entry.oldPath.isEmpty())
-			paths.push_back(row.entry.oldPath); // a rename must carry both paths or the deletion of the old name is lost
+			paths.push_back(row.entry.oldPath); // or the deletion of the old name is lost
 	}
 	return paths;
 }
@@ -272,13 +272,13 @@ QVariant ChangedFilesModel::data(const QModelIndex& index, int role) const
 			font.setWeight(QFont::DemiBold);
 			return font;
 		}
-		else if (index.column() == PathColumn) // monospace, struck through when deleted (FileListDelegate recolors the strike)
+		else if (index.column() == PathColumn) // FileListDelegate recolors the strikethrough
 		{
 			QFont font = monospaceFont();
 			font.setStrikeOut(entry.type == ChangeType::Deleted);
 			return font;
 		}
-		return monospaceFont(); // the counts, where digits of one width line up down the column
+		return monospaceFont(); // the counts line up down the column
 	case Qt::BackgroundRole:
 		if (entry.isSubmodule && entry.contentBlocksPointer())
 			return QBrush{ activeTheme().blockedRowTint() };

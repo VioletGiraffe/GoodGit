@@ -18,8 +18,7 @@
 
 namespace {
 
-// An executable path edit with its Browse button, as one form-row widget. An empty field means the
-// default from PATH, which the placeholder shows.
+// A path edit with a Browse button. An empty field means the default from PATH, which the placeholder shows.
 QWidget* executableRow(QWidget* parent, QLineEdit*& edit, const char* settingsKey, const char* defaultName)
 {
 	auto* row = new QWidget{ parent };
@@ -132,21 +131,21 @@ ThemeFontSettingsPage::ThemeFontSettingsPage(QWidget* parent) :
 	_colorScheme->addItem(tr("Dark"), int(Qt::ColorScheme::Dark));
 	_schemeOnEntry = CThemeController::instance().schemePreference();
 	_colorScheme->setCurrentIndex(_colorScheme->findData(int(_schemeOnEntry)));
-	// Applied as it is picked, so the choice is judged against the real windows rather than a swatch
+	// Applied as picked, so the choice is judged on the real windows rather than a swatch
 	connect(_colorScheme, &QComboBox::currentIndexChanged, this, [this] {
 		CThemeController::instance().setSchemePreference(Qt::ColorScheme(_colorScheme->currentData().toInt()));
 	});
 	layout->addRow(tr("Color scheme:"), _colorScheme);
 
-	// One combo per polarity; each holds that polarity's themes and applies as it is picked, like the scheme
+	// One combo per polarity, applied as picked like the scheme
 	const auto themeCombo = [this](bool dark, QString& nameOnEntry) {
 		nameOnEntry = CThemeController::instance().themeName(dark);
 		auto* combo = new QComboBox;
 		for (const Theme& theme : allThemes())
 			if (theme.dark == dark)
 				combo->addItem(theme.name);
-		// A stored name can be empty or outlive its theme; the combo then shows the polarity's first
-		// theme, matching what the resolver falls back to
+		// A stored name can be empty or outlive its theme; the combo then shows the polarity's first theme,
+		// matching what selectActiveTheme() falls back to
 		if (const int storedIndex = combo->findText(nameOnEntry); storedIndex != -1)
 			combo->setCurrentIndex(storedIndex);
 		connect(combo, &QComboBox::currentTextChanged, this, [dark](const QString& name) {
@@ -158,7 +157,6 @@ ThemeFontSettingsPage::ThemeFontSettingsPage(QWidget* parent) :
 	layout->addRow(tr("Dark theme:"), themeCombo(true, _darkThemeOnEntry));
 
 	_systemFont = new QCheckBox{ tr("Use the system monospace font") };
-	// An empty stored family means no override, exactly as monospaceFont() reads it
 	_systemFont->setChecked(CSettings{}.value(Settings::MonospaceFontFamilyKey).toString().isEmpty());
 	layout->addRow(_systemFont);
 
@@ -189,7 +187,7 @@ ThemeFontSettingsPage::ThemeFontSettingsPage(QWidget* parent) :
 
 void ThemeFontSettingsPage::acceptSettings()
 {
-	// The scheme and themes are not stored here: picking them applied and stored them
+	// The scheme and themes were stored when picked
 	CSettings settings;
 	const bool systemFont = _systemFont->isChecked();
 	settings.setValue(Settings::MonospaceFontFamilyKey, systemFont ? QString{} : _fontFamily->currentFont().family());
@@ -199,8 +197,7 @@ void ThemeFontSettingsPage::acceptSettings()
 
 void ThemeFontSettingsPage::rejectSettings()
 {
-	// All no-ops when nothing was previewed. Names first: restoring the scheme can flip the polarity,
-	// which re-resolves against whatever names are in force.
+	// Names first: restoring the scheme can flip the polarity, which re-resolves against the names in force
 	CThemeController& controller = CThemeController::instance();
 	controller.setThemeName(false, _lightThemeOnEntry);
 	controller.setThemeName(true, _darkThemeOnEntry);

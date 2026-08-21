@@ -57,17 +57,16 @@
 
 namespace {
 
-constexpr int RecentRepositoriesDockWidth = 210; // first-run default; the dock's width persists with the window state
-constexpr int LeftColumnWidth = 430; // first-run default; fits the default 50-column subject guide, and the splitter position persists
+constexpr int RecentRepositoriesDockWidth = 210; // first-run default; persists with the window state
+constexpr int LeftColumnWidth = 430; // first-run default, fits the default 50-column subject guide; persists with the splitter
 constexpr qsizetype BinarySniffBytes = 8000; // git's own threshold: a NUL this early means the file is not text
 constexpr int MaxListedPathsInDialog = 20;
-constexpr int MaxIncomingCommits = 200; // a peek, not a history window - that is what History is for
+constexpr int MaxIncomingCommits = 200; // a peek, not a history window
 constexpr int IncomingPopupWidth = 560;
 constexpr int IncomingPopupHeight = 320;
 
-// What discarding can act on. Untracked files are not git's to restore, and a submodule with changes inside
-// would be checked out over. Mid-operation nothing is: restoring a path to HEAD there would silently
-// drop the merge's or rebase's result for it, conflicted or not.
+// Untracked files have nothing to restore to. A submodule with changes inside would be checked out over.
+// Mid-operation nothing is discardable: restoring a path to HEAD would silently drop the operation's result for it.
 bool discardable(const FileEntry& entry, bool operationInProgress)
 {
 	if (operationInProgress)
@@ -97,9 +96,9 @@ bool looksLikeHexSha(const QString& token)
 	return true;
 }
 
-// The message completion pool: every changed file's path and basename, plus identifier-shaped words
-// from the changed lines themselves. Length < 4 and a small stoplist weed out prose function words;
-// hex-sha-shaped tokens are dropped so submodule pointer diffs don't pollute the pool.
+// Every changed file's path and basename, plus identifier-shaped words from the changed lines.
+// Length < 4 and a small stoplist weed out prose function words.
+// Hex-sha-shaped tokens are dropped: submodule pointer diffs would pollute the pool.
 QStringList completionWordsFor(const std::vector<FileEntry>& files, QByteArray diff)
 {
 	constexpr qsizetype MaxDiffBytesForWords = 8 * 1024 * 1024;
@@ -154,7 +153,7 @@ CommitWindow::CommitWindow(const RepositoryLocation& location) :
 	setAttribute(Qt::WA_DeleteOnClose);
 	buildUi();
 
-	// One geometry for every commit window, keyed like the splitter beside it
+	// One geometry for every commit window
 	installEventFilter(new CPersistenceEnabler(QStringLiteral("CommitWindow"), this));
 
 	connect(_repo.get(), &Repository::refreshed, this, &CommitWindow::onRefreshed);
@@ -190,7 +189,7 @@ void CommitWindow::buildUi()
 	editMenu->addAction(tr("&Preferences..."), this, &CommitWindow::showPreferencesDialog)
 		->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_P));
 	QMenu* viewMenu = menuBar()->addMenu(tr("&View"));
-	viewMenu->addAction(buildRecentRepositoriesDock()); // builds the dock; the action is what shows and hides it
+	viewMenu->addAction(buildRecentRepositoriesDock());
 	QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
 	helpMenu->addAction(tr("&About"), this, [this] {
 		CAboutDialog aboutDialog{ QStringLiteral(GG_VERSION), this };
@@ -239,7 +238,7 @@ void CommitWindow::buildUi()
 	repoBarLayout->addWidget(_uncommitButton);
 	leftLayout->addWidget(repoBar);
 
-	// Colored by the central stylesheet through the object names
+	// Colored by the stylesheet through the object names
 	const auto makeStrip = [](const char* objectName) {
 		auto* strip = new QLabel;
 		strip->setObjectName(QLatin1String(objectName));
@@ -248,7 +247,7 @@ void CommitWindow::buildUi()
 		strip->setVisible(false);
 		return strip;
 	};
-	// First: the strips below describe a state this one says could not be read
+	// First: the other strips describe a state this one says could not be read
 	_readFailureStrip = makeStrip("errorStrip");
 	_opStrip = makeStrip("errorStrip");
 	_detachedStrip = makeStrip("warningStrip");
@@ -297,7 +296,7 @@ void CommitWindow::buildUi()
 	_lastCommitLabel = new CLabelElided;
 	_lastCommitLabel->setElideMode(Qt::ElideRight); // a subject reads from its start, unlike the paths elsewhere
 	_lastCommitLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-	// This column's width is the repo header row's to set, so a long subject elides instead of adding to it
+	// A long subject must elide rather than widen the column
 	_lastCommitLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 	messageHeaderLayout->addWidget(_lastCommitLabel, 1);
 	leftLayout->addWidget(messageHeader);
@@ -408,7 +407,7 @@ void CommitWindow::buildUi()
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Enter), this, commitPushShortcut);
 
 	updateButtons();
-	_messageEdit->setFocus(); // typing the message is what the window is opened to do
+	_messageEdit->setFocus();
 }
 
 QAction* CommitWindow::buildRecentRepositoriesDock()
@@ -416,11 +415,10 @@ QAction* CommitWindow::buildRecentRepositoriesDock()
 	auto* dock = new QDockWidget{ this };
 	dock->setWindowTitle(tr("Recent Repositories"));
 	dock->setObjectName(QStringLiteral("recentRepositoriesDock")); // saveState() drops a dock that has no name
-	dock->setFeatures(QDockWidget::DockWidgetClosable); // it has one place in the window, and closes rather than moves
+	dock->setFeatures(QDockWidget::DockWidgetClosable);
 	dock->setAllowedAreas(Qt::LeftDockWidgetArea);
 
-	// A dock's own title bar is the style's to draw, and the app's is a stylesheet: this one is a bar like
-	// the others in the window instead
+	// The stylesheet cannot style a dock's native title bar, so it gets a bar like the others in the window
 	auto* header = new QFrame;
 	header->setObjectName(QStringLiteral("dockHeader"));
 	auto* headerLayout = new QHBoxLayout(header);
@@ -464,7 +462,7 @@ bool CommitWindow::eventFilter(QObject* watched, QEvent* event)
 		}
 		if (keyEvent->key() == Qt::Key_Delete)
 		{
-			if (canActOnList()) // swallowed either way: the key means this and nothing else here
+			if (canActOnList()) // swallowed either way
 				deleteSelection();
 			return true;
 		}
@@ -478,19 +476,17 @@ void CommitWindow::onRefreshed()
 
 	const RepoState& state = _repo->state();
 	_filesModel.setEntries(_repo->files(), state.operationInProgress());
-	// The subrepo rows in the recent list come from here: nothing else ever asks a repository what it holds
-	RecentRepositories::setSubrepos(*_repo);
+	RecentRepositories::setSubrepos(*_repo); // the only place the recent list learns a repository's subrepos
 
 	updateHeader();
 	updateStrips();
 	updateButtons();
 
 	restoreSelectionByPath(selection);
-	// Selecting a row is not what makes this needed: an emptied list leaves nothing to make current,
-	// and content that changed under a selection that did not move has to be re-read anyway
+	// Even if the current row did not move: the list may have emptied, or the content changed underneath
 	showDiffForCurrentRow();
 
-	// Or refreshes in quick succession leave the pool built by whichever finished last, not by the newest
+	// Cancelled, or refreshes in quick succession would leave the pool built by whichever finished last
 	_wordPoolQuery.cancel();
 	_wordPoolQuery = _repo->diffAllChanges(this, [this](std::expected<QByteArray, QString> diff) {
 		_messageEdit->setCompletionWords(completionWordsFor(_repo->files(), std::move(diff).value_or(QByteArray{})));
@@ -530,7 +526,7 @@ void CommitWindow::updateHeader()
 	}
 	_pushButton->setToolTip(unpushedTooltip.isEmpty() ? QStringLiteral("Ctrl+Shift+P")
 		: QStringLiteral("Ctrl+Shift+P\n") + unpushedTooltip);
-	_aheadLabel->setToolTip(unpushedTooltip); // the label is not the button, and has no shortcut to advertise
+	_aheadLabel->setToolTip(unpushedTooltip);
 
 	_lastCommitLabel->setText(state.headSubject.isEmpty() ? QString{} : tr("Previous commit: %1").arg(state.headSubject));
 	_lastCommitLabel->setToolTip(state.headSubject.isEmpty() ? QString{}
@@ -590,8 +586,7 @@ void CommitWindow::updateButtons()
 			: checkedCount == checkableCount ? Qt::Checked : Qt::PartiallyChecked);
 	}
 
-	// One label rather than the list's two columns: colouring halves of a string is what a QLabel does
-	// without a delegate's help
+	// One rich-text label rather than two columns: a QLabel can color halves of a string without a delegate
 	const std::optional<LineCounts> lineTotals = _filesModel.checkedLineTotals();
 	_lineTotalsLabel->setText(lineTotals
 		? QStringLiteral("<span style=\"color:%1\">%2</span>&nbsp;&nbsp;<span style=\"color:%3\">%4</span>")
@@ -607,7 +602,6 @@ void CommitWindow::updateButtons()
 	_commitButton->setText(state.operationInProgress() ? tr("Commit (%1 files)").arg(checkedCount)
 		: tr("Commit %1 file(s)").arg(checkedCount));
 
-	// Without an upstream there is no ref for the incoming walk to name
 	_peekButton->setEnabled(!state.upstream.isEmpty() && !_peekInFlight);
 	_uncommitButton->setEnabled(state.lastCommitUndoable() && canActOnList());
 }
@@ -667,8 +661,8 @@ void CommitWindow::confirmUntrackedThenCommit(bool pushAfterwards)
 	doCommit(pushAfterwards);
 }
 
-// Reattachment rule (doc/ARCHITECTURE.md): only ever attach to a branch whose tip is exactly HEAD,
-// so the working tree never moves. Anything else refuses.
+// Reattachment rule (doc/ARCHITECTURE.md): only ever attach to a branch whose tip is exactly HEAD, so the
+// working tree never moves. Anything else refuses.
 void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 {
 	const RepoState& state = _repo->state();
@@ -719,7 +713,7 @@ void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 		_repo->localBranchExists(localName, this, [this, localName, remoteBranch, onDone](bool exists) {
 			if (exists)
 			{
-				// Taking the name would move the working tree - that disqualifies it
+				// Checking it out would move the working tree
 				MessageBox::notice(this, tr("Cannot reattach"),
 					tr("HEAD matches %1, but the local branch '%2' already exists and points elsewhere.\n"
 					   "Committing is blocked - resolve the branch state first.").arg(remoteBranch, localName), {});
@@ -747,7 +741,7 @@ void CommitWindow::doCommit(bool pushAfterwards)
 	const QStringList pathspec = _filesModel.checkedPathspec();
 	const QStringList untracked = _filesModel.checkedUntrackedPaths();
 	assert(!message.trimmed().isEmpty() && !pathspec.isEmpty());
-	assert(_mutationInFlight); // startCommit took it, and holds it across the reattach and the dialogs
+	assert(_mutationInFlight); // held by startCommit across the reattach and the dialogs
 
 	const auto onDone = [this, message, pushAfterwards](std::expected<void, QString> result) {
 		endMutation();
@@ -773,7 +767,7 @@ void CommitWindow::doCommit(bool pushAfterwards)
 void CommitWindow::startPush()
 {
 	_pushButton->setEnabled(false);
-	_pushLogView->clearLog(); // this push replaces the last one's log rather than adding to it
+	_pushLogView->clearLog();
 
 	_repo->planPush([this](std::expected<std::vector<PushStep>, QString> steps) {
 		if (!steps)
@@ -812,18 +806,16 @@ void CommitWindow::runPushStep(size_t index, bool setUpstream)
 			return;
 		}
 
-		// A push with nowhere to go is not over until the offer to give it one is answered
 		const bool upstreamOffered = !setUpstream && QString::fromUtf8(result.err).contains(QLatin1String("no upstream"));
 		if (upstreamOffered && offerUpstreamThenRetry(index))
 			return;
 
 		_pushButton->setEnabled(true);
-		if (!upstreamOffered) // a declined offer named this failure already
+		if (!upstreamOffered) // a declined offer already named this failure
 			showError(tr("Push failed"), result.errorText());
 	};
 
 	Vcs::Job* job = _repo->runPushStep(step, setUpstream, onDone);
-	// Before the event loop runs again, so the first chunk is not missed
 	job->streamTo([this](const QByteArray& chunk) { _pushLogView->appendOutput(chunk); });
 }
 
@@ -857,7 +849,7 @@ void CommitWindow::peekIncoming()
 			showError(tr("Fetch failed"), fetchResult.error());
 			return;
 		}
-		_repo->refresh(); // the fetch moved the remote-tracking ref, so the header's counts are stale
+		_repo->refresh(); // the fetch moved the remote-tracking ref, so the header counts are stale
 
 		_repo->incomingCommits(MaxIncomingCommits, this, [this](std::expected<std::vector<CommitRecord>, QString> commits) {
 			if (!commits)
@@ -901,7 +893,7 @@ void CommitWindow::showIncomingCommits(const std::vector<CommitRecord>& commits,
 		lines.push_back(tr("... and older ones, not listed"));
 	_incomingView->setPlainText(lines.join(QLatin1Char('\n')));
 
-	// Nothing to list shrinks the popup to its one line, rather than framing a lot of nothing
+	// With nothing to list the popup shrinks to its header line
 	_incomingView->setVisible(!commits.empty());
 	if (commits.empty())
 		_incomingPopup->adjustSize();
@@ -914,13 +906,12 @@ void CommitWindow::showIncomingCommits(const std::vector<CommitRecord>& commits,
 
 void CommitWindow::closePushLogEntry(const ProcessResult& result)
 {
-	// Everything the push had to say is already in the log, streamed as it ran. What is left is the
-	// verdict, which its output nowhere states.
+	// The output was streamed into the log as it ran; only the verdict is left to add
 	if (result.ok)
 		_pushLogView->appendNote(tr("Succeeded"), ConsoleLogView::NoteKind::Success);
 	else if (result.outcome == ProcessOutcome::Exited)
 		_pushLogView->appendNote(tr("Process failed with exit code %1").arg(result.exitCode), ConsoleLogView::NoteKind::Failure);
-	else // no exit code to report: it never started, or died without exiting
+	else // no exit code: never started, or died without exiting
 		_pushLogView->appendNote(result.errorText(), ConsoleLogView::NoteKind::Failure);
 }
 
@@ -1046,7 +1037,7 @@ void CommitWindow::showPreferencesDialog()
 void CommitWindow::openSubmoduleWindow(const FileEntry& entry)
 {
 	CommitWindow* window = openRepositoryWindow(_repo->submoduleLocation(entry.path));
-	// The window may be one already open, and so already connected to this one
+	// The window may already be open, and so already connected
 	connect(window, &CommitWindow::committed, this, &CommitWindow::refreshRepository, Qt::UniqueConnection);
 }
 
@@ -1056,16 +1047,15 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	if (rows.empty())
 		return;
 
-	// Entries are captured by value: menu.exec() spins an event loop, so a completing refresh can reset
-	// the model while the menu is open, invalidating row indexes. The slots for the git actions re-query
-	// the selection instead, which the reset safely empties.
+	// Captured by value: menu.exec() spins an event loop, and a refresh completing in it resets the model.
+	// The slots for the VCS actions re-query the selection instead, which the reset safely empties.
 	std::vector<FileEntry> entries;
 	entries.reserve(rows.size());
 	for (const int row : rows)
 		entries.push_back(_filesModel.entryAt(row));
 
 	const bool operationInProgress = _repo->state().operationInProgress();
-	// The read-only entries below stay available either way - a stale row is still worth inspecting
+	// Only gates the writing actions; a stale row is still worth inspecting
 	const bool canAct = canActOnList();
 	bool anyUntracked = false, anyAdded = false, anyDeletable = false, anyDiscardable = false;
 	for (const FileEntry& entry : entries)
@@ -1086,12 +1076,12 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	unAddAction->setEnabled(anyAdded && canAct);
 	QMenu* ignoreMenu = menu.addMenu(tr("Add to %1").arg(_repo->ignoreFileName()));
 	const bool singleUntracked = entries.size() == 1 && !entries.front().isSubmodule && entries.front().type == ChangeType::Untracked;
-	ignoreMenu->setEnabled(singleUntracked && canAct); // the pattern comes off the row, so it is as stale as the row
+	ignoreMenu->setEnabled(singleUntracked && canAct); // the pattern comes from the row, so it is as stale as the row
 	if (singleUntracked)
 	{
 		for (const IgnorePattern& pattern : _repo->ignorePatternsFor(entries.front().path))
 		{
-			// '&' doubled for display only - QMenu would otherwise eat it as an accelerator marker
+			// '&' doubled for display, or QMenu takes it as an accelerator marker
 			ignoreMenu->addAction(QString{ pattern.text }.replace(QLatin1Char('&'), QStringLiteral("&&")),
 				this, [this, pattern] { addPatternToIgnoreFile(pattern); });
 		}
@@ -1102,19 +1092,18 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	});
 	openAction->setEnabled(singleFile);
 	QAction* submoduleHistoryAction = menu.addAction(tr("View commit history"), this, [this, entry = entries.front()] {
-		// Not deduplicated the way this repo's own history window is, matching openSubmoduleWindow
+		// Not deduplicated like this repo's own history window, matching openSubmoduleWindow
 		auto* window = new HistoryWindow(_repo->submoduleLocation(entry.path), this);
 		window->show();
 	});
 	submoduleHistoryAction->setEnabled(entries.size() == 1 && entries.front().isSubmodule);
 	QAction* fileHistoryAction = menu.addAction(tr("View file history"), this, [this, entry = entries.front()] {
-		// Nothing is committed at a rename's new path yet: the history is under the name the commits know
+		// Nothing is committed at a rename's new path yet
 		const QString& path = entry.oldPath.isEmpty() ? entry.path : entry.oldPath;
 		auto* window = new HistoryWindow(_repo->location(), path, this);
 		window->show();
 	});
-	// A submodule's history is its own repo's, offered above; an untracked or newly added file is in no
-	// commit under any name
+	// A submodule's history is its own repo's, offered above; an untracked or newly added file is in no commit
 	fileHistoryAction->setEnabled(entries.size() == 1 && !entries.front().isSubmodule
 		&& entries.front().type != ChangeType::Untracked && entries.front().type != ChangeType::Added);
 	QAction* explorerAction = menu.addAction(tr("Show in Explorer"), this, [this, entry = entries.front()] {
@@ -1137,8 +1126,8 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	discardAction->setEnabled(anyDiscardable && canAct);
 	QAction* deleteAction = menu.addAction(tr("Delete to Recycle Bin"), this, &CommitWindow::deleteSelection);
 	deleteAction->setEnabled(anyDeletable && canAct);
-	// Display-only: the view's event filter owns the actual Del handling; WidgetShortcut on an action
-	// belonging to no widget never registers globally, so the key cannot trigger twice
+	// Display only: the view's event filter handles the key. WidgetShortcut on an action belonging to no
+	// widget never registers, so the key cannot trigger twice.
 	deleteAction->setShortcut(QKeySequence::Delete);
 	deleteAction->setShortcutContext(Qt::WidgetShortcut);
 	deleteAction->setShortcutVisibleInContextMenu(true);
@@ -1162,8 +1151,7 @@ CommitWindow::SelectionByPath CommitWindow::captureSelectionByPath() const
 
 void CommitWindow::restoreSelectionByPath(const SelectionByPath& selection)
 {
-	// One pass over the new rows rather than a lookup per remembered path, so a large selection
-	// over a large list stays linear
+	// One pass over the rows, so a large selection over a large list stays linear
 	QItemSelection restored;
 	int currentRow = -1;
 	for (int row = 0; row < _filesModel.rowCount(); ++row)
@@ -1176,11 +1164,11 @@ void CommitWindow::restoreSelectionByPath(const SelectionByPath& selection)
 	}
 
 	if (currentRow < 0 && _filesModel.rowCount() > 0)
-		currentRow = 0; // the file is gone - committed, or discarded elsewhere
+		currentRow = 0; // the file is gone: committed, or discarded elsewhere
 	if (currentRow >= 0)
 		_filesView->setCurrentIndex(_filesModel.index(currentRow, ChangedFilesModel::StateColumn));
 
-	// After setCurrentIndex, which selects the row it lands on and would otherwise be the selection
+	// After setCurrentIndex, which selects the row it lands on
 	if (!restored.isEmpty())
 		_filesView->selectionModel()->select(restored, QItemSelectionModel::ClearAndSelect);
 }
@@ -1215,7 +1203,7 @@ void CommitWindow::toggleCheckOnSelection()
 
 void CommitWindow::deleteSelection()
 {
-	// Per-state delete rules. Submodules and already-deleted rows are skipped.
+	// Submodules and already-deleted rows are skipped
 	QStringList untrackedPaths, addedPaths, trackedPaths;
 	for (const int row : selectedRows())
 	{
@@ -1257,7 +1245,7 @@ void CommitWindow::deleteSelection()
 
 	if (!addedPaths.isEmpty())
 	{
-		// Un-add first: trashing a staged-as-added file would leave the index pointing at a file that no longer exists
+		// Un-add first, or the index would point at a file that no longer exists
 		beginMutation();
 		_repo->unAdd(addedPaths, [this, paths = untrackedPaths + trackedPaths + addedPaths, trashAll](std::expected<void, QString> result) {
 			endMutation();
@@ -1280,9 +1268,9 @@ void CommitWindow::discardSelection()
 {
 	const bool operationInProgress = _repo->state().operationInProgress();
 
-	// Added rows are un-added rather than restored: `git restore` deletes such a file outright, and nothing
-	// in this window destroys content that was never committed. Everything the rest of this needs is read
-	// from the model here - the dialog below spins an event loop, and a refresh in it resets the rows.
+	// Added rows are un-added rather than restored: discardChanges() would delete the file, and nothing in this
+	// window destroys content that was never committed.
+	// Everything is read from the model up front: the dialog below spins an event loop, and a refresh in it resets the rows.
 	QStringList pathspec, promptPaths, addedPaths;
 	bool anySubmodule = false;
 	int skippedRows = 0;
@@ -1291,7 +1279,7 @@ void CommitWindow::discardSelection()
 		const FileEntry& entry = _filesModel.entryAt(row);
 		if (!discardable(entry, operationInProgress))
 		{
-			++skippedRows; // rows in a mixed selection that discarding does not cover are a deliberate no-op
+			++skippedRows; // a deliberate no-op in a mixed selection
 			continue;
 		}
 		if (!entry.isSubmodule && entry.type == ChangeType::Added)
@@ -1308,7 +1296,7 @@ void CommitWindow::discardSelection()
 	if (pathspec.isEmpty() && addedPaths.isEmpty())
 		return;
 
-	if (!promptPaths.isEmpty()) // un-adding on its own loses nothing, so it needs no confirmation
+	if (!promptPaths.isEmpty()) // un-adding alone loses nothing, so it needs no confirmation
 	{
 		QString text = tr("Discard all changes to %1 file(s)? This cannot be undone.\n\n%2")
 			.arg(promptPaths.size()).arg(listedPaths(promptPaths));
@@ -1388,7 +1376,7 @@ void CommitWindow::addSelectionToIndex()
 	{
 		const FileEntry& entry = _filesModel.entryAt(row);
 		if (!entry.isSubmodule && entry.type == ChangeType::Untracked)
-			paths.push_back(entry.path); // tracked rows in a mixed selection are a deliberate no-op
+			paths.push_back(entry.path); // tracked rows in a mixed selection are a no-op
 	}
 	if (paths.isEmpty())
 		return;
@@ -1424,7 +1412,7 @@ void CommitWindow::unAddSelection()
 void CommitWindow::addPatternToIgnoreFile(const IgnorePattern& pattern)
 {
 	QFile file{ QDir{ _repo->path() }.filePath(_repo->ignoreFileName()) };
-	if (!file.open(QIODevice::ReadWrite)) // the backend places the pattern by what the file already holds
+	if (!file.open(QIODevice::ReadWrite)) // read too: the backend places the pattern by the existing content
 	{
 		MessageBox::notice(this, tr("Failed to update %1").arg(_repo->ignoreFileName()),
 			tr("Could not open '%1' for writing.").arg(QDir::toNativeSeparators(file.fileName())), {});
@@ -1440,7 +1428,7 @@ void CommitWindow::addPatternToIgnoreFile(const IgnorePattern& pattern)
 
 void CommitWindow::showError(const QString& title, const QString& details)
 {
-	// The command's own output, verbatim - hook output is the only thing that makes a rejected commit diagnosable
+	// The command's output verbatim: hook output is what makes a rejected commit diagnosable
 	MessageBox::notice(this, title, title + QLatin1Char('.'), details);
 }
 

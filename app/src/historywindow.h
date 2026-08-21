@@ -17,10 +17,9 @@ class QTreeView;
 class CLabelElided;
 class DiffPane;
 
-// The commit history of one repository, read-only. Owns its own Repository - it only ever asks
-// read-only questions, and a submodule's history is opened without a CommitWindow on that submodule
-// to borrow one from. Every job is scoped to this window, so closing it drops the pending queries
-// instead of leaving them to finish against nothing.
+// The commit history of one repository, read-only.
+// Owns its own Repository: a submodule's history may be opened without a CommitWindow on that submodule.
+// Every query is scoped to this window, so closing it drops the pending ones.
 class HistoryWindow final : public QMainWindow
 {
 	Q_OBJECT
@@ -30,16 +29,14 @@ public:
 	// The history of one repo-relative path, traced across renames
 	HistoryWindow(const RepositoryLocation& location, const QString& filePath, QWidget* parent);
 
-	// Selects this commit and scrolls it into view once the listing is in - the window is opened and told
-	// to reveal one in the same breath, before any of it has been read. A commit the walk did not cover
-	// (the checkout has moved on from it, or it is older than the limit) re-runs the walk from that commit,
-	// which is then the newest row.
+	// Selects the commit and scrolls it into view once the listing is in.
+	// A commit the walk did not cover (the checkout has moved on, or it is older than the limit) re-runs the
+	// walk from that commit, which is then the newest row.
 	void revealCommit(const QString& sha);
 
-	// Re-runs the log query from scratch. The commit window calls this after committing here.
+	// Re-runs the log query from scratch
 	void reload();
-	// Re-reads which commits are unpushed, leaving the list and the selection alone - a push changes
-	// nothing else, so the commit window calls this rather than reload() after one.
+	// Re-reads which commits are unpushed, leaving the list and the selection alone
 	void refreshUnpushedMarks();
 
 protected:
@@ -56,14 +53,12 @@ private:
 	void showCommitContextMenu(const QPoint& pos);
 	void showFileContextMenu(const QPoint& pos);
 	void openFileHistory(const QString& filePath);
-	// A submodule row opens its own repository's history, at the commit this one's pointer names
+	// A submodule row opens its own repository's history at the commit the pointer names
 	void onFileRowActivated(const QModelIndex& index);
 	void openSubmoduleHistory(const CommitFileChange& entry);
-	// The background second phase of a cold open: the same walk at the full limit, extending the shown
-	// batch in place when it lands
+	// The second phase of a cold open: the same walk at the full limit, extending the shown batch in place
 	void loadRemainingCommits();
-	// Where a finished listing lands: the commit revealCommit() asked for, or the newest row. A requested
-	// commit the listing does not hold re-runs the walk from that commit, which does hold it.
+	// Selects the commit revealCommit() asked for, or the newest row
 	void selectLoadedCommit();
 	void showFilesForCurrentCommit();
 	void showDiffForCurrentFile();
@@ -74,24 +69,23 @@ private:
 	CommitLogModel _logModel;
 	CommitFilesModel _filesModel;
 
-	// What this window shows. maxCommits is widened by Load more, which re-runs the whole query: a
-	// walk of this shape cannot be resumed from a cursor - see doc/ARCHITECTURE.md. The path is fixed
-	// at construction; the pickaxe is not.
+	// Load more doubles maxCommits and re-runs the whole query: the walk cannot be resumed from a cursor
+	// (doc/ARCHITECTURE.md). The path is fixed at construction; the content search is not.
 	Repository::LogQuery _query;
 	bool _logCapped = false; // the last query returned its full limit, so older commits exist unread
 	bool _logLoaded = false; // the marks query can land first, and its counts mean nothing until this
-	// A cold open shows a small first batch while the full-limit walk still runs; while it does, a
-	// reveal miss waits for it instead of re-walking, and the count label says more is coming
+	// The full-limit walk of a cold open is still running: a reveal miss waits for it instead of re-walking,
+	// and the count label says more is coming
 	bool _fullLoadPending = false;
-	// The commit the next finished listing should land on; cleared once it has, so a later reload or
-	// Load more selects the newest row as it otherwise would
+	// The commit the next finished listing should land on; cleared once it has, so a later reload or Load
+	// more selects the newest row as usual
 	QString _revealSha;
 
 	QSplitter* _splitter = nullptr;       // log above, the commit's detail below
 	QSplitter* _detailSplitter = nullptr; // file list beside the diff
 	QTreeView* _logView = nullptr;
 	QTreeView* _filesView = nullptr;
-	CLabelElided* _filePathLabel = nullptr; // shown only in a file history, which is otherwise indistinguishable
+	CLabelElided* _filePathLabel = nullptr; // shown only in a file history
 	QLabel* _countLabel = nullptr;
 	QLineEdit* _searchEdit = nullptr;
 	QPushButton* _pickaxeButton = nullptr;

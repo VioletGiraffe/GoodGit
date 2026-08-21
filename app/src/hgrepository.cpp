@@ -22,7 +22,7 @@
 
 namespace {
 
-constexpr int MaxUnpushedLogEntries = 30; // tooltip fodder; state.ahead carries the true count
+constexpr int MaxUnpushedLogEntries = 30; // for the tooltip; state.ahead carries the true count
 constexpr char GitSubrepoPrefix[] = "[git]";
 
 QByteArray fileContents(const QString& path)
@@ -31,8 +31,7 @@ QByteArray fileContents(const QString& path)
 	return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
 }
 
-// A path list as hg takes one: a pattern naming a file of NUL-separated paths, so a long list never
-// reaches the command line
+// A pattern naming a file of NUL-separated paths, so a long list never reaches the command line
 QString listfilePattern(const std::shared_ptr<QTemporaryFile>& file)
 {
 	return QStringLiteral("listfile0:") + file->fileName();
@@ -55,8 +54,8 @@ QString escapedForHgIgnore(const QString& text)
 	return out;
 }
 
-// hg says "nothing to report" with exit code 1: no incoming changesets, none outgoing, no search hits,
-// nothing to push. Left uncorrected, the ordinary empty answer would reach the user as a failure.
+// hg exits with 1 for "nothing to report": no incoming changesets, none outgoing, no search hits, nothing
+// to push. That is an ordinary empty answer, not a failure.
 Vcs::Callback tolerantOfEmptyResult(Vcs::Callback callback)
 {
 	return [callback = std::move(callback)](const ProcessResult& result) {
@@ -76,32 +75,31 @@ Vcs::Query runQuery(const QString& workDir, QStringList args, const QObject* con
 	return Vcs::Query{ Hg::run(workDir, std::move(args), context, std::move(callback)) };
 }
 
-// The base of every commit-listing query; the walk itself is whatever the caller appends. -f is what confines
-// it to one line of history: a plain `hg log` lists every changeset in the repository, unrelated heads
-// included. With no path it means the ancestors of `.`; with one it also follows that file across renames.
+// The base of every commit-listing query; the caller appends the walk.
+// -f: the ancestors of `.` (or of the -r revision) only; a plain `hg log` lists every changeset, unrelated heads included.
+// With a path, -f also follows that file across renames.
 QStringList commitLogArgs(int maxCommits)
 {
 	return { QStringLiteral("log"), QStringLiteral("-f"), QStringLiteral("-l"), QString::number(maxCommits),
 		QStringLiteral("-T"), QStringLiteral("json") };
 }
 
-// Where the walk starts; `-f` alone means the ancestors of `.`, and with a revision the ancestors of that
-// one. Before the pattern and the pathspec, both of which are positional.
+// Must precede the pattern and the pathspec, which are positional
 void appendStartRevision(QStringList& args, const Repository::LogQuery& query)
 {
 	if (!query.startRevision.isEmpty())
 		args << QStringLiteral("-r") << query.startRevision;
 }
 
-// The pathspec closes the argument list, so everything else has to be in place first
+// Must come last: the pathspec closes the argument list
 void appendPathLimit(QStringList& args, const Repository::LogQuery& query)
 {
 	if (!query.path.isEmpty())
 		args << QStringLiteral("--") << query.path;
 }
 
-// `hg grep` has no fixed-string mode, so the search term reaches it as a pattern whatever it holds. -f confines
-// it to the line of history the listing walks; without one it searches every head.
+// `hg grep` has no fixed-string mode, so the term has to be escaped. -f confines it to the line of history
+// the listing walks; without it every head is searched.
 QStringList grepArgs(const Repository::LogQuery& query)
 {
 	QStringList args = { QStringLiteral("grep"), QStringLiteral("--diff"), QStringLiteral("-f"),
@@ -115,8 +113,8 @@ QStringList grepArgs(const Repository::LogQuery& query)
 	return args;
 }
 
-// The changesets a search found, newest first and capped, as one revset. hg would otherwise list a union
-// in its own order, which is the opposite of the one the log view shows.
+// The found changesets as one revset, capped and sorted newest first (hg's own order for a union is the
+// opposite of the log view's)
 QString revsetOf(const std::vector<Hg::GrepMatch>& matches, int maxCommits)
 {
 	QStringList nodes;
@@ -129,10 +127,10 @@ QString revsetOf(const std::vector<Hg::GrepMatch>& matches, int maxCommits)
 	return QStringLiteral("sort(%1, -rev)").arg(nodes.join(QLatin1Char('+')));
 }
 
-// The diff of one changeset or of the working tree. --git names renames and binary files instead of
-// printing an add of every line. -Z is git's --ignore-cr-at-eol: whether a line-endings-only change
-// reads as a change is the user's display choice, and the line counts come from these same args, so
-// they always match the shown diff. Either way the row still commits its content verbatim.
+// --git: names renames and binary files instead of printing every line as added.
+// -Z (git's --ignore-cr-at-eol): whether a line-endings-only change shows is a display setting.
+// The line counts come from these same args, so they always match the shown diff.
+// Either way the row still commits its content verbatim.
 QStringList diffArgs()
 {
 	QStringList args = { QStringLiteral("diff"), QStringLiteral("--git") };
@@ -141,7 +139,7 @@ QStringList diffArgs()
 	return args;
 }
 
-// The same diff with no context lines: an unchanged line is neither a word for the pool nor a line to count
+// No context lines: for the word pool and for line counting
 QStringList contextFreeDiffArgs()
 {
 	QStringList args = diffArgs();
@@ -149,8 +147,8 @@ QStringList contextFreeDiffArgs()
 	return args;
 }
 
-// One changeset's pointer moves, as lines of .hgsubstate: a changeset's status names that file rather
-// than the subrepos it records. `path:` keeps the name a literal path rather than a pattern.
+// One changeset's subrepo pointer moves, as the diff of .hgsubstate. `path:` keeps the name a literal path
+// rather than a pattern.
 QStringList substateDiffArgs(const QString& sha)
 {
 	QStringList args = contextFreeDiffArgs();
@@ -158,7 +156,7 @@ QStringList substateDiffArgs(const QString& sha)
 	return args;
 }
 
-// A pointer move rendered the way .hgsubstate carries it, which the diff view colors like any diff
+// A pointer move in .hgsubstate's own format, which the diff view colors like any diff
 QByteArray pointerMoveText(const Hg::SubrepoPointerChange& change)
 {
 	QByteArray text;
@@ -174,14 +172,14 @@ QByteArray pointerMoveText(const Hg::SubrepoPointerChange& change)
 struct HgRepository::RefreshRun
 {
 	std::vector<CommitFileChange> status;
-	std::map<QString, LineCounts> changeCounts; // by path; only the files with countable lines have one
-	std::vector<CommitRecord> head; // `.`, which is the null changeset in an unborn repository
+	std::map<QString, LineCounts> changeCounts; // by path; only files with countable lines have one
+	std::vector<CommitRecord> head; // `.`; the null changeset in an unborn repository
 	Hg::WorkingDirectory workingDir;
 	bool hasDefaultPath = false;
 	std::vector<CommitRecord> unpushed; // the drafts `push -r .` would send
-	QStringList conflicted; // paths still unresolved; only asked for while a mergestate exists
+	QStringList conflicted; // only queried while a mergestate exists
 	std::map<QString, QString> subrepoNodes; // the changeset each subrepo is actually on; absent if unread
-	std::map<QString, SubmoduleContent> subrepoContent; // what each subrepo's own worktree holds; absent if unread
+	std::map<QString, SubmoduleContent> subrepoContent; // absent if unread
 
 	QString failure;
 
@@ -202,8 +200,7 @@ void HgRepository::startRefresh()
 	auto run = std::make_shared<RefreshRun>();
 	_run = run;
 
-	// The parent's own record of its subrepos, re-read before the first process: it decides which subrepos
-	// are asked about, and which tool answers for each one.
+	// Re-read first: this decides which subrepos are asked about, and which tool answers for each
 	_subrepoNodes = Hg::parseSubrepoState(fileContents(QDir{ path() }.filePath(QStringLiteral(".hgsubstate"))));
 	_subrepoSources = Hg::parseSubrepoSources(fileContents(QDir{ path() }.filePath(QStringLiteral(".hgsub"))));
 
@@ -213,8 +210,8 @@ void HgRepository::startRefresh()
 			self->finishRefresh();
 	} };
 
-	// Not recursing: what is inside a subrepo is asked of that subrepo itself, and the parent's
-	// list holds the subrepo itself rather than the files under it
+	// Not recursing: a subrepo's content is asked of the subrepo itself, and the parent's list holds the
+	// subrepo rather than the files under it
 	round.launch(path(), { QStringLiteral("status"), QStringLiteral("-C"), QStringLiteral("-T"), QStringLiteral("json") },
 		[run](const ProcessResult& r) {
 			if (r.ok)
@@ -222,7 +219,7 @@ void HgRepository::startRefresh()
 			else
 				run->noteFailure(r);
 		});
-	// Losing this costs the rows their counts, which is a shorter answer rather than a wrong one
+	// Failure costs the rows their counts, which is a shorter answer rather than a wrong one
 	round.launch(path(), contextFreeDiffArgs(),
 		[run](const ProcessResult& r) { run->changeCounts = Hg::parseDiffCounts(r.out); });
 	// The parent changeset: what the next commit builds on, and what the header names
@@ -233,8 +230,8 @@ void HgRepository::startRefresh()
 			else
 				run->noteFailure(r);
 		});
-	// The working directory is its own revision: it carries the branch a commit would land on, which after
-	// `hg branch` the parent changeset does not yet, and two parents while a merge is uncommitted
+	// The working directory carries the branch a commit would land on (after `hg branch`, the parent
+	// changeset does not yet) and has two parents while a merge is uncommitted
 	round.launch(path(), { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("wdir()"), QStringLiteral("-T"), QStringLiteral("json") },
 		[run](const ProcessResult& r) {
 			if (r.ok)
@@ -242,19 +239,18 @@ void HgRepository::startRefresh()
 			else
 				run->noteFailure(r); // unread, a merge in progress is indistinguishable from none
 		});
-	// No default path is an answer rather than a failure: this repository has nowhere to push to
+	// No default path is an answer, not a failure: nowhere to push to
 	round.launch(path(), { QStringLiteral("paths"), QStringLiteral("default") },
 		[run](const ProcessResult& r) { run->hasDefaultPath = r.ok; });
-	// A draft changeset is one no remote has seen, limited here to the ancestors of the parent because that
-	// is what `push -r .` sends and this count stands next to that button. Without a remote every changeset
-	// is draft, so stateFromRun only reads the answer where there is a remote to be ahead of.
+	// Drafts among the ancestors of the parent: what `push -r .` sends, next to which this count is shown.
+	// Without a remote every changeset is draft, so stateFromRun only reads this when there is one.
 	round.launch(path(), { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("draft() and ::."),
 			QStringLiteral("-T"), QStringLiteral("json") },
 		[run](const ProcessResult& r) { run->unpushed = Hg::parseCommitLog(r.out); });
 
-	// `status` calls a conflicted file modified, so only the mergestate knows better. Every command that can
-	// conflict leaves one - merge, graft, rebase, an update over local changes - and it lives until the
-	// resolve is committed or aborted, so its absence is a complete answer.
+	// `status` reports a conflicted file as modified; only the mergestate knows better.
+	// Every command that can conflict (merge, graft, rebase, update over local changes) leaves a mergestate
+	// until the resolve is committed or aborted, so its absence is a complete answer.
 	if (QFileInfo::exists(QDir{ path() }.filePath(QStringLiteral(".hg/merge"))))
 	{
 		round.launch(path(), { QStringLiteral("resolve"), QStringLiteral("--list"), QStringLiteral("-T"), QStringLiteral("json") },
@@ -272,16 +268,16 @@ void HgRepository::launchSubrepoQueries(QueryRound& round, const std::shared_ptr
 		const QString& subPath = subrepo.first;
 		const QString workDir = QDir{ path() }.filePath(subPath);
 		if (!QFileInfo::exists(workDir))
-			continue; // never cloned: there is nothing inside to ask, and nothing inside to lose
+			continue; // never cloned
 
-		// The dirtiness question goes to the subrepo itself. Asked of the parent, a recursing status answers it
-		// against the node .hgsubstate records rather than against the subrepo's parent changeset, so it reports
-		// the files of a committed pointer move as modified - the one state in which the pointer has to be
-		// committable. Asked of the subrepo it may recurse freely, and must: a nested subrepo the enclosing one
-		// has not recorded yet is uncommitted work there, which is what blocks this row.
+		// Dirtiness is queried in the subrepo, not via the parent's recursing status: that compares against the
+		// node .hgsubstate records rather than the subrepo's parent changeset, so after a committed pointer move
+		// it reports the files as modified, exactly when the pointer must be committable.
+		// The subrepo's own status must recurse: a nested subrepo the enclosing one has not recorded yet is
+		// uncommitted work there, which blocks this row.
 		if (isGitSubrepo(subPath))
 		{
-			// git needs no flag for that: its status calls a submodule holding commits of its own modified
+			// Needs no flag: git status reports a submodule holding its own commits as modified
 			round.launch(workDir, { QStringLiteral("status"), QStringLiteral("--porcelain"), QStringLiteral("-z") },
 				[run, subPath = subPath](const ProcessResult& r) {
 					run->subrepoContent[subPath] = submoduleContentOf(r.ok, Git::parsePorcelainDirtiness(r.out));
@@ -331,12 +327,10 @@ RepoState HgRepository::stateFromRun(const RefreshRun& run) const
 	state.unborn = head.sha.isEmpty() || head.sha == QLatin1String(Hg::NullNode);
 	state.headSha = state.unborn ? QString{} : head.sha;
 	state.headSubject = state.unborn ? QString{} : head.subject();
-	state.headParentCount = int(head.parents.size()); // the null parent of a root changeset is already out
-	// Mercurial has no nameless state for a branch to be in, and no bookmarks are read: this is the named
-	// branch, `default` unless another was created
+	state.headParentCount = int(head.parents.size()); // the parser already drops a root changeset's null parent
+	// The named branch (`default` unless another was created); bookmarks are not read, and hg has no detached state
 	state.branch = run.workingDir.branch;
-	// One name for the whole remote, which is as far as hg's own vocabulary goes - there is no per-branch
-	// upstream, and `default` is what a push contacts
+	// hg has no per-branch upstream; `default` is the path a push contacts
 	state.upstream = run.hasDefaultPath ? QStringLiteral("default") : QString{};
 	state.behind = _behind;
 
@@ -351,13 +345,12 @@ RepoState HgRepository::stateFromRun(const RefreshRun& run) const
 		}
 	}
 
-	// .hgsub is what declares a subrepo; .hgsubstate only records where each one is, and lags a newly
-	// added one by a commit. The map is keyed by path, so this comes out in path order.
+	// From .hgsub, which declares subrepos; .hgsubstate lags a newly added one by a commit. The map is keyed
+	// by path, so this comes out in path order.
 	for (const auto& subrepo : _subrepoSources)
 		state.submodules << subrepo.first;
 
-	// An uncommitted merge is the working directory having two parents. Rebase, graft and histedit leave
-	// state of their own that this does not read.
+	// Rebase, graft and histedit leave state of their own that this does not read
 	if (run.workingDir.parents.size() > 1)
 		state.op = RepoOp::Merge;
 	return state;
@@ -379,7 +372,7 @@ std::vector<FileEntry> HgRepository::filesFromRun(const RefreshRun& run) const
 	for (const auto& [subPath, recordedNode] : _subrepoNodes)
 	{
 		if (!QFileInfo::exists(QDir{ path() }.filePath(subPath)))
-			continue; // never cloned: nothing inside to have moved, and nothing inside to lose
+			continue; // never cloned
 
 		const auto contentInside = run.subrepoContent.find(subPath);
 		const auto currentNode = run.subrepoNodes.find(subPath);
@@ -387,8 +380,7 @@ std::vector<FileEntry> HgRepository::filesFromRun(const RefreshRun& run) const
 			.content = contentInside != run.subrepoContent.end() ? contentInside->second : SubmoduleContent::Unknown };
 		if (currentNode == run.subrepoNodes.end())
 		{
-			// It is there but would not say what it is on, so whether the pointer moved is unknown - and an
-			// unknown pointer is as good a reason to refuse to commit it as dirty content is
+			// Whether the pointer moved is unknown, which blocks committing it as much as dirty content does
 			if (entry.content == SubmoduleContent::Clean || entry.content == SubmoduleContent::Untracked)
 				entry.content = SubmoduleContent::Unknown;
 		}
@@ -407,8 +399,6 @@ bool HgRepository::isGitSubrepo(const QString& subrepoPath) const
 	return source != _subrepoSources.end() && source->second.startsWith(QLatin1String(GitSubrepoPrefix));
 }
 
-// Every refresh query is scoped to the repository that asked, and run by whichever tool owns the directory
-// it is pointed at: a subrepo of an hg repository may be a git one, and its arguments are then git's.
 QueryRound::Launcher HgRepository::refreshQueries()
 {
 	return [this](const QString& workDir, QStringList args, Vcs::Callback onResult) {
@@ -434,10 +424,10 @@ void HgRepository::commit(const QString& message, const QStringList& pathspec, c
 	if (!pathspecFile)
 		return;
 
-	// -A marks the new and the missing files within the pathspec, and only within it - a missing file
-	// cannot be committed by name otherwise, and the ticked untracked rows need it. So the untracked paths
-	// need no step of their own here, and none of their own to undo: a commit that fails rolls its own -A
-	// back with the rest of the transaction.
+	// -A: adds the new and removes the missing files within the pathspec. A missing file cannot otherwise be
+	// committed by name.
+	// No separate add step for the untracked paths, and no rollback: a failed commit rolls its own -A back with
+	// the rest of the transaction.
 	Hg::run(path(), { QStringLiteral("commit"), QStringLiteral("-l"), messageFile->fileName(),
 			QStringLiteral("-A"), listfilePattern(pathspecFile) }, this,
 		[messageFile, pathspecFile, report](const ProcessResult& result) { report(result); });
@@ -451,13 +441,12 @@ void HgRepository::commitMergeState(const QString& message, const QStringList& u
 		return;
 
 	const auto runCommit = [this, messageFile, untrackedPaths, report] {
-		// No pathspec: a merge cannot be committed in parts. -A is out for the same reason - with nothing to
-		// scope it, it would sweep in every unknown file rather than the ticked ones.
+		// No pathspec: a merge cannot be committed in parts. No -A either: unscoped, it would sweep in every
+		// unknown file rather than the ticked ones.
 		Hg::run(path(), { QStringLiteral("commit"), QStringLiteral("-l"), messageFile->fileName() }, this,
 			[this, messageFile, untrackedPaths, report](const ProcessResult& result) {
-				// A commit that failed after the add leaves those paths tracked, and the rows would then read
-				// Added rather than Untracked. The reported result stays the commit's: the forget's says
-				// nothing about why the commit was refused.
+				// A failed commit would leave the untracked paths added, and their rows would read Added instead
+				// of Untracked. The commit's result is what gets reported.
 				if (result.ok || untrackedPaths.isEmpty())
 				{
 					report(result);
@@ -486,10 +475,9 @@ void HgRepository::commitMergeState(const QString& message, const QStringList& u
 
 void HgRepository::undoLastCommit(Vcs::Answer<void> onDone)
 {
-	// `uncommit` ships with hg but is off until a repository asks for it, so this one command asks for
-	// itself - narrower than `rollback`, which undoes the last transaction whatever it happened to be, and
-	// guarded in its own right: it refuses a public or a merge changeset. --allow-dirty-working-copy because
-	// everything the commit did not take is still modified here, which is this window's ordinary state.
+	// `uncommit` ships with hg but is off by default, so the command enables it for itself.
+	// Narrower than `rollback`, which undoes the last transaction of any kind; refuses public and merge changesets.
+	// --allow-dirty-working-copy: whatever the commit did not take is still modified.
 	Hg::run(path(), { QStringLiteral("--config"), QStringLiteral("extensions.uncommit="),
 		QStringLiteral("uncommit"), QStringLiteral("--allow-dirty-working-copy") },
 		this, Vcs::reporting(std::move(onDone)));
@@ -497,7 +485,7 @@ void HgRepository::undoLastCommit(Vcs::Answer<void> onDone)
 
 void HgRepository::planPush(Vcs::Answer<std::vector<PushStep>> onDone)
 {
-	// Answered from the event loop, as every other operation answers
+	// Answered from the event loop, like every other operation
 	QTimer::singleShot(0, this, [onDone = std::move(onDone), root = path()] {
 		onDone(std::vector<PushStep>{ { .workDir = root } });
 	});
@@ -505,7 +493,7 @@ void HgRepository::planPush(Vcs::Answer<std::vector<PushStep>> onDone)
 
 Vcs::Job* HgRepository::runPushStep(const PushStep& step, bool /*setUpstream*/, Vcs::Callback onDone)
 {
-	// A process of its own: the push log streams from it, and cancelling mid-transfer must kill it
+	// A process of its own: the push log streams its output, and cancelling mid-transfer must kill it
 	return Hg::run(step.workDir, { QStringLiteral("push"), QStringLiteral("-r"), QStringLiteral(".") }, this,
 		tolerantOfEmptyResult(std::move(onDone)), {}, Hg::Transport::Process);
 }
@@ -517,9 +505,7 @@ QString HgRepository::pushCommandLabel(const PushStep& /*step*/, bool /*setUpstr
 
 void HgRepository::fetch(Vcs::Answer<void> onDone)
 {
-	// Mercurial keeps no remote-tracking state, so there is nothing for a fetch to move: what the remote
-	// holds is read by incomingCommits(), at the moment it is asked for. Answered from the event loop, as
-	// every other operation answers.
+	// Nothing to do: Mercurial keeps no remote-tracking state, incomingCommits() reads the remote directly
 	QTimer::singleShot(0, this, [onDone = std::move(onDone)] { onDone({}); });
 }
 
@@ -552,7 +538,7 @@ void HgRepository::discardChanges(const QStringList& pathspec, Vcs::Answer<void>
 	if (!pathspecFile)
 		return;
 
-	// -C, or every reverted file leaves a .orig copy behind - which the next refresh would list as untracked
+	// -C: without it every reverted file leaves a .orig copy, which the next refresh would list as untracked
 	Hg::run(path(), { QStringLiteral("revert"), QStringLiteral("-C"), QStringLiteral("--rev"), QStringLiteral("."),
 			listfilePattern(pathspecFile) }, this,
 		[pathspecFile, report](const ProcessResult& result) { report(result); });
@@ -580,14 +566,13 @@ void HgRepository::localBranchExists(const QString& name, const QObject* context
 
 Vcs::Query HgRepository::diffFile(const FileEntry& entry, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
-	// The rename's source needs no naming: hg records a copy rather than inferring one, so --git prints the
-	// old path from what it already knows
+	// No need to name a rename's source: hg records copies rather than inferring them, so --git prints the
+	// old path on its own
 	QStringList args = diffArgs();
 	if (entry.type == ChangeType::Deleted)
 	{
-		// A file gone from disk stays in the dirstate until its removal is recorded, and the dirstate is what
-		// the working directory means to `hg diff`: it would report no change at all. The parent against the
-		// null revision is the removal this row commits, and the same answer for an already `hg remove`d file.
+		// A file missing from disk stays in the dirstate until its removal is recorded, so `hg diff` would report
+		// no change. Parent against null is the removal this row commits, and the same diff for an `hg remove`d file.
 		args << QStringLiteral("-r") << QStringLiteral(".") << QStringLiteral("-r") << QStringLiteral("null");
 	}
 	args << QStringLiteral("--") << entry.path;
@@ -596,8 +581,8 @@ Vcs::Query HgRepository::diffFile(const FileEntry& entry, const QObject* context
 
 Vcs::Query HgRepository::diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
-	// -Z unconditionally, display setting or not: a wholesale line-ending conversion would flood the
-	// word pool with every line of the file
+	// -Z regardless of the display setting: a line-ending conversion would flood the word pool with every
+	// line of the file
 	QStringList args = { QStringLiteral("diff"), QStringLiteral("--git"), QStringLiteral("-Z"),
 		QStringLiteral("-U"), QStringLiteral("0") };
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
@@ -613,9 +598,7 @@ Vcs::Query HgRepository::commitLog(const LogQuery& query, const QObject* context
 		return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Hg::parseCommitLog));
 	}
 
-	// A search names changesets and nothing else - what the listing shows of each one is a second query
-	// over what the first found. A callback only runs while its context lives, so this one can hand the
-	// same context to that query.
+	// grep only names changesets; a second query lists them
 	Vcs::Query query2;
 	const int maxCommits = query.maxCommits;
 	query2.attach(Hg::run(path(), grepArgs(query), context,
@@ -639,8 +622,8 @@ Vcs::Query HgRepository::commitLog(const LogQuery& query, const QObject* context
 
 Vcs::Query HgRepository::commitsAddingOrRemovingText(const LogQuery& query, const QObject* context, Vcs::Answer<QSet<QString>> onDone)
 {
-	// The same search as the listing's, read for the narrower thing: a changeset whose matching lines added
-	// and removed differ in number genuinely gained or lost the text, rather than editing around it
+	// The same grep as the listing's: a changeset whose added and removed matching lines differ in number
+	// gained or lost the text rather than editing around it
 	const auto changedOccurrences = [maxCommits = query.maxCommits](const QByteArray& output) {
 		QSet<QString> nodes;
 		for (const Hg::GrepMatch& match : Hg::parseGrepDiff(output))
@@ -658,13 +641,11 @@ Vcs::Query HgRepository::commitsAddingOrRemovingText(const LogQuery& query, cons
 
 Vcs::Query HgRepository::incomingCommits(int maxCommits, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone)
 {
-	// The one query that goes to the network for what the remote has. What it finds is also the only
-	// answer this backend ever gets to the header's behind count, so it is kept for the next refresh.
+	// The result is also the only source of the behind count, so it is kept for the next refresh
 	const auto record = [this](const QByteArray& output) {
 		std::vector<CommitRecord> commits = Hg::parseCommitLog(output);
 		_behind = int(commits.size());
-		// A revision number names a position in the repository it was read from, and these were read from
-		// the remote's: pulling them here would number them differently
+		// Revision numbers are the remote's; pulling would number these differently
 		for (CommitRecord& commit : commits)
 			commit.revision.reset();
 		return commits;
@@ -676,8 +657,7 @@ Vcs::Query HgRepository::incomingCommits(int maxCommits, const QObject* context,
 
 Vcs::Query HgRepository::commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone)
 {
-	// The status may name .hgsubstate, which stands for the subrepos it records - that row becomes one row
-	// per subrepo, from the pointer moves in its own diff. The same two-process shape as commitLog's search.
+	// An .hgsubstate row is replaced by one row per subrepo pointer move, read from its diff
 	Vcs::Query query;
 	query.attach(Hg::run(path(), { QStringLiteral("status"), QStringLiteral("--change"), sha, QStringLiteral("-C"),
 			QStringLiteral("-T"), QStringLiteral("json") }, context,
@@ -696,7 +676,7 @@ Vcs::Query HgRepository::commitFiles(const QString& sha, const QObject* context,
 				onDone(std::move(entries));
 				return;
 			}
-			const qsizetype insertAt = substate - entries.begin(); // the rows take the row's place
+			const qsizetype insertAt = substate - entries.begin(); // the subrepo rows take .hgsubstate's place
 			entries.erase(substate);
 
 			query.attach(Hg::run(path(), substateDiffArgs(sha), context,
@@ -725,8 +705,8 @@ Vcs::Query HgRepository::commitFiles(const QString& sha, const QObject* context,
 
 Vcs::Query HgRepository::commitFileCounts(const QString& sha, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone)
 {
-	// Mercurial has no --numstat, and `diff --stat` scales its bar to the widest file in the set, so the
-	// split it shows is not a count. The lines themselves are, and -U0 leaves nothing else in the output.
+	// hg has no --numstat, and `diff --stat` scales its bars to the widest file, so the counts come from the
+	// diff lines themselves
 	QStringList args = contextFreeDiffArgs();
 	args << QStringLiteral("-c") << sha;
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Hg::parseDiffCounts));
@@ -734,8 +714,7 @@ Vcs::Query HgRepository::commitFileCounts(const QString& sha, const QObject* con
 
 Vcs::Query HgRepository::commitFileDiff(const QString& sha, const CommitFileChange& file, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
-	// A subrepo path has no diff of its own in the parent; the row's diff is its pointer move,
-	// read back out of .hgsubstate's
+	// A subrepo row's diff is its pointer move, read from .hgsubstate's diff
 	if (file.isSubmodule)
 	{
 		const auto pointerMove = [path = file.path](const QByteArray& diff) {
@@ -756,8 +735,7 @@ Vcs::Query HgRepository::commitFileDiff(const QString& sha, const CommitFileChan
 
 Vcs::Query HgRepository::unpushedCommits(const QObject* context, Vcs::Answer<QSet<QString>> onDone)
 {
-	// Local and free: a draft changeset is one no remote has seen. Every draft, wherever it sits - unlike the
-	// header's count, which is what one push would send.
+	// Every draft changeset, wherever it sits; the header's count covers only what one push would send
 	const auto nodes = [](const QByteArray& output) {
 		QSet<QString> shas;
 		for (const CommitRecord& commit : Hg::parseCommitLog(output))
@@ -782,13 +760,11 @@ Vcs::Query HgRepository::submodulePointerLog(const QString& repoRelativePath, co
 	const QString workDir = QDir{ path() }.filePath(repoRelativePath);
 	if (isGitSubrepo(repoRelativePath))
 	{
-		// A subrepo of an hg repository may be a git one, and the commits its pointer pulls in are then
-		// git's to list
 		return Vcs::Query{ Git::run(workDir, { QStringLiteral("log"), QStringLiteral("--oneline"), QStringLiteral("--no-decorate"),
 			recorded->second + QStringLiteral("..HEAD") }, context, Vcs::answering(std::move(onDone), outputAsText), {}, /*readOnlyQuery=*/true) };
 	}
 
-	// only(., X) is what the working directory's parent has and X does not
+	// only(., X): what the working directory's parent has and X does not
 	return Vcs::Query{ Hg::run(workDir, { QStringLiteral("log"), QStringLiteral("-r"),
 		QStringLiteral("only(., %1)").arg(recorded->second), QStringLiteral("-T"), QStringLiteral("{node|short} {desc|firstline}\n") },
 		context, Vcs::answering(std::move(onDone), outputAsText)) };
@@ -796,7 +772,6 @@ Vcs::Query HgRepository::submodulePointerLog(const QString& repoRelativePath, co
 
 RepositoryLocation HgRepository::submoduleLocation(const QString& repoRelativePath) const
 {
-	// .hgsub may name a subrepo of another kind, and a window on one is that kind's window
 	return { isGitSubrepo(repoRelativePath) ? VcsKind::Git : VcsKind::Mercurial, QDir{ path() }.filePath(repoRelativePath) };
 }
 
@@ -818,8 +793,7 @@ std::vector<IgnorePattern> HgRepository::ignorePatternsFor(const QString& repoRe
 	patterns.push_back({ escapedForHgIgnore(fileName), IgnoreScope::Name });
 	if (slash >= 0)
 	{
-		// No trailing slash: hg excludes a file when any leading part of its path matches, so the directory
-		// itself is the whole pattern
+		// No trailing slash: hg matches any leading part of a path, so the directory itself is the pattern
 		patterns.push_back({ escapedForHgIgnore(repoRelativePath.left(slash)), IgnoreScope::Directory });
 	}
 	return patterns;
@@ -827,14 +801,13 @@ std::vector<IgnorePattern> HgRepository::ignorePatternsFor(const QString& repoRe
 
 QByteArray HgRepository::ignoreFileWithPatternAdded(QByteArray content, const IgnorePattern& pattern) const
 {
-	// A path only means "at the repository root" in a rootglob section; in a glob section it matches that
-	// relative path in any directory, which is the opposite of what the two rooted scopes offer
+	// In a glob section a path matches in any directory; only rootglob anchors it to the repository root
 	const bool rooted = pattern.scope == IgnoreScope::ExactPath || pattern.scope == IgnoreScope::Directory;
 	const QByteArray section = rooted ? QByteArrayLiteral("rootglob") : QByteArrayLiteral("glob");
 	const QByteArray eol = content.contains("\r\n") ? QByteArrayLiteral("\r\n") : QByteArrayLiteral("\n");
 
-	// Where the section this pattern belongs to ends. Everything before the first `syntax:` line is read as
-	// regular expressions, so there is no section to extend until one has been declared.
+	// The end of the last section of the right kind. Lines before the first `syntax:` are regular
+	// expressions, so there is nothing to extend until one is declared.
 	qsizetype insertAt = -1;
 	bool inSection = false;
 	for (qsizetype lineStart = 0; lineStart < content.size(); )
@@ -846,7 +819,7 @@ QByteArray HgRepository::ignoreFileWithPatternAdded(QByteArray content, const Ig
 		if (line.startsWith("syntax:"))
 			inSection = line.mid(7).trimmed().toLower() == section;
 		if (inSection)
-			insertAt = lineEnd; // the last line of the section so far, its own declaration included
+			insertAt = lineEnd;
 
 		lineStart = lineEnd;
 	}
@@ -855,7 +828,7 @@ QByteArray HgRepository::ignoreFileWithPatternAdded(QByteArray content, const Ig
 	{
 		QByteArray addition;
 		if (insertAt > 0 && content.at(insertAt - 1) != '\n')
-			addition += eol; // the section's last line ends the file, and unterminated
+			addition += eol; // the section's last line is unterminated
 		addition += pattern.text.toUtf8() + eol;
 		content.insert(insertAt, addition);
 		return content;
@@ -868,8 +841,7 @@ QByteArray HgRepository::ignoreFileWithPatternAdded(QByteArray content, const Ig
 
 void HgRepository::launchExternalDiffTool(const QString& repoRelativePath) const
 {
-	// extdiff ships with hg but is off unless enabled, and which tool it starts is the user's `[extdiff]`
-	// configuration - exactly as which tool `git difftool` starts is theirs
+	// extdiff ships with hg but is off by default; which tool it starts is the user's `[extdiff]` configuration
 	QString executable = CSettings{}.value(Settings::HgExecutableKey).toString();
 	if (executable.isEmpty())
 		executable = QLatin1String(Settings::HgExecutableDefault);

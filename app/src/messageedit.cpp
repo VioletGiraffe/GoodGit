@@ -18,7 +18,7 @@ MessageEdit::MessageEdit(QWidget* parent) :
 	QPlainTextEdit(parent)
 {
 	setFont(monospaceFont());
-	// setFont alone relayouts; the update() is for a guide-column change under an unchanged font
+	// update() for a guide-column change under an unchanged font
 	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] { setFont(monospaceFont()); viewport()->update(); });
 	setTabChangesFocus(true);
 
@@ -41,8 +41,7 @@ void MessageEdit::setCompletionWords(QStringList words)
 		[](const QString& l, const QString& r) { return l.compare(r, Qt::CaseInsensitive) < 0; });
 	_completerModel->setStringList(words);
 
-	// A refresh can replace the pool while the popup is up, leaving it visible over an empty
-	// completion model - QCompleter hides the popup only from complete().
+	// A refresh can replace the pool while the popup is up, and QCompleter only hides it from complete()
 	_completer->popup()->hide();
 }
 
@@ -57,9 +56,9 @@ void MessageEdit::keyPressEvent(QKeyEvent* event)
 	QPlainTextEdit::keyPressEvent(event);
 
 	if (event->text().isEmpty() && !_completer->popup()->isVisible())
-		return; // pure navigation - nothing typed, nothing shown to update
+		return; // pure navigation
 
-	// With auto-popup off, a popup summoned by Ctrl+Space still follows further typing instead of closing on it
+	// With auto-popup off, a popup summoned by Ctrl+Space still follows further typing
 	const QString prefix = wordUnderCursor();
 	const CSettings settings;
 	const bool follow = settings.value(Settings::CompletionAutoPopupKey, Settings::CompletionAutoPopupDefault).toBool()
@@ -73,8 +72,8 @@ void MessageEdit::keyPressEvent(QKeyEvent* event)
 
 bool MessageEdit::eventFilter(QObject* watched, QEvent* event)
 {
-	// The QAbstractScrollArea base filters its own viewport's events through this override,
-	// which runs during construction - before the completer exists
+	// QAbstractScrollArea filters its viewport's events through this override during construction, before
+	// the completer exists
 	if (_completer && watched == _completer->popup() && event->type() == QEvent::KeyPress)
 	{
 		auto* keyEvent = static_cast<QKeyEvent*>(event);
@@ -86,11 +85,11 @@ bool MessageEdit::eventFilter(QObject* watched, QEvent* event)
 		case Qt::Key_Return:
 		case Qt::Key_Enter:
 			_completer->popup()->hide();
-			// The Ctrl+Enter commit shortcuts live on the window and never reach a grabbing popup -
-			// swallow the press so it does not turn into a newline; the next one lands on the shortcut
+			// The Ctrl+Enter commit shortcuts live on the window and never reach a grabbing popup: swallow the
+			// press so it does not become a newline; the next one lands on the shortcut
 			if (keyEvent->modifiers().testFlag(Qt::ControlModifier))
 				return true;
-			keyPressEvent(keyEvent); // deliver to the editor: Enter means a newline, popup or not
+			keyPressEvent(keyEvent); // Enter means a newline, popup or not
 			return true;
 		default:
 			break;
@@ -108,7 +107,7 @@ QString MessageEdit::wordUnderCursor() const
 
 void MessageEdit::showCompletions(const QString& prefix)
 {
-	_completer->setCompletionPrefix(prefix); // unconditional: the pool changes under an unchanged prefix
+	_completer->setCompletionPrefix(prefix); // even if unchanged: the pool may have changed
 
 	const bool nothingToOffer = _completer->completionCount() == 0
 		|| (_completer->completionCount() == 1 && _completer->currentCompletion() == prefix);

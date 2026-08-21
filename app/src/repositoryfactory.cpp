@@ -8,10 +8,9 @@
 
 namespace {
 
-// What one kind was asked, and what came of asking it
 struct Claim
 {
-	QString root; // empty: this kind does not claim the path, for whichever of the reasons `result` gives
+	QString root; // empty: this kind does not claim the path, for the reason `result` gives
 	ProcessResult result;
 };
 
@@ -34,10 +33,8 @@ Claim claimedByMercurial(const QString& startPath)
 
 std::expected<RepositoryLocation, std::vector<ProcessResult>> findRepository(const QString& startPath)
 {
-	// Asked in turn rather than both at once: git is the cheaper process and the common answer, and one
-	// that claims the path settles the question. The cost is that an hg repository nested inside a git one
-	// resolves to the outer git root - the other way round, which is what a git subrepo of an hg parent
-	// looks like, is found correctly.
+	// git first: the cheaper process and the common answer. The cost is that an hg repository nested inside a
+	// git one resolves to the outer git root; a git subrepo inside an hg parent is found correctly.
 	Claim git = claimedByGit(startPath);
 	if (!git.root.isEmpty())
 		return RepositoryLocation{ VcsKind::Git, std::move(git.root) };

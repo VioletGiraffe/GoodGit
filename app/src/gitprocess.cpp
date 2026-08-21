@@ -16,7 +16,7 @@ void applyInvariants(QStringList& args, bool readOnlyQuery)
 Vcs::Tool gitTool()
 {
 	auto environment = QProcessEnvironment::systemEnvironment();
-	// A credential miss fails fast instead of hanging on a prompt nothing here would show
+	// A credential miss fails instead of hanging on a prompt nobody would see
 	environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
 	QString executable = CSettings{}.value(Settings::GitExecutableKey).toString();
 	if (executable.isEmpty())

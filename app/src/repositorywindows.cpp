@@ -14,8 +14,7 @@
 
 namespace {
 
-// Nothing claimed the path, and what that means depends on whether anything answered at all: where no
-// tool ran there is no answer to report, only the reasons there is none.
+// "Not a repository" if at least one tool answered, "could not check" if none could be run
 QString noRepositoryMessage(const QString& startPath, const std::vector<ProcessResult>& attempts)
 {
 	const bool anyToolAnswered = std::ranges::any_of(attempts,
@@ -27,8 +26,7 @@ QString noRepositoryMessage(const QString& startPath, const std::vector<ProcessR
 		: QStringLiteral("Could not determine what '%1' is inside: no version control tool could be started.").arg(nativePath) };
 	for (const ProcessResult& attempt : attempts)
 	{
-		// Where another tool did answer, one that never started is a gap in the search rather than
-		// something the user is being told to go and install
+		// When another tool did answer, one that never started is a gap in the search, not something to install
 		parts << (anyToolAnswered && attempt.outcome == ProcessOutcome::LaunchFailed
 			? QStringLiteral("%1 could not be started, so no %1 repository was looked for: %2").arg(attempt.toolName, attempt.launchError)
 			: attempt.errorText());
@@ -36,8 +34,7 @@ QString noRepositoryMessage(const QString& startPath, const std::vector<ProcessR
 	return parts.join(QStringLiteral("\n\n"));
 }
 
-// Where a folder chooser opens: beside the repository last worked on, that being where the next one
-// tends to live too
+// Beside the repository last worked on, where the next one tends to live too
 QString browseStartDirectory()
 {
 	const std::vector<RecentRepository> recent = RecentRepositories::list();
@@ -48,8 +45,7 @@ QString browseStartDirectory()
 
 CommitWindow* repositoryWindow(const QString& root)
 {
-	// The open windows are the registry: there are a handful of them, and one that closes is gone from
-	// this list without anything having to say so
+	// The open windows are the registry: a closed one drops out without any bookkeeping
 	for (QWidget* widget : QApplication::topLevelWidgets())
 	{
 		auto* window = qobject_cast<CommitWindow*>(widget);
@@ -63,7 +59,7 @@ CommitWindow* openRepositoryWindow(const RepositoryLocation& location)
 {
 	RecentRepositories::recordOpen(location);
 
-	// A second window on one repository would show one commit pathspec twice and write through both
+	// Two windows on one repository would commit the same changes through both
 	if (CommitWindow* existing = repositoryWindow(location.root))
 	{
 		existing->raise();
@@ -92,8 +88,7 @@ CommitWindow* openRecentRepository(const QString& root, QWidget* dialogParent)
 	if (location)
 		return openRepositoryWindow(*location);
 
-	// Keeping it is the safe default: a drive that is not mounted today says exactly what a deleted
-	// repository says, and only one of the two is worth forgetting
+	// Keep is the default: an unmounted drive looks exactly like a deleted repository
 	const std::optional<int> answer = MessageBox::question(dialogParent, QApplication::applicationName(),
 		noRepositoryMessage(root, location.error()), { QStringLiteral("Remove from list"), QStringLiteral("Keep") }, 1);
 	if (answer == 0)

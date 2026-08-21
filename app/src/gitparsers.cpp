@@ -40,8 +40,8 @@ BranchHeader parseBranchHeader(const QByteArray& statusOutput)
 
 QStringList parseUnmergedPaths(const QByteArray& statusOutput)
 {
-	// Record: u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>. The path is whatever follows the tenth
-	// space rather than the last field, since -z leaves it unquoted and a path may hold spaces of its own.
+	// Record: u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>. The path is everything after the tenth
+	// space: -z leaves it unquoted, and it may contain spaces.
 	constexpr int fieldsBeforePath = 10;
 
 	QStringList paths;
@@ -64,8 +64,8 @@ QStringList parseUnmergedPaths(const QByteArray& statusOutput)
 
 namespace {
 
-// The status letter of --name-status and --raw alike. `diff --name-status HEAD` calls an unmerged path M,
-// so 'U' does not fire during a merge: parseUnmergedPaths is what names the conflicted rows.
+// The status letter of --name-status and --raw alike. `diff --name-status HEAD` reports an unmerged path as
+// M, so 'U' does not occur during a merge; parseUnmergedPaths names the conflicted rows.
 ChangeType changeTypeOfLetter(char letter)
 {
 	switch (letter)
@@ -79,8 +79,8 @@ ChangeType changeTypeOfLetter(char letter)
 	}
 }
 
-// The one or two path tokens following a record's status, appended to `entry` - two for a rename or copy,
-// old first. Returns the index past them, or -1 when the record is cut short.
+// Reads the path tokens following a record's status into `entry`: two for a rename or copy, old first.
+// Returns the index past them, or -1 when the record is cut short.
 qsizetype readPathTokens(const QList<QByteArray>& tokens, qsizetype i, CommitFileChange& entry)
 {
 	if (entry.type == ChangeType::Renamed)
@@ -124,9 +124,8 @@ std::vector<CommitFileChange> parseRawZ(const QByteArray& diffOutput)
 	std::vector<CommitFileChange> entries;
 	const auto tokens = diffOutput.split('\0');
 
-	// Layout: ":<oldmode> <newmode> <oldsha> <newsha> <letter>\0<path>\0", with the same rename/copy
-	// letters and path pairs as --name-status. The modes are what --name-status cannot say: 160000 on
-	// either side is a gitlink, so the row is a submodule.
+	// Layout: ":<oldmode> <newmode> <oldsha> <newsha> <letter>\0<path>\0", with the same rename/copy letters
+	// and path pairs as --name-status. Mode 160000 on either side is a gitlink, so the row is a submodule.
 	for (qsizetype i = 0; i + 1 < tokens.size(); )
 	{
 		const QByteArray& meta = tokens[i];
@@ -139,7 +138,7 @@ std::vector<CommitFileChange> parseRawZ(const QByteArray& diffOutput)
 		CommitFileChange entry;
 		entry.type = changeTypeOfLetter(fields[4][0]);
 		entry.isSubmodule = fields[0] == "160000" || fields[1] == "160000";
-		if (entry.isSubmodule) // the side that names a commit; a removal has only the old one
+		if (entry.isSubmodule) // a removal only has the old side
 			entry.submoduleSha = QString::fromUtf8(entry.type == ChangeType::Deleted ? fields[2] : fields[3]);
 		i = readPathTokens(tokens, i + 1, entry);
 		if (i < 0)
@@ -175,8 +174,7 @@ std::map<QString, LineCounts> parseNumstatZ(const QByteArray& diffOutput)
 	std::map<QString, LineCounts> counts;
 	const auto tokens = diffOutput.split('\0');
 
-	// Layout: <added>\t<removed>\t<path>\0, and <added>\t<removed>\t\0<old>\0<new>\0 for renames - the
-	// path field spent on nothing, the two names following as records of their own
+	// Layout: <added>\t<removed>\t<path>\0, or <added>\t<removed>\t\0<old>\0<new>\0 for renames
 	for (qsizetype i = 0; i < tokens.size(); ++i)
 	{
 		const QByteArray& record = tokens[i];
@@ -190,14 +188,14 @@ std::map<QString, LineCounts> parseNumstatZ(const QByteArray& diffOutput)
 		{
 			if (i + 2 >= tokens.size())
 				break;
-			path = QString::fromUtf8(tokens[i + 2]); // the new name, the one the file list knows the row by
+			path = QString::fromUtf8(tokens[i + 2]); // the new name, which the file list knows the row by
 			i += 2;
 		}
 
 		bool addedRead = false, removedRead = false;
 		const int added = record.left(firstTab).toInt(&addedRead);
 		const int removed = record.mid(firstTab + 1, secondTab - firstTab - 1).toInt(&removedRead);
-		if (addedRead && removedRead) // git counts a binary file `-` and `-`: no count, rather than a count of none
+		if (addedRead && removedRead) // a binary file is counted as `-` `-`: no count rather than zero
 			counts[path] = { .added = added, .removed = removed };
 	}
 	return counts;
@@ -269,7 +267,7 @@ std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput)
 	for (const QByteArray& record : logOutput.split('\0'))
 	{
 		if (record.isEmpty())
-			continue; // -z terminates rather than separates, so the last split yields an empty tail
+			continue; // -z terminates rather than separates, so the split yields an empty tail
 
 		const QList<QByteArray> fields = record.split('\x1f');
 		if (fields.size() < 6)
@@ -281,7 +279,7 @@ std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput)
 		commit.author = QString::fromUtf8(fields[2]);
 		commit.date = QString::fromUtf8(fields[3]);
 		commit.refs = QString::fromUtf8(fields[4]);
-		// Rejoined: a US in the message must not truncate it. %B carries a trailing newline of its own.
+		// Rejoined, so a US in the message does not truncate it. %B carries a trailing newline.
 		commit.message = QString::fromUtf8(fields.mid(5).join('\x1f')).trimmed();
 		commits.push_back(std::move(commit));
 	}
