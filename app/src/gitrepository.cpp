@@ -41,31 +41,43 @@ void rollBackAddThenReport(const QString& workDir, const QObject* context, const
 		[onDone, commitResult](const ProcessResult&) { onDone(commitResult); }, Vcs::nulJoined(untrackedPaths));
 }
 
-// What a commit of `pathspec` has to clear from the index first: `git commit` takes all of it.
+// The index manipulation a commit of `pathspec` needs: `git commit` takes the whole index.
+// `resetPaths`: staged entries the commit must not carry.
+// `addPaths`: `pathspec` minus the paths the index already records as deleted - `git add` fails on a path
+// that is in neither the working tree nor the index.
 // `savedModes`: `update-index --index-info` records for cleared entries whose mode re-adding from the working
 // tree would lose (with core.filemode off, only the index records a mode).
 // Entries only added or deleted in the index are not saved: their content is on disk either way.
-struct IndexReset
+struct CommitIndexPlan
 {
-	QStringList paths;
+	QStringList resetPaths;
+	QStringList addPaths;
 	QByteArray savedModes;
 };
 
-IndexReset plannedIndexReset(const std::vector<Git::StagedEntry>& staged, const QStringList& pathspec)
+CommitIndexPlan plannedIndexChange(const std::vector<Git::StagedEntry>& staged, const QStringList& pathspec)
 {
 	const QSet<QString> committed(pathspec.begin(), pathspec.end());
 
-	IndexReset reset;
+	CommitIndexPlan plan;
+	plan.addPaths = pathspec;
+
+	QSet<QString> stagedDeletions;
 	for (const Git::StagedEntry& entry : staged)
 	{
+		if (entry.indexMode == "000000")
+			stagedDeletions.insert(entry.path);
+
 		if (committed.contains(entry.path))
 			continue;
 
-		reset.paths << entry.path;
+		plan.resetPaths << entry.path;
 		if (entry.treeMode != entry.indexMode && entry.treeMode != "000000" && entry.indexMode != "000000")
-			reset.savedModes += entry.indexMode + ' ' + entry.indexSha + '\t' + entry.path.toUtf8() + '\0';
+			plan.savedModes += entry.indexMode + ' ' + entry.indexSha + '\t' + entry.path.toUtf8() + '\0';
 	}
-	return reset;
+
+	plan.addPaths.removeIf([&stagedDeletions](const QString& path) { return stagedDeletions.contains(path); });
+	return plan;
 }
 
 // Shared by the name listing and the line counts of the tracked changes: rename pairing and baseline must
@@ -575,10 +587,10 @@ void GitRepository::commit(const QString& message, const QStringList& pathspec, 
 			return;
 		}
 
-		const IndexReset reset = plannedIndexReset(Git::parseStagedRawZ(stagedResult.out), pathspec);
+		const CommitIndexPlan plan = plannedIndexChange(Git::parseStagedRawZ(stagedResult.out), pathspec);
 
 		// Every step from the reset on ends here, with whichever result ended the commit
-		const auto restoreThenReport = [this, untrackedPaths, savedModes = reset.savedModes, report](const ProcessResult& result) {
+		const auto restoreThenReport = [this, untrackedPaths, savedModes = plan.savedModes, report](const ProcessResult& result) {
 			if (savedModes.isEmpty())
 			{
 				rollBackAddThenReport(path(), this, untrackedPaths, result, report);
@@ -596,33 +608,38 @@ void GitRepository::commit(const QString& message, const QStringList& pathspec, 
 				[messageFile, restoreThenReport](const ProcessResult& result) { restoreThenReport(result); });
 		};
 
-		const auto addPathspec = [this, pathspec, runCommit, restoreThenReport] {
+		const auto addThenCommit = [this, addPaths = plan.addPaths, runCommit, restoreThenReport] {
+			if (addPaths.isEmpty()) // every checked path is staged as deleted, so the index already holds the commit
+			{
+				runCommit();
+				return;
+			}
 			Git::run(path(), { QStringLiteral("add"), QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") }, this,
 				[runCommit, restoreThenReport](const ProcessResult& result) {
 					if (result.ok)
 						runCommit();
 					else
 						restoreThenReport(result);
-				}, Vcs::nulJoined(pathspec));
+				}, Vcs::nulJoined(addPaths));
 		};
 
-		if (reset.paths.isEmpty())
+		if (plan.resetPaths.isEmpty())
 		{
-			addPathspec();
+			addThenCommit();
 			return;
 		}
 		Git::run(path(), { QStringLiteral("reset"), QStringLiteral("-q"), QStringLiteral("--pathspec-from-file=-"),
 				QStringLiteral("--pathspec-file-nul") }, this,
-			[addPathspec, restoreThenReport](const ProcessResult& result) {
+			[addThenCommit, restoreThenReport](const ProcessResult& result) {
 				if (result.ok)
-					addPathspec();
+					addThenCommit();
 				else
 					restoreThenReport(result);
-			}, Vcs::nulJoined(reset.paths));
+			}, Vcs::nulJoined(plan.resetPaths));
 	};
 
 	Git::run(path(), { QStringLiteral("diff"), QStringLiteral("--cached"), QStringLiteral("--raw"), QStringLiteral("--no-abbrev"),
-		QStringLiteral("-z"), diffBase() }, this, prepareIndexThenCommit, {}, /*readOnlyQuery=*/true);
+		QStringLiteral("--no-renames"), QStringLiteral("-z"), diffBase() }, this, prepareIndexThenCommit, {}, /*readOnlyQuery=*/true);
 }
 
 void GitRepository::commitMergeState(const QString& message, const QStringList& untrackedPaths, Vcs::Answer<void> onDone)

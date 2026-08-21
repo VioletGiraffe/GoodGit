@@ -47,7 +47,8 @@ struct StagedEntry
 	QByteArray indexSha;
 };
 
-// Input: `diff --cached --raw --no-abbrev -z <tree>` output. Without -M, so every record names one path;
+// Input: `diff --cached --raw --no-abbrev --no-renames -z <tree>` output.
+// --no-renames: detection is on by default, and a rename record names two paths where every other names one.
 // --no-abbrev, or update-index will not take the object names back.
 [[nodiscard]] std::vector<StagedEntry> parseStagedRawZ(const QByteArray& diffOutput);
 
