@@ -38,6 +38,20 @@ struct BranchHeader
 // commits the pointer moved between; --no-abbrev, or those arrive as prefixes.
 [[nodiscard]] std::vector<CommitFileChange> parseRawZ(const QByteArray& diffOutput);
 
+// One index entry as a `--cached` diff reports it, against whatever tree that diff was taken against.
+// Modes are the six raw digits, "000000" where that side has no entry for the path at all.
+struct StagedEntry
+{
+	QString path;
+	QByteArray treeMode;
+	QByteArray indexMode;
+	QByteArray indexSha;
+};
+
+// Input: `diff --cached --raw --no-abbrev -z <tree>` output. Taken without -M, so every record names one
+// path; --no-abbrev, or the object names arrive shortened and update-index will not take them back.
+[[nodiscard]] std::vector<StagedEntry> parseStagedRawZ(const QByteArray& diffOutput);
+
 // Input: `diff --numstat -M -z` output. Keyed by path - the new one for a rename, as parseNameStatusZ
 // names its entries. A binary file, which git counts as `-`, is absent rather than zero.
 [[nodiscard]] std::map<QString, LineCounts> parseNumstatZ(const QByteArray& diffOutput);

@@ -19,7 +19,7 @@ namespace {
 
 constexpr int MaxUnpushedLogEntries = 30; // tooltip fodder; state.ahead carries the true count
 
-// The commit message travels in a temp file - `-F -` and a stdin pathspec cannot share the pipe
+// The commit message travels in a temp file - it is the one argument with no bound on its length
 std::shared_ptr<QTemporaryFile> openMessageFile(const QString& message, QObject* context, const Vcs::Callback& onDone)
 {
 	return Vcs::openTempFile(message.toUtf8(), QStringLiteral("commit message"), context, onDone);
@@ -40,6 +40,33 @@ void rollBackAddThenReport(const QString& workDir, const QObject* context, const
 	Git::run(workDir, { QStringLiteral("reset"), QStringLiteral("-q"), QStringLiteral("--pathspec-from-file=-"),
 		QStringLiteral("--pathspec-file-nul") }, context,
 		[onDone, commitResult](const ProcessResult&) { onDone(commitResult); }, Vcs::nulJoined(untrackedPaths));
+}
+
+// What a commit of `pathspec` has to clear from the index first: `git commit` takes the whole of it.
+// `savedModes` are `update-index --index-info` records for the cleared entries the working tree could not
+// put back - with core.filemode off nothing but the index records a mode. An entry only added or deleted
+// there is not saved: its content is on disk either way.
+struct IndexReset
+{
+	QStringList paths;
+	QByteArray savedModes;
+};
+
+IndexReset plannedIndexReset(const std::vector<Git::StagedEntry>& staged, const QStringList& pathspec)
+{
+	const QSet<QString> committed(pathspec.begin(), pathspec.end());
+
+	IndexReset reset;
+	for (const Git::StagedEntry& entry : staged)
+	{
+		if (committed.contains(entry.path))
+			continue;
+
+		reset.paths << entry.path;
+		if (entry.treeMode != entry.indexMode && entry.treeMode != "000000" && entry.indexMode != "000000")
+			reset.savedModes += entry.indexMode + ' ' + entry.indexSha + '\t' + entry.path.toUtf8() + '\0';
+	}
+	return reset;
 }
 
 // The tracked half of the file list, read out two ways: the names, and the lines behind them. The pairing
@@ -550,26 +577,63 @@ void GitRepository::commit(const QString& message, const QStringList& pathspec, 
 	if (!messageFile)
 		return;
 
-	const auto runCommit = [this, messageFile, pathspec, untrackedPaths, report] {
-		Git::run(path(), { QStringLiteral("commit"), QStringLiteral("-F"), messageFile->fileName(),
-				QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") }, this,
-			[this, messageFile, untrackedPaths, report](const ProcessResult& result) {
+	// The index is where a commit is assembled and nothing else, so it is made to hold exactly this commit
+	// and then left as it was found.
+	const auto prepareIndexThenCommit = [this, messageFile, pathspec, untrackedPaths, report](const ProcessResult& stagedResult) {
+		if (!stagedResult.ok)
+		{
+			report(stagedResult); // nothing has been touched yet, so there is nothing to put back
+			return;
+		}
+
+		const IndexReset reset = plannedIndexReset(Git::parseStagedRawZ(stagedResult.out), pathspec);
+
+		// Where every step from the reset on ends, carrying whichever result ended the commit
+		const auto restoreThenReport = [this, untrackedPaths, savedModes = reset.savedModes, report](const ProcessResult& result) {
+			if (savedModes.isEmpty())
+			{
 				rollBackAddThenReport(path(), this, untrackedPaths, result, report);
-			}, Vcs::nulJoined(pathspec));
+				return;
+			}
+			Git::run(path(), { QStringLiteral("update-index"), QStringLiteral("-z"), QStringLiteral("--index-info") }, this,
+				[this, untrackedPaths, result, report](const ProcessResult&) {
+					rollBackAddThenReport(path(), this, untrackedPaths, result, report);
+				}, savedModes);
+		};
+
+		const auto runCommit = [this, messageFile, restoreThenReport] {
+			// The callback holds the message file open until git has read it
+			Git::run(path(), { QStringLiteral("commit"), QStringLiteral("-F"), messageFile->fileName() }, this,
+				[messageFile, restoreThenReport](const ProcessResult& result) { restoreThenReport(result); });
+		};
+
+		const auto addPathspec = [this, pathspec, runCommit, restoreThenReport] {
+			Git::run(path(), { QStringLiteral("add"), QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") }, this,
+				[runCommit, restoreThenReport](const ProcessResult& result) {
+					if (result.ok)
+						runCommit();
+					else
+						restoreThenReport(result);
+				}, Vcs::nulJoined(pathspec));
+		};
+
+		if (reset.paths.isEmpty())
+		{
+			addPathspec();
+			return;
+		}
+		Git::run(path(), { QStringLiteral("reset"), QStringLiteral("-q"), QStringLiteral("--pathspec-from-file=-"),
+				QStringLiteral("--pathspec-file-nul") }, this,
+			[addPathspec, restoreThenReport](const ProcessResult& result) {
+				if (result.ok)
+					addPathspec();
+				else
+					restoreThenReport(result);
+			}, Vcs::nulJoined(reset.paths));
 	};
 
-	if (untrackedPaths.isEmpty())
-	{
-		runCommit();
-		return;
-	}
-	Git::run(path(), { QStringLiteral("add"), QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") }, this,
-		[runCommit, report](const ProcessResult& result) {
-			if (result.ok)
-				runCommit();
-			else
-				report(result);
-		}, Vcs::nulJoined(untrackedPaths));
+	Git::run(path(), { QStringLiteral("diff"), QStringLiteral("--cached"), QStringLiteral("--raw"), QStringLiteral("--no-abbrev"),
+		QStringLiteral("-z"), diffBase() }, this, prepareIndexThenCommit, {}, /*readOnlyQuery=*/true);
 }
 
 void GitRepository::commitMergeState(const QString& message, const QStringList& untrackedPaths, Vcs::Answer<void> onDone)

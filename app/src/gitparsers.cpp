@@ -149,6 +149,27 @@ std::vector<CommitFileChange> parseRawZ(const QByteArray& diffOutput)
 	return entries;
 }
 
+std::vector<StagedEntry> parseStagedRawZ(const QByteArray& diffOutput)
+{
+	std::vector<StagedEntry> entries;
+	const auto tokens = diffOutput.split('\0');
+
+	// Layout: ":<treemode> <indexmode> <treesha> <indexsha> <letter>\0<path>\0"
+	for (qsizetype i = 0; i + 1 < tokens.size(); i += 2)
+	{
+		const QByteArray& meta = tokens[i];
+		if (!meta.startsWith(':'))
+			break;
+		const auto fields = meta.mid(1).split(' ');
+		if (fields.size() < 5)
+			break;
+
+		entries.push_back({ .path = QString::fromUtf8(tokens[i + 1]), .treeMode = fields[0],
+			.indexMode = fields[1], .indexSha = fields[3] });
+	}
+	return entries;
+}
+
 std::map<QString, LineCounts> parseNumstatZ(const QByteArray& diffOutput)
 {
 	std::map<QString, LineCounts> counts;
