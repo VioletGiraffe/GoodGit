@@ -39,6 +39,8 @@ DiffPane::DiffPane(QWidget* parent) :
 	_view = new QPlainTextEdit;
 	_view->setObjectName(QStringLiteral("diffView"));
 	_view->setReadOnly(true);
+	// A read-only view has nothing to do with a drop, and one it registers for never reaches the containing window
+	_view->setAcceptDrops(false);
 	_view->setLineWrapMode(QPlainTextEdit::WidgetWidth);
 	_highlighter = new DiffHighlighter(_view->document());
 	layout->addWidget(_view, 1);

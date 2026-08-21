@@ -10,6 +10,8 @@ ConsoleLogView::ConsoleLogView(QWidget* parent) :
 	QPlainTextEdit(parent)
 {
 	setReadOnly(true);
+	// A read-only view has nothing to do with a drop, and one it registers for never reaches the containing window
+	setAcceptDrops(false);
 	setFont(monospaceFont());
 	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] { setFont(monospaceFont()); });
 	setMaximumBlockCount(500); // bounds a chatty remote's hook output
