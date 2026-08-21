@@ -6,8 +6,9 @@
 <dict>
 	<key>CFBundleName</key>
 	<string>GoodGit</string>
+	<!-- Literal, matching TARGET in app.pro: qmake resolves ${EXECUTABLE_NAME} to the bundle name, which here is not the binary name -->
 	<key>CFBundleExecutable</key>
-	<string>${EXECUTABLE_NAME}</string>
+	<string>gg</string>
 	<!-- Fixed install identity: must never change, or macOS stops recognizing an update as the same app -->
 	<key>CFBundleIdentifier</key>
 	<string>com.violetgiraffe.GoodGit</string>

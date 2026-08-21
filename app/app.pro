@@ -112,6 +112,4 @@ mac*|linux*|freebsd*{
 
 mac*{
 	LIBS += -framework AppKit
-
-	QMAKE_POST_LINK = cp -f -p $${DESTDIR}/*.dylib $${DESTDIR}/$${QMAKE_APPLICATION_BUNDLE_NAME}.app/Contents/MacOS/ || true
 }

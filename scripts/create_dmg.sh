@@ -25,7 +25,14 @@ if [ ! -d "${BUNDLE}" ]; then
 fi
 
 echo "${MYSELF}: deploying Qt frameworks into ${BUNDLE}"
-"${QT_DIR}/bin/macdeployqt" "${BUNDLE}"
+
+# macdeployqt exits 0 even when it deploys nothing, so its output is the only signal of failure
+DEPLOY_OUTPUT="$("${QT_DIR}/bin/macdeployqt" "${BUNDLE}" 2>&1)"
+echo "${DEPLOY_OUTPUT}"
+if echo "${DEPLOY_OUTPUT}" | grep -q "^ERROR"; then
+	echo "${MYSELF}: macdeployqt failed, refusing to package an undeployed bundle" >&2
+	exit 1
+fi
 
 echo "${MYSELF}: creating ${DMG}"
 
