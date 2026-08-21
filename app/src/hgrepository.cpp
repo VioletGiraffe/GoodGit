@@ -351,6 +351,11 @@ RepoState HgRepository::stateFromRun(const RefreshRun& run) const
 		}
 	}
 
+	// .hgsub is what declares a subrepo; .hgsubstate only records where each one is, and lags a newly
+	// added one by a commit. The map is keyed by path, so this comes out in path order.
+	for (const auto& subrepo : _subrepoSources)
+		state.submodules << subrepo.first;
+
 	// An uncommitted merge is the working directory having two parents. Rebase, graft and histedit leave
 	// state of their own that this does not read.
 	if (run.workingDir.parents.size() > 1)

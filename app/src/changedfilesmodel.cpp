@@ -4,7 +4,6 @@
 
 #include "settings/csettings.h"
 #include "settingsui/csettingsdialog.h"
-#include "theme/ctintedsvgiconengine.h"
 
 #include <QApplication>
 #include <QBrush>
@@ -67,13 +66,6 @@ QColor lineCountColor(bool added)
 {
 	const Theme& t = activeTheme();
 	return added ? t.stAdded : t.stDeleted;
-}
-
-QIcon submoduleIcon()
-{
-	// One cached instance suffices: the engine resolves the tint per render, so it follows theme switches
-	static const QIcon icon = tintedSvgIcon(QStringLiteral(":/theme/folder.svg"), [] { return activeTheme().stSubmodule; });
-	return icon;
 }
 
 ChangedFilesModel::ChangedFilesModel(QObject* parent) :

@@ -4,6 +4,7 @@
 
 DISABLE_COMPILER_WARNINGS
 #include <QFont>
+#include <QIcon>
 #include <QString>
 RESTORE_COMPILER_WARNINGS
 
@@ -57,6 +58,10 @@ struct Theme
 };
 
 [[nodiscard]] QFont monospaceFont();
+
+// The folder glyph in the submodule colour, wherever a submodule row is drawn - the file list, the
+// recent repositories. Tinted per render, so it follows a theme change like the rest.
+[[nodiscard]] QIcon submoduleIcon();
 
 // Installs the themeicon handler, applies the active theme, and reapplies whenever
 // CThemeController announces a change. Call once, right after constructing the QApplication.

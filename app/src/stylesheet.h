@@ -29,8 +29,9 @@ QLabel#aheadLabel { color: @accentText@; font-weight: 600; }
 QFrame#counterBar { background: @windowBg@; border-bottom: 1px solid @border@; }
 QFrame#diffHeader { background: @windowBg@; border-bottom: 1px solid @border@; }
 QFrame#pushLogHeader { background: @windowBg@; border-top: 1px solid @border@; border-bottom: 1px solid @border@; }
+QFrame#dockHeader { background: @surfaceAlt@; border-bottom: 1px solid @border@; }
 QLabel#diffTagLabel { color: @textDim@; }
-QWidget#messageHeader QLabel, QFrame#pushLogHeader QLabel { color: @textDim@; }
+QWidget#messageHeader QLabel, QFrame#pushLogHeader QLabel, QFrame#dockHeader QLabel { color: @textDim@; }
 
 /* ---------- status strips ---------- */
 QLabel#errorStrip { background: @errBg@; color: @errFg@; }
@@ -59,7 +60,8 @@ QPushButton { background: @button@; color: @text@; border: 1px solid @buttonBord
 QPushButton:hover { background: @buttonHover@; }
 QPushButton:pressed { background: @buttonPressed@; }
 QPushButton:disabled { background: @surfaceAlt@; color: @textDim@; }
-QFrame#repoBar QPushButton, QFrame#counterBar QPushButton, QFrame#pushLogHeader QPushButton { padding: 3px 9px; }
+QFrame#repoBar QPushButton, QFrame#counterBar QPushButton, QFrame#pushLogHeader QPushButton,
+QFrame#dockHeader QPushButton { padding: 3px 9px; }
 QPushButton#commitButton, QPushButton#commitPushButton { padding: 8px 14px; }
 QPushButton#commitButton { background: @accent@; color: @accentFg@; border-color: @accent@; font-weight: 600; }
 QPushButton#commitButton:hover { background: @accentHover@; }

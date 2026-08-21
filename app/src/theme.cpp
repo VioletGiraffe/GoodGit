@@ -6,6 +6,7 @@
 #include "settings/csettings.h"
 #include "theme/cthemecontroller.h"
 #include "theme/cthemeiconhandler.h"
+#include "theme/ctintedsvgiconengine.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QApplication>
@@ -65,6 +66,13 @@ QFont monospaceFont()
 	if (const int pointSize = settings.value(Settings::MonospaceFontPointSizeKey).toInt(); pointSize > 0)
 		font.setPointSize(pointSize);
 	return font;
+}
+
+QIcon submoduleIcon()
+{
+	// One cached instance suffices: the engine resolves the tint per render, so it follows theme switches
+	static const QIcon icon = tintedSvgIcon(QStringLiteral(":/theme/folder.svg"), [] { return activeTheme().stSubmodule; });
+	return icon;
 }
 
 void applyTheme(QApplication& app)

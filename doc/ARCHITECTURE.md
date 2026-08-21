@@ -59,6 +59,9 @@ the pull. It ships with hg but is off by default, so that one command switches i
 | `queryround` | A set of queries launched together and what runs once the last has answered. Backend-agnostic: it counts, the backend launches |
 | `repository` | `Repository` - one repo: state, file entries, refresh, and every action, as the windows see them. The unit of the application, and the backend boundary. Its queries parse what they ran before they answer, so no command output crosses out of it, and each takes the object that will show the answer as its context - a query dies with its view rather than with the repo. It also owns the refresh policy every backend shares: re-entry coalesced, and a run applied whole or not at all |
 | `repositoryfactory` | `findRepository()` - what kind of repository a path is inside, and where its root is. `openRepository()` - one of that kind. The only place that names every backend |
+| `repositorywindows` | Where a repository is opened, wherever the request comes from: resolves a path, reports one nothing claims, raises the window already on that repository or makes one, and records the open. The only place a top-level `CommitWindow` is constructed |
+| `recentrepositories` | The list of repositories opened before, with each one's subrepos as its last refresh found them. Stored, capped, and announced when written, so every open panel rebuilds |
+| `recentrepositoriespanel` | That list as the dock beside a commit window: one row per repository, one level of subrepos under it, and a delegate for the two lines and the marks item roles cannot express |
 | `gitprocess` | `Git::run()`, `Git::runSync()` - the git executable and the invariants below, over `vcsprocess` |
 | `gitparsers` | Free-function parsers for the git outputs the app consumes. UI- and process-free deliberately: exercisable directly |
 | `gitrepository` | The git backend: every `Repository` operation as `git` subprocesses, and the parsing of what they print |
@@ -66,7 +69,7 @@ the pull. It ships with hg but is off by default, so that one command switches i
 | `changedfilesmodel` | Checkable table over the entries; row styling comes from the theme as item data roles |
 | `filelistdelegate` | Paints the two file-list details item roles cannot express: the recolored deleted strikethrough and the selected-row accent stripe |
 | `theme` | The selectable themes and the stylesheet built from them, on qtutils' theming framework (`CThemeController` persists the scheme and per-polarity theme choice; `themeicon:/` serves runtime-tinted QSS glyphs). Reapplies live on any change; the system scheme is followed unless overridden |
-| `commitwindow` | One window = one repository. Owns a `Repository` and all user flows. Submodule rows open another `CommitWindow` on the submodule, same process; the child's `committed()` signal refreshes the parent |
+| `commitwindow` | One window = one repository. Owns a `Repository` and all user flows, and hosts the recent repositories dock. Submodule rows open another `CommitWindow` on the submodule, same process; the child's `committed()` signal refreshes the parent |
 | `historywindow`, `historymodels` | The commit history, read-only: log above, the selected commit's file list beside that file's diff. The same window narrowed to one path is a file history. Owns its own `Repository`, so a submodule's history opens without a `CommitWindow` on that submodule |
 | `commitgraph` | The lane diagram behind the commit list: each row's lane, its first-parent chain, and the lines crossing it - from the records' parent links and nothing else. Backend- and UI-free, like the parsers |
 | `commitgraphdelegate` | Paints that diagram in the log's first column, each line colored by the chain it belongs to |
@@ -75,6 +78,25 @@ the pull. It ships with hg but is off by default, so that one command switches i
 | `diffpane` | The pane both windows show one file's text in: the path and tag header over a read-only monospace view, and whether that text is highlighted as a diff. It neither reads nor caps what it is handed - the display size cap is a setting, and what to say instead is each window's own wording |
 | `settings` | Every storage key with its default beside it, one named constant each. The values are read and written where they are consumed, through qtutils `CSettings` directly; qtutils `CSettingsNotifier` is what has open windows re-apply fonts and cached layout once a settings dialog stores them. Window geometry is qtutils `CPersistenceEnabler`, one key per window kind - as the splitter positions are, and shared by every repository the same way |
 | `settingspages` | The two Preferences pages (Main, Theme & Font) for qtutils `CSettingsDialog`, opened from the commit window's menu. Theme choices go through `CThemeController` |
+
+## Opening a repository
+
+Every way in resolves a path the same way - `findRepository()`, blocking on two local probes - so a
+mistyped argument, a chosen folder that is not a repository and a stored entry that has moved all fail
+with one wording. Where they differ is which path is asked for. A named argument is a claim about that
+path, and its failure is the program's, exit code and all. With none, the current directory is the first
+guess rather than the only one - started from a shortcut it is wherever that pointed - so a directory
+nothing claims falls through to the repository opened last, and to a folder chooser where there is no
+such thing. **There is no window without a repository**, which is what keeps every path in `CommitWindow`
+free of one, and closing the last window still quits.
+
+One repository has one window: a second request raises the one already open, the open windows being the
+registry there is. The list of repositories opened before is stored rather than derived, and so is what
+hangs under each of them - the subrepos that repository's last refresh found, harvested from
+`RepoState::submodules`, which is every subrepo it declares rather than the changed ones the file list
+carries. So the panel expands an entry without running anything, shows nothing under one never opened
+yet, and goes stale exactly as the rest of an entry does. Opening a subrepo records its parent: the list
+names workspaces, and a subrepo is part of one rather than one of its own.
 
 ## Backends
 

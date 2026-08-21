@@ -9,6 +9,7 @@
 
 #include <memory>
 
+class QAction;
 class QCheckBox;
 class QFrame;
 class QLabel;
@@ -30,6 +31,11 @@ class CommitWindow final : public QMainWindow
 public:
 	explicit CommitWindow(const RepositoryLocation& location);
 
+	// Which repository this window is showing - how a second request to open one finds it already open
+	[[nodiscard]] const QString& repositoryPath() const;
+	// For the window whose submodule another window is showing: that window's commit moves a pointer here
+	void refreshRepository();
+
 signals:
 	void committed(); // a commit succeeded here; the parent window refreshes its gitlink row off this
 	void pushed();    // a push succeeded here; the history window's unpushed marks are stale until it hears this
@@ -40,6 +46,8 @@ protected:
 
 private:
 	void buildUi();
+	// The recent repositories dock, added to the window; answers with the action that shows and hides it
+	[[nodiscard]] QAction* buildRecentRepositoriesDock();
 
 	void onRefreshed();
 	void updateHeader();

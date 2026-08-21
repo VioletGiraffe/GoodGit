@@ -8,7 +8,10 @@
 #include "historymodels.h"
 #include "historywindow.h"
 #include "messageedit.h"
+#include "recentrepositories.h"
+#include "recentrepositoriespanel.h"
 #include "repositoryfactory.h"
+#include "repositorywindows.h"
 #include "settings.h"
 #include "settingspages.h"
 #include "theme.h"
@@ -26,6 +29,7 @@
 #include <QClipboard>
 #include <QDesktopServices>
 #include <QDir>
+#include <QDockWidget>
 #include <QEvent>
 #include <QFile>
 #include <QFileInfo>
@@ -53,6 +57,7 @@
 
 namespace {
 
+constexpr int RecentRepositoriesDockWidth = 210; // first-run default; the dock's width persists with the window state
 constexpr int LeftColumnWidth = 430; // first-run default; fits the default 50-column subject guide, and the splitter position persists
 constexpr qsizetype BinarySniffBytes = 8000; // git's own threshold: a NUL this early means the file is not text
 constexpr int MaxListedPathsInDialog = 20;
@@ -156,9 +161,22 @@ CommitWindow::CommitWindow(const RepositoryLocation& location) :
 	_repo->refresh();
 }
 
+const QString& CommitWindow::repositoryPath() const
+{
+	return _repo->path();
+}
+
+void CommitWindow::refreshRepository()
+{
+	_repo->refresh();
+}
+
 void CommitWindow::buildUi()
 {
 	QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
+	fileMenu->addAction(tr("&Open Repository..."), this, [this] { browseForRepository(this); })
+		->setShortcut(QKeySequence::Open);
+	fileMenu->addSeparator();
 #ifdef Q_OS_MACOS
 	fileMenu->addAction(tr("Install 'gg' Command Line Tool..."), this, [this] {
 		const auto result = installCommandLineTool();
@@ -171,6 +189,8 @@ void CommitWindow::buildUi()
 	QMenu* editMenu = menuBar()->addMenu(tr("&Edit"));
 	editMenu->addAction(tr("&Preferences..."), this, &CommitWindow::showPreferencesDialog)
 		->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_P));
+	QMenu* viewMenu = menuBar()->addMenu(tr("&View"));
+	viewMenu->addAction(buildRecentRepositoriesDock()); // builds the dock; the action is what shows and hides it
 	QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
 	helpMenu->addAction(tr("&About"), this, [this] {
 		CAboutDialog aboutDialog{ QStringLiteral(GG_VERSION), this };
@@ -341,7 +361,7 @@ void CommitWindow::buildUi()
 	else
 		_splitter->setSizes({ LeftColumnWidth, 750 });
 	setCentralWidget(_splitter);
-	resize(1180, 740);
+	resize(1180 + RecentRepositoriesDockWidth, 740); // the dock is beside the two panes, not carved out of them
 
 	connect(_refreshButton, &QPushButton::clicked, _repo.get(), &Repository::refresh);
 	connect(_pushButton, &QPushButton::clicked, this, &CommitWindow::startPush);
@@ -391,6 +411,41 @@ void CommitWindow::buildUi()
 	_messageEdit->setFocus(); // typing the message is what the window is opened to do
 }
 
+QAction* CommitWindow::buildRecentRepositoriesDock()
+{
+	auto* dock = new QDockWidget{ this };
+	dock->setWindowTitle(tr("Recent Repositories"));
+	dock->setObjectName(QStringLiteral("recentRepositoriesDock")); // saveState() drops a dock that has no name
+	dock->setFeatures(QDockWidget::DockWidgetClosable); // it has one place in the window, and closes rather than moves
+	dock->setAllowedAreas(Qt::LeftDockWidgetArea);
+
+	// A dock's own title bar is the style's to draw, and the app's is a stylesheet: this one is a bar like
+	// the others in the window instead
+	auto* header = new QFrame;
+	header->setObjectName(QStringLiteral("dockHeader"));
+	auto* headerLayout = new QHBoxLayout(header);
+	headerLayout->setContentsMargins(8, 6, 8, 6);
+	headerLayout->addWidget(new QLabel(tr("Recent")));
+	headerLayout->addStretch();
+	auto* openButton = new QPushButton(tr("Open..."));
+	openButton->setToolTip(tr("Open another repository"));
+	auto* hideButton = new QPushButton(tr("Hide"));
+	headerLayout->addWidget(openButton);
+	headerLayout->addWidget(hideButton);
+	dock->setTitleBarWidget(header);
+
+	dock->setWidget(new RecentRepositoriesPanel{ _repo->path(), dock });
+	addDockWidget(Qt::LeftDockWidgetArea, dock);
+	resizeDocks({ dock }, { RecentRepositoriesDockWidth }, Qt::Horizontal);
+
+	connect(openButton, &QPushButton::clicked, this, [this] { browseForRepository(this); });
+	connect(hideButton, &QPushButton::clicked, dock, &QWidget::hide);
+
+	QAction* toggleAction = dock->toggleViewAction();
+	toggleAction->setText(tr("&Recent Repositories"));
+	return toggleAction;
+}
+
 void CommitWindow::closeEvent(QCloseEvent* event)
 {
 	CSettings{}.setValue(Settings::CommitWindowSplitterKey, _splitter->saveState());
@@ -423,6 +478,8 @@ void CommitWindow::onRefreshed()
 
 	const RepoState& state = _repo->state();
 	_filesModel.setEntries(_repo->files(), state.operationInProgress());
+	// The subrepo rows in the recent list come from here: nothing else ever asks a repository what it holds
+	RecentRepositories::setSubrepos(*_repo);
 
 	updateHeader();
 	updateStrips();
@@ -988,9 +1045,9 @@ void CommitWindow::showPreferencesDialog()
 
 void CommitWindow::openSubmoduleWindow(const FileEntry& entry)
 {
-	auto* window = new CommitWindow(_repo->submoduleLocation(entry.path));
-	connect(window, &CommitWindow::committed, _repo.get(), &Repository::refresh);
-	window->show();
+	CommitWindow* window = openRepositoryWindow(_repo->submoduleLocation(entry.path));
+	// The window may be one already open, and so already connected to this one
+	connect(window, &CommitWindow::committed, this, &CommitWindow::refreshRepository, Qt::UniqueConnection);
 }
 
 void CommitWindow::showContextMenu(const QPoint& pos)

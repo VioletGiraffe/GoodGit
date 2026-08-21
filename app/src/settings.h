@@ -44,6 +44,18 @@ inline constexpr const char* NewRowCheckPolicyNone = "none";
 inline constexpr const char* DiffTabWidthKey = "DiffTabWidth";
 inline constexpr int DiffTabWidthDefault = 4;
 
+// The repositories a window was opened on, most recent first: a QSettings array whose elements carry the
+// keys below. The kinds are stored as text rather than an enum's number, so a reorder could never silently
+// repoint an existing user's entry - as the check policy above is.
+inline constexpr const char* RecentRepositoriesKey = "RecentRepositories";
+inline constexpr const char* RecentRepositoryRootKey = "root";
+inline constexpr const char* RecentRepositoryKindKey = "kind";
+// The subrepos the last refresh of that repository found: two lists of equal length, one path per kind
+inline constexpr const char* RecentRepositorySubrepoPathsKey = "subrepoPaths";
+inline constexpr const char* RecentRepositorySubrepoKindsKey = "subrepoKinds";
+inline constexpr const char* VcsKindGit = "git";
+inline constexpr const char* VcsKindMercurial = "hg";
+
 // One key per window kind, shared by every repository, as the window geometry beside them is
 inline constexpr const char* CommitWindowSplitterKey = "CommitWindow/splitterState";
 inline constexpr const char* HistoryWindowSplitterKey = "HistoryWindow/splitterState";

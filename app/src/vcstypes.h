@@ -85,6 +85,11 @@ struct RepoState
 	// Subjects of the commits the upstream has not seen, newest first; capped, `ahead` holds the true count
 	QStringList unpushedSubjects;
 
+	// Every subrepo this repository declares, repo-relative and in path order - not only the ones with a
+	// row of their own, which is all the file list carries. What kind each one is stays the backend's to
+	// answer, through submoduleLocation().
+	QStringList submodules;
+
 	// Why the last refresh could not establish this state - empty when it could. Everything above is then
 	// the last refresh that did, held rather than half-replaced, and nothing may be acted on.
 	QString readFailure;

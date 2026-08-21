@@ -501,6 +501,7 @@ RepoState GitRepository::stateFromRun(const RefreshRun& run) const
 	state.localBranchesAtHead = run.localBranchesAtHead;
 	state.remoteBranchesAtHead = run.remoteBranchesAtHead;
 	state.unpushedSubjects = run.unpushedSubjects;
+	state.submodules = run.submodules; // ls-files lists the index, which is ordered by path
 
 	if (!_gitDir.isEmpty())
 	{

@@ -238,6 +238,19 @@ body {
 .repobar .ab { color: var(--accent-text); font-size: 12px; font-weight: 600; }
 .grow { flex: 1; }
 .row { display: flex; flex: 1; min-height: 0; }
+
+/* ---------- recent repositories dock ---------- */
+.dock { flex: 0 0 210px; background: var(--pane); border-right: 1px solid var(--border); }
+.dock .dhead { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: var(--pane-alt); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--dim); }
+.rrow { position: relative; padding: 4px 10px; border-bottom: 1px solid var(--border-soft); line-height: 1.35; }
+.rrow.cur { background: var(--pane-alt); }
+.rrow.cur::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--accent); }
+.rrow.hover { background: var(--sel); } /* the mouse or the keyboard, there being no selection */
+.rrow.sub { padding-left: 30px; }
+.rrow .p { font-size: 11px; color: var(--dim); word-break: break-all; }
+.rrow .kind { float: right; font-size: 10px; color: var(--accent-text); border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; }
+.rrow .tw { display: inline-block; width: 12px; margin-left: -14px; color: var(--dim); font-size: 10px; }
+.rrow .ico { margin-left: -18px; margin-right: 4px; font-size: 12px; }
 .col { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 
 /* ---------- message ---------- */
@@ -507,14 +520,43 @@ ${PUSH_LOG.map(l => esc(l)).join('\n')}
 <span class="ok">Succeeded</span></pre>
 		</div>`;
 
+/* The dock takes its width from the diff pane beside it, never from the commit column: the repo header
+   row sets that column's floor and nothing here may push it. Rows carry the path over two lines, since
+   210px elides most of one. */
+const RECENT = [
+	{ name: 'GoodGit', path: 'E:\\Development\\Projects\\Personal\\GoodGit', kind: 'git', cur: 1, open: 1,
+		subs: [{ name: 'cpputils' }, { name: 'cpp-template-utils' }, { name: 'qtutils' },
+			{ name: 'zlib', path: '3rdparty\\zlib' }] },
+	{ name: 'FileCommander', path: 'E:\\Development\\Projects\\FileCommander', kind: 'git', subs: [{ name: 'thin_io' }] },
+	{ name: 'text-utils', path: 'E:\\Development\\Projects\\Personal\\text-processing-utils', kind: 'git', hover: 1 },
+	{ name: 'design-notes', path: 'D:\\Work\\design-notes', kind: 'hg' },
+];
+
+const rrow = r => {
+	const twisty = r.subs ? `<span class="tw">${r.open ? '&#9662;' : '&#9656;'}</span>` : '';
+	const cls = ['rrow', r.cur ? 'cur' : '', r.hover ? 'hover' : ''].filter(Boolean).join(' ');
+	return `<div class="${cls}"><span class="kind">${r.kind}</span>${twisty}${esc(r.name)}<div class="p">${esc(r.path)}</div></div>`;
+};
+
+// A subrepo's own path only where it says more than the name does
+const subrow = s => `<div class="rrow sub"><span class="ico">&#128193;</span>${esc(s.name)}`
+	+ (s.path ? `<div class="p">${esc(s.path)}</div>` : '') + '</div>';
+
+const recentDock = () => `<div class="dock col">
+			<div class="dhead"><span>Recent</span><span class="grow"></span>
+				<button class="btn small">Open...</button><button class="btn small">Hide</button></div>
+			${RECENT.map(r => [rrow(r), ...(r.open ? r.subs.map(subrow) : [])].join('\n\t\t\t')).join('\n\t\t\t')}
+		</div>`;
+
 /* Left column width is set by the repo header row, the widest thing in the column: repo name, branch
    chip, the upstream phrase and four buttons, none of which shrink. The 50-column subject guide needs
    only 430px of it. */
 const window_ = () => `<div class="win">
 	<div class="titlebar"><span class="tt">GoodGit [master] - GoodGit</span>
 		<span class="wbtns"><i>&#8210;</i><i>&#9633;</i><i>&#10005;</i></span></div>
-	<div class="menubar"><span>File</span><span>Edit</span><span>Help</span></div>
+	<div class="menubar"><span>File</span><span>Edit</span><span>View</span><span>Help</span></div>
 	<div class="row">
+		${recentDock()}
 		<div class="col" style="flex:0 0 600px;border-right:1px solid var(--border)">
 			<div class="repobar">
 				<span class="repo">GoodGit</span><span class="branch">master</span>

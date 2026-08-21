@@ -19,6 +19,11 @@ QString escapedForRegex(const QString& literal)
 	return escaped;
 }
 
+bool sameRepositoryPath(const QString& left, const QString& right)
+{
+	return left.compare(right, Qt::CaseInsensitive) == 0;
+}
+
 Repository::Repository(QString rootPath, QObject* parent) :
 	QObject(parent),
 	_rootPath{ std::move(rootPath) }

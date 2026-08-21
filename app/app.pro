@@ -56,8 +56,11 @@ HEADERS += \
 	src/historywindow.h \
 	src/messageedit.h \
 	src/queryround.h \
+	src/recentrepositories.h \
+	src/recentrepositoriespanel.h \
 	src/repository.h \
 	src/repositoryfactory.h \
+	src/repositorywindows.h \
 	src/settings.h \
 	src/settingspages.h \
 	src/stylesheet.h \
@@ -85,8 +88,11 @@ SOURCES += \
 	src/historywindow.cpp \
 	src/main.cpp \
 	src/messageedit.cpp \
+	src/recentrepositories.cpp \
+	src/recentrepositoriespanel.cpp \
 	src/repository.cpp \
 	src/repositoryfactory.cpp \
+	src/repositorywindows.cpp \
 	src/settingspages.cpp \
 	src/theme.cpp \
 	src/vcsprocess.cpp

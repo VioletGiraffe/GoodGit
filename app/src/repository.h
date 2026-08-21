@@ -24,6 +24,12 @@ struct RepositoryLocation
 	QString root; // absolute
 };
 
+// Whether two roots name one repository. Case-insensitively: a root is resolved against whatever case the
+// path it was found from was spelled in, so one repository reaches the app spelled several ways, and two
+// repositories that differ only in case exist nowhere this runs. Every place that has to recognise a
+// repository it has already seen - the open windows, the recent list - asks this, so they agree.
+[[nodiscard]] bool sameRepositoryPath(const QString& left, const QString& right);
+
 // One command of a push. Usually a push is just the repository's own, but a superproject commit
 // referencing an unpublished submodule commit is unfetchable, so those submodules are pushed first.
 struct PushStep
