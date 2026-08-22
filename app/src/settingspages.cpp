@@ -62,9 +62,9 @@ MainSettingsPage::MainSettingsPage(QWidget* parent) :
 	_textEditorCommand = new QLineEdit;
 	_textEditorCommand->setText(settings.value(Settings::TextEditorCommandKey).toString());
 	_textEditorCommand->setPlaceholderText(QLatin1String(Settings::TextEditorCommandDefault));
-	_textEditorCommand->setToolTip(tr("What the file list's Edit command runs. %path% is replaced with the file "
-		"and stays one argument whatever it contains; a command without it gets the file appended. Quote an "
-		"executable whose own path has spaces in it."));
+	_textEditorCommand->setToolTip(tr("The command the file list's Edit action runs. %path% is replaced with the file path "
+		"and is always passed as a single argument; without %path%, the file path is appended to the command. "
+		"Quote the executable if its own path contains spaces."));
 	layout->addRow(tr("Text editor command:"), _textEditorCommand);
 
 	_historyDepth = new QSpinBox;
@@ -72,20 +72,20 @@ MainSettingsPage::MainSettingsPage(QWidget* parent) :
 	_historyDepth->setSingleStep(1000);
 	_historyDepth->setGroupSeparatorShown(true);
 	_historyDepth->setValue(settings.value(Settings::HistoryMaxCommitsKey, Settings::HistoryMaxCommitsDefault).toInt());
-	_historyDepth->setToolTip(tr("How many commits a history window loads. \"Load more\" doubles from here."));
+	_historyDepth->setToolTip(tr("How many commits a history window loads at first. \"Load more\" doubles the count."));
 	layout->addRow(tr("History depth, commits:"), _historyDepth);
 
 	_maxDiffMb = new QSpinBox;
 	_maxDiffMb->setRange(1, 64);
 	_maxDiffMb->setSuffix(tr(" MB"));
 	_maxDiffMb->setValue(int(settings.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong() / (1024 * 1024)));
-	_maxDiffMb->setToolTip(tr("Diffs and files larger than this are reported instead of displayed."));
+	_maxDiffMb->setToolTip(tr("Diffs and files larger than this are not displayed; only their size is shown."));
 	layout->addRow(tr("Largest diff to display:"), _maxDiffMb);
 
 	_showEolOnlyChanges = new QCheckBox{ tr("Show changes where only the line endings differ") };
 	_showEolOnlyChanges->setChecked(settings.value(Settings::ShowLineEndingOnlyChangesKey, Settings::ShowLineEndingOnlyChangesDefault).toBool());
-	_showEolOnlyChanges->setToolTip(tr("Applies to the shown diffs and the line counts. Either way the file "
-		"lists as modified and commits its content byte for byte."));
+	_showEolOnlyChanges->setToolTip(tr("Affects only the displayed diffs and the line counts. Either way the file "
+		"is listed as modified and its content is committed as is."));
 	layout->addRow(_showEolOnlyChanges);
 
 	_subjectGuideColumn = new QSpinBox;
@@ -95,7 +95,7 @@ MainSettingsPage::MainSettingsPage(QWidget* parent) :
 
 	_completionAutoPopup = new QCheckBox{ tr("Suggest message completions while typing") };
 	_completionAutoPopup->setChecked(settings.value(Settings::CompletionAutoPopupKey, Settings::CompletionAutoPopupDefault).toBool());
-	_completionAutoPopup->setToolTip(tr("Ctrl+Space asks for completions either way."));
+	_completionAutoPopup->setToolTip(tr("Ctrl+Space shows completions either way."));
 	layout->addRow(_completionAutoPopup);
 	_completionMinPrefix = new QSpinBox;
 	_completionMinPrefix->setRange(1, 10);
@@ -109,8 +109,8 @@ MainSettingsPage::MainSettingsPage(QWidget* parent) :
 	const QString policy = settings.value(Settings::NewRowCheckPolicyKey).toString();
 	_newRowCheckPolicy->setCurrentIndex(policy == QLatin1String(Settings::NewRowCheckPolicyAll) ? 1
 		: policy == QLatin1String(Settings::NewRowCheckPolicyNone) ? 2 : 0);
-	_newRowCheckPolicy->setToolTip(tr("Rows already listed keep their check state across a refresh; this is "
-		"the state a newly appearing row starts with."));
+	_newRowCheckPolicy->setToolTip(tr("Files already listed keep their check state across a refresh; this is "
+		"the initial state of files that appear in the list for the first time."));
 	layout->addRow(tr("Newly listed files start checked:"), _newRowCheckPolicy);
 }
 

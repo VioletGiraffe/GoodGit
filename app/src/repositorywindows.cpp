@@ -32,12 +32,12 @@ QString noRepositoryMessage(const QString& startPath, const std::vector<ProcessR
 	const QString nativePath = QDir::toNativeSeparators(startPath);
 	QStringList parts{ anyToolAnswered
 		? QStringLiteral("'%1' is not inside a repository.").arg(nativePath)
-		: QStringLiteral("Could not determine what '%1' is inside: no version control tool could be started.").arg(nativePath) };
+		: QStringLiteral("Could not check whether '%1' is inside a repository: no version control tool could be started.").arg(nativePath) };
 	for (const ProcessResult& attempt : attempts)
 	{
 		// When another tool did answer, one that never started is a gap in the search, not something to install
 		parts << (anyToolAnswered && attempt.outcome == ProcessOutcome::LaunchFailed
-			? QStringLiteral("%1 could not be started, so no %1 repository was looked for: %2").arg(attempt.toolName, attempt.launchError)
+			? QStringLiteral("%1 could not be started, so it is unknown whether this is a %1 repository: %2").arg(attempt.toolName, attempt.launchError)
 			: attempt.errorText());
 	}
 	return parts.join(QStringLiteral("\n\n"));
@@ -211,8 +211,8 @@ void scanFolderForRepositories(QWidget* dialogParent)
 		if (found.empty())
 			message = QStringLiteral("No repositories directly inside '%1'.").arg(nativePath);
 		else if (added == 0) // the cap can also have dropped every one of them, so neither reason is claimed alone
-			message = QStringLiteral("Nothing added from '%1': its repositories are already listed, or older than "
-				"the ones the list keeps.").arg(nativePath);
+			message = QStringLiteral("Nothing added from '%1': its repositories are already in the list, or were used "
+				"less recently than the ones the list keeps.").arg(nativePath);
 		else
 			message = QStringLiteral("Added %1 %2 from '%3'.")
 				.arg(added)

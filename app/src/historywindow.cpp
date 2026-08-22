@@ -86,14 +86,14 @@ void HistoryWindow::buildUi()
 	_countLabel = new QLabel;
 	_searchEdit = new QLineEdit;
 	_searchEdit->setPlaceholderText(tr("Search commits"));
-	_searchEdit->setToolTip(tr("Ctrl+F. Matches the hash, author, refs, date or message; non-matching commits are hidden"));
+	_searchEdit->setToolTip(tr("Ctrl+F. Show only the commits whose hash, author, refs, date or message contain this text"));
 	_searchEdit->setClearButtonEnabled(true);
 	_searchEdit->setMinimumWidth(220);
 	_searchEdit->installEventFilter(this);
 	_pickaxeButton = new QPushButton(tr("Find in contents..."));
-	_pickaxeButton->setToolTip(tr("Re-read the log, keeping only the commits whose diff touches the text"));
+	_pickaxeButton->setToolTip(tr("Reload the log with only the commits whose diff contains a given text"));
 	_loadMoreButton = new QPushButton(tr("Load more"));
-	_loadMoreButton->setToolTip(tr("Re-read the log with twice the limit"));
+	_loadMoreButton->setToolTip(tr("Reload the log with twice as many commits"));
 	_loadMoreButton->setVisible(false);
 	auto* refreshButton = new QPushButton(tr("Refresh"));
 	refreshButton->setToolTip(QStringLiteral("F5"));
@@ -421,7 +421,7 @@ void HistoryWindow::showPickaxePopup()
 		popupLayout->setContentsMargins(8, 8, 8, 8);
 		popupLayout->setSpacing(6);
 
-		auto* caption = new QLabel(tr("List the commits whose diff touches this text:"));
+		auto* caption = new QLabel(tr("Show only the commits whose diff contains this text:"));
 		_pickaxeEdit = new QLineEdit;
 		_pickaxeEdit->setPlaceholderText(tr("Text to find, taken literally"));
 		_pickaxeEdit->setMinimumWidth(PickaxeEditWidth);
@@ -472,7 +472,7 @@ void HistoryWindow::runPickaxe(const QString& text, bool ignoreCase)
 	// since a whole pasted line would push the rest of the bar off the window
 	const QString shown = text.size() > MaxShownPickaxeTerm ? text.left(MaxShownPickaxeTerm) + QStringLiteral("...") : text;
 	_pickaxeButton->setText(text.isEmpty() ? tr("Find in contents...") : tr("Contents: %1").arg(shown));
-	_pickaxeButton->setToolTip(text.isEmpty() ? tr("Re-read the log, keeping only the commits whose diff touches the text") : text);
+	_pickaxeButton->setToolTip(text.isEmpty() ? tr("Reload the log with only the commits whose diff contains a given text") : text);
 	reload();
 }
 
@@ -543,7 +543,7 @@ void HistoryWindow::showFilesForCurrentCommit()
 
 	const bool isMerge = commit.parents.size() > 1;
 	_fileCountLabel->setToolTip(isMerge
-		? tr("A merge has no diff of its own - what it changed depends on which parent it is compared against.")
+		? tr("A merge commit has no diff of its own: its changes depend on which parent it is compared against.")
 		: QString{});
 	if (isMerge)
 	{

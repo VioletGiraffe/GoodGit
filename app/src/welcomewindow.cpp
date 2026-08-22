@@ -46,13 +46,13 @@ WelcomeWindow::WelcomeWindow()
 	titleRow->addWidget(titleLabel);
 	titleRow->addStretch();
 
-	auto* introLabel = new QLabel(tr("Every window works on one repository.\n\n"
-		"Drop a folder that is inside a Git or Mercurial repository onto this window, or choose one below."));
+	auto* introLabel = new QLabel(tr("Each window shows one repository.\n\n"
+		"Drop a folder from inside a Git or Mercurial repository onto this window, or choose one below."));
 	introLabel->setWordWrap(true);
 
 	auto* openButton = new QPushButton(tr("Open Repository..."));
 	auto* scanButton = new QPushButton(tr("Scan Folder for Repositories..."));
-	scanButton->setToolTip(tr("Lists every repository one level inside a folder, without opening any"));
+	scanButton->setToolTip(tr("Add every repository directly inside a folder to the recent list, without opening them"));
 
 	auto* buttonRow = new QHBoxLayout;
 	buttonRow->addWidget(openButton);

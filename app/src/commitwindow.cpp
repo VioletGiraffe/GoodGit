@@ -225,7 +225,7 @@ void CommitWindow::buildUi()
 	_aheadLabel->setObjectName(QStringLiteral("aheadLabel"));
 	_pushButton = new QPushButton(tr("Push"));
 	_peekButton = new QPushButton(tr("Peek"));
-	_peekButton->setToolTip(tr("Ask the upstream what it has that this branch does not"));
+	_peekButton->setToolTip(tr("Fetch and list the commits on the upstream that this branch does not have yet"));
 	_historyButton = new QPushButton(tr("History"));
 	_historyButton->setToolTip(QStringLiteral("Ctrl+H"));
 	repoBarLayout->addWidget(_repoNameLabel);
@@ -265,8 +265,8 @@ void CommitWindow::buildUi()
 	counterLayout->addWidget(modifiedOnlyButton);
 	counterLayout->addStretch();
 	_lineTotalsLabel = new QLabel;
-	_lineTotalsLabel->setToolTip(tr("Lines added and removed in the checked files. Files with no counts of "
-		"their own - untracked and binary ones - are not in the total."));
+	_lineTotalsLabel->setToolTip(tr("Lines added and removed in the checked files. "
+		"Untracked and binary files have no line counts and are not included."));
 	counterLayout->addWidget(_lineTotalsLabel);
 	leftLayout->addWidget(counterBar);
 
@@ -436,7 +436,7 @@ QAction* CommitWindow::buildRecentRepositoriesDock()
 	// and a field beside them would add to it
 	auto* filterEdit = new QLineEdit;
 	filterEdit->setPlaceholderText(tr("Filter"));
-	filterEdit->setToolTip(tr("Matches anywhere in a repository's path; the rest are hidden"));
+	filterEdit->setToolTip(tr("Show only the repositories whose path contains this text"));
 	filterEdit->setClearButtonEnabled(true);
 	auto* filterRow = new QWidget;
 	auto* filterRowLayout = new QHBoxLayout(filterRow);
@@ -563,18 +563,18 @@ void CommitWindow::updateStrips()
 	const RepoState& state = _repo->state();
 
 	const QString readFailureText = state.known() ? QString{}
-		: tr("Could not read this repository: %1\nEverything below is from the last refresh that could, and "
-			 "nothing can be committed, discarded or deleted until F5 succeeds.").arg(state.readFailure);
+		: tr("Could not read this repository: %1\nThe list below is from the last successful refresh. "
+			 "Committing, discarding and deleting are disabled until a refresh (F5) succeeds.").arg(state.readFailure);
 	_readFailureStrip->setText(readFailureText);
 	_readFailureStrip->setVisible(!readFailureText.isEmpty());
 
 	QString opText;
 	switch (state.op)
 	{
-	case RepoOp::Merge:      opText = tr("Merge in progress: everything must be committed together."); break;
-	case RepoOp::CherryPick: opText = tr("Cherry-pick in progress: everything must be committed together."); break;
-	case RepoOp::Revert:     opText = tr("Revert in progress: everything must be committed together."); break;
-	case RepoOp::Rebase:     opText = tr("Rebase in progress: everything must be committed together."); break;
+	case RepoOp::Merge:      opText = tr("Merge in progress: all changes must be committed together."); break;
+	case RepoOp::CherryPick: opText = tr("Cherry-pick in progress: all changes must be committed together."); break;
+	case RepoOp::Revert:     opText = tr("Revert in progress: all changes must be committed together."); break;
+	case RepoOp::Rebase:     opText = tr("Rebase in progress: all changes must be committed together."); break;
 	case RepoOp::None:       break;
 	}
 	_opStrip->setText(opText);
@@ -586,9 +586,9 @@ void CommitWindow::updateStrips()
 		if (state.localBranchesAtHead.size() == 1)
 			detachedText = tr("Not on a branch. '%1' points here and will be checked out when you commit.").arg(state.localBranchesAtHead.front());
 		else if (state.localBranchesAtHead.size() > 1)
-			detachedText = tr("Not on a branch. Several branches point here - you will choose one when committing.");
+			detachedText = tr("Not on a branch. Several branches point here; you will be asked which one to check out when you commit.");
 		else if (!state.remoteBranchesAtHead.isEmpty())
-			detachedText = tr("Not on a branch. HEAD matches %1 - a local branch will be created when you commit.").arg(state.remoteBranchesAtHead.front());
+			detachedText = tr("Not on a branch. HEAD matches %1; a local branch tracking it will be created when you commit.").arg(state.remoteBranchesAtHead.front());
 		else
 			detachedText = tr("Not on a branch, and no branch points at this commit. Committing is blocked - check out a branch first.");
 	}
@@ -723,7 +723,7 @@ void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 		if (state.remoteBranchesAtHead.size() > 1)
 		{
 			const auto answer = MessageBox::question(this, tr("Not on a branch"),
-				tr("HEAD matches several remote branches. Create a local branch tracking which one?"),
+				tr("HEAD matches several remote branches. Which one should the new local branch track?"),
 				state.remoteBranchesAtHead);
 			if (!answer)
 			{
@@ -907,14 +907,14 @@ void CommitWindow::showIncomingCommits(const std::vector<CommitRecord>& commits,
 	const QString upstream = _repo->state().upstream;
 	_incomingHeaderLabel->setText(commits.empty()
 		? tr("Nothing to pull from %1").arg(upstream)
-		: tr("%1 commit(s) waiting in %2").arg(int(commits.size())).arg(upstream));
+		: tr("%1 commit(s) to pull from %2").arg(int(commits.size())).arg(upstream));
 
 	QStringList lines;
 	lines.reserve(qsizetype(commits.size()) + 1);
 	for (const CommitRecord& commit : commits)
 		lines.push_back(shortSha(commit.sha) + QStringLiteral("  ") + commit.subject());
 	if (capped)
-		lines.push_back(tr("... and older ones, not listed"));
+		lines.push_back(tr("... and more; only the newest %1 are listed").arg(MaxIncomingCommits));
 	_incomingView->setPlainText(lines.join(QLatin1Char('\n')));
 
 	// With nothing to list the popup shrinks to its header line
@@ -956,12 +956,12 @@ void CommitWindow::showDiffForCurrentRow()
 	{
 		if (!entry.pointerMoved)
 		{
-			_diffPane->showDiff(entry.path, tr("submodule"), tr("The submodule pointer has not moved.\nThere are uncommitted changes inside - double-click to open the submodule."));
+			_diffPane->showDiff(entry.path, tr("submodule"), tr("The submodule pointer has not moved, but there are uncommitted changes inside the submodule.\nDouble-click to open it."));
 			return;
 		}
 		_diffPane->showDiff(entry.path, tr("new commits"), tr("Loading..."));
 		_diffQuery = _repo->submodulePointerLog(entry.path, this, [this, entry](std::expected<QString, QString> log) {
-			_diffPane->showDiff(entry.path, tr("new commits"), log ? tr("Commits being pulled in:\n\n") + *log : log.error());
+			_diffPane->showDiff(entry.path, tr("new commits"), log ? tr("New commits in the submodule:\n\n") + *log : log.error());
 		});
 		return;
 	}
@@ -1261,7 +1261,7 @@ void CommitWindow::deleteSelection()
 			// Never fall back to a permanent delete
 			MessageBox::notice(this, tr("Delete failed"),
 				tr("Could not move '%1' to the Recycle Bin (the file may be locked, or the volume has no Recycle Bin).\n"
-				   "Remaining files were not touched.").arg(path), {});
+				   "The remaining files were not deleted.").arg(path), {});
 			return;
 		}
 	};
@@ -1324,12 +1324,12 @@ void CommitWindow::discardSelection()
 		QString text = tr("Discard all changes to %1 file(s)? This cannot be undone.\n\n%2")
 			.arg(promptPaths.size()).arg(listedPaths(promptPaths));
 		if (anySubmodule)
-			text += tr("\n\nDiscarding a submodule's pointer change checks the recorded commit out inside it, which leaves it on a detached HEAD.");
+			text += tr("\n\nDiscarding a submodule's pointer change checks out the recorded commit inside it, leaving the submodule on a detached HEAD.");
 		if (!addedPaths.isEmpty())
 			text += tr("\n\n%1 added file(s) will be un-added and left on disk.").arg(addedPaths.size());
 		if (skippedRows > 0)
-			text += tr("\n\n%1 other selected row(s) stay as they are: untracked files, and submodules whose content is "
-					   "modified or could not be read, cannot be discarded.").arg(skippedRows);
+			text += tr("\n\n%1 other selected row(s) will be left as they are: untracked files, and submodules with "
+					   "modified or unreadable content, cannot be discarded.").arg(skippedRows);
 
 		const auto answer = MessageBox::question(this, tr("Discard changes?"), text, { tr("Discard") });
 		if (answer != 0)
@@ -1384,14 +1384,14 @@ void CommitWindow::undoLastCommit()
 			{
 			case UndoRefusal::Unborn: return tr("There is nothing to undo: this repository has no commits yet.");
 			case UndoRefusal::Detached:
-				return tr("HEAD is detached, so there is no upstream to tell an unpushed commit from a pushed one.");
+				return tr("HEAD is detached, so there is no upstream to check whether the last commit has been pushed.");
 			case UndoRefusal::OperationInProgress:
-				return tr("A merge, rebase, cherry-pick or revert is in progress and holds HEAD. Finish or abort it first.");
+				return tr("A merge, rebase, cherry-pick or revert is in progress. Finish or abort it first.");
 			case UndoRefusal::MergeCommit: return tr("The last commit is a merge, and undoing it would leave the merge half done.");
 			case UndoRefusal::RootCommit:
-				return tr("The last commit is the first one in this repository, so there is nothing to move back to.");
+				return tr("The last commit is the only one in this repository, so there is no earlier commit to go back to.");
 			case UndoRefusal::AlreadyPushed:
-				return tr("The last commit is already on %1. Undoing it would rewrite history the upstream has.").arg(state.upstream);
+				return tr("The last commit has already been pushed to %1. Undoing it would rewrite published history.").arg(state.upstream);
 			case UndoRefusal::None: break;
 			}
 			return QString{};
@@ -1401,8 +1401,8 @@ void CommitWindow::undoLastCommit()
 	}
 
 	const auto answer = MessageBox::question(this, tr("Undo the last commit?"),
-		tr("'%1' will be undone. Everything it took comes back to this list as uncommitted changes; nothing "
-			"in the working tree changes.").arg(state.headSubject),
+		tr("'%1' will be undone. Its changes return to this list as uncommitted changes; the working tree "
+			"is not modified.").arg(state.headSubject),
 		{ tr("Undo commit") });
 	if (answer != 0)
 		return;

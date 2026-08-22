@@ -229,9 +229,9 @@ void requirePushableBranch(const std::shared_ptr<PushPlanRun>& run, const std::s
 	round.launch(node->workDir, { QStringLiteral("merge-base"), QStringLiteral("--is-ancestor"), recordedSha, QStringLiteral("HEAD") },
 		[run, node](const ProcessResult& r) {
 			if (!r.ok)
-				run->refuse(QStringLiteral("Submodule '%1' is checked out at a commit that does not contain the one recorded "
-					"for it, so pushing the branch it is on would not publish that commit.\n"
-					"Open it and check out the branch that has it.").arg(node->displayPath));
+				run->refuse(QStringLiteral("Submodule '%1' is checked out at a commit that does not contain the commit recorded "
+					"for it, so pushing its current branch would not publish the recorded commit.\n"
+					"Open it and check out a branch that contains the recorded commit.").arg(node->displayPath));
 		});
 }
 
@@ -415,7 +415,7 @@ void GitRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run
 	if (run->header.oid == QLatin1String("(initial)"))
 	{
 		if (_emptyTreeSha.isEmpty())
-			run->trackedError = QStringLiteral("The empty tree could not be resolved, leaving nothing to list an unborn repository's changes against.");
+			run->trackedError = QStringLiteral("Could not resolve the empty tree; without it the changes of a repository with no commits cannot be listed.");
 		else
 		{
 			round.launch(path(), trackedChangesArgs(_emptyTreeSha),
