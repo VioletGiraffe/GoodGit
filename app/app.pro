@@ -45,6 +45,7 @@ HEADERS += \
 	src/diffhighlighter.h \
 	src/diffpane.h \
 	src/filelistdelegate.h \
+	src/filemanager.h \
 	src/gitparsers.h \
 	src/gitprocess.h \
 	src/gitrepository.h \
@@ -78,6 +79,7 @@ SOURCES += \
 	src/diffhighlighter.cpp \
 	src/diffpane.cpp \
 	src/filelistdelegate.cpp \
+	src/filemanager.cpp \
 	src/gitparsers.cpp \
 	src/gitprocess.cpp \
 	src/gitrepository.cpp \

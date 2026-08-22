@@ -1,5 +1,6 @@
 #include "recentrepositoriespanel.h"
 #include "commitwindow.h"
+#include "filemanager.h"
 #include "recentrepositories.h"
 #include "repositorywindows.h"
 #include "theme.h"
@@ -351,6 +352,7 @@ void RecentRepositoriesPanel::showContextMenu(const QPoint& pos)
 
 	QMenu menu{ this };
 	menu.addAction(tr("&Open"), this, [this, root, parentRoot] { openRepository(root, parentRoot); });
+	menu.addAction(openInFileManagerActionText(), this, [root] { openInFileManager(root); });
 	if (parentRoot.isEmpty()) // a subrepo has no rows under it, and only its parent is listed
 	{
 		if (item->childCount() > 0)

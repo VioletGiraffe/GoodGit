@@ -5,6 +5,7 @@
 #include "consolelogview.h"
 #include "diffpane.h"
 #include "filelistdelegate.h"
+#include "filemanager.h"
 #include "historymodels.h"
 #include "historywindow.h"
 #include "messageedit.h"
@@ -32,7 +33,6 @@
 #include <QDockWidget>
 #include <QEvent>
 #include <QFile>
-#include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -43,7 +43,6 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QPlainTextEdit>
-#include <QProcess>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSet>
@@ -1131,15 +1130,10 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	// A submodule's history is its own repo's, offered above; an untracked or newly added file is in no commit
 	fileHistoryAction->setEnabled(entries.size() == 1 && !entries.front().isSubmodule
 		&& entries.front().type != ChangeType::Untracked && entries.front().type != ChangeType::Added);
-	QAction* explorerAction = menu.addAction(tr("Show in Explorer"), this, [this, entry = entries.front()] {
-		const QString nativePath = QDir::toNativeSeparators(absolutePath(entry));
-#ifdef Q_OS_WIN
-		QProcess::startDetached(QStringLiteral("explorer"), { QStringLiteral("/select,") + nativePath });
-#else
-		QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(nativePath).absolutePath()));
-#endif
+	QAction* showInFileManagerAction = menu.addAction(showInFileManagerActionText(), this, [this, entry = entries.front()] {
+		showInFileManager(absolutePath(entry));
 	});
-	explorerAction->setEnabled(entries.size() == 1 && !entries.front().isSubmodule);
+	showInFileManagerAction->setEnabled(entries.size() == 1 && !entries.front().isSubmodule);
 	menu.addAction(tr("Copy path"), this, [this, entries] {
 		QStringList paths;
 		for (const FileEntry& entry : entries)
