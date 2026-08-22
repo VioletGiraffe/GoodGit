@@ -233,7 +233,7 @@ void RecentRepositoriesPanel::rebuild()
 		item->setData(0, CurrentRole, sameRepositoryPath(repository.root, _currentRoot));
 		item->setToolTip(0, QDir::toNativeSeparators(repository.root));
 
-		for (const RecentSubrepo& subrepo : repository.subrepos)
+		for (const Subrepo& subrepo : repository.subrepos)
 		{
 			const QString root = repository.root + QLatin1Char('/') + subrepo.path;
 			const QString name = subrepo.path.section(QLatin1Char('/'), -1);

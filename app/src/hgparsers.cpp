@@ -13,6 +13,8 @@
 
 namespace {
 
+constexpr char GitSubrepoPrefix[] = "[git]"; // the only source prefix naming another system
+
 // `incoming` and `outgoing` print "comparing with ..." before their JSON, and no JSON at all when they found
 // nothing. The array starts on a line of its own, which distinguishes it from a bracket in a remote path.
 QJsonArray jsonRecords(const QByteArray& output)
@@ -328,6 +330,11 @@ std::map<QString, QString> parseSubrepoSources(const QByteArray& content)
 			sources[path] = source;
 	}
 	return sources;
+}
+
+VcsKind subrepoKind(const QString& source)
+{
+	return source.startsWith(QLatin1String(GitSubrepoPrefix)) ? VcsKind::Git : VcsKind::Mercurial;
 }
 
 } // namespace Hg

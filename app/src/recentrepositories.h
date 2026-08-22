@@ -7,21 +7,13 @@
 
 #include <vector>
 
-struct RecentSubrepo
-{
-	QString path;  // relative to the repository that holds it
-	VcsKind kind;  // need not be the parent's: a git subrepo may sit inside a Mercurial repository
-
-	[[nodiscard]] bool operator==(const RecentSubrepo&) const = default;
-};
-
 struct RecentRepository
 {
 	QString root;
 	VcsKind kind;
 	int64_t lastUsedMSecs = 0; // 0 in an entry stored before the field existed, which sorts it last
 	// From the last refresh of this repository, in path order. Empty until it has been opened once.
-	std::vector<RecentSubrepo> subrepos;
+	std::vector<Subrepo> subrepos;
 };
 
 // The repositories windows have been opened on, and the ones a folder scan found, most recently used first, capped.
@@ -34,8 +26,9 @@ namespace RecentRepositories {
 // A repository that is a listed one's subrepo bumps that repository instead of joining the list itself
 void recordOpen(const RepositoryLocation& location);
 
-// Adds the ones not listed yet, each placed among the entries already there by its timestamp. The cap then
-// falls on the oldest of the merged list, whichever side they came from. Returns how many were added and kept.
+// Adds the ones not listed yet, subrepos included, each placed among the entries already there by its
+// timestamp. The cap then falls on the oldest of the merged list, whichever side they came from. Returns
+// how many were added and kept.
 size_t recordFound(const std::vector<FoundRepository>& found);
 
 // Replaces the recorded subrepos with the ones the repository's state names. Does nothing for a repository

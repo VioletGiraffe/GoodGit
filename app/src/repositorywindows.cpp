@@ -8,12 +8,14 @@
 #include "dialogs/messagebox.h"
 
 #include <QApplication>
+#include <QCursor>
 #include <QDir>
 #include <QDropEvent>
 #include <QEvent>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMimeData>
+#include <QPointer>
 #include <QUrl>
 
 #include <algorithm>
@@ -194,22 +196,30 @@ void scanFolderForRepositories(QWidget* dialogParent)
 	if (folder.isEmpty())
 		return;
 
-	const std::vector<FoundRepository> found = repositoriesInFolder(folder);
-	const int added = int(RecentRepositories::recordFound(found));
+	// One query per git repository is in flight from here; the window stays usable, and the cursor is what
+	// says a scan is running
+	QApplication::setOverrideCursor(Qt::BusyCursor);
+	findRepositoriesInFolder(folder, dialogParent, [parent = QPointer<QWidget>{ dialogParent }, folder](std::vector<FoundRepository> found) {
+		QApplication::restoreOverrideCursor();
+		if (!parent)
+			return; // the window the scan was started from is gone, and the answers with it
 
-	const QString nativePath = QDir::toNativeSeparators(folder);
-	QString message;
-	if (found.empty())
-		message = QStringLiteral("No repositories directly inside '%1'.").arg(nativePath);
-	else if (added == 0) // the cap can also have dropped every one of them, so neither reason is claimed alone
-		message = QStringLiteral("Nothing added from '%1': its repositories are already listed, or older than "
-			"the ones the list keeps.").arg(nativePath);
-	else
-		message = QStringLiteral("Added %1 %2 from '%3'.")
-			.arg(added)
-			.arg(added == 1 ? QStringLiteral("repository") : QStringLiteral("repositories"), nativePath);
+		const int added = int(RecentRepositories::recordFound(found));
 
-	MessageBox::notice(dialogParent, QApplication::applicationName(), message, {}, QMessageBox::Information);
+		const QString nativePath = QDir::toNativeSeparators(folder);
+		QString message;
+		if (found.empty())
+			message = QStringLiteral("No repositories directly inside '%1'.").arg(nativePath);
+		else if (added == 0) // the cap can also have dropped every one of them, so neither reason is claimed alone
+			message = QStringLiteral("Nothing added from '%1': its repositories are already listed, or older than "
+				"the ones the list keeps.").arg(nativePath);
+		else
+			message = QStringLiteral("Added %1 %2 from '%3'.")
+				.arg(added)
+				.arg(added == 1 ? QStringLiteral("repository") : QStringLiteral("repositories"), nativePath);
+
+		MessageBox::notice(parent, QApplication::applicationName(), message, {}, QMessageBox::Information);
+	});
 }
 
 void showWelcomeWindow()

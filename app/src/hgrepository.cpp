@@ -23,7 +23,6 @@
 namespace {
 
 constexpr int MaxUnpushedLogEntries = 30; // for the tooltip; state.ahead carries the true count
-constexpr char GitSubrepoPrefix[] = "[git]";
 
 QByteArray fileContents(const QString& path)
 {
@@ -396,7 +395,7 @@ std::vector<FileEntry> HgRepository::filesFromRun(const RefreshRun& run) const
 bool HgRepository::isGitSubrepo(const QString& subrepoPath) const
 {
 	const auto source = _subrepoSources.find(subrepoPath);
-	return source != _subrepoSources.end() && source->second.startsWith(QLatin1String(GitSubrepoPrefix));
+	return source != _subrepoSources.end() && Hg::subrepoKind(source->second) == VcsKind::Git;
 }
 
 QueryRound::Launcher HgRepository::refreshQueries()

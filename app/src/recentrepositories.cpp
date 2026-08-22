@@ -32,7 +32,7 @@ void sortByLastUsed(std::vector<RecentRepository>& repositories)
 	return text == QLatin1String(Settings::VcsKindMercurial) ? VcsKind::Mercurial : VcsKind::Git;
 }
 
-[[nodiscard]] QString subrepoRoot(const RecentRepository& repository, const RecentSubrepo& subrepo)
+[[nodiscard]] QString subrepoRoot(const RecentRepository& repository, const Subrepo& subrepo)
 {
 	return repository.root + QLatin1Char('/') + subrepo.path;
 }
@@ -40,7 +40,7 @@ void sortByLastUsed(std::vector<RecentRepository>& repositories)
 [[nodiscard]] bool holdsSubrepoAt(const RecentRepository& repository, const QString& root)
 {
 	return std::ranges::any_of(repository.subrepos,
-		[&](const RecentSubrepo& subrepo) { return sameRepositoryPath(subrepoRoot(repository, subrepo), root); });
+		[&](const Subrepo& subrepo) { return sameRepositoryPath(subrepoRoot(repository, subrepo), root); });
 }
 
 void save(const std::vector<RecentRepository>& repositories)
@@ -59,7 +59,7 @@ void save(const std::vector<RecentRepository>& repositories)
 		settings.setValue(QLatin1String(Settings::RecentRepositoryLastUsedKey), qint64(repository.lastUsedMSecs));
 
 		QStringList paths, kinds;
-		for (const RecentSubrepo& subrepo : repository.subrepos)
+		for (const Subrepo& subrepo : repository.subrepos)
 		{
 			paths << subrepo.path;
 			kinds << kindText(subrepo.kind);
@@ -162,7 +162,7 @@ size_t recordFound(const std::vector<FoundRepository>& found)
 		if (listed)
 			continue;
 
-		repositories.push_back(RecentRepository{ root, candidate.location.kind, candidate.lastUsedMSecs, {} });
+		repositories.push_back(RecentRepository{ root, candidate.location.kind, candidate.lastUsedMSecs, candidate.subrepos });
 		addedRoots.insert(root);
 	}
 
@@ -191,7 +191,7 @@ void setSubrepos(const Repository& repository)
 	if (entry == repositories.end())
 		return;
 
-	std::vector<RecentSubrepo> subrepos;
+	std::vector<Subrepo> subrepos;
 	subrepos.reserve(size_t(repository.state().submodules.size()));
 	for (const QString& path : repository.state().submodules)
 		subrepos.push_back({ path, repository.submoduleLocation(path).kind });

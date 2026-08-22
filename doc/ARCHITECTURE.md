@@ -105,10 +105,14 @@ folder's own timestamp barely moves. The list is ordered by it, so scanned and o
 interleave on one timeline. An entry stored before the field existed carries 0 and sorts last; nothing
 migrates them.
 
-A folder scan is the one way an entry joins the list unopened. It reads the kind off the marker in each
-subfolder's root - `.git`, `.hg` - and validates it by what the marker must hold, rather than asking a tool,
-so a folder of repositories costs no processes; only working trees are found. The cap applies to the merged
-list once it is sorted, so a scan can push out an entry that was already there.
+A folder scan is the one way an entry joins the list unopened. Which folders are repositories, of which
+kind, and when each was last worked in all come off the filesystem - the marker in a subfolder's root, what
+that marker must hold, the timestamp of the file everyday work rewrites - so only working trees are found
+and nothing is launched to find them. Subrepos are the exception: git keeps them in the index, so every git
+repository found costs one `ls-files`, launched through the queue that caps every other query and joined by
+a `QueryRound`; Mercurial declares its own in `.hgsub`, which the scan reads. A repository whose query fails
+is listed without subrepos, as one never opened is. The cap applies to the merged list once it is sorted, so
+a scan can push out an entry that was already there.
 
 ## Backends
 

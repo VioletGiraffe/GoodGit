@@ -8,6 +8,18 @@
 
 // The VCS-neutral types the windows and models work with and every backend answers in
 
+enum class VcsKind : uint8_t { Git, Mercurial };
+
+// One subrepo of a repository: a git submodule, a Mercurial subrepo. The kind need not be the parent's - a
+// git subrepo may sit inside a Mercurial repository.
+struct Subrepo
+{
+	QString path; // relative to the repository that holds it
+	VcsKind kind;
+
+	[[nodiscard]] bool operator==(const Subrepo&) const = default;
+};
+
 enum class ChangeType : uint8_t { Modified, Added, Untracked, Deleted, Renamed, TypeChanged, Conflicted };
 
 // Each backend renders a scope into its own ignore syntax and knows where in its ignore file it belongs

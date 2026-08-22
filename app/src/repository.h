@@ -9,8 +9,6 @@
 #include <map>
 #include <vector>
 
-enum class VcsKind : uint8_t { Git, Mercurial };
-
 // Escapes the metacharacters common to extended and Python regular expressions. LogQuery::contentSearch is
 // always a literal, but every backend's content search takes a pattern.
 [[nodiscard]] QString escapedForRegex(const QString& literal);

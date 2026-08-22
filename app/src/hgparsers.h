@@ -81,4 +81,7 @@ struct SubrepoPointerChange
 // system, as in "[git]https://...".
 [[nodiscard]] std::map<QString, QString> parseSubrepoSources(const QByteArray& content);
 
+// The system a `.hgsub` source names: only the "[git]" prefix means another one
+[[nodiscard]] VcsKind subrepoKind(const QString& source);
+
 } // namespace Hg
