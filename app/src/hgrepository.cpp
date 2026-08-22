@@ -551,7 +551,7 @@ void HgRepository::checkoutBranch(const QString& branch, Vcs::Answer<void> onDon
 void HgRepository::createTrackingBranch(const QString& /*localName*/, const QString& /*remoteBranch*/, Vcs::Answer<void> onDone)
 {
 	QTimer::singleShot(0, this, [onDone = std::move(onDone)] {
-		onDone(std::unexpected(QStringLiteral("Mercurial has no remote branches to create a local branch from.")));
+		onDone(std::unexpected(QObject::tr("Mercurial has no remote branches to create a local branch from.")));
 	});
 }
 

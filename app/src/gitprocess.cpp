@@ -55,7 +55,7 @@ std::optional<QString> versionProblem(const QString& workDir)
 	if (version.isNull() || version >= minimum)
 		return {};
 
-	return QStringLiteral("This git is version %1, but %2 or newer is required.\n\nStaging and discarding changes pass the file list to git in a form older versions reject.")
+	return QObject::tr("This git is version %1, but %2 or newer is required.\n\nStaging and discarding changes pass the file list to git in a form older versions reject.")
 		.arg(version.toString(), minimum.toString());
 }
 

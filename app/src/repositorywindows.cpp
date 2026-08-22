@@ -31,13 +31,13 @@ QString noRepositoryMessage(const QString& startPath, const std::vector<ProcessR
 
 	const QString nativePath = QDir::toNativeSeparators(startPath);
 	QStringList parts{ anyToolAnswered
-		? QStringLiteral("'%1' is not inside a repository.").arg(nativePath)
-		: QStringLiteral("Could not check whether '%1' is inside a repository: no version control tool could be started.").arg(nativePath) };
+		? QObject::tr("'%1' is not inside a repository.").arg(nativePath)
+		: QObject::tr("Could not check whether '%1' is inside a repository: no version control tool could be started.").arg(nativePath) };
 	for (const ProcessResult& attempt : attempts)
 	{
 		// When another tool did answer, one that never started is a gap in the search, not something to install
 		parts << (anyToolAnswered && attempt.outcome == ProcessOutcome::LaunchFailed
-			? QStringLiteral("%1 could not be started, so it is unknown whether this is a %1 repository: %2").arg(attempt.toolName, attempt.launchError)
+			? QObject::tr("%1 could not be started, so it is unknown whether this is a %1 repository: %2").arg(attempt.toolName, attempt.launchError)
 			: attempt.errorText());
 	}
 	return parts.join(QStringLiteral("\n\n"));
@@ -177,7 +177,7 @@ CommitWindow* openRecentRepository(const QString& root, QWidget* dialogParent)
 
 	// Keep is the default: an unmounted drive looks exactly like a deleted repository
 	const std::optional<int> answer = MessageBox::question(dialogParent, QApplication::applicationName(),
-		noRepositoryMessage(root, location.error()), { QStringLiteral("Remove from list"), QStringLiteral("Keep") }, 1);
+		noRepositoryMessage(root, location.error()), { QObject::tr("Remove from list"), QObject::tr("Keep") }, 1);
 	if (answer == 0)
 		RecentRepositories::forget(root);
 	return nullptr;
@@ -185,14 +185,14 @@ CommitWindow* openRecentRepository(const QString& root, QWidget* dialogParent)
 
 CommitWindow* browseForRepository(QWidget* dialogParent)
 {
-	const QString directory = QFileDialog::getExistingDirectory(dialogParent, QStringLiteral("Open Repository"), browseStartDirectory());
+	const QString directory = QFileDialog::getExistingDirectory(dialogParent, QObject::tr("Open Repository"), browseStartDirectory());
 	return directory.isEmpty() ? nullptr : openRepositoryWindowAt(directory, dialogParent);
 }
 
 void scanFolderForRepositories(QWidget* dialogParent)
 {
 	const QString folder = QFileDialog::getExistingDirectory(dialogParent,
-		QStringLiteral("Scan Folder for Repositories"), browseStartDirectory());
+		QObject::tr("Scan Folder for Repositories"), browseStartDirectory());
 	if (folder.isEmpty())
 		return;
 
@@ -209,14 +209,14 @@ void scanFolderForRepositories(QWidget* dialogParent)
 		const QString nativePath = QDir::toNativeSeparators(folder);
 		QString message;
 		if (found.empty())
-			message = QStringLiteral("No repositories directly inside '%1'.").arg(nativePath);
+			message = QObject::tr("No repositories directly inside '%1'.").arg(nativePath);
 		else if (added == 0) // the cap can also have dropped every one of them, so neither reason is claimed alone
-			message = QStringLiteral("Nothing added from '%1': its repositories are already in the list, or were used "
+			message = QObject::tr("Nothing added from '%1': its repositories are already in the list, or were used "
 				"less recently than the ones the list keeps.").arg(nativePath);
 		else
-			message = QStringLiteral("Added %1 %2 from '%3'.")
+			message = QObject::tr("Added %1 %2 from '%3'.")
 				.arg(added)
-				.arg(added == 1 ? QStringLiteral("repository") : QStringLiteral("repositories"), nativePath);
+				.arg(added == 1 ? QObject::tr("repository") : QObject::tr("repositories"), nativePath);
 
 		MessageBox::notice(parent, QApplication::applicationName(), message, {}, QMessageBox::Information);
 	});

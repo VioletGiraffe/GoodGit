@@ -423,7 +423,7 @@ void HistoryWindow::showPickaxePopup()
 
 		auto* caption = new QLabel(tr("Show only the commits whose diff contains this text:"));
 		_pickaxeEdit = new QLineEdit;
-		_pickaxeEdit->setPlaceholderText(tr("Text to find, taken literally"));
+		_pickaxeEdit->setPlaceholderText(tr("Text to find"));
 		_pickaxeEdit->setMinimumWidth(PickaxeEditWidth);
 		_pickaxeIgnoreCaseBox = new QCheckBox(tr("Ignore case"));
 		auto* findButton = new QPushButton(tr("Find"));

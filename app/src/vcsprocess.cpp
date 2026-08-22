@@ -30,12 +30,12 @@ QString ProcessResult::errorText() const
 	{
 		const bool bareName = QFileInfo{ executable }.fileName() == executable; // looked up on PATH
 		const QString what = bareName
-			? QStringLiteral("Failed to launch %1: %2").arg(toolName, launchError)
-			: QStringLiteral("Failed to launch %1 from \"%2\": %3").arg(toolName, executable, launchError);
-		const QString where = QStringLiteral("Working directory: %1").arg(QDir::toNativeSeparators(workDir));
+			? QObject::tr("Failed to launch %1: %2").arg(toolName, launchError)
+			: QObject::tr("Failed to launch %1 from \"%2\": %3").arg(toolName, executable, launchError);
+		const QString where = QObject::tr("Working directory: %1").arg(QDir::toNativeSeparators(workDir));
 		const QString advice = bareName
-			? QStringLiteral("Check that %1 is installed and on PATH, or set its full path in Preferences.").arg(toolName)
-			: QStringLiteral("Check the %1 path set in Preferences.").arg(toolName);
+			? QObject::tr("Check that %1 is installed and on PATH, or set its full path in Preferences.").arg(toolName)
+			: QObject::tr("Check the %1 path set in Preferences.").arg(toolName);
 		return QStringList{ what, where, advice }.join(QLatin1Char('\n'));
 	}
 
@@ -266,7 +266,7 @@ std::shared_ptr<QTemporaryFile> openTempFile(const QByteArray& contents, const Q
 	{
 		QMetaObject::invokeMethod(context, [onFailure, description] {
 			// The default outcome, Exited, makes errorText() return this err
-			onFailure(ProcessResult{ .err = QStringLiteral("Failed to create the %1 temp file").arg(description).toUtf8() });
+			onFailure(ProcessResult{ .err = QObject::tr("Failed to create the %1 temp file").arg(description).toUtf8() });
 		}, Qt::QueuedConnection);
 		return nullptr;
 	}
