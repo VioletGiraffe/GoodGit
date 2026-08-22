@@ -96,14 +96,21 @@ protected:
 	}
 };
 
-// The welcome window stands only while no repository window does
-void closeWelcomeWindow()
+// The one up, or none
+WelcomeWindow* welcomeWindow()
 {
 	for (QWidget* widget : QApplication::topLevelWidgets())
 	{
-		if (auto* welcome = dynamic_cast<WelcomeWindow*>(widget))
-			welcome->close();
+		if (auto* welcome = dynamic_cast<WelcomeWindow*>(widget)) // not qobject_cast: WelcomeWindow has no meta-object
+			return welcome;
 	}
+	return nullptr;
+}
+
+void closeWelcomeWindow()
+{
+	if (WelcomeWindow* welcome = welcomeWindow())
+		welcome->close();
 }
 
 } // namespace
@@ -178,6 +185,17 @@ CommitWindow* browseForRepository(QWidget* dialogParent)
 {
 	const QString directory = QFileDialog::getExistingDirectory(dialogParent, QStringLiteral("Open Repository"), browseStartDirectory());
 	return directory.isEmpty() ? nullptr : openRepositoryWindowAt(directory, dialogParent);
+}
+
+void showWelcomeWindow()
+{
+	WelcomeWindow* welcome = welcomeWindow();
+	if (!welcome)
+		welcome = new WelcomeWindow;
+
+	welcome->show(); // a no-op on one already up
+	welcome->raise();
+	welcome->activateWindow();
 }
 
 void acceptRepositoryFolderDrops(QWidget* target)

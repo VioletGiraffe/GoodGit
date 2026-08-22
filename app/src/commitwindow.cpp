@@ -191,6 +191,7 @@ void CommitWindow::buildUi()
 		->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_P));
 	QMenu* viewMenu = menuBar()->addMenu(tr("&View"));
 	viewMenu->addAction(buildRecentRepositoriesDock());
+	viewMenu->addAction(tr("Show &Welcome Screen"), &showWelcomeWindow);
 	QMenu* repositoryMenu = menuBar()->addMenu(tr("&Repository"));
 	repositoryMenu->addAction(openRepositoryAction); // the same action as in File, where Ctrl+O is looked for
 	repositoryMenu->addSeparator();

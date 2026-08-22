@@ -25,6 +25,10 @@ CommitWindow* openRecentRepository(const QString& root, QWidget* dialogParent);
 // Asks for a directory and opens the repository containing it. Null when cancelled, as when nothing claimed it.
 CommitWindow* browseForRepository(QWidget* dialogParent);
 
+// The welcome window, raised if one is already up. It deletes itself when closed, and any open through
+// openRepositoryWindow() closes it.
+void showWelcomeWindow();
+
 // Opens the repository containing any folder dropped on `target`; its window is the dialogs' parent. Repeat
 // for a child that takes drops of its own: a drag over it never reaches the window.
 void acceptRepositoryFolderDrops(QWidget* target);
