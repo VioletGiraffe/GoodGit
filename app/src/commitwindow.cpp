@@ -178,11 +178,7 @@ void CommitWindow::buildUi()
 	openRepositoryAction->setShortcut(QKeySequence::Open);
 	fileMenu->addSeparator();
 #ifdef Q_OS_MACOS
-	fileMenu->addAction(tr("Install 'gg' Command Line Tool..."), this, [this] {
-		const auto result = installCommandLineTool();
-		MessageBox::notice(this, tr("Command line tool"), result ? *result : result.error(), {},
-			result ? QMessageBox::Information : QMessageBox::Warning);
-	});
+	fileMenu->addAction(tr("Install 'gg' Command Line Tool..."), this, [this] { installCommandLineToolAndReport(this); });
 	fileMenu->addSeparator();
 #endif
 	fileMenu->addAction(tr("E&xit"), [] { QApplication::closeAllWindows(); }); // not quit(): closeEvent saves the layout state

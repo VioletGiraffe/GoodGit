@@ -1,4 +1,7 @@
 #include "welcomewindow.h"
+#ifdef Q_OS_MACOS
+#include "commandlinetool_mac.h"
+#endif
 #include "recentrepositories.h"
 #include "recentrepositoriespanel.h"
 #include "repositorywindows.h"
@@ -48,9 +51,6 @@ WelcomeWindow::WelcomeWindow()
 	introLabel->setWordWrap(true);
 
 	auto* openButton = new QPushButton(tr("Open Repository..."));
-	auto* buttonRow = new QHBoxLayout;
-	buttonRow->addWidget(openButton);
-	buttonRow->addStretch();
 
 	auto* intro = new QWidget;
 	auto* introLayout = new QVBoxLayout(intro);
@@ -58,7 +58,30 @@ WelcomeWindow::WelcomeWindow()
 	introLayout->setSpacing(16);
 	introLayout->addLayout(titleRow);
 	introLayout->addWidget(introLabel);
-	introLayout->addLayout(buttonRow);
+	introLayout->addWidget(openButton, 0, Qt::AlignLeft);
+
+#ifdef Q_OS_MACOS
+	if (commandLineToolLinkMissingOrBroken())
+	{
+		auto* toolLabel = new QLabel(tr("The 'gg' command line tool opens a repository from a terminal."));
+		toolLabel->setWordWrap(true);
+		auto* installButton = new QPushButton(tr("Install 'gg' Command Line Tool..."));
+
+		auto* toolSection = new QWidget;
+		auto* toolLayout = new QVBoxLayout(toolSection);
+		toolLayout->setContentsMargins(0, 0, 0, 0);
+		toolLayout->setSpacing(8);
+		toolLayout->addWidget(toolLabel);
+		toolLayout->addWidget(installButton, 0, Qt::AlignLeft);
+		introLayout->addWidget(toolSection);
+
+		connect(installButton, &QPushButton::clicked, this, [this, toolSection] {
+			installCommandLineToolAndReport(this);
+			// The install can be cancelled or refused, so the section stays until the link is really there
+			toolSection->setVisible(commandLineToolLinkMissingOrBroken());
+		});
+	}
+#endif
 
 	auto* recentLabel = new QLabel(tr("Recent"));
 	recentLabel->setContentsMargins(Inset, 0, Inset, 6);

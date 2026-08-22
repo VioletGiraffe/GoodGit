@@ -1,5 +1,7 @@
 #include "commandlinetool_mac.h"
 
+#include "dialogs/messagebox.h"
+
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
@@ -63,6 +65,11 @@ std::expected<Elevated, QString> runAsAdministrator(const QString& shellCommand)
 
 }
 
+bool commandLineToolLinkMissingOrBroken()
+{
+	return !QFileInfo::exists(QString::fromLatin1(LinkPath)); // follows the link, so a dangling one reads as absent
+}
+
 std::expected<QString, QString> installCommandLineTool()
 {
 	const QString target = QFileInfo(QCoreApplication::applicationFilePath()).canonicalFilePath();
@@ -107,4 +114,11 @@ std::expected<QString, QString> installCommandLineTool()
 	}
 
 	return QStringLiteral("The gg command is now available: %1").arg(linkPath);
+}
+
+void installCommandLineToolAndReport(QWidget* dialogParent)
+{
+	const std::expected<QString, QString> result = installCommandLineTool();
+	MessageBox::notice(dialogParent, QStringLiteral("Command line tool"), result ? *result : result.error(), {},
+		result ? QMessageBox::Information : QMessageBox::Warning);
 }
