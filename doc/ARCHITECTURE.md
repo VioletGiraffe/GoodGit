@@ -295,7 +295,11 @@ for minutes would starve refreshes.
 ## Build
 
 qmake subdirs: `app` plus the first-party submodules `cpputils`, `cpp-template-utils`, `qtutils` (static
-libs). Compiler configuration lives in `global.pri`, included by both the app and qtutils.
+libs). Compiler configuration lives in `global.pri`, included by the app, the launcher and qtutils.
+
+On Windows the `launcher` subproject builds a second `gg.exe` that starts the real one from the directory
+above it. Only the launcher's directory goes on PATH, so the Qt DLLs sitting beside the application are not
+offered to every process's DLL search.
 
 **Submodule policy:** all submodules are first-party. When a helper almost fits, extend it in the library,
 in library shape; ask before changing existing behavior, since other projects share them. Each such change

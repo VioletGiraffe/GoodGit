@@ -1,6 +1,7 @@
 #define MyAppName "GoodGit"
 #define MyAppPublisher "VioletGiraffe"
 #define MyAppExeName "gg.exe"
+#define LauncherDirName "launcher"
 #define VCRedistExeName "vc_redist.x64.exe"
 ; Version is read from the built exe (which gets it from VERSION in app/app.pro) - single source of truth
 #define MyAppVersion GetVersionNumbersString(AddBackslash(SourcePath) + "dist\" + MyAppExeName)
@@ -23,7 +24,7 @@ WizardStyle=modern
 UninstallDisplayIcon={app}\{#MyAppExeName}
 SetupIconFile=app\res\goodgit.ico
 
-; The install dir is appended to the system PATH (gg is meant to be launched from a terminal in a repo);
+; The launcher dir is added to the system PATH (gg is meant to be launched from a terminal in a repo);
 ; this makes the installer broadcast the environment change so new shells pick it up without a reboot
 ChangesEnvironment=yes
 
@@ -34,9 +35,11 @@ LZMAUseSeparateProcess=yes
 LZMABlockSize=8192
 
 [Files]
-; Main exe has its own entry so ignoreversion forces overwrite on same-version rebuilds. Being a non-wildcard
-; Source, it also makes a missing exe (e.g. a failed build) a hard compile error instead of a silent broken installer.
+; Both exes have their own entry so ignoreversion forces overwrite on same-version rebuilds. Being non-wildcard
+; Sources, they also make a missing exe (e.g. a failed build) a hard compile error instead of a silent broken installer.
+; The wildcard's Excludes matches by file name at any depth, so it covers the launcher copy too.
 Source: "{#SourcePath}\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourcePath}\dist\{#LauncherDirName}\{#MyAppExeName}"; DestDir: "{app}\{#LauncherDirName}"; Flags: ignoreversion
 Source: "{#SourcePath}\dist\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs; Excludes: "{#VCRedistExeName},{#MyAppExeName}"
 Source: "{#SourcePath}\dist\{#VCRedistExeName}";  DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "{#SourcePath}\LICENSE"; DestDir: "{app}"
@@ -51,13 +54,14 @@ Name: desktopicon; Description: {cm:CreateDesktopIcon}; GroupDescription: {cm:Ad
 
 [Registry]
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; \
-	ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; \
-	Check: NeedsAddToPath(ExpandConstant('{app}'))
+	ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}\{#LauncherDirName}"; \
+	Check: NeedsAddToPath(ExpandConstant('{app}\{#LauncherDirName}'))
 
 [Run]
 Filename: "{tmp}\{#VCRedistExeName}"; Parameters: "/install /quiet /norestart"; StatusMsg: Installing Microsoft C++ Runtime...; Flags: runhidden waituntilterminated skipifdoesntexist
 
 [UninstallDelete]
+Type: dirifempty; Name: "{app}\{#LauncherDirName}"
 Type: dirifempty; Name: "{app}"
 
 [Code]
@@ -87,7 +91,7 @@ begin
 	if not RegQueryStringValue(HKEY_LOCAL_MACHINE, EnvironmentKey, 'Path', Path) then
 		exit;
 
-	Dir := ExpandConstant('{app}');
+	Dir := ExpandConstant('{app}\{#LauncherDirName}');
 	Position := Pos(';' + Uppercase(Dir) + ';', ';' + Uppercase(Path) + ';');
 	if Position = 0 then
 		exit;

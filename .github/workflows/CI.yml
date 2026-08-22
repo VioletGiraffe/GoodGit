@@ -52,6 +52,8 @@ jobs:
         RMDIR /S /Q %STAGING_DIR%
         mkdir %STAGING_DIR%
         copy /y bin\release\gg.exe "%STAGING_DIR%\" >nul
+        mkdir %STAGING_DIR%\launcher
+        copy /y bin\release\launcher\gg.exe "%STAGING_DIR%\launcher\" >nul
         %QT_ROOT_DIR%\bin\windeployqt.exe --dir %STAGING_DIR% --force --release --compiler-runtime --no-translations --no-system-d3d-compiler --no-system-dxc-compiler --no-opengl-sw --skip-plugin-types networkinformation --skip-plugin-types tls %STAGING_DIR%\gg.exe
 
         del %STAGING_DIR%\dxil.dll >nul
