@@ -20,9 +20,10 @@ namespace {
 enum ItemRole
 {
 	RootRole = Qt::UserRole, // absolute for subrepo rows too
-	PathRole,     // the line under the name, in native separators; empty where the name says it all
-	BadgeRole,    // the kind, where worth showing; empty otherwise
-	CurrentRole,  // this window's own repository
+	PathRole,          // the line under the name, in native separators; empty where the name says it all
+	BadgeRole,         // the kind, where worth showing; empty otherwise
+	InvertedBadgeRole, // the badge is filled with its text colour instead of outlined
+	CurrentRole,       // this window's own repository
 };
 
 constexpr int HorizontalPadding = 5;
@@ -115,15 +116,22 @@ public:
 			const QRect badgeRect{ nameRight - badgeSize.width(), y + (nameMetrics.height() - badgeSize.height()) / 2,
 				badgeSize.width(), badgeSize.height() };
 
+			const bool inverted = index.data(InvertedBadgeRole).toBool();
+			// accentText is legible on surface in every theme, and contrast is symmetric, so the swap is too
+			const QColor badgeBg = inverted ? theme.palette.accentText : theme.palette.surface;
+			const QColor badgeFg = inverted ? theme.palette.surface : theme.palette.accentText;
+
 			painter->save();
 			painter->setRenderHint(QPainter::Antialiasing);
-			painter->setPen(theme.palette.border);
-			painter->setBrush(Qt::NoBrush); // the row background's brush is still set
+			// The filled badge outlines itself: a border-coloured ring would halo the fill
+			painter->setPen(inverted ? badgeBg : theme.palette.border);
+			// Opaque, so the hover and current-repository row fills do not show through
+			painter->setBrush(badgeBg);
 			painter->setFont(badgeFont);
 			// Half a pixel in, so the one-pixel pen lands on a pixel instead of across two
 			painter->drawRoundedRect(QRectF{ badgeRect }.adjusted(0.5, 0.5, -0.5, -0.5),
 				theme.metrics.controlRadius, theme.metrics.controlRadius);
-			painter->setPen(theme.palette.accentText);
+			painter->setPen(badgeFg);
 			painter->drawText(badgeRect, Qt::AlignCenter, badge);
 			painter->restore();
 
@@ -179,9 +187,12 @@ private:
 	const QTreeWidget* const _view;
 };
 
-[[nodiscard]] QString kindLabel(VcsKind kind)
+// Mercurial gets the filled badge, git the outlined one: the rarer kind is the one worth spotting
+void setBadge(QTreeWidgetItem* item, VcsKind kind)
 {
-	return kind == VcsKind::Mercurial ? QStringLiteral("hg") : QStringLiteral("git");
+	const bool mercurial = kind == VcsKind::Mercurial;
+	item->setData(0, BadgeRole, mercurial ? QStringLiteral("hg") : QStringLiteral("git"));
+	item->setData(0, InvertedBadgeRole, mercurial);
 }
 
 } // namespace
@@ -230,7 +241,7 @@ void RecentRepositoriesPanel::rebuild()
 		item->setText(0, QFileInfo{ repository.root }.fileName());
 		item->setData(0, RootRole, repository.root);
 		item->setData(0, PathRole, QDir::toNativeSeparators(repository.root));
-		item->setData(0, BadgeRole, kindLabel(repository.kind));
+		setBadge(item, repository.kind);
 		item->setData(0, CurrentRole, sameRepositoryPath(repository.root, _currentRoot));
 		item->setToolTip(0, QDir::toNativeSeparators(repository.root));
 
@@ -244,8 +255,8 @@ void RecentRepositoriesPanel::rebuild()
 			subrepoItem->setData(0, RootRole, root);
 			// Only shown for a subrepo deeper than the parent's root directory
 			subrepoItem->setData(0, PathRole, name == subrepo.path ? QString{} : QDir::toNativeSeparators(subrepo.path));
-			// Only shown where the kind differs from the parent's
-			subrepoItem->setData(0, BadgeRole, subrepo.kind == repository.kind ? QString{} : kindLabel(subrepo.kind));
+			if (subrepo.kind != repository.kind) // only shown where the kind differs from the parent's
+				setBadge(subrepoItem, subrepo.kind);
 			subrepoItem->setData(0, CurrentRole, sameRepositoryPath(root, _currentRoot));
 			subrepoItem->setToolTip(0, QDir::toNativeSeparators(root));
 		}
