@@ -19,6 +19,7 @@
 
 #include "aboutdialog/caboutdialog.h"
 #include "dialogs/messagebox.h"
+#include "hash/wheathash.hpp"
 #include "settings/csettings.h"
 #include "settingsui/csettingsdialog.h"
 #include "widgets/clabelelided.h"
@@ -48,6 +49,7 @@
 #include <QSet>
 #include <QShortcut>
 #include <QSplitter>
+#include <QTextCursor>
 #include <QTreeView>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -144,6 +146,15 @@ QStringList completionWordsFor(const std::vector<FileEntry>& files, QByteArray d
 		}
 	}
 	return QStringList{ words.begin(), words.end() };
+}
+
+// A repository's draft group. The path is hashed: it is not a usable settings key. sameRepositoryPath() is
+// case-insensitive, so the hash is of the lowercased path.
+[[nodiscard]] QString draftGroup(const QString& repositoryPath)
+{
+	const QByteArray path = repositoryPath.toLower().toUtf8();
+	const uint64_t hash = wheathash64(path.constData(), uint64_t(path.size()));
+	return QString::fromLatin1(Settings::CommitDraftsGroupKey) + QLatin1Char('/') + QString::number(hash, 16);
 }
 
 } // namespace
@@ -468,6 +479,7 @@ QAction* CommitWindow::buildRecentRepositoriesDock()
 void CommitWindow::closeEvent(QCloseEvent* event)
 {
 	CSettings{}.setValue(Settings::CommitWindowSplitterKey, _splitter->saveState());
+	saveDraftMessage();
 	QMainWindow::closeEvent(event);
 }
 
@@ -508,6 +520,12 @@ void CommitWindow::onRefreshed()
 	restoreSelectionByPath(selection);
 	// Even if the current row did not move: the list may have emptied, or the content changed underneath
 	showDiffForCurrentRow();
+
+	if (!_stateWasRead && state.known())
+	{
+		_stateWasRead = true;
+		restoreDraftIfParentUnchanged();
+	}
 
 	// Cancelled, or refreshes in quick succession would leave the pool built by whichever finished last
 	_wordPoolQuery.cancel();
@@ -633,6 +651,43 @@ void CommitWindow::updateControlStates()
 QString CommitWindow::subjectOrPlaceholder(const QString& subject)
 {
 	return subject.isEmpty() ? tr("<no commit title>") : subject;
+}
+
+void CommitWindow::saveDraftMessage()
+{
+	if (!_stateWasRead)
+		return; // no parent sha was ever read here: an unreadable repository must not drop the stored draft
+
+	CSettings settings;
+	const QString group = draftGroup(_repo->path());
+	const QString message = _messageEdit->toPlainText();
+	if (message.trimmed().isEmpty())
+	{
+		settings.remove(group);
+		return;
+	}
+
+	settings.beginGroup(group);
+	settings.setValue(Settings::CommitDraftMessageKey, message);
+	// May be stale: a stale sha only means the next open finds no match
+	settings.setValue(Settings::CommitDraftParentShaKey, _repo->state().headSha);
+}
+
+// Runs from the first refresh that establishes the state: before it there is no parent sha to compare against
+void CommitWindow::restoreDraftIfParentUnchanged()
+{
+	if (!_messageEdit->toPlainText().isEmpty())
+		return; // typed into while that refresh was still running
+
+	CSettings settings;
+	settings.beginGroup(draftGroup(_repo->path()));
+	const QString message = settings.value(Settings::CommitDraftMessageKey).toString();
+	// A group that is not there reads as an empty sha, the same value an unborn repository stores
+	if (message.isEmpty() || settings.value(Settings::CommitDraftParentShaKey).toString() != _repo->state().headSha)
+		return;
+
+	_messageEdit->setPlainText(message);
+	_messageEdit->moveCursor(QTextCursor::End);
 }
 
 bool CommitWindow::canActOnList() const

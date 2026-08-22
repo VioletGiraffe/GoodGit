@@ -65,6 +65,12 @@ inline constexpr const char* RecentRepositorySubrepoKindsKey = "subrepoKinds";
 inline constexpr const char* VcsKindGit = "git";
 inline constexpr const char* VcsKindMercurial = "hg";
 
+// One group per repository, named by a hash of its root path: a path is not a usable settings key.
+// Written when a window closes on an uncommitted message; restored only while HEAD is still the sha stored with it.
+inline constexpr const char* CommitDraftsGroupKey = "CommitDrafts";
+inline constexpr const char* CommitDraftMessageKey = "message";
+inline constexpr const char* CommitDraftParentShaKey = "parentSha";
+
 // One key per window kind, shared by every repository, like the window geometry
 inline constexpr const char* CommitWindowSplitterKey = "CommitWindow/splitterState";
 inline constexpr const char* HistoryWindowSplitterKey = "HistoryWindow/splitterState";

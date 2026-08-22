@@ -55,6 +55,10 @@ private:
 	// The subject a commit is named by in the UI: a commit made with an empty message has none
 	[[nodiscard]] static QString subjectOrPlaceholder(const QString& subject);
 
+	// The message a window closes on outlives it, keyed by the repository and the commit it was written against
+	void saveDraftMessage();
+	void restoreDraftIfParentUnchanged();
+
 	// Every flow that writes to the index or the working tree brackets itself with these; they disable the
 	// controls that would start a second one
 	void beginMutation();
@@ -148,4 +152,6 @@ private:
 	// runs: two flows would meet at index.lock, and the second would commit a pathspec the first already took
 	bool _mutationInFlight = false;
 	bool _peekInFlight = false; // a fetch is slow, and a refresh landing meanwhile must not re-enable the button
+	// A refresh has established the state at least once: before that there is no parent sha to judge a stored draft by
+	bool _stateWasRead = false;
 };
