@@ -292,12 +292,12 @@ void CommitWindow::buildUi()
 	auto* messageHeaderLayout = new QHBoxLayout(messageHeader);
 	messageHeaderLayout->setContentsMargins(8, 6, 8, 4);
 	messageHeaderLayout->addWidget(new QLabel(tr("Commit message")));
-	_lastCommitLabel = new CLabelElided;
-	_lastCommitLabel->setElideMode(Qt::ElideRight); // a subject reads from its start, unlike the paths elsewhere
-	_lastCommitLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+	_parentCommitLabel = new CLabelElided;
+	_parentCommitLabel->setElideMode(Qt::ElideRight); // a subject reads from its start, unlike the paths elsewhere
+	_parentCommitLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 	// A long subject must elide rather than widen the column
-	_lastCommitLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-	messageHeaderLayout->addWidget(_lastCommitLabel, 1);
+	_parentCommitLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+	messageHeaderLayout->addWidget(_parentCommitLabel, 1);
 	leftLayout->addWidget(messageHeader);
 
 	auto* messageArea = new QWidget;
@@ -551,9 +551,9 @@ void CommitWindow::updateHeader()
 		: QStringLiteral("Ctrl+Shift+P\n") + unpushedTooltip);
 	_aheadLabel->setToolTip(unpushedTooltip);
 
-	_lastCommitLabel->setText(state.headSubject.isEmpty() ? QString{} : tr("Previous commit: %1").arg(state.headSubject));
-	_lastCommitLabel->setToolTip(state.headSubject.isEmpty() ? QString{}
-		: QStringLiteral("%1 %2").arg(state.headSha.left(7), state.headSubject));
+	const QString parentSubject = subjectOrPlaceholder(state.headSubject);
+	_parentCommitLabel->setText(state.unborn ? QString{} : tr("Parent commit: %1").arg(parentSubject));
+	_parentCommitLabel->setToolTip(state.unborn ? QString{} : QStringLiteral("%1 %2").arg(state.headSha.left(7), parentSubject));
 
 	setWindowTitle(QStringLiteral("%1 [%2] - GoodGit").arg(_repo->name(), state.detached ? QStringLiteral("detached") : state.branch));
 }
@@ -628,6 +628,11 @@ void CommitWindow::updateControlStates()
 	_peekButton->setEnabled(!state.upstream.isEmpty() && !_peekInFlight);
 	// undoLastCommit() reports every refusal, so only a write in flight disables this
 	_uncommitAction->setEnabled(canActOnList());
+}
+
+QString CommitWindow::subjectOrPlaceholder(const QString& subject)
+{
+	return subject.isEmpty() ? tr("<no commit title>") : subject;
 }
 
 bool CommitWindow::canActOnList() const
@@ -1402,7 +1407,7 @@ void CommitWindow::undoLastCommit()
 
 	const auto answer = MessageBox::question(this, tr("Undo the last commit?"),
 		tr("'%1' will be undone. Its changes return to this list as uncommitted changes; the working tree "
-			"is not modified.").arg(state.headSubject),
+			"is not modified.").arg(subjectOrPlaceholder(state.headSubject)),
 		{ tr("Undo commit") });
 	if (answer != 0)
 		return;

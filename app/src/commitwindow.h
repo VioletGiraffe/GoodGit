@@ -52,6 +52,8 @@ private:
 	void updateHeader();
 	void updateStrips();
 	void updateControlStates();
+	// The subject a commit is named by in the UI: a commit made with an empty message has none
+	[[nodiscard]] static QString subjectOrPlaceholder(const QString& subject);
 
 	// Every flow that writes to the index or the working tree brackets itself with these; they disable the
 	// controls that would start a second one
@@ -125,7 +127,7 @@ private:
 	QCheckBox* _checkAllBox = nullptr;
 	QLabel* _lineTotalsLabel = nullptr;
 	QTreeView* _filesView = nullptr;
-	CLabelElided* _lastCommitLabel = nullptr;
+	CLabelElided* _parentCommitLabel = nullptr;
 	MessageEdit* _messageEdit = nullptr;
 	QPushButton* _commitButton = nullptr;
 	QPushButton* _commitPushButton = nullptr;
