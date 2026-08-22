@@ -47,6 +47,7 @@ inline constexpr int DiffTabWidthDefault = 4;
 inline constexpr const char* RecentRepositoriesKey = "RecentRepositories";
 inline constexpr const char* RecentRepositoryRootKey = "root";
 inline constexpr const char* RecentRepositoryKindKey = "kind";
+inline constexpr const char* RecentRepositoryLastUsedKey = "lastUsed";
 // Two parallel lists
 inline constexpr const char* RecentRepositorySubrepoPathsKey = "subrepoPaths";
 inline constexpr const char* RecentRepositorySubrepoKindsKey = "subrepoKinds";

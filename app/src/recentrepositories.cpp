@@ -3,6 +3,9 @@
 
 #include "settings/csettings.h"
 
+#include <QDateTime>
+#include <QSet>
+
 #include <algorithm>
 
 namespace {
@@ -12,6 +15,15 @@ constexpr qsizetype MaxRecentRepositories = 100;
 [[nodiscard]] QString kindText(VcsKind kind)
 {
 	return QLatin1String(kind == VcsKind::Mercurial ? Settings::VcsKindMercurial : Settings::VcsKindGit);
+}
+
+// Most recently used first. Stable, so entries sharing a timestamp - every one stored before the field
+// existed - keep the order they were read in.
+void sortByLastUsed(std::vector<RecentRepository>& repositories)
+{
+	std::ranges::stable_sort(repositories, [](const RecentRepository& left, const RecentRepository& right) {
+		return left.lastUsedMSecs > right.lastUsedMSecs;
+	});
 }
 
 // Anything but Mercurial's text reads as git: the stored value may be anything
@@ -44,6 +56,7 @@ void save(const std::vector<RecentRepository>& repositories)
 		settings.setArrayIndex(int(i));
 		settings.setValue(QLatin1String(Settings::RecentRepositoryRootKey), repository.root);
 		settings.setValue(QLatin1String(Settings::RecentRepositoryKindKey), kindText(repository.kind));
+		settings.setValue(QLatin1String(Settings::RecentRepositoryLastUsedKey), qint64(repository.lastUsedMSecs));
 
 		QStringList paths, kinds;
 		for (const RecentSubrepo& subrepo : repository.subrepos)
@@ -79,6 +92,8 @@ std::vector<RecentRepository> list()
 			continue;
 
 		repository.kind = kindFromText(settings.value(QLatin1String(Settings::RecentRepositoryKindKey)).toString());
+		// Absent before the field existed, and 0 is exactly what such an entry should sort by
+		repository.lastUsedMSecs = settings.value(QLatin1String(Settings::RecentRepositoryLastUsedKey)).toLongLong();
 
 		const QStringList paths = settings.value(QLatin1String(Settings::RecentRepositorySubrepoPathsKey)).toStringList();
 		const QStringList kinds = settings.value(QLatin1String(Settings::RecentRepositorySubrepoKindsKey)).toStringList();
@@ -98,6 +113,7 @@ std::vector<RecentRepository> list()
 void recordOpen(const RepositoryLocation& location)
 {
 	std::vector<RecentRepository> repositories = list();
+	const int64_t now = QDateTime::currentMSecsSinceEpoch();
 
 	const auto moveToFront = [&repositories](std::vector<RecentRepository>::iterator entry) {
 		std::rotate(repositories.begin(), entry, entry + 1);
@@ -107,9 +123,7 @@ void recordOpen(const RepositoryLocation& location)
 		[&](const RecentRepository& repository) { return holdsSubrepoAt(repository, location.root); });
 	if (parent != repositories.end())
 	{
-		if (parent == repositories.begin())
-			return; // already the newest
-
+		parent->lastUsedMSecs = now;
 		moveToFront(parent);
 		save(repositories);
 		return;
@@ -121,16 +135,52 @@ void recordOpen(const RepositoryLocation& location)
 	{
 		existing->kind = location.kind;
 		existing->root = location.root; // the spelling that was actually opened
+		existing->lastUsedMSecs = now;
 		moveToFront(existing);
 	}
 	else
 	{
-		repositories.insert(repositories.begin(), RecentRepository{ location.root, location.kind, {} });
+		repositories.insert(repositories.begin(), RecentRepository{ location.root, location.kind, now, {} });
 		if (qsizetype(repositories.size()) > MaxRecentRepositories)
 			repositories.resize(size_t(MaxRecentRepositories));
 	}
 
 	save(repositories);
+}
+
+size_t recordFound(const std::vector<FoundRepository>& found)
+{
+	std::vector<RecentRepository> repositories = list();
+	QSet<QString> addedRoots;
+
+	for (const FoundRepository& candidate : found)
+	{
+		const QString& root = candidate.location.root;
+		const bool listed = std::ranges::any_of(repositories, [&](const RecentRepository& repository) {
+			return sameRepositoryPath(repository.root, root) || holdsSubrepoAt(repository, root);
+		});
+		if (listed)
+			continue;
+
+		repositories.push_back(RecentRepository{ root, candidate.location.kind, candidate.lastUsedMSecs, {} });
+		addedRoots.insert(root);
+	}
+
+	if (addedRoots.isEmpty())
+		return 0;
+
+	// The cap falls on the oldest of the whole list, so a scan can push out an entry that was already there
+	sortByLastUsed(repositories);
+	if (qsizetype(repositories.size()) > MaxRecentRepositories)
+		repositories.resize(size_t(MaxRecentRepositories));
+
+	const size_t added = size_t(std::ranges::count_if(repositories,
+		[&](const RecentRepository& repository) { return addedRoots.contains(repository.root); }));
+	if (added == 0)
+		return 0; // every one of them was older than the entries the cap kept, which are unchanged
+
+	save(repositories); // one write and one announcement for the whole scan
+	return added;
 }
 
 void setSubrepos(const Repository& repository)

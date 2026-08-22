@@ -190,6 +190,7 @@ void CommitWindow::buildUi()
 	viewMenu->addAction(tr("Show &Welcome Screen"), &showWelcomeWindow);
 	QMenu* repositoryMenu = menuBar()->addMenu(tr("&Repository"));
 	repositoryMenu->addAction(openRepositoryAction); // the same action as in File, where Ctrl+O is looked for
+	repositoryMenu->addAction(tr("&Scan Folder for Repositories..."), this, [this] { scanFolderForRepositories(this); });
 	repositoryMenu->addSeparator();
 	repositoryMenu->addAction(tr("&Refresh"), _repo.get(), &Repository::refresh)->setShortcut(QKeySequence::Refresh);
 	_uncommitAction = repositoryMenu->addAction(tr("&Undo Last Commit"), this, &CommitWindow::undoLastCommit);

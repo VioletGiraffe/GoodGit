@@ -99,6 +99,17 @@ changed ones in the file list). The panel therefore expands an entry without run
 under one never opened, and is as stale as the rest of the entry. Opening a subrepo records its parent: the
 list names workspaces, and a subrepo is part of one rather than one of its own.
 
+Every entry carries when it was last used: the moment it was opened, or, for one a folder scan found, the
+timestamp of the file everyday work rewrites - git's index, Mercurial's dirstate, since a repository
+folder's own timestamp barely moves. The list is ordered by it, so scanned and opened repositories
+interleave on one timeline. An entry stored before the field existed carries 0 and sorts last; nothing
+migrates them.
+
+A folder scan is the one way an entry joins the list unopened. It reads the kind off the marker in each
+subfolder's root - `.git`, `.hg` - and validates it by what the marker must hold, rather than asking a tool,
+so a folder of repositories costs no processes; only working trees are found. The cap applies to the merged
+list once it is sorted, so a scan can push out an entry that was already there.
+
 ## Backends
 
 `Repository` is the boundary. Above it the windows and models use one vocabulary and never learn which

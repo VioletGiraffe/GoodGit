@@ -51,6 +51,13 @@ WelcomeWindow::WelcomeWindow()
 	introLabel->setWordWrap(true);
 
 	auto* openButton = new QPushButton(tr("Open Repository..."));
+	auto* scanButton = new QPushButton(tr("Scan Folder for Repositories..."));
+	scanButton->setToolTip(tr("Lists every repository one level inside a folder, without opening any"));
+
+	auto* buttonRow = new QHBoxLayout;
+	buttonRow->addWidget(openButton);
+	buttonRow->addWidget(scanButton);
+	buttonRow->addStretch();
 
 	auto* intro = new QWidget;
 	auto* introLayout = new QVBoxLayout(intro);
@@ -58,7 +65,7 @@ WelcomeWindow::WelcomeWindow()
 	introLayout->setSpacing(16);
 	introLayout->addLayout(titleRow);
 	introLayout->addWidget(introLabel);
-	introLayout->addWidget(openButton, 0, Qt::AlignLeft);
+	introLayout->addLayout(buttonRow);
 
 #ifdef Q_OS_MACOS
 	if (commandLineToolLinkMissingOrBroken())
@@ -105,6 +112,7 @@ WelcomeWindow::WelcomeWindow()
 		[recentSection] { recentSection->setVisible(!RecentRepositories::list().empty()); });
 
 	connect(openButton, &QPushButton::clicked, this, [this] { browseForRepository(this); });
+	connect(scanButton, &QPushButton::clicked, this, [this] { scanFolderForRepositories(this); });
 	acceptRepositoryFolderDrops(this);
 
 	resize(WindowWidth, anyRecent ? WithRecentListHeight : IntroOnlyHeight);

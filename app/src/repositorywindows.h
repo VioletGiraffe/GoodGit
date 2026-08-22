@@ -25,6 +25,11 @@ CommitWindow* openRecentRepository(const QString& root, QWidget* dialogParent);
 // Asks for a directory and opens the repository containing it. Null when cancelled, as when nothing claimed it.
 CommitWindow* browseForRepository(QWidget* dialogParent);
 
+// Asks for a folder and adds the repositories one level inside it to the recent list, opening none, each
+// placed by when it was last worked in. Nothing is run on them: see repositoriesInFolder(). Reports what
+// the scan found either way.
+void scanFolderForRepositories(QWidget* dialogParent);
+
 // The welcome window, raised if one is already up. It deletes itself when closed, and any open through
 // openRepositoryWindow() closes it.
 void showWelcomeWindow();

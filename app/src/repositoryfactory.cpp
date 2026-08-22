@@ -4,7 +4,12 @@
 #include "hgprocess.h"
 #include "hgrepository.h"
 
+#include <QDateTime>
 #include <QDir>
+#include <QFile>
+#include <QFileInfo>
+
+#include <algorithm>
 
 namespace {
 
@@ -19,6 +24,50 @@ Claim claimedByGit(const QString& startPath)
 	ProcessResult result = Git::runSync(startPath, { QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel") });
 	QString root = result.ok ? QString::fromUtf8(result.out.trimmed()) : QString{};
 	return { std::move(root), std::move(result) };
+}
+
+// What git itself looks for in a repository directory, so an empty or half-deleted .git is not one
+bool isGitDirectory(const QString& path)
+{
+	return QFileInfo::exists(path + QStringLiteral("/HEAD"))
+		&& QFileInfo{ path + QStringLiteral("/objects") }.isDir()
+		&& QFileInfo{ path + QStringLiteral("/refs") }.isDir();
+}
+
+// The repository directory a worktree's or a submodule's .git file names, which may be relative to it.
+// Empty when the file names none that exists, a dangling link included.
+QString gitLinkTarget(const QFileInfo& dotGit)
+{
+	constexpr qint64 MaxGitLinkBytes = 4096; // it holds a path, not a document
+	static const QByteArray prefix = QByteArrayLiteral("gitdir:");
+
+	QFile file{ dotGit.absoluteFilePath() };
+	if (!file.open(QIODevice::ReadOnly))
+		return {};
+
+	const QByteArray line = file.readLine(MaxGitLinkBytes);
+	if (!line.startsWith(prefix))
+		return {};
+
+	const QString target = QString::fromUtf8(line.mid(prefix.size()).trimmed());
+	const QFileInfo directory{ QDir{ dotGit.absolutePath() }, target };
+	return directory.isDir() ? directory.absoluteFilePath() : QString{};
+}
+
+// Mercurial's format file, written by init: a repository whose requirements it cannot read does not open
+bool isMercurialDirectory(const QString& path)
+{
+	return QFileInfo::exists(path + QStringLiteral("/requires"));
+}
+
+// When the repository was last worked in: git rewrites the index and Mercurial the dirstate on every add,
+// commit, checkout and merge. Neither exists before the first of those, so a repository that has none falls
+// back to the stamp init left on the directory.
+int64_t lastActivity(const QString& repositoryDirectory, const QString& activityFileName)
+{
+	const QFileInfo activity{ repositoryDirectory + QLatin1Char('/') + activityFileName };
+	const QDateTime modified = activity.exists() ? activity.lastModified() : QFileInfo{ repositoryDirectory }.lastModified();
+	return modified.toMSecsSinceEpoch();
 }
 
 Claim claimedByMercurial(const QString& startPath)
@@ -44,6 +93,36 @@ std::expected<RepositoryLocation, std::vector<ProcessResult>> findRepository(con
 		return RepositoryLocation{ VcsKind::Mercurial, std::move(hg.root) };
 
 	return std::unexpected(std::vector<ProcessResult>{ std::move(git.result), std::move(hg.result) });
+}
+
+std::vector<FoundRepository> repositoriesInFolder(const QString& folder)
+{
+	std::vector<FoundRepository> found;
+	for (const QFileInfo& entry : QDir{ folder }.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot))
+	{
+		const QString root = entry.absoluteFilePath();
+
+		// A plain repository's .git is the repository directory; a worktree's and a submodule's is a file
+		// naming one, and that it names a directory at all is the whole test: a worktree's holds neither
+		// objects nor refs, both of which stay in the repository it was made from.
+		const QFileInfo dotGit{ root + QStringLiteral("/.git") };
+		QString gitDirectory;
+		if (dotGit.isDir())
+			gitDirectory = isGitDirectory(dotGit.absoluteFilePath()) ? dotGit.absoluteFilePath() : QString{};
+		else if (dotGit.isFile())
+			gitDirectory = gitLinkTarget(dotGit);
+
+		if (!gitDirectory.isEmpty())
+			found.push_back({ { VcsKind::Git, root }, lastActivity(gitDirectory, QStringLiteral("index")) });
+		else if (const QString hgDirectory = root + QStringLiteral("/.hg"); isMercurialDirectory(hgDirectory))
+			found.push_back({ { VcsKind::Mercurial, root }, lastActivity(hgDirectory, QStringLiteral("dirstate")) });
+	}
+
+	// Stable, so repositories worked in at the same moment keep the name order entryInfoList returned them in
+	std::ranges::stable_sort(found, [](const FoundRepository& left, const FoundRepository& right) {
+		return left.lastUsedMSecs > right.lastUsedMSecs;
+	});
+	return found;
 }
 
 std::unique_ptr<Repository> openRepository(const RepositoryLocation& location)
