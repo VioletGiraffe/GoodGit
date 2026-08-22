@@ -1,5 +1,6 @@
 TEMPLATE = app
 TARGET   = gg   # the name typed in a terminal; the application it starts carries the same name one level up
+QMAKE_PROJECT_NAME = launcher   # a VS solution cannot hold two projects named after the same target
 
 include(../global.pri)
 
