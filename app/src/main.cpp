@@ -2,6 +2,7 @@
 #include "repositoryfactory.h"
 #include "repositorywindows.h"
 #include "theme.h"
+#include "welcomewindow.h"
 
 #include <QApplication>
 #include <QDir>
@@ -28,9 +29,8 @@ int main(int argc, char* argv[])
 		return openRepositoryWindow(*location) ? QApplication::exec() : 1;
 
 	const std::vector<RecentRepository> recent = RecentRepositories::list();
-	const bool opened = !recent.empty() && openRecentRepository(recent.front().root, nullptr) != nullptr;
-	if (!opened && !browseForRepository(nullptr))
-		return 0; // nothing to show, and nothing chosen
+	if (recent.empty() || !openRecentRepository(recent.front().root, nullptr))
+		(new WelcomeWindow)->show(); // deletes itself when closed, and openRepositoryWindow() closes it
 
 	return QApplication::exec();
 }

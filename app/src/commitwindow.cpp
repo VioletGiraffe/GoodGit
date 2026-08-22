@@ -30,8 +30,6 @@
 #include <QDesktopServices>
 #include <QDir>
 #include <QDockWidget>
-#include <QDragEnterEvent>
-#include <QDropEvent>
 #include <QEvent>
 #include <QFile>
 #include <QFileInfo>
@@ -44,7 +42,6 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
-#include <QMimeData>
 #include <QPlainTextEdit>
 #include <QProcess>
 #include <QPushButton>
@@ -78,19 +75,6 @@ bool discardable(const FileEntry& entry, bool operationInProgress)
 	if (entry.isSubmodule)
 		return entry.committable();
 	return entry.type != ChangeType::Untracked;
-}
-
-// The local directories a drag carries, in the order it lists them; empty when it carries none
-QStringList draggedFolders(const QMimeData* mimeData)
-{
-	QStringList folders;
-	for (const QUrl& url : mimeData->urls())
-	{
-		const QString path = url.toLocalFile(); // empty for anything that is not a local file
-		if (!path.isEmpty() && QFileInfo{ path }.isDir())
-			folders << path;
-	}
-	return folders;
 }
 
 QString listedPaths(const QStringList& paths)
@@ -325,9 +309,9 @@ void CommitWindow::buildUi()
 	_messageEdit->setObjectName(QStringLiteral("messageEdit"));
 	_messageEdit->setMinimumHeight(90);
 	_messageEdit->setMaximumHeight(160);
-	// The editor takes text drops, so folder drags are taken from it here. On the viewport: that is where a
-	// scroll area's drag events are delivered.
-	_messageEdit->viewport()->installEventFilter(this);
+	// The editor takes text drops, so folder drags are taken from it before it sees them. On the viewport:
+	// that is where a scroll area's drag events are delivered.
+	acceptRepositoryFolderDrops(_messageEdit->viewport());
 	messageLayout->addWidget(_messageEdit);
 	_commitButton = new QPushButton(tr("Commit"));
 	_commitButton->setObjectName(QStringLiteral("commitButton"));
@@ -381,7 +365,7 @@ void CommitWindow::buildUi()
 		_splitter->setSizes({ LeftColumnWidth, 750 });
 	setCentralWidget(_splitter);
 	resize(1180 + RecentRepositoriesDockWidth, 740); // the dock is beside the two panes, not carved out of them
-	setAcceptDrops(true); // a repository folder dropped anywhere on the window opens it
+	acceptRepositoryFolderDrops(this);
 
 	connect(_pushButton, &QPushButton::clicked, this, &CommitWindow::startPush);
 	connect(_peekButton, &QPushButton::clicked, this, &CommitWindow::peekIncoming);
@@ -483,14 +467,6 @@ QAction* CommitWindow::buildRecentRepositoriesDock()
 	return toggleAction;
 }
 
-void CommitWindow::openDroppedFolders(const QStringList& folders)
-{
-	QMetaObject::invokeMethod(this, [this, folders] {
-		for (const QString& folder : folders)
-			openRepositoryWindowAt(folder, this);
-	}, Qt::QueuedConnection);
-}
-
 void CommitWindow::closeEvent(QCloseEvent* event)
 {
 	CSettings{}.setValue(Settings::CommitWindowSplitterKey, _splitter->saveState());
@@ -516,37 +492,7 @@ bool CommitWindow::eventFilter(QObject* watched, QEvent* event)
 		}
 	}
 
-	if (_messageEdit != nullptr && watched == _messageEdit->viewport()
-		&& (eventType == QEvent::DragEnter || eventType == QEvent::DragMove || eventType == QEvent::Drop))
-	{
-		auto* dragEvent = static_cast<QDropEvent*>(event); // the base of the drag-enter and drag-move events too
-		const QStringList folders = draggedFolders(dragEvent->mimeData());
-		if (!folders.isEmpty())
-		{
-			dragEvent->acceptProposedAction();
-			if (eventType == QEvent::Drop)
-				openDroppedFolders(folders);
-			return true;
-		}
-	}
-
 	return QMainWindow::eventFilter(watched, event);
-}
-
-void CommitWindow::dragEnterEvent(QDragEnterEvent* event)
-{
-	if (!draggedFolders(event->mimeData()).isEmpty())
-		event->acceptProposedAction(); // the drag-move events that follow inherit this accept
-}
-
-void CommitWindow::dropEvent(QDropEvent* event)
-{
-	const QStringList folders = draggedFolders(event->mimeData());
-	if (folders.isEmpty())
-		return;
-
-	event->acceptProposedAction();
-	openDroppedFolders(folders);
 }
 
 void CommitWindow::onRefreshed()

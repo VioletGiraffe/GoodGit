@@ -85,9 +85,11 @@ first), so a mistyped argument, a chosen folder that is not a repository and a s
 all fail with one wording. They differ in which path is asked for. A command line argument is taken
 literally: if it is not a repository, the program fails with an exit code, like any command line tool. With
 no argument, the current directory is the first guess (started from a shortcut it is wherever that pointed),
-falling through to the repository opened last and then to a folder chooser. A folder dropped on a window
-opens like a chosen one. **There is no window without a repository**, so `CommitWindow` never handles that
-case, and closing the last window quits.
+falling through to the repository opened last and then to the welcome window, which states what the
+application needs, asks for a folder, and lists the recent repositories in the panel the dock uses. A folder
+dropped on a window opens like a chosen one. **No commit window exists without a repository**, so
+`CommitWindow` never handles that case; the welcome window is the one that does, and
+`openRepositoryWindow()` closes it as soon as a repository window stands. Closing the last window quits.
 
 One repository has one window: a second request raises the existing one. The open windows are the
 registry; nothing else tracks them. The recent list is stored, and so are the subrepos under each entry,

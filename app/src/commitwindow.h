@@ -41,17 +41,12 @@ signals:
 
 protected:
 	bool eventFilter(QObject* watched, QEvent* event) override;
-	void dragEnterEvent(QDragEnterEvent* event) override;
-	void dropEvent(QDropEvent* event) override;
 	void closeEvent(QCloseEvent* event) override;
 
 private:
 	void buildUi();
 	// Returns the action that shows and hides the dock
 	[[nodiscard]] QAction* buildRecentRepositoriesDock();
-	// Opens the repository each folder is in, queued past the drop handler: the drag source is blocked until
-	// that returns, and a folder no repository claims is reported in a modal dialog
-	void openDroppedFolders(const QStringList& folders);
 
 	void onRefreshed();
 	void updateHeader();

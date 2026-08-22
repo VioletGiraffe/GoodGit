@@ -15,8 +15,6 @@
 // The commit list, in the backend's walk order: newest first, no commit before its children
 class CommitLogModel final : public QAbstractTableModel
 {
-	Q_OBJECT
-
 public:
 	// CommitColumn shows the revision number where the system has one, else the short sha (see CommitRecord::revision)
 	enum Column { GraphColumn = 0, CommitColumn, SubjectColumn, AuthorColumn, DateColumn, ColumnCount };
@@ -76,8 +74,6 @@ private:
 // (check boxes, submodule blocking) that a commit already made has no notion of.
 class CommitFilesModel final : public QAbstractTableModel
 {
-	Q_OBJECT
-
 public:
 	enum Column { StateColumn = 0, AddedColumn, RemovedColumn, PathColumn, ColumnCount };
 

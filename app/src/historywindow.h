@@ -22,8 +22,6 @@ class DiffPane;
 // Every query is scoped to this window, so closing it drops the pending ones.
 class HistoryWindow final : public QMainWindow
 {
-	Q_OBJECT
-
 public:
 	HistoryWindow(const RepositoryLocation& location, QWidget* parent);
 	// The history of one repo-relative path, traced across renames

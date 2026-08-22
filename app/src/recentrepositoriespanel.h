@@ -9,8 +9,6 @@
 // looks like any other until opened.
 class RecentRepositoriesPanel final : public QTreeWidget
 {
-	Q_OBJECT
-
 public:
 	// `currentRepositoryRoot` is the repository of the window this panel belongs to, marked in the list
 	explicit RecentRepositoriesPanel(QString currentRepositoryRoot, QWidget* parent = nullptr);

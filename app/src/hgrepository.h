@@ -12,8 +12,6 @@
 //   No remote-tracking refs: what the upstream holds is only known from a network query (fetch(), incomingCommits()).
 class HgRepository final : public Repository
 {
-	Q_OBJECT
-
 public:
 	explicit HgRepository(QString rootPath, QObject* parent = nullptr);
 

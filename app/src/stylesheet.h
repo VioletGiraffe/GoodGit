@@ -20,7 +20,7 @@ inline QColor pressedShade(const QColor& base, bool dark) { return dark ? base.l
 inline QString buildStyleSheet(const Theme& t)
 {
 	QString qss = QStringLiteral(R"qss(
-QMainWindow, QDialog { background: @windowBg@; }
+QMainWindow, QDialog, QWidget#welcomeWindow { background: @windowBg@; }
 
 /* ---------- bars ---------- */
 QFrame#repoBar { background: @surfaceAlt@; border-bottom: 1px solid @border@; }

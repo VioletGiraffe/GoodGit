@@ -8,8 +8,6 @@
 // output. No libgit2, no reimplemented git logic.
 class GitRepository final : public Repository
 {
-	Q_OBJECT
-
 public:
 	explicit GitRepository(QString rootPath, QObject* parent = nullptr);
 

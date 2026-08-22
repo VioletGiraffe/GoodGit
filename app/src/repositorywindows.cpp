@@ -3,13 +3,18 @@
 #include "gitprocess.h"
 #include "recentrepositories.h"
 #include "repositoryfactory.h"
+#include "welcomewindow.h"
 
 #include "dialogs/messagebox.h"
 
 #include <QApplication>
 #include <QDir>
+#include <QDropEvent>
+#include <QEvent>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QMimeData>
+#include <QUrl>
 
 #include <algorithm>
 #include <optional>
@@ -43,6 +48,64 @@ QString browseStartDirectory()
 	return recent.empty() ? QDir::homePath() : QFileInfo{ recent.front().root }.absolutePath();
 }
 
+// The local directories a drag carries, in the order it lists them; empty when it carries none
+QStringList draggedFolders(const QMimeData* mimeData)
+{
+	QStringList folders;
+	for (const QUrl& url : mimeData->urls())
+	{
+		const QString path = url.toLocalFile(); // empty for anything that is not a local file
+		if (!path.isEmpty() && QFileInfo{ path }.isDir())
+			folders << path;
+	}
+	return folders;
+}
+
+// Queued past the drop handler: the drag source is blocked until that returns, and opening reports a folder
+// no repository claims in a modal dialog
+void openDroppedFolders(const QStringList& folders, QWidget* dropTarget)
+{
+	QMetaObject::invokeMethod(dropTarget, [folders, dropTarget] {
+		for (const QString& folder : folders)
+			openRepositoryWindowAt(folder, dropTarget->window());
+	}, Qt::QueuedConnection);
+}
+
+// Watches the one widget it is installed on
+class FolderDropFilter final : public QObject
+{
+public:
+	explicit FolderDropFilter(QWidget* target) : QObject{ target } {}
+
+protected:
+	bool eventFilter(QObject* watched, QEvent* event) override
+	{
+		const QEvent::Type type = event->type();
+		if (type != QEvent::DragEnter && type != QEvent::DragMove && type != QEvent::Drop)
+			return QObject::eventFilter(watched, event);
+
+		auto* dragEvent = static_cast<QDropEvent*>(event); // the base of the drag-enter and drag-move events too
+		const QStringList folders = draggedFolders(dragEvent->mimeData());
+		if (folders.isEmpty())
+			return QObject::eventFilter(watched, event);
+
+		dragEvent->acceptProposedAction();
+		if (type == QEvent::Drop)
+			openDroppedFolders(folders, static_cast<QWidget*>(watched));
+		return true;
+	}
+};
+
+// The welcome window stands only while no repository window does
+void closeWelcomeWindow()
+{
+	for (QWidget* widget : QApplication::topLevelWidgets())
+	{
+		if (auto* welcome = dynamic_cast<WelcomeWindow*>(widget))
+			welcome->close();
+	}
+}
+
 } // namespace
 
 CommitWindow* repositoryWindow(const QString& root)
@@ -71,15 +134,19 @@ CommitWindow* openRepositoryWindow(const RepositoryLocation& location, QWidget* 
 	RecentRepositories::recordOpen(location);
 
 	// Two windows on one repository would commit the same changes through both
-	if (CommitWindow* existing = repositoryWindow(location.root))
+	CommitWindow* window = repositoryWindow(location.root);
+	if (window)
 	{
-		existing->raise();
-		existing->activateWindow();
-		return existing;
+		window->raise();
+		window->activateWindow();
+	}
+	else
+	{
+		window = new CommitWindow{ location };
+		window->show();
 	}
 
-	auto* window = new CommitWindow{ location };
-	window->show();
+	closeWelcomeWindow(); // after the repository window shows, so the application is never left with none
 	return window;
 }
 
@@ -111,4 +178,10 @@ CommitWindow* browseForRepository(QWidget* dialogParent)
 {
 	const QString directory = QFileDialog::getExistingDirectory(dialogParent, QStringLiteral("Open Repository"), browseStartDirectory());
 	return directory.isEmpty() ? nullptr : openRepositoryWindowAt(directory, dialogParent);
+}
+
+void acceptRepositoryFolderDrops(QWidget* target)
+{
+	target->setAcceptDrops(true);
+	target->installEventFilter(new FolderDropFilter{ target });
 }

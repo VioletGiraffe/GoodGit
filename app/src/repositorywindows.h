@@ -6,9 +6,10 @@ class CommitWindow;
 class QWidget;
 struct RepositoryLocation;
 
-// Opening a repository in a window, from the command line, the current directory, the recent list or a chosen folder.
+// Opening a repository in a window, from the command line, the current directory, the recent list, a chosen
+// folder or a dropped one.
 // One window per repository. The recent list is updated on every open.
-// Every function returns the window now showing the repository, or nullptr with the failure already reported.
+// Each open returns the window now showing the repository, or nullptr with the failure already reported.
 
 [[nodiscard]] CommitWindow* repositoryWindow(const QString& root);
 
@@ -23,3 +24,7 @@ CommitWindow* openRecentRepository(const QString& root, QWidget* dialogParent);
 
 // Asks for a directory and opens the repository containing it. Null when cancelled, as when nothing claimed it.
 CommitWindow* browseForRepository(QWidget* dialogParent);
+
+// Opens the repository containing any folder dropped on `target`; its window is the dialogs' parent. Repeat
+// for a child that takes drops of its own: a drag over it never reaches the window.
+void acceptRepositoryFolderDrops(QWidget* target);

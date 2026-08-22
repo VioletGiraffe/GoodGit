@@ -11,8 +11,6 @@
 // Chunks may split anywhere, mid-line or between a CR and its LF.
 class ConsoleLogView final : public QPlainTextEdit
 {
-	Q_OBJECT
-
 public:
 	explicit ConsoleLogView(QWidget* parent = nullptr);
 

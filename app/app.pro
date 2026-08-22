@@ -66,7 +66,8 @@ HEADERS += \
 	src/stylesheet.h \
 	src/theme.h \
 	src/vcsprocess.h \
-	src/vcstypes.h
+	src/vcstypes.h \
+	src/welcomewindow.h
 
 SOURCES += \
 	src/changedfilesmodel.cpp \
@@ -95,7 +96,8 @@ SOURCES += \
 	src/repositorywindows.cpp \
 	src/settingspages.cpp \
 	src/theme.cpp \
-	src/vcsprocess.cpp
+	src/vcsprocess.cpp \
+	src/welcomewindow.cpp
 
 RESOURCES += res/theme.qrc
 
