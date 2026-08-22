@@ -537,9 +537,10 @@ void CommitWindow::onRefreshed()
 void CommitWindow::updateHeader()
 {
 	const RepoState& state = _repo->state();
+	const QString shortHeadSha = state.headSha.left(7);
 
 	_repoNameLabel->setText(_repo->name());
-	const QString branchText = state.detached ? tr("detached HEAD at %1").arg(state.headSha.left(7))
+	const QString branchText = state.detached ? tr("detached HEAD at %1").arg(shortHeadSha)
 		: state.unborn ? state.branch + tr(" (no commits yet)")
 		: state.branch;
 	_branchLabel->setText(branchText);
@@ -571,7 +572,7 @@ void CommitWindow::updateHeader()
 
 	const QString parentSubject = subjectOrPlaceholder(state.headSubject);
 	_parentCommitLabel->setText(state.unborn ? QString{} : tr("Parent commit: %1").arg(parentSubject));
-	_parentCommitLabel->setToolTip(state.unborn ? QString{} : QStringLiteral("%1 %2").arg(state.headSha.left(7), parentSubject));
+	_parentCommitLabel->setToolTip(state.unborn ? QString{} : QStringLiteral("%1 %2").arg(shortHeadSha, parentSubject));
 
 	setWindowTitle(QStringLiteral("%1 [%2] - GoodGit").arg(_repo->name(), state.detached ? QStringLiteral("detached") : state.branch));
 }
