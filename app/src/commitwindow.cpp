@@ -4,8 +4,8 @@
 #endif
 #include "consolelogview.h"
 #include "diffpane.h"
+#include "externalapps.h"
 #include "filelistdelegate.h"
-#include "filemanager.h"
 #include "historymodels.h"
 #include "historywindow.h"
 #include "messageedit.h"
@@ -1115,6 +1115,10 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 		QDesktopServices::openUrl(QUrl::fromLocalFile(absolutePath(entry)));
 	});
 	openAction->setEnabled(singleFile);
+	QAction* editAction = menu.addAction(tr("Edit"), this, [this, entry = entries.front()] {
+		openInTextEditor(absolutePath(entry), this);
+	});
+	editAction->setEnabled(singleFile);
 	QAction* submoduleHistoryAction = menu.addAction(tr("View commit history"), this, [this, entry = entries.front()] {
 		// Not deduplicated like this repo's own history window, matching openSubmoduleWindow
 		auto* window = new HistoryWindow(_repo->submoduleLocation(entry.path), this);

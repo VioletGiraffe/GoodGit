@@ -77,7 +77,7 @@ ships with hg but is off by default, so the command enables it for itself.
 | `diffpane` | The pane both windows show one file's text in: path and tag header over a read-only monospace view. Neither reads nor caps the text; the size cap is a setting each window applies with its own wording |
 | `settings` | Every storage key with its default. Values are read and written where consumed, through qtutils `CSettings`; `CSettingsNotifier` makes open windows re-apply fonts and cached layout after the settings dialog stores them. Window geometry is qtutils `CPersistenceEnabler`, one key per window kind shared by every repository, as the splitter positions are |
 | `settingspages` | The Preferences pages (Main, Theme & Font) for qtutils `CSettingsDialog`. Theme choices go through `CThemeController` |
-| `filemanager` | The platform file manager: opening a directory in it, showing a file selected in it, and the action texts naming it as each platform does |
+| `externalapps` | Programs outside the application. The platform file manager: opening a directory in it, showing a file selected in it, and the action texts naming it as each platform does. The configured text editor: its command line with `%path%` substituted, reporting one that will not start |
 
 ## Opening a repository
 

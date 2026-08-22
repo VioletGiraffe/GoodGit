@@ -59,6 +59,14 @@ MainSettingsPage::MainSettingsPage(QWidget* parent) :
 	layout->addRow(tr("Git executable:"), executableRow(this, _gitExecutable, Settings::GitExecutableKey, Settings::GitExecutableDefault));
 	layout->addRow(tr("Mercurial executable:"), executableRow(this, _hgExecutable, Settings::HgExecutableKey, Settings::HgExecutableDefault));
 
+	_textEditorCommand = new QLineEdit;
+	_textEditorCommand->setText(settings.value(Settings::TextEditorCommandKey).toString());
+	_textEditorCommand->setPlaceholderText(QLatin1String(Settings::TextEditorCommandDefault));
+	_textEditorCommand->setToolTip(tr("What the file list's Edit command runs. %path% is replaced with the file "
+		"and stays one argument whatever it contains; a command without it gets the file appended. Quote an "
+		"executable whose own path has spaces in it."));
+	layout->addRow(tr("Text editor command:"), _textEditorCommand);
+
 	_historyDepth = new QSpinBox;
 	_historyDepth->setRange(100, 1'000'000);
 	_historyDepth->setSingleStep(1000);
@@ -111,6 +119,7 @@ void MainSettingsPage::acceptSettings()
 	CSettings settings;
 	settings.setValue(Settings::GitExecutableKey, _gitExecutable->text().trimmed());
 	settings.setValue(Settings::HgExecutableKey, _hgExecutable->text().trimmed());
+	settings.setValue(Settings::TextEditorCommandKey, _textEditorCommand->text().trimmed());
 	settings.setValue(Settings::HistoryMaxCommitsKey, _historyDepth->value());
 	settings.setValue(Settings::MaxShownDiffBytesKey, qlonglong{ _maxDiffMb->value() } * 1024 * 1024);
 	settings.setValue(Settings::ShowLineEndingOnlyChangesKey, _showEolOnlyChanges->isChecked());

@@ -11,6 +11,17 @@ inline constexpr const char* GitExecutableDefault = "git"; // from PATH
 inline constexpr const char* HgExecutableKey = "HgExecutable";
 inline constexpr const char* HgExecutableDefault = "hg";
 
+// A whole command line, %path% standing for the file to edit. The default is empty where no editor ships
+// with every install, and the Edit action then reports that nothing is configured.
+inline constexpr const char* TextEditorCommandKey = "TextEditorCommand";
+#ifdef Q_OS_WIN
+inline constexpr const char* TextEditorCommandDefault = "notepad.exe %path%";
+#elif defined Q_OS_MACOS
+inline constexpr const char* TextEditorCommandDefault = "open -t %path%"; // the default text editor, TextEdit unless changed
+#else
+inline constexpr const char* TextEditorCommandDefault = "";
+#endif
+
 // An empty family means no override (the system fixed font at its own size); a size of 0 keeps the family's default size
 inline constexpr const char* MonospaceFontFamilyKey = "MonospaceFontFamily";
 inline constexpr const char* MonospaceFontPointSizeKey = "MonospaceFontPointSize";

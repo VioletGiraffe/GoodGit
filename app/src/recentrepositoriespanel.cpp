@@ -1,6 +1,6 @@
 #include "recentrepositoriespanel.h"
 #include "commitwindow.h"
-#include "filemanager.h"
+#include "externalapps.h"
 #include "recentrepositories.h"
 #include "repositorywindows.h"
 #include "theme.h"

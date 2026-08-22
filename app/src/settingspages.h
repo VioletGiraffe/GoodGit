@@ -22,6 +22,7 @@ public:
 private:
 	QLineEdit* _gitExecutable = nullptr;
 	QLineEdit* _hgExecutable = nullptr;
+	QLineEdit* _textEditorCommand = nullptr;
 	QSpinBox* _historyDepth = nullptr;
 	QSpinBox* _maxDiffMb = nullptr;
 	QCheckBox* _showEolOnlyChanges = nullptr;
