@@ -59,7 +59,8 @@
 namespace {
 
 constexpr int RecentRepositoriesDockWidth = 175; // first-run default; persists with the window state
-constexpr int LeftColumnWidth = 430; // first-run default, fits the default 50-column subject guide; persists with the splitter
+constexpr int SplitterWidth = 1180;  // first-run width of the two panes together
+constexpr int LeftColumnWidth = 520; // first-run default; persists with the splitter
 constexpr qsizetype BinarySniffBytes = 8000; // git's own threshold: a NUL this early means the file is not text
 constexpr int MaxListedPathsInDialog = 20;
 constexpr int MaxIncomingCommits = 200; // a peek, not a history window
@@ -360,9 +361,9 @@ void CommitWindow::buildUi()
 	if (const QByteArray state = CSettings{}.value(Settings::CommitWindowSplitterKey).toByteArray(); !state.isEmpty())
 		_splitter->restoreState(state);
 	else
-		_splitter->setSizes({ LeftColumnWidth, 750 });
+		_splitter->setSizes({ LeftColumnWidth, SplitterWidth - LeftColumnWidth });
 	setCentralWidget(_splitter);
-	resize(1180 + RecentRepositoriesDockWidth, 740); // the dock is beside the two panes, not carved out of them
+	resize(SplitterWidth + RecentRepositoriesDockWidth, 740); // the dock is beside the two panes, not carved out of them
 	acceptRepositoryFolderDrops(this);
 
 	connect(_pushButton, &QPushButton::clicked, this, &CommitWindow::startPush);
