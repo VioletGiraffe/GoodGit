@@ -13,7 +13,7 @@ macOS: 13.3 or newer\
 Windows: 10 1809+ / 11 (any build)\
 \
 Git: 2.25 or newer (January 2020)\
-Mercurial: no known floor\
+Mercurial: no known floor
 
 ## Building
 
