@@ -89,44 +89,41 @@ void DiffTextView::setContent(const QString& text, Content content)
 {
 	_content = content;
 
-	// A block ends at its terminator, so a trailing one would add an empty last block to number.
-	// QTextDocument reads a CRLF as one terminator, so both characters go.
-	QStringView body{ text };
-	if (body.endsWith(QLatin1Char('\n')))
-		body.chop(body.endsWith(QLatin1String("\r\n")) ? 2 : 1);
-
 	// Cleared before the text changes, so a paint arriving in between indexes nothing
 	_lines.clear();
 	_spans.clear();
 	_maxOldLine = 0;
 	_maxNewLine = 0;
-	setPlainText(body.toString());
 
-	// Built by walking the blocks rather than by splitting the text, so one record per block holds whatever
-	// the document made of the terminators
 	if (content == Content::Diff)
 	{
-		_lines.reserve(size_t(document()->blockCount()));
-		// Kept only as long as the pairing needs them: every line again is several MB on a large diff
-		std::vector<QString> texts;
-		texts.reserve(size_t(document()->blockCount()));
-		UnifiedDiffScanner scanner;
-		for (QTextBlock block = document()->begin(); block.isValid(); block = block.next())
+		// The lines shown are not the diff's own: an edit the parse could merge arrives as one line
+		ParsedDiff parsed = parseUnifiedDiff(text);
+		setPlainText(parsed.text);
+		_lines = std::move(parsed.lines);
+		_spans = std::move(parsed.spans);
+		for (const DiffLine& line : _lines)
 		{
-			texts.push_back(block.text());
-			const DiffLine line = scanner.scan(texts.back());
 			_maxOldLine = std::max(_maxOldLine, line.oldLine);
 			_maxNewLine = std::max(_maxNewLine, line.newLine);
-			_lines.push_back(line);
 		}
-		_spans = intralineEmphasis(_lines, texts);
 	}
-	else if (content == Content::FileText)
+	else
 	{
-		_maxNewLine = document()->blockCount();
-		_lines.reserve(size_t(_maxNewLine));
-		for (int number = 1; number <= _maxNewLine; ++number)
-			_lines.push_back(DiffLine{ DiffLineKind::Context, 0, number });
+		// A block ends at its terminator, so a trailing one would add an empty last block to number.
+		// QTextDocument reads a CRLF as one terminator, so both characters go.
+		QStringView body{ text };
+		if (body.endsWith(QLatin1Char('\n')))
+			body.chop(body.endsWith(QLatin1String("\r\n")) ? 2 : 1);
+		setPlainText(body.toString());
+
+		if (content == Content::FileText)
+		{
+			_maxNewLine = document()->blockCount();
+			_lines.reserve(size_t(_maxNewLine));
+			for (int number = 1; number <= _maxNewLine; ++number)
+				_lines.push_back(DiffLine{ DiffLineKind::Context, 0, number });
+		}
 	}
 
 	assert(content == Content::Message ? _lines.empty() : _lines.size() == size_t(document()->blockCount()));
@@ -154,32 +151,35 @@ void DiffTextView::applyDiffFormats()
 	addedBand.setBackground(theme.diffAddBg);
 	removedBand.setBackground(theme.diffDelBg);
 
-	// Merged over the line's own format, so only the background changes
-	QTextCharFormat addedSpan, removedSpan;
-	addedSpan.setBackground(theme.diffAddEmphasisBg());
-	removedSpan.setBackground(theme.diffDelEmphasisBg());
+	// A merged line carries no band, so its spans are the only thing naming either side: they take the diff
+	// colors themselves, and the text an edit removed is struck through, which no palette is needed to read.
+	QTextCharFormat removedSpan, addedSpan;
+	removedSpan.setBackground(theme.diffDelBg);
+	removedSpan.setForeground(theme.diffDelFg);
+	removedSpan.setFontStrikeOut(true);
+	addedSpan.setBackground(theme.diffAddBg);
+	addedSpan.setForeground(theme.diffAddFg);
 
 	QTextCursor cursor{ document() };
 	cursor.beginEditBlock();
 	size_t spanIndex = 0;
 	for (QTextBlock block = document()->begin(); block.isValid(); block = block.next())
 	{
+		const DiffLineKind kind = _lines[size_t(block.blockNumber())].kind;
 		const QTextCharFormat* textFormat = nullptr;
 		const QTextBlockFormat* bandFormat = nullptr;
-		const QTextCharFormat* spanFormat = nullptr;
-		switch (_lines[size_t(block.blockNumber())].kind)
+		switch (kind)
 		{
 		case DiffLineKind::Context:
+		case DiffLineKind::Edited:
 			break; // the widget's own text color, unbanded
 		case DiffLineKind::Added:
 			textFormat = &addedText;
 			bandFormat = &addedBand;
-			spanFormat = &addedSpan;
 			break;
 		case DiffLineKind::Removed:
 			textFormat = &removedText;
 			bandFormat = &removedBand;
-			spanFormat = &removedSpan;
 			break;
 		case DiffLineKind::HunkHeader:
 			textFormat = &hunkText;
@@ -198,15 +198,23 @@ void DiffTextView::applyDiffFormats()
 			if (bandFormat)
 				cursor.setBlockFormat(*bandFormat);
 		}
+		else if (kind == DiffLineKind::Edited)
+		{
+			// Its marker stands in a column the diff's own lines fill, and belongs to neither version of the line
+			cursor.setPosition(block.position());
+			cursor.setPosition(block.position() + 1, QTextCursor::KeepAnchor);
+			cursor.setCharFormat(dimmedText);
+		}
 
 		// After the line's own format, which covers the whole block and would otherwise replace these
 		while (spanIndex < _spans.size() && _spans[spanIndex].line == block.blockNumber())
 		{
-			assert(spanFormat); // spans are emitted for added and removed lines alone
-			const EmphasisSpan& span = _spans[spanIndex++];
+			assert(kind == DiffLineKind::Edited); // no other kind of line carries spans
+			const DiffSpan& span = _spans[spanIndex++];
+			const QTextCharFormat& spanFormat = span.removed ? removedSpan : addedSpan;
 			cursor.setPosition(block.position() + span.start);
 			cursor.setPosition(block.position() + span.start + span.length, QTextCursor::KeepAnchor);
-			cursor.mergeCharFormat(*spanFormat);
+			cursor.mergeCharFormat(spanFormat);
 		}
 	}
 	cursor.endEditBlock();

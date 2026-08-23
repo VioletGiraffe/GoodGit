@@ -9,9 +9,9 @@
 class QPaintEvent;
 
 // A read-only monospace view of one file's text, in one of three kinds:
-//   diff    - a unified diff: added and removed lines banded across the full width, an edited line marked
-//             where it differs from the one it replaced, headers dimmed, and a gutter carrying both files'
-//             line numbers
+//   diff    - a unified diff: added and removed lines banded across the full width, an edit small enough
+//             shown as one line with what it took out struck through beside what it put in, headers dimmed,
+//             and a gutter carrying both files' line numbers
 //   file    - a file's own contents: one gutter column, no diff decoration
 //   message - prose, such as a placeholder or an error: no gutter, no decoration
 //
@@ -20,6 +20,7 @@ class QPaintEvent;
 //     announces a change. The text color of an undecorated line is the widget's own, so a stylesheet sets it.
 //   - The font, the tab stop and any cap on the size of the text belong to the caller.
 //   - Nothing is parsed beyond the unified format `unifieddiff` reads.
+//   - A merged line's text is in neither file, so what is copied out of one is neither version.
 //
 // Two properties the implementation rests on:
 //   - The bands are block backgrounds, which QPlainTextEdit paints to the full viewport width, so a
@@ -52,7 +53,7 @@ private:
 
 private:
 	std::vector<DiffLine> _lines;       // one per block of the document, empty for a message
-	std::vector<EmphasisSpan> _spans;   // ascending by line, so the formatting pass walks it in step
+	std::vector<DiffSpan> _spans;       // ascending by line, so the formatting pass walks it in step
 	Content _content = Content::Message;
 	int _maxOldLine = 0; // the widest number each column has to fit
 	int _maxNewLine = 0;

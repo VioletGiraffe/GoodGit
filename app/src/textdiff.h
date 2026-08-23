@@ -2,6 +2,7 @@
 
 #include <QStringView>
 
+#include <stdint.h>
 #include <vector>
 
 // A range of characters within one line
@@ -11,16 +12,31 @@ struct TextRange
 	int length = 0;
 };
 
-// Two lines compared as sequences of tokens: a run of letters, digits and underscores, a run of whitespace,
+enum class SegmentKind : uint8_t
+{
+	Common,  // the same text in both lines
+	Removed, // in the left line alone
+	Added,   // in the right line alone
+};
+
+// One run of the two lines interleaved. `range` reads the right line for Added and the left line otherwise.
+struct MergeSegment
+{
+	SegmentKind kind = SegmentKind::Common;
+	TextRange range;
+};
+
+// Two lines aligned as sequences of tokens: a run of letters, digits and underscores, a run of whitespace,
 // or one other character. Words rather than characters, or an edit inside a long identifier would come back
 // as confetti.
 struct TokenAlignment
 {
-	double similarity = 0.0; // 0 where no token is shared, 1 for the same tokens in the same order
-	// Where the two differ, one list per side. Adjacent differing tokens are merged, so a range covers a
-	// phrase rather than each token of it.
-	std::vector<TextRange> leftChanges;
-	std::vector<TextRange> rightChanges;
+	// 0 where the two share nothing, 1 for the same tokens in the same order. Counted in characters, not in
+	// tokens, and whitespace counts for nothing: shared spacing and a few short words are not one line edited.
+	double similarity = 0.0;
+	// In order, so concatenating them - the right line's text for Added, the left line's otherwise - reads
+	// as one line holding both
+	std::vector<MergeSegment> segments;
 };
 
 // Answers nothing at all for a pair that costs more to align than the answer is worth: a line longer than

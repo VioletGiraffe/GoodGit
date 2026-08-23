@@ -31,6 +31,22 @@ public:
 	[[nodiscard]] const TextRange& range(int index) const { return _ranges[size_t(index)]; }
 	[[nodiscard]] QStringView token(int index) const { return _text.sliced(_ranges[size_t(index)].start, _ranges[size_t(index)].length); }
 
+	// What sharing this token says about the two lines being one edit. Whitespace says nothing: two
+	// sentences share their spacing, and counting it makes any two prose lines look alike.
+	[[nodiscard]] int weight(int index) const
+	{
+		const TextRange& range = _ranges[size_t(index)];
+		return _text[range.start].isSpace() ? 0 : range.length;
+	}
+
+	[[nodiscard]] int weight(int from, int to) const
+	{
+		int total = 0;
+		for (int index = from; index < to; ++index)
+			total += weight(index);
+		return total;
+	}
+
 private:
 	[[nodiscard]] static bool isWordCharacter(QChar c) { return c.isLetterOrNumber() || c == QLatin1Char('_'); }
 
@@ -57,13 +73,18 @@ CommonEnds commonEnds(const LineTokens& left, const LineTokens& right)
 	return ends;
 }
 
-// Extends the last range where the token continues it, so a run of changed tokens becomes one range
-void appendToken(std::vector<TextRange>& ranges, const TextRange& token)
+// Extends the last segment where the token continues it, so a run of tokens from one side becomes one
+// segment. Ranges of one kind are contiguous in the line they read, so only the kind has to match.
+void appendSegment(std::vector<MergeSegment>& segments, SegmentKind kind, const TextRange& token)
 {
-	if (!ranges.empty() && ranges.back().start + ranges.back().length == token.start)
-		ranges.back().length += token.length;
-	else
-		ranges.push_back(token);
+	if (!segments.empty() && segments.back().kind == kind
+		&& segments.back().range.start + segments.back().range.length == token.start)
+	{
+		segments.back().range.length += token.length;
+		return;
+	}
+
+	segments.push_back(MergeSegment{ kind, token });
 }
 
 } // namespace
@@ -75,7 +96,7 @@ TokenAlignment alignTokens(QStringView left, QStringView right)
 
 	const LineTokens leftTokens{ left }, rightTokens{ right };
 	if (leftTokens.count() == 0 && rightTokens.count() == 0)
-		return TokenAlignment{ 1.0, {}, {} };
+		return TokenAlignment{ 1.0, {} };
 
 	const CommonEnds ends = commonEnds(leftTokens, rightTokens);
 	const int leftMiddle = leftTokens.count() - ends.prefix - ends.suffix;
@@ -83,8 +104,9 @@ TokenAlignment alignTokens(QStringView left, QStringView right)
 	if (leftMiddle > MaxAlignedTokens || rightMiddle > MaxAlignedTokens)
 		return {};
 
-	// Cell (i, j) is the length of the longest common subsequence of the two middles from i and from j on.
-	// Counting from the far end makes the walk below run forwards, in the order the ranges are emitted.
+	// Cell (i, j) is the greatest weight the two middles can share from i and from j on, counting a shared
+	// token for its characters rather than for one.
+	// Counting from the far end makes the walk below run forwards, in the order the segments are emitted.
 	const int width = rightMiddle + 1;
 	std::vector<int> lcs(size_t(leftMiddle + 1) * size_t(width), 0);
 	const auto cell = [width](int i, int j) { return size_t(i) * size_t(width) + size_t(j); };
@@ -95,38 +117,48 @@ TokenAlignment alignTokens(QStringView left, QStringView right)
 		for (int j = rightMiddle - 1; j >= 0; --j)
 		{
 			lcs[cell(i, j)] = sameToken(i, j)
-				? lcs[cell(i + 1, j + 1)] + 1
+				? lcs[cell(i + 1, j + 1)] + leftTokens.weight(ends.prefix + i)
 				: std::max(lcs[cell(i + 1, j)], lcs[cell(i, j + 1)]);
 		}
 	}
 
 	TokenAlignment alignment;
-	const int common = ends.prefix + ends.suffix + lcs[cell(0, 0)];
-	alignment.similarity = 2.0 * common / (leftTokens.count() + rightTokens.count());
+	const int shared = leftTokens.weight(0, ends.prefix) + lcs[cell(0, 0)]
+		+ leftTokens.weight(leftTokens.count() - ends.suffix, leftTokens.count());
+	const int total = leftTokens.weight(0, leftTokens.count()) + rightTokens.weight(0, rightTokens.count());
+	// Two lines of nothing but whitespace differ only in their indentation, which is one edit
+	alignment.similarity = total == 0 ? 1.0 : 2.0 * shared / total;
+
+	for (int k = 0; k < ends.prefix; ++k)
+		appendSegment(alignment.segments, SegmentKind::Common, leftTokens.range(k));
 
 	int i = 0, j = 0;
 	while (i < leftMiddle && j < rightMiddle)
 	{
 		if (sameToken(i, j))
 		{
+			appendSegment(alignment.segments, SegmentKind::Common, leftTokens.range(ends.prefix + i));
 			++i;
 			++j;
 		}
 		else if (lcs[cell(i + 1, j)] >= lcs[cell(i, j + 1)])
 		{
-			appendToken(alignment.leftChanges, leftTokens.range(ends.prefix + i));
+			appendSegment(alignment.segments, SegmentKind::Removed, leftTokens.range(ends.prefix + i));
 			++i;
 		}
 		else
 		{
-			appendToken(alignment.rightChanges, rightTokens.range(ends.prefix + j));
+			appendSegment(alignment.segments, SegmentKind::Added, rightTokens.range(ends.prefix + j));
 			++j;
 		}
 	}
 	for (; i < leftMiddle; ++i)
-		appendToken(alignment.leftChanges, leftTokens.range(ends.prefix + i));
+		appendSegment(alignment.segments, SegmentKind::Removed, leftTokens.range(ends.prefix + i));
 	for (; j < rightMiddle; ++j)
-		appendToken(alignment.rightChanges, rightTokens.range(ends.prefix + j));
+		appendSegment(alignment.segments, SegmentKind::Added, rightTokens.range(ends.prefix + j));
+
+	for (int k = leftTokens.count() - ends.suffix; k < leftTokens.count(); ++k)
+		appendSegment(alignment.segments, SegmentKind::Common, leftTokens.range(k));
 
 	return alignment;
 }

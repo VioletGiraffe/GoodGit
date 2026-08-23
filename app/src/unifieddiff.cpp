@@ -5,13 +5,38 @@
 #include <assert.h>
 #include <utility>
 
-// Below this the two lines are separate lines rather than one edited into the other, and every token of
-// them would be marked
-static constexpr double SimilarityThreshold = 0.5;
+// Below this the two lines have nothing to do with each other. It is a floor and a way to rank candidates,
+// not the test of whether one line was edited into the other: how many fragments the merge comes out in
+// answers that far better, and does it after the two have been aligned.
+static constexpr double SimilarityThreshold = 0.3;
 // A run offering more pairings than this is a rewritten block, where no pairing is worth finding
 static constexpr int MaxRunPairings = 100;
 
+// A merged line stops reading as one line once it is a chain of alternating old and new fragments. A longer
+// line carries more of them before that happens, so the allowance grows with it.
+// A pair exceeding it is not one edit at all: its lines stand as the diff printed them, unmarked, since
+// marking that many fragments is the same noise in another shape.
+static constexpr int BaseInlineChanges = 3;
+static constexpr int CharsPerExtraInlineChange = 80;
+static constexpr int MaxInlineChanges = 8;
+
+// Column 0 of a merged line, where the diff's own lines carry ' ', '+' or '-'
+static constexpr char EditedMarker = '~';
+
 namespace {
+
+// Reads a unified diff one line at a time, classifying each line and numbering it against both files.
+// Lines must arrive in the order the diff prints them: numbering counts forward from each hunk header.
+class UnifiedDiffScanner
+{
+public:
+	[[nodiscard]] DiffLine scan(QStringView line);
+
+private:
+	int _oldLine = 0;
+	int _newLine = 0;
+	bool _inHunk = false;
+};
 
 // Reads the digits at `pos`, leaving it on the first character after them. -1 where there are none, or
 // where the number does not fit an int.
@@ -50,8 +75,6 @@ std::pair<int, int> parseHunkHeader(QStringView line)
 	return { oldStart, newStart };
 }
 
-} // namespace
-
 DiffLine UnifiedDiffScanner::scan(QStringView line)
 {
 	if (line.startsWith(QLatin1String("@@")))
@@ -85,21 +108,132 @@ DiffLine UnifiedDiffScanner::scan(QStringView line)
 	return { DiffLineKind::FileHeader };
 }
 
-namespace {
+// QTextDocument ends a block at any of these and reads a CRLF as one. Splitting the same way keeps one line
+// of the answer to one block of whatever shows it.
+bool isBlockTerminator(QChar c)
+{
+	return c == QLatin1Char('\n') || c == QLatin1Char('\r') || c == QChar::ParagraphSeparator
+		|| c == QChar(0xfdd0) || c == QChar(0xfdd1); // QTextBeginningOfFrame, QTextEndOfFrame
+}
 
-// Pairs the removed lines [removedBegin, addedBegin) with the added lines [addedBegin, addedEnd) and
-// appends the spans of every pair accepted, the removed side first: the view walks the spans in step with
-// the lines, and every removed line of a run precedes every added one.
-void emphasizeRun(const std::vector<QString>& texts, int removedBegin, int addedBegin, int addedEnd,
-	std::vector<EmphasisSpan>& spans)
+// Views into `diff`, so nothing is copied. A trailing terminator ends the last line rather than opening
+// an empty one.
+std::vector<QStringView> splitLines(QStringView diff)
+{
+	std::vector<QStringView> lines;
+	qsizetype start = 0;
+	for (qsizetype pos = 0; pos < diff.size(); ++pos)
+	{
+		if (!isBlockTerminator(diff[pos]))
+			continue;
+
+		lines.push_back(diff.sliced(start, pos - start));
+		if (diff[pos] == QLatin1Char('\r') && pos + 1 < diff.size() && diff[pos + 1] == QLatin1Char('\n'))
+			++pos;
+		start = pos + 1;
+	}
+
+	if (start < diff.size())
+		lines.push_back(diff.sliced(start));
+	if (lines.empty())
+		lines.push_back(diff); // empty text is one empty line, as it is one empty block
+	return lines;
+}
+
+void appendLine(ParsedDiff& parsed, const DiffLine& line, QStringView text)
+{
+	if (!parsed.lines.empty())
+		parsed.text += QLatin1Char('\n');
+	parsed.lines.push_back(line);
+	parsed.text += text;
+}
+
+// Spans of the line appended last, which is where they were measured against
+void appendSpans(ParsedDiff& parsed, std::vector<DiffSpan> spans)
+{
+	assert(!parsed.lines.empty());
+
+	const int line = int(parsed.lines.size()) - 1;
+	for (DiffSpan& span : spans)
+	{
+		span.line = line;
+		parsed.spans.push_back(span);
+	}
+}
+
+// One edit as one line: the marker, then the two lines interleaved
+struct MergedLine
+{
+	QString text;
+	std::vector<DiffSpan> spans; // measured against `text`, awaiting the line they land on
+	int changeCount = 0;         // runs of text only one side has, however many segments each holds
+};
+
+MergedLine mergeLines(QStringView removed, QStringView added, const std::vector<MergeSegment>& segments)
+{
+	MergedLine merged;
+	merged.text += QLatin1Char(EditedMarker);
+
+	bool withinChange = false;
+	for (const MergeSegment& segment : segments)
+	{
+		const QStringView source = segment.kind == SegmentKind::Added ? added : removed;
+		if (segment.kind != SegmentKind::Common)
+		{
+			if (!withinChange)
+				++merged.changeCount;
+			merged.spans.push_back(DiffSpan{ 0, int(merged.text.size()), segment.range.length,
+				segment.kind == SegmentKind::Removed });
+		}
+		withinChange = segment.kind != SegmentKind::Common;
+
+		merged.text += source.sliced(segment.range.start, segment.range.length);
+	}
+
+	return merged;
+}
+
+int maxInlineChanges(qsizetype lineLength)
+{
+	return std::min(int(BaseInlineChanges + lineLength / CharsPerExtraInlineChange), MaxInlineChanges);
+}
+
+// One pair, merged into a line where that reads, and left as the diff's own two lines where it does not
+void appendPair(ParsedDiff& parsed, const std::vector<DiffLine>& lines, const std::vector<QStringView>& texts,
+	int removedIndex, int addedIndex, const TokenAlignment& alignment)
+{
+	const QStringView removedText = texts[size_t(removedIndex)], addedText = texts[size_t(addedIndex)];
+	// Past the marker character, which is not content
+	const MergedLine merged = mergeLines(removedText.sliced(1), addedText.sliced(1), alignment.segments);
+
+	if (merged.changeCount <= maxInlineChanges(std::max(removedText.size(), addedText.size())))
+	{
+		appendLine(parsed, DiffLine{ DiffLineKind::Edited, lines[size_t(removedIndex)].oldLine,
+			lines[size_t(addedIndex)].newLine }, merged.text);
+		appendSpans(parsed, merged.spans);
+		return;
+	}
+
+	appendLine(parsed, lines[size_t(removedIndex)], removedText);
+	appendLine(parsed, lines[size_t(addedIndex)], addedText);
+}
+
+// Renders the removed lines [removedBegin, addedBegin) against the added lines [addedBegin, addedEnd),
+// pairing each removed line with the added line it was most likely edited into.
+void appendRun(ParsedDiff& parsed, const std::vector<DiffLine>& lines, const std::vector<QStringView>& texts,
+	int removedBegin, int addedBegin, int addedEnd)
 {
 	const int removedCount = addedBegin - removedBegin;
 	const int addedCount = addedEnd - addedBegin;
-	if (int64_t(removedCount) * addedCount > MaxRunPairings)
+	if (addedCount == 0 || int64_t(removedCount) * addedCount > MaxRunPairings)
+	{
+		for (int k = removedBegin; k < addedEnd; ++k)
+			appendLine(parsed, lines[size_t(k)], texts[size_t(k)]);
 		return;
+	}
 
 	// Every candidate pair, aligned once: the pairing scores them all, and an accepted pair reuses the
-	// ranges the alignment already found
+	// segments the alignment already found
 	std::vector<TokenAlignment> alignments;
 	alignments.reserve(size_t(removedCount) * size_t(addedCount));
 	for (int i = 0; i < removedCount; ++i)
@@ -107,8 +241,8 @@ void emphasizeRun(const std::vector<QString>& texts, int removedBegin, int added
 		for (int j = 0; j < addedCount; ++j)
 		{
 			// Past the marker character: it is not content, and the two sides never carry the same one
-			alignments.push_back(alignTokens(QStringView{ texts[size_t(removedBegin + i)] }.sliced(1),
-				QStringView{ texts[size_t(addedBegin + j)] }.sliced(1)));
+			alignments.push_back(alignTokens(texts[size_t(removedBegin + i)].sliced(1),
+				texts[size_t(addedBegin + j)].sliced(1)));
 		}
 	}
 
@@ -116,7 +250,7 @@ void emphasizeRun(const std::vector<QString>& texts, int removedBegin, int added
 
 	// best(i, j) is the highest total similarity reachable by pairing the removed lines from i on with the
 	// added lines from j on. Pairs never cross: a diff is a sequence, and a crossing pair would mark a line
-	// against one it does not answer.
+	// against one it does not answer. It is also what lets the walk below emit the run in one order.
 	const int width = addedCount + 1;
 	std::vector<double> best(size_t(removedCount + 1) * size_t(width), 0.0);
 	const auto cell = [width](int i, int j) { return size_t(i) * size_t(width) + size_t(j); };
@@ -129,42 +263,50 @@ void emphasizeRun(const std::vector<QString>& texts, int removedBegin, int added
 		for (int j = addedCount - 1; j >= 0; --j)
 			best[cell(i, j)] = std::max({ best[cell(i + 1, j)], best[cell(i, j + 1)], pairedScore(i, j) });
 
-	std::vector<std::pair<int, int>> pairs;
 	int i = 0, j = 0;
-	while (i < removedCount && j < addedCount)
+	while (i < removedCount || j < addedCount)
 	{
-		if (pairedScore(i, j) >= best[cell(i, j)])
+		if (i < removedCount && j < addedCount && pairedScore(i, j) >= best[cell(i, j)])
 		{
-			pairs.emplace_back(i, j);
+			appendPair(parsed, lines, texts, removedBegin + i, addedBegin + j, alignment(i, j));
 			++i;
 			++j;
 		}
-		else if (best[cell(i + 1, j)] >= best[cell(i, j + 1)])
+		else if (j >= addedCount || (i < removedCount && best[cell(i + 1, j)] >= best[cell(i, j + 1)]))
+		{
+			appendLine(parsed, lines[size_t(removedBegin + i)], texts[size_t(removedBegin + i)]);
 			++i;
+		}
 		else
+		{
+			appendLine(parsed, lines[size_t(addedBegin + j)], texts[size_t(addedBegin + j)]);
 			++j;
+		}
 	}
-
-	for (const auto& [removed, added] : pairs)
-		for (const TextRange& range : alignment(removed, added).leftChanges)
-			spans.push_back(EmphasisSpan{ removedBegin + removed, range.start + 1, range.length });
-	for (const auto& [removed, added] : pairs)
-		for (const TextRange& range : alignment(removed, added).rightChanges)
-			spans.push_back(EmphasisSpan{ addedBegin + added, range.start + 1, range.length });
 }
 
 } // namespace
 
-std::vector<EmphasisSpan> intralineEmphasis(const std::vector<DiffLine>& lines, const std::vector<QString>& texts)
+ParsedDiff parseUnifiedDiff(QStringView diff)
 {
-	assert(lines.size() == texts.size());
+	const std::vector<QStringView> texts = splitLines(diff);
 
-	std::vector<EmphasisSpan> spans;
+	std::vector<DiffLine> lines;
+	lines.reserve(texts.size());
+	UnifiedDiffScanner scanner;
+	for (QStringView text : texts)
+		lines.push_back(scanner.scan(text));
+
+	ParsedDiff parsed;
+	parsed.text.reserve(diff.size());
+	parsed.lines.reserve(lines.size());
+
 	const int count = int(lines.size());
 	for (int i = 0; i < count; )
 	{
 		if (lines[size_t(i)].kind != DiffLineKind::Removed)
 		{
+			appendLine(parsed, lines[size_t(i)], texts[size_t(i)]);
 			++i;
 			continue;
 		}
@@ -178,10 +320,9 @@ std::vector<EmphasisSpan> intralineEmphasis(const std::vector<DiffLine>& lines, 
 		while (addedEnd < count && lines[size_t(addedEnd)].kind == DiffLineKind::Added)
 			++addedEnd;
 
-		if (addedEnd > addedBegin)
-			emphasizeRun(texts, i, addedBegin, addedEnd, spans);
+		appendRun(parsed, lines, texts, i, addedBegin, addedEnd);
 		i = addedEnd;
 	}
 
-	return spans;
+	return parsed;
 }

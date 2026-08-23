@@ -54,12 +54,6 @@ struct Theme
 	QString qssFragment; // optional per-theme QSS, appended after the app sheet so it wins ties
 
 	QColor blockedRowTint() const; // warnBg, translucent so selection and the base show through
-
-	// The band under the spans an edited line differs in, a step from the band toward its own text color.
-	// Derived rather than authored: how far a theme's bands sit from its surface is the theme's own
-	// decision, and the step keeps whatever it chose.
-	QColor diffAddEmphasisBg() const;
-	QColor diffDelEmphasisBg() const;
 };
 
 [[nodiscard]] QFont monospaceFont();

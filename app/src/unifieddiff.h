@@ -6,8 +6,9 @@
 #include <stdint.h>
 #include <vector>
 
-// Reads a unified diff: what each line is, which line of either file it is, and what changed within a line
-// that was edited rather than replaced.
+// Reads a unified diff into the lines to show for it. A removed line and the added line one edit turned it
+// into become a single line carrying both, where that still reads as one line; every other line is the
+// diff's own, unchanged.
 // Backend-free: git and Mercurial (with --git) print the same format.
 
 enum class DiffLineKind : uint8_t
@@ -15,13 +16,14 @@ enum class DiffLineKind : uint8_t
 	Context,
 	Added,
 	Removed,
+	Edited,     // one edit as one line, the text it took out and the text it put in interleaved
 	HunkHeader, // @@ -old[,count] +new[,count] @@
 	FileHeader, // anything outside a hunk: the preamble, "Binary files ... differ", a second file's header
 	NoNewline,  // "\ No newline at end of file": describes the line above and numbers nothing
 };
 
-// A line number of 0 means that file has no line here: a removed line is absent from the new file, an
-// added one from the old, and a header line from both.
+// A line number of 0 means that file has no line here: a removed line is absent from the new file, an added
+// one from the old, and a header line from both. An edited line carries both.
 struct DiffLine
 {
 	DiffLineKind kind = DiffLineKind::FileHeader;
@@ -29,28 +31,21 @@ struct DiffLine
 	int newLine = 0;
 };
 
-// Lines must arrive in the order the diff prints them: numbering counts forward from each hunk header.
-class UnifiedDiffScanner
+// A range of a merged line that only one side of the edit has. No other kind of line carries one: a line
+// the diff printed itself is marked by being printed at all.
+struct DiffSpan
 {
-public:
-	[[nodiscard]] DiffLine scan(QStringView line);
-
-private:
-	int _oldLine = 0;
-	int _newLine = 0;
-	bool _inHunk = false;
-};
-
-// A range of one line to mark as changed within it
-struct EmphasisSpan
-{
-	int line = 0;   // index into the lines scanned
-	int start = 0;  // character offset into that line, counted from its marker character
+	int line = 0;   // index into the lines
+	int start = 0;  // character offset into that line's text
 	int length = 0;
+	bool removed = false; // text the edit took out, as against what it put in
 };
 
-// Pairs each removed line with the added line it was most likely edited into, and answers the spans in
-// which the two differ, ascending by line. Lines too unalike to be one edit are left unpaired, and so are
-// the lines of a run too large to be anything but a rewrite.
-// `lines` is what scan() made of each line, `texts` the lines themselves; the two run parallel.
-[[nodiscard]] std::vector<EmphasisSpan> intralineEmphasis(const std::vector<DiffLine>& lines, const std::vector<QString>& texts);
+struct ParsedDiff
+{
+	QString text;                // the lines to show, joined by '\n'
+	std::vector<DiffLine> lines; // one per line of `text`
+	std::vector<DiffSpan> spans; // ascending by line
+};
+
+[[nodiscard]] ParsedDiff parseUnifiedDiff(QStringView diff);
