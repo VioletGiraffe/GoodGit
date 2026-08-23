@@ -120,6 +120,8 @@ LIBS += -L$${DESTDIR} -lqtutils -lcpputils
 
 mac*|linux*|freebsd*{
 	PRE_TARGETDEPS += $${DESTDIR}/libqtutils.a $${DESTDIR}/libcpputils.a
+
+	QMAKE_CXXFLAGS_WARN_ON += -Wno-missing-field-initializers
 }
 
 ###################################################
