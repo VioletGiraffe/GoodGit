@@ -46,6 +46,7 @@ HEADERS += \
 	src/difftextview.h \
 	src/externalapps.h \
 	src/filelistdelegate.h \
+	src/filelistview.h \
 	src/gitparsers.h \
 	src/gitprocess.h \
 	src/gitrepository.h \
@@ -82,6 +83,7 @@ SOURCES += \
 	src/difftextview.cpp \
 	src/externalapps.cpp \
 	src/filelistdelegate.cpp \
+	src/filelistview.cpp \
 	src/gitparsers.cpp \
 	src/gitprocess.cpp \
 	src/gitrepository.cpp \

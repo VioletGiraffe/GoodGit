@@ -5,7 +5,7 @@
 #include "consolelogview.h"
 #include "diffpane.h"
 #include "externalapps.h"
-#include "filelistdelegate.h"
+#include "filelistview.h"
 #include "historymodels.h"
 #include "historywindow.h"
 #include "messageedit.h"
@@ -36,7 +36,6 @@
 #include <QFile>
 #include <QFrame>
 #include <QHBoxLayout>
-#include <QHeaderView>
 #include <QItemSelectionModel>
 #include <QKeyEvent>
 #include <QLabel>
@@ -50,11 +49,9 @@
 #include <QShortcut>
 #include <QSplitter>
 #include <QTextCursor>
-#include <QTreeView>
 #include <QUrl>
 #include <QVBoxLayout>
 
-#include <algorithm>
 #include <assert.h>
 
 namespace {
@@ -281,20 +278,9 @@ void CommitWindow::buildUi()
 	counterLayout->addWidget(_lineTotalsLabel);
 	leftLayout->addWidget(counterBar);
 
-	_filesView = new QTreeView;
+	_filesView = new FileListView;
 	_filesView->setModel(&_filesModel);
-	_filesView->setItemDelegate(new FileListDelegate{ _filesView });
-	_filesView->setRootIsDecorated(false);
-	_filesView->setUniformRowHeights(true);
-	_filesView->setAllColumnsShowFocus(true);
 	_filesView->setSelectionMode(QAbstractItemView::ExtendedSelection);
-	_filesView->setSelectionBehavior(QAbstractItemView::SelectRows);
-	_filesView->setContextMenuPolicy(Qt::CustomContextMenu);
-	_filesView->header()->hide();
-	_filesView->header()->setSectionResizeMode(ChangedFilesModel::StateColumn, QHeaderView::ResizeToContents);
-	_filesView->header()->setSectionResizeMode(ChangedFilesModel::AddedColumn, QHeaderView::ResizeToContents);
-	_filesView->header()->setSectionResizeMode(ChangedFilesModel::RemovedColumn, QHeaderView::ResizeToContents);
-	_filesView->header()->setSectionResizeMode(ChangedFilesModel::PathColumn, QHeaderView::Stretch);
 	_filesView->installEventFilter(this);
 	leftLayout->addWidget(_filesView, 1);
 
@@ -388,7 +374,7 @@ void CommitWindow::buildUi()
 		_filesModel.setAllChecked(_filesModel.checkedCount() < _filesModel.checkableCount());
 	});
 	connect(modifiedOnlyButton, &QPushButton::clicked, &_filesModel, &ChangedFilesModel::checkAllExceptUntracked);
-	connect(_filesView, &QAbstractItemView::activated, this, &CommitWindow::onRowActivated);
+	connect(_filesView, &FileListView::rowActivated, this, &CommitWindow::onRowActivated);
 	connect(_filesView, &QWidget::customContextMenuRequested, this, &CommitWindow::showContextMenu);
 	connect(_filesView->selectionModel(), &QItemSelectionModel::currentChanged, this, &CommitWindow::showDiffForCurrentRow);
 
@@ -1004,14 +990,14 @@ void CommitWindow::showDiffForCurrentRow()
 {
 	_diffQuery.cancel();
 
-	const QModelIndex current = _filesView->currentIndex();
-	if (!current.isValid() || current.row() >= _filesModel.rowCount())
+	const std::optional<FileEntry> current = currentEntry();
+	if (!current)
 	{
 		_diffPane->showMessage({}, {}, {});
 		return;
 	}
 
-	const FileEntry entry = _filesModel.entryAt(current.row());
+	const FileEntry& entry = *current;
 
 	if (entry.isSubmodule)
 	{
@@ -1076,11 +1062,11 @@ void CommitWindow::showFileContents(const FileEntry& entry)
 	_diffPane->showFileText(entry.path, tag, QString::fromUtf8(contents));
 }
 
-void CommitWindow::onRowActivated(const QModelIndex& index)
+void CommitWindow::onRowActivated(const QModelIndex& sourceIndex)
 {
-	if (!index.isValid())
+	if (!sourceIndex.isValid())
 		return;
-	const FileEntry entry = _filesModel.entryAt(index.row());
+	const FileEntry entry = _filesModel.entryAt(sourceIndex.row());
 
 	if (entry.isSubmodule)
 	{
@@ -1128,16 +1114,10 @@ void CommitWindow::openSubmoduleWindow(const FileEntry& entry)
 
 void CommitWindow::showContextMenu(const QPoint& pos)
 {
-	const std::vector<int> rows = selectedRows();
-	if (rows.empty())
+	// The VCS action slots re-query the selection instead of using these entries: a refresh during menu.exec() safely empties it
+	const std::vector<FileEntry> entries = selectedEntries();
+	if (entries.empty())
 		return;
-
-	// Captured by value: menu.exec() spins an event loop, and a refresh completing in it resets the model.
-	// The slots for the VCS actions re-query the selection instead, which the reset safely empties.
-	std::vector<FileEntry> entries;
-	entries.reserve(rows.size());
-	for (const int row : rows)
-		entries.push_back(_filesModel.entryAt(row));
 
 	const bool operationInProgress = _repo->state().operationInProgress();
 	// Only gates the writing actions; a stale row is still worth inspecting
@@ -1222,76 +1202,75 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 CommitWindow::SelectionByPath CommitWindow::captureSelectionByPath() const
 {
 	SelectionByPath selection;
-	for (const int row : selectedRows())
-		selection.paths.insert(_filesModel.entryAt(row).path);
+	for (const FileEntry& entry : selectedEntries())
+		selection.paths.insert(entry.path);
 
-	if (const QModelIndex current = _filesView->currentIndex();
-		current.isValid() && current.row() < _filesModel.rowCount())
-	{
-		selection.currentPath = _filesModel.entryAt(current.row()).path;
-	}
+	if (const std::optional<FileEntry> current = currentEntry())
+		selection.currentPath = current->path;
 	return selection;
 }
 
 void CommitWindow::restoreSelectionByPath(const SelectionByPath& selection)
 {
 	// One pass over the rows, so a large selection over a large list stays linear
-	QItemSelection restored;
+	std::vector<int> rows;
 	int currentRow = -1;
 	for (int row = 0; row < _filesModel.rowCount(); ++row)
 	{
 		const QString& path = _filesModel.entryAt(row).path;
 		if (selection.paths.contains(path))
-			restored.select(_filesModel.index(row, 0), _filesModel.index(row, ChangedFilesModel::ColumnCount - 1));
+			rows.push_back(row);
 		if (path == selection.currentPath)
 			currentRow = row;
 	}
 
 	if (currentRow < 0 && _filesModel.rowCount() > 0)
 		currentRow = 0; // the file is gone: committed, or discarded elsewhere
-	if (currentRow >= 0)
-		_filesView->setCurrentIndex(_filesModel.index(currentRow, ChangedFilesModel::StateColumn));
 
-	// After setCurrentIndex, which selects the row it lands on
-	if (!restored.isEmpty())
-		_filesView->selectionModel()->select(restored, QItemSelectionModel::ClearAndSelect);
+	_filesView->setSelectedSourceRows(rows, currentRow);
 }
 
-std::vector<int> CommitWindow::selectedRows() const
+std::vector<FileEntry> CommitWindow::selectedEntries() const
 {
-	std::vector<int> rows;
-	const auto indexes = _filesView->selectionModel()->selectedRows(ChangedFilesModel::StateColumn);
-	rows.reserve(size_t(indexes.size()));
+	const QModelIndexList indexes = _filesView->selectedSourceRows();
+	std::vector<FileEntry> entries;
+	entries.reserve(size_t(indexes.size()));
 	for (const QModelIndex& index : indexes)
-		rows.push_back(index.row());
-	std::sort(rows.begin(), rows.end());
-	return rows;
+		entries.push_back(_filesModel.entryAt(index.row()));
+	return entries;
+}
+
+std::optional<FileEntry> CommitWindow::currentEntry() const
+{
+	const QModelIndex current = _filesView->currentSourceIndex();
+	if (!current.isValid() || current.row() >= _filesModel.rowCount())
+		return {};
+	return _filesModel.entryAt(current.row());
 }
 
 void CommitWindow::toggleCheckOnSelection()
 {
-	const std::vector<int> rows = selectedRows();
+	const QModelIndexList rows = _filesView->selectedSourceRows();
 
 	bool allChecked = true;
-	for (const int row : rows)
+	for (const QModelIndex& index : rows)
 	{
-		if (_filesModel.isUserCheckable(row) && !_filesModel.isChecked(row))
+		if (_filesModel.isUserCheckable(index.row()) && !_filesModel.isChecked(index.row()))
 		{
 			allChecked = false;
 			break;
 		}
 	}
-	for (const int row : rows)
-		_filesModel.setRowChecked(row, !allChecked);
+	for (const QModelIndex& index : rows)
+		_filesModel.setRowChecked(index.row(), !allChecked);
 }
 
 void CommitWindow::deleteSelection()
 {
 	// Submodules and already-deleted rows are skipped
 	QStringList untrackedPaths, addedPaths, trackedPaths;
-	for (const int row : selectedRows())
+	for (const FileEntry& entry : selectedEntries())
 	{
-		const FileEntry& entry = _filesModel.entryAt(row);
 		if (entry.isSubmodule || entry.type == ChangeType::Deleted)
 			continue;
 		if (entry.type == ChangeType::Untracked)
@@ -1358,9 +1337,8 @@ void CommitWindow::discardSelection()
 	QStringList pathspec, promptPaths, addedPaths;
 	bool anySubmodule = false;
 	int skippedRows = 0;
-	for (const int row : selectedRows())
+	for (const FileEntry& entry : selectedEntries())
 	{
-		const FileEntry& entry = _filesModel.entryAt(row);
 		if (!discardable(entry, operationInProgress))
 		{
 			++skippedRows; // a deliberate no-op in a mixed selection
@@ -1480,9 +1458,8 @@ void CommitWindow::undoLastCommit()
 void CommitWindow::addSelectionToIndex()
 {
 	QStringList paths;
-	for (const int row : selectedRows())
+	for (const FileEntry& entry : selectedEntries())
 	{
-		const FileEntry& entry = _filesModel.entryAt(row);
 		if (!entry.isSubmodule && entry.type == ChangeType::Untracked)
 			paths.push_back(entry.path); // tracked rows in a mixed selection are a no-op
 	}
@@ -1500,9 +1477,8 @@ void CommitWindow::addSelectionToIndex()
 void CommitWindow::unAddSelection()
 {
 	QStringList paths;
-	for (const int row : selectedRows())
+	for (const FileEntry& entry : selectedEntries())
 	{
-		const FileEntry& entry = _filesModel.entryAt(row);
 		if (!entry.isSubmodule && entry.type == ChangeType::Added)
 			paths.push_back(entry.path);
 	}

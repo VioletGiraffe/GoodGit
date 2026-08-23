@@ -1,7 +1,7 @@
 #include "historywindow.h"
 #include "commitgraphdelegate.h"
 #include "diffpane.h"
-#include "filelistdelegate.h"
+#include "filelistview.h"
 #include "repositoryfactory.h"
 #include "settings.h"
 #include "theme.h"
@@ -136,19 +136,8 @@ void HistoryWindow::buildUi()
 	fileCountLayout->addStretch();
 	filesLayout->addWidget(fileCountBar);
 
-	_filesView = new QTreeView;
+	_filesView = new FileListView;
 	_filesView->setModel(&_filesModel);
-	_filesView->setItemDelegate(new FileListDelegate{ _filesView });
-	_filesView->setRootIsDecorated(false);
-	_filesView->setUniformRowHeights(true);
-	_filesView->setAllColumnsShowFocus(true);
-	_filesView->setSelectionBehavior(QAbstractItemView::SelectRows);
-	_filesView->setContextMenuPolicy(Qt::CustomContextMenu);
-	_filesView->header()->hide();
-	_filesView->header()->setSectionResizeMode(CommitFilesModel::StateColumn, QHeaderView::ResizeToContents);
-	_filesView->header()->setSectionResizeMode(CommitFilesModel::AddedColumn, QHeaderView::ResizeToContents);
-	_filesView->header()->setSectionResizeMode(CommitFilesModel::RemovedColumn, QHeaderView::ResizeToContents);
-	_filesView->header()->setSectionResizeMode(CommitFilesModel::PathColumn, QHeaderView::Stretch);
 	filesLayout->addWidget(_filesView, 1);
 
 	_diffPane = new DiffPane;
@@ -190,7 +179,7 @@ void HistoryWindow::buildUi()
 	connect(_filesView, &QWidget::customContextMenuRequested, this, &HistoryWindow::showFileContextMenu);
 	connect(_logView->selectionModel(), &QItemSelectionModel::currentChanged, this, &HistoryWindow::showFilesForCurrentCommit);
 	connect(_filesView->selectionModel(), &QItemSelectionModel::currentChanged, this, &HistoryWindow::showDiffForCurrentFile);
-	connect(_filesView, &QAbstractItemView::activated, this, &HistoryWindow::onFileRowActivated);
+	connect(_filesView, &FileListView::rowActivated, this, &HistoryWindow::onFileRowActivated);
 
 	new QShortcut(QKeySequence(Qt::Key_F5), this, [this] { reload(); });
 	new QShortcut(QKeySequence::Find, this, [this] {
@@ -358,14 +347,18 @@ void HistoryWindow::selectLoadedCommit()
 		_logView->setCurrentIndex(_logModel.index(0, CommitLogModel::CommitColumn));
 }
 
-void HistoryWindow::onFileRowActivated(const QModelIndex& index)
+void HistoryWindow::onFileRowActivated(const QModelIndex& sourceIndex)
 {
-	if (!index.isValid() || index.row() >= _filesModel.rowCount())
-		return;
+	const std::optional<CommitFileChange> entry = fileEntryAt(sourceIndex);
+	if (entry && entry->isSubmodule)
+		openSubmoduleHistory(*entry);
+}
 
-	const CommitFileChange entry = _filesModel.entryAt(index.row());
-	if (entry.isSubmodule)
-		openSubmoduleHistory(entry);
+std::optional<CommitFileChange> HistoryWindow::fileEntryAt(const QModelIndex& sourceIndex) const
+{
+	if (!sourceIndex.isValid() || sourceIndex.row() >= _filesModel.rowCount())
+		return {};
+	return _filesModel.entryAt(sourceIndex.row());
 }
 
 void HistoryWindow::openSubmoduleHistory(const CommitFileChange& entry)
@@ -493,12 +486,11 @@ void HistoryWindow::showCommitContextMenu(const QPoint& pos)
 
 void HistoryWindow::showFileContextMenu(const QPoint& pos)
 {
-	const QModelIndex index = _filesView->indexAt(pos);
-	if (!index.isValid() || index.row() >= _filesModel.rowCount())
-		return;
-
 	// Read before exec() spins an event loop, in which a completing query could reset the model
-	const CommitFileChange entry = _filesModel.entryAt(index.row());
+	const std::optional<CommitFileChange> rowEntry = fileEntryAt(_filesView->sourceIndexAt(pos));
+	if (!rowEntry)
+		return;
+	const CommitFileChange& entry = *rowEntry;
 
 	QMenu menu{ this };
 	if (entry.isSubmodule)
@@ -576,15 +568,12 @@ void HistoryWindow::showDiffForCurrentFile()
 {
 	_diffQuery.cancel();
 
-	const QModelIndex currentFile = _filesView->currentIndex();
+	const std::optional<CommitFileChange> currentFile = fileEntryAt(_filesView->currentSourceIndex());
 	const QModelIndex currentCommit = _logView->currentIndex();
-	if (!currentFile.isValid() || currentFile.row() >= _filesModel.rowCount()
-		|| !currentCommit.isValid() || currentCommit.row() >= _logModel.rowCount())
-	{
+	if (!currentFile || !currentCommit.isValid() || currentCommit.row() >= _logModel.rowCount())
 		return; // no file picked: the pane keeps the commit message
-	}
 
-	const CommitFileChange entry = _filesModel.entryAt(currentFile.row());
+	const CommitFileChange& entry = *currentFile;
 	const QString sha = _logModel.commitAt(currentCommit.row()).sha;
 	const QString tag = shortSha(sha);
 

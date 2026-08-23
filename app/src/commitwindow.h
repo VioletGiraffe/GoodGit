@@ -15,10 +15,10 @@ class QFrame;
 class QLabel;
 class QPushButton;
 class QSplitter;
-class QTreeView;
 class QPlainTextEdit;
 class ConsoleLogView;
 class DiffPane;
+class FileListView;
 class MessageEdit;
 class CLabelElided;
 class HistoryWindow;
@@ -102,7 +102,10 @@ private:
 	[[nodiscard]] SelectionByPath captureSelectionByPath() const;
 	void restoreSelectionByPath(const SelectionByPath& selection);
 
-	[[nodiscard]] std::vector<int> selectedRows() const;
+	// Copies, not references: a menu or a dialog spins an event loop, and a refresh completing in it resets the rows
+	[[nodiscard]] std::vector<FileEntry> selectedEntries() const;
+	// The row the view is on; absent when there is none
+	[[nodiscard]] std::optional<FileEntry> currentEntry() const;
 	void toggleCheckOnSelection();
 	void deleteSelection();
 	void discardSelection();
@@ -130,7 +133,7 @@ private:
 	QLabel* _detachedStrip = nullptr;
 	QCheckBox* _checkAllBox = nullptr;
 	QLabel* _lineTotalsLabel = nullptr;
-	QTreeView* _filesView = nullptr;
+	FileListView* _filesView = nullptr;
 	CLabelElided* _parentCommitLabel = nullptr;
 	MessageEdit* _messageEdit = nullptr;
 	QPushButton* _commitButton = nullptr;

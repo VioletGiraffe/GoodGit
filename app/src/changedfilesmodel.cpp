@@ -225,7 +225,7 @@ int ChangedFilesModel::rowCount(const QModelIndex& parent) const
 
 int ChangedFilesModel::columnCount(const QModelIndex& parent) const
 {
-	return parent.isValid() ? 0 : ColumnCount;
+	return parent.isValid() ? 0 : FileListColumnCount;
 }
 
 QVariant ChangedFilesModel::data(const QModelIndex& index, int role) const

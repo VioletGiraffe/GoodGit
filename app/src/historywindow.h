@@ -16,6 +16,7 @@ class QSplitter;
 class QTreeView;
 class CLabelElided;
 class DiffPane;
+class FileListView;
 
 // The commit history of one repository, read-only.
 // Owns its own Repository: a submodule's history may be opened without a CommitWindow on that submodule.
@@ -52,7 +53,9 @@ private:
 	void showFileContextMenu(const QPoint& pos);
 	void openFileHistory(const QString& filePath);
 	// A submodule row opens its own repository's history at the commit the pointer names
-	void onFileRowActivated(const QModelIndex& index);
+	void onFileRowActivated(const QModelIndex& sourceIndex);
+	// Absent when the index is not a row of the listing shown
+	[[nodiscard]] std::optional<CommitFileChange> fileEntryAt(const QModelIndex& sourceIndex) const;
 	void openSubmoduleHistory(const CommitFileChange& entry);
 	// The second phase of a cold open: the same walk at the full limit, extending the shown batch in place
 	void loadRemainingCommits();
@@ -82,7 +85,7 @@ private:
 	QSplitter* _splitter = nullptr;       // log above, the commit's detail below
 	QSplitter* _detailSplitter = nullptr; // file list beside the diff
 	QTreeView* _logView = nullptr;
-	QTreeView* _filesView = nullptr;
+	FileListView* _filesView = nullptr;
 	CLabelElided* _filePathLabel = nullptr; // shown only in a file history
 	QLabel* _countLabel = nullptr;
 	QLineEdit* _searchEdit = nullptr;

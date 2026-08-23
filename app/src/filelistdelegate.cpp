@@ -1,20 +1,16 @@
 #include "filelistdelegate.h"
-#include "changedfilesmodel.h"
-#include "historymodels.h"
+#include "changedfilesmodel.h" // for the column layout both file lists share
 #include "theme.h"
 
 #include <QPainter>
 
 #include <algorithm>
 
-static_assert(int(ChangedFilesModel::StateColumn) == int(CommitFilesModel::StateColumn),
-	"the stripe is painted on one column number for both file lists");
-
 void FileListDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const
 {
 	QStyledItemDelegate::paint(painter, option, index);
 
-	if (index.column() == ChangedFilesModel::StateColumn && option.state.testFlag(QStyle::State_Selected))
+	if (index.column() == StateColumn && option.state.testFlag(QStyle::State_Selected))
 	{
 		const Theme& t = activeTheme();
 		painter->fillRect(QRect{ option.rect.left(), option.rect.top(), t.metrics.selectionStripeWidth, option.rect.height() }, t.palette.accent);

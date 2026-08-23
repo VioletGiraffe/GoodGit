@@ -70,13 +70,12 @@ private:
 	QSet<QString> _addingOrRemovingShas;
 };
 
-// The files one commit touched. ChangedFilesModel does not fit here: its rows carry pending-commit state
-// (check boxes, submodule blocking) that a commit already made has no notion of.
+// The files one commit touched, in the shared FileListColumn layout. ChangedFilesModel does not fit here:
+// its rows carry pending-commit state (check boxes, submodule blocking) that a commit already made has no
+// notion of.
 class CommitFilesModel final : public QAbstractTableModel
 {
 public:
-	enum Column { StateColumn = 0, AddedColumn, RemovedColumn, PathColumn, ColumnCount };
-
 	explicit CommitFilesModel(QObject* parent = nullptr);
 
 	// The counts come from a separate query and may land before or after the entries, so neither setter

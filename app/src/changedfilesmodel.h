@@ -19,16 +19,17 @@
 
 [[nodiscard]] QIcon submoduleIcon();
 
-// The checkable file list. Columns: checkbox + icon + state text, lines added, lines removed, path.
+// The layout of both file lists: checkbox + icon + state text, lines added, lines removed, path.
 // The counts take a column each so that a data role can color them.
+enum FileListColumn { StateColumn = 0, AddedColumn, RemovedColumn, PathColumn, FileListColumnCount };
+
+// The checkable file list.
 // Row styling comes from the theme via item data roles; FileListDelegate paints what roles cannot express.
 class ChangedFilesModel final : public QAbstractTableModel
 {
 	Q_OBJECT
 
 public:
-	enum Column { StateColumn = 0, AddedColumn, RemovedColumn, PathColumn, ColumnCount };
-
 	explicit ChangedFilesModel(QObject* parent = nullptr);
 
 	// Rebuilds the rows. Check state is carried over by path; new rows follow the NewRowCheckPolicy setting.
