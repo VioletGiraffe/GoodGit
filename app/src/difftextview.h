@@ -22,9 +22,11 @@ class QPaintEvent;
 //   - Nothing is parsed beyond the unified format `unifieddiff` reads.
 //   - A merged line's text is in neither file, so what is copied out of one is neither version.
 //
-// Two properties the implementation rests on:
+// What the implementation rests on:
 //   - The bands are block backgrounds, which QPlainTextEdit paints to the full viewport width, so a
 //     wrapped line stays banded to its last row.
+//   - The strike through removed text is painted over the glyphs, not the font's own: a QTextCharFormat
+//     offers no color or width for one, and the font's is a hairline in the text's own color.
 //   - Numbers and formats are computed once per content, over the whole text: the text is never edited.
 class DiffTextView final : public QPlainTextEdit
 {
@@ -39,6 +41,7 @@ public:
 	void paintGutter(QPaintEvent* event);
 
 protected:
+	void paintEvent(QPaintEvent* event) override;
 	void resizeEvent(QResizeEvent* event) override;
 	void changeEvent(QEvent* event) override;
 
@@ -46,6 +49,7 @@ private:
 	enum class Content : uint8_t { Diff, FileText, Message };
 
 	void setContent(const QString& text, Content content);
+	void paintRemovedStrikes(const QRect& clip);
 	void applyDiffFormats();
 	void updateNumberWidths();
 	void updateGutterWidth();

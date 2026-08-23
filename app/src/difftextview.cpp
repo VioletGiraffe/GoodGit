@@ -8,6 +8,7 @@
 #include <QPaintEvent>
 #include <QResizeEvent>
 #include <QTextBlock>
+#include <QTextLayout>
 
 #include <algorithm>
 #include <assert.h>
@@ -16,6 +17,10 @@
 static constexpr int GutterOuterMargin = 6;
 // Between the two number columns
 static constexpr int GutterColumnGap = 8;
+
+// The strike through removed text follows the font's height, floored so it stays a line at small sizes
+static constexpr qreal StrikeThicknessDivisor = 9.0;
+static constexpr qreal MinStrikeThickness = 2.0;
 
 namespace {
 
@@ -30,6 +35,24 @@ protected:
 private:
 	DiffTextView* _view = nullptr;
 };
+
+// One span's strike, in as many pieces as a wrapped block splits it into
+void strikeSpan(QPainter& painter, const QTextLayout& layout, QPointF origin, const DiffSpan& span, qreal strikeOutPos)
+{
+	const int end = span.start + span.length;
+	for (int pos = span.start; pos < end; )
+	{
+		const QTextLine line = layout.lineForTextPosition(pos);
+		const int pieceEnd = std::min(end, line.textStart() + line.textLength());
+		if (pieceEnd <= pos)
+			break;
+
+		const qreal y = origin.y() + line.y() + line.ascent() - strikeOutPos;
+		painter.drawLine(QPointF{ origin.x() + line.cursorToX(pos), y },
+			QPointF{ origin.x() + line.cursorToX(pieceEnd), y });
+		pos = pieceEnd;
+	}
+}
 
 int digitCount(int value)
 {
@@ -151,12 +174,11 @@ void DiffTextView::applyDiffFormats()
 	addedBand.setBackground(theme.diffAddBg);
 	removedBand.setBackground(theme.diffDelBg);
 
-	// A merged line carries no band, so its spans are the only thing naming either side: they take the diff
-	// colors themselves, and the text an edit removed is struck through, which no palette is needed to read.
+	// A merged line carries no band, so its spans are the only thing naming either side, and they take the
+	// diff colors themselves. The strike over removed text is painted rather than set here, in paintRemovedStrikes.
 	QTextCharFormat removedSpan, addedSpan;
 	removedSpan.setBackground(theme.diffDelBg);
 	removedSpan.setForeground(theme.diffDelFg);
-	removedSpan.setFontStrikeOut(true);
 	addedSpan.setBackground(theme.diffAddBg);
 	addedSpan.setForeground(theme.diffAddFg);
 
@@ -250,6 +272,50 @@ void DiffTextView::updateGutterGeometry()
 {
 	const QRect rect = contentsRect();
 	_gutter->setGeometry(rect.left(), rect.top(), _gutterWidth, rect.height());
+}
+
+void DiffTextView::paintEvent(QPaintEvent* event)
+{
+	QPlainTextEdit::paintEvent(event);
+
+	paintRemovedStrikes(event->rect());
+}
+
+void DiffTextView::paintRemovedStrikes(const QRect& clip)
+{
+	if (_spans.empty())
+		return;
+
+	const QFontMetricsF metrics{ font() };
+	QPainter painter{ viewport() };
+	painter.setClipRect(clip);
+	// The color the file lists strike a deleted row with, which reads against the text it crosses
+	painter.setPen(QPen{ activeTheme().stDeleted, std::max(MinStrikeThickness, metrics.height() / StrikeThicknessDivisor) });
+
+	for (QTextBlock block = firstVisibleBlock(); block.isValid(); block = block.next())
+	{
+		const QRectF blockRect = blockBoundingGeometry(block).translated(contentOffset());
+		if (blockRect.top() > clip.bottom())
+			break;
+		if (blockRect.bottom() < clip.top())
+			continue;
+
+		auto span = std::lower_bound(_spans.begin(), _spans.end(), block.blockNumber(),
+			[](const DiffSpan& span, int line) { return span.line < line; });
+		if (span == _spans.end() || span->line != block.blockNumber())
+			continue;
+
+		// A layout places its lines from its own origin. A cursor at the start of the block says where that
+		// origin sits in the viewport, and carries none of the ambiguity a position at a wrap does.
+		const QTextLayout& layout = *block.layout();
+		const QPointF origin{ cursorRect(QTextCursor{ block }).left() - layout.lineAt(0).cursorToX(0), blockRect.top() };
+
+		for (; span != _spans.end() && span->line == block.blockNumber(); ++span)
+		{
+			if (span->removed)
+				strikeSpan(painter, layout, origin, *span, metrics.strikeOutPos());
+		}
+	}
 }
 
 void DiffTextView::resizeEvent(QResizeEvent* event)
