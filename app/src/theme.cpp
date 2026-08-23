@@ -55,6 +55,29 @@ QColor Theme::blockedRowTint() const
 	return tint;
 }
 
+namespace {
+
+// Far enough for the span to read as marked, near enough for the line's text to stay legible on it
+constexpr int EmphasisPercent = 25;
+
+QColor steppedToward(const QColor& from, const QColor& to)
+{
+	const auto step = [](int a, int b) { return a + (b - a) * EmphasisPercent / 100; };
+	return QColor{ step(from.red(), to.red()), step(from.green(), to.green()), step(from.blue(), to.blue()) };
+}
+
+} // namespace
+
+QColor Theme::diffAddEmphasisBg() const
+{
+	return steppedToward(diffAddBg, diffAddFg);
+}
+
+QColor Theme::diffDelEmphasisBg() const
+{
+	return steppedToward(diffDelBg, diffDelFg);
+}
+
 QFont monospaceFont()
 {
 	const CSettings settings;

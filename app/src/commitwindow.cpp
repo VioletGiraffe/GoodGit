@@ -1007,7 +1007,7 @@ void CommitWindow::showDiffForCurrentRow()
 	const QModelIndex current = _filesView->currentIndex();
 	if (!current.isValid() || current.row() >= _filesModel.rowCount())
 	{
-		_diffPane->showDiff({}, {}, {});
+		_diffPane->showMessage({}, {}, {});
 		return;
 	}
 
@@ -1017,12 +1017,12 @@ void CommitWindow::showDiffForCurrentRow()
 	{
 		if (!entry.pointerMoved)
 		{
-			_diffPane->showDiff(entry.path, tr("submodule"), tr("The submodule pointer has not moved, but there are uncommitted changes inside the submodule.\nDouble-click to open it."));
+			_diffPane->showMessage(entry.path, tr("submodule"), tr("The submodule pointer has not moved, but there are uncommitted changes inside the submodule.\nDouble-click to open it."));
 			return;
 		}
-		_diffPane->showDiff(entry.path, tr("new commits"), tr("Loading..."));
+		_diffPane->showMessage(entry.path, tr("new commits"), tr("Loading..."));
 		_diffQuery = _repo->submodulePointerLog(entry.path, this, [this, entry](std::expected<QString, QString> log) {
-			_diffPane->showDiff(entry.path, tr("new commits"), log ? tr("New commits in the submodule:\n\n") + *log : log.error());
+			_diffPane->showMessage(entry.path, tr("new commits"), log ? tr("New commits in the submodule:\n\n") + *log : log.error());
 		});
 		return;
 	}
@@ -1034,14 +1034,14 @@ void CommitWindow::showDiffForCurrentRow()
 	}
 
 	const QString tag = tr("HEAD %1 working tree").arg(QChar(0x2192));
-	_diffPane->showDiff(entry.path, tag, tr("Loading..."));
+	_diffPane->showMessage(entry.path, tag, tr("Loading..."));
 	_diffQuery = _repo->diffFile(entry, this, [this, entry, tag](std::expected<QByteArray, QString> diff) {
 		if (!diff)
-			_diffPane->showDiff(entry.path, {}, diff.error());
+			_diffPane->showMessage(entry.path, {}, diff.error());
 		else if (diff->size() > CSettings{}.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong())
-			_diffPane->showDiff(entry.path, {}, tr("The diff is too large to display (%1 MB).").arg(double(diff->size()) / (1024 * 1024), 0, 'f', 1));
+			_diffPane->showMessage(entry.path, {}, tr("The diff is too large to display (%1 MB).").arg(double(diff->size()) / (1024 * 1024), 0, 'f', 1));
 		else if (diff->isEmpty())
-			_diffPane->showDiff(entry.path, {}, tr("No content changes (only the mode or the line endings differ, or the file matches HEAD)."));
+			_diffPane->showMessage(entry.path, {}, tr("No content changes (only the mode or the line endings differ, or the file matches HEAD)."));
 		else
 			_diffPane->showDiff(entry.path, tag, QString::fromUtf8(*diff));
 	});
@@ -1053,27 +1053,27 @@ void CommitWindow::showFileContents(const FileEntry& entry)
 	QFile file{ absolutePath(entry) };
 	if (file.size() > CSettings{}.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong())
 	{
-		_diffPane->showDiff(entry.path, tag, tr("The file is too large to display (%1 MB).").arg(double(file.size()) / (1024 * 1024), 0, 'f', 1));
+		_diffPane->showMessage(entry.path, tag, tr("The file is too large to display (%1 MB).").arg(double(file.size()) / (1024 * 1024), 0, 'f', 1));
 		return;
 	}
 	if (!file.open(QIODevice::ReadOnly))
 	{
-		_diffPane->showDiff(entry.path, tag, tr("Could not read '%1'.").arg(QDir::toNativeSeparators(file.fileName())));
+		_diffPane->showMessage(entry.path, tag, tr("Could not read '%1'.").arg(QDir::toNativeSeparators(file.fileName())));
 		return;
 	}
 	const QByteArray contents = file.readAll();
 	if (contents.isEmpty())
 	{
-		_diffPane->showDiff(entry.path, tag, tr("The file is empty."));
+		_diffPane->showMessage(entry.path, tag, tr("The file is empty."));
 		return;
 	}
 	if (contents.left(BinarySniffBytes).contains('\0'))
 	{
-		_diffPane->showDiff(entry.path, tag, tr("Binary file (%1 bytes).").arg(contents.size()));
+		_diffPane->showMessage(entry.path, tag, tr("Binary file (%1 bytes).").arg(contents.size()));
 		return;
 	}
 
-	_diffPane->showText(entry.path, tag, QString::fromUtf8(contents));
+	_diffPane->showFileText(entry.path, tag, QString::fromUtf8(contents));
 }
 
 void CommitWindow::onRowActivated(const QModelIndex& index)

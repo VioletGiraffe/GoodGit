@@ -42,8 +42,8 @@ HEADERS += \
 	src/commitgraphdelegate.h \
 	src/commitwindow.h \
 	src/consolelogview.h \
-	src/diffhighlighter.h \
 	src/diffpane.h \
+	src/difftextview.h \
 	src/externalapps.h \
 	src/filelistdelegate.h \
 	src/gitparsers.h \
@@ -65,7 +65,9 @@ HEADERS += \
 	src/settings.h \
 	src/settingspages.h \
 	src/stylesheet.h \
+	src/textdiff.h \
 	src/theme.h \
+	src/unifieddiff.h \
 	src/vcsprocess.h \
 	src/vcstypes.h \
 	src/welcomewindow.h
@@ -76,8 +78,8 @@ SOURCES += \
 	src/commitgraphdelegate.cpp \
 	src/commitwindow.cpp \
 	src/consolelogview.cpp \
-	src/diffhighlighter.cpp \
 	src/diffpane.cpp \
+	src/difftextview.cpp \
 	src/externalapps.cpp \
 	src/filelistdelegate.cpp \
 	src/gitparsers.cpp \
@@ -97,7 +99,9 @@ SOURCES += \
 	src/repositoryfactory.cpp \
 	src/repositorywindows.cpp \
 	src/settingspages.cpp \
+	src/textdiff.cpp \
 	src/theme.cpp \
+	src/unifieddiff.cpp \
 	src/vcsprocess.cpp \
 	src/welcomewindow.cpp
 
