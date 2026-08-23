@@ -3,8 +3,10 @@
 
 #include "settingsui/csettingsdialog.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QScrollBar>
 #include <QTextCursor>
+RESTORE_COMPILER_WARNINGS
 
 ConsoleLogView::ConsoleLogView(QWidget* parent) :
 	QPlainTextEdit(parent)

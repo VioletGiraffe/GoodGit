@@ -7,6 +7,7 @@
 
 #include "dialogs/messagebox.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QApplication>
 #include <QCursor>
 #include <QDir>
@@ -17,6 +18,7 @@
 #include <QMimeData>
 #include <QPointer>
 #include <QUrl>
+RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 #include <optional>

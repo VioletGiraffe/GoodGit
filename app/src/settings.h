@@ -1,6 +1,10 @@
 #pragma once
 
+#include "compiler/compiler_warnings_control.h"
+
+DISABLE_COMPILER_WARNINGS
 #include <QtGlobal> // qlonglong
+RESTORE_COMPILER_WARNINGS
 
 // Every storage key with its default. The values are read and written through CSettings at the use sites.
 namespace Settings {

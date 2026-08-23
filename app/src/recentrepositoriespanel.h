@@ -1,7 +1,11 @@
 #pragma once
 
+#include "compiler/compiler_warnings_control.h"
+
+DISABLE_COMPILER_WARNINGS
 #include <QSet>
 #include <QTreeWidget>
+RESTORE_COMPILER_WARNINGS
 
 // The recent repositories dock: one row per repository, expanding to the subrepos its last refresh found (one level).
 // Activating a row opens that repository in its own window.

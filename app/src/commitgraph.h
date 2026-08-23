@@ -2,7 +2,9 @@
 
 #include "vcstypes.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QMetaType>
+RESTORE_COMPILER_WARNINGS
 
 #include <vector>
 

@@ -3,9 +3,11 @@
 #include "changedfilesmodel.h"
 #include "repository.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QMainWindow>
 #include <QPointer>
 #include <QSet>
+RESTORE_COMPILER_WARNINGS
 
 #include <memory>
 

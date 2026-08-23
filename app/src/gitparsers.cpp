@@ -1,6 +1,8 @@
 #include "gitparsers.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QList>
+RESTORE_COMPILER_WARNINGS
 
 namespace Git {
 

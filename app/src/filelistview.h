@@ -1,6 +1,10 @@
 #pragma once
 
+#include "compiler/compiler_warnings_control.h"
+
+DISABLE_COMPILER_WARNINGS
 #include <QTreeView>
+RESTORE_COMPILER_WARNINGS
 
 #include <vector>
 

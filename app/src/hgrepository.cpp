@@ -8,6 +8,7 @@
 
 #include "settings/csettings.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -15,6 +16,7 @@
 #include <QProcess>
 #include <QTemporaryFile>
 #include <QTimer>
+RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 #include <functional>

@@ -2,9 +2,11 @@
 
 #include "vcstypes.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QAbstractTableModel>
 #include <QColor>
 #include <QIcon>
+RESTORE_COMPILER_WARNINGS
 
 #include <functional>
 #include <vector>

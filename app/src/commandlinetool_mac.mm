@@ -2,9 +2,11 @@
 
 #include "dialogs/messagebox.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
+RESTORE_COMPILER_WARNINGS
 
 #import <Foundation/Foundation.h>
 

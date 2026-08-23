@@ -12,6 +12,7 @@
 #include "widgets/cpersistentwindow.h"
 #include "widgets/widgetutils.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QCheckBox>
@@ -28,6 +29,7 @@
 #include <QSplitter>
 #include <QTreeView>
 #include <QVBoxLayout>
+RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 

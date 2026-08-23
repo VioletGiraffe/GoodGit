@@ -2,8 +2,10 @@
 
 #include "repositoryfactory.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QObject>
 #include <QString>
+RESTORE_COMPILER_WARNINGS
 
 #include <vector>
 

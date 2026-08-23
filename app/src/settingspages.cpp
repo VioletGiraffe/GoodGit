@@ -5,6 +5,7 @@
 #include "settings/csettings.h"
 #include "theme/cthemecontroller.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDir>
@@ -15,6 +16,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSpinBox>
+RESTORE_COMPILER_WARNINGS
 
 namespace {
 

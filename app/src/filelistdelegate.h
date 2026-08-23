@@ -1,6 +1,10 @@
 #pragma once
 
+#include "compiler/compiler_warnings_control.h"
+
+DISABLE_COMPILER_WARNINGS
 #include <QStyledItemDelegate>
+RESTORE_COMPILER_WARNINGS
 
 // Paints what item data roles cannot express: the accent stripe on the selected row's left edge, and the
 // deleted-file strikethrough in the deleted-state color (a QFont strike draws in the text color, near-invisible).

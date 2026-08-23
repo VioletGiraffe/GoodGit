@@ -1,7 +1,9 @@
 #include "hgcommandserver.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QTimer>
 #include <QtEndian>
+RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 #include <assert.h>

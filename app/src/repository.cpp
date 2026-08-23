@@ -1,6 +1,8 @@
 #include "repository.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QFileInfo>
+RESTORE_COMPILER_WARNINGS
 
 #include <utility>
 

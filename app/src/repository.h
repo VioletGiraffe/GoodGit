@@ -3,8 +3,10 @@
 #include "vcsprocess.h"
 #include "vcstypes.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QObject>
 #include <QSet>
+RESTORE_COMPILER_WARNINGS
 
 #include <map>
 #include <vector>

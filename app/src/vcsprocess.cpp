@@ -1,9 +1,11 @@
 #include "vcsprocess.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QFileInfo>
 #include <QPointer>
 #include <QTemporaryFile>
+RESTORE_COMPILER_WARNINGS
 
 #include <deque>
 

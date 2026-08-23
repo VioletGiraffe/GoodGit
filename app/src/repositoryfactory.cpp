@@ -7,10 +7,12 @@
 #include "hgrepository.h"
 #include "queryround.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 

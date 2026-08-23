@@ -6,6 +6,7 @@
 #include "recentrepositoriespanel.h"
 #include "repositorywindows.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QApplication>
 #include <QFont>
 #include <QHBoxLayout>
@@ -14,6 +15,7 @@
 #include <QPushButton>
 #include <QScreen>
 #include <QVBoxLayout>
+RESTORE_COMPILER_WARNINGS
 
 namespace {
 

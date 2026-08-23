@@ -2,7 +2,9 @@
 #include "changedfilesmodel.h" // for the column layout both file lists share
 #include "theme.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QPainter>
+RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 

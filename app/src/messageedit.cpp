@@ -5,12 +5,14 @@
 #include "settings/csettings.h"
 #include "settingsui/csettingsdialog.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QAbstractItemView>
 #include <QCompleter>
 #include <QKeyEvent>
 #include <QPainter>
 #include <QScrollBar>
 #include <QStringListModel>
+RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 

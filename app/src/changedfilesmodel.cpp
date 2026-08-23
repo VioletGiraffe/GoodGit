@@ -5,9 +5,11 @@
 #include "settings/csettings.h"
 #include "settingsui/csettingsdialog.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QApplication>
 #include <QBrush>
 #include <QFont>
+RESTORE_COMPILER_WARNINGS
 
 #include <unordered_map>
 

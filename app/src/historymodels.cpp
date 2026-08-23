@@ -4,10 +4,12 @@
 
 #include "settingsui/csettingsdialog.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QApplication>
 #include <QBrush>
 #include <QDateTime>
 #include <QFont>
+RESTORE_COMPILER_WARNINGS
 
 namespace {
 

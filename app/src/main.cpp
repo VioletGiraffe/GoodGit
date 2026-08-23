@@ -3,9 +3,11 @@
 #include "repositorywindows.h"
 #include "theme.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QApplication>
 #include <QDir>
 #include <QIcon>
+RESTORE_COMPILER_WARNINGS
 
 int main(int argc, char* argv[])
 {

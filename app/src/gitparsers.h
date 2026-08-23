@@ -2,9 +2,11 @@
 
 #include "vcstypes.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QByteArray>
 #include <QString>
 #include <QStringList>
+RESTORE_COMPILER_WARNINGS
 
 #include <map>
 #include <vector>

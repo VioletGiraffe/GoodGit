@@ -1,11 +1,13 @@
 #include "hgparsers.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSet>
 #include <QTimeZone>
+RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 #include <functional>

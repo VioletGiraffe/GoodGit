@@ -2,7 +2,9 @@
 
 #include "settingsui/csettingspage.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <Qt>
+RESTORE_COMPILER_WARNINGS
 
 class QCheckBox;
 class QComboBox;

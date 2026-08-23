@@ -3,6 +3,7 @@
 
 #include "theme/cthemecontroller.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QEvent>
 #include <QPainter>
 #include <QPaintEvent>
@@ -10,6 +11,7 @@
 #include <QScrollBar>
 #include <QTextBlock>
 #include <QTextLayout>
+RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 #include <assert.h>

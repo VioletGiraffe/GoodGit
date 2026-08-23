@@ -7,6 +7,7 @@
 #include "settingsui/csettingsdialog.h"
 #include "widgets/clabelelided.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QFontMetricsF>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -14,6 +15,7 @@
 #include <QPushButton>
 #include <QSizePolicy>
 #include <QVBoxLayout>
+RESTORE_COMPILER_WARNINGS
 
 DiffPane::DiffPane(QWidget* parent) :
 	QWidget(parent)

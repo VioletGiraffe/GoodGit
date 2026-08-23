@@ -5,6 +5,7 @@
 #include "repositorywindows.h"
 #include "theme.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QFileInfo>
 #include <QHeaderView>
@@ -12,6 +13,7 @@
 #include <QPainter>
 #include <QResizeEvent>
 #include <QStyledItemDelegate>
+RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 

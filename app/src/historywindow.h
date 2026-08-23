@@ -3,7 +3,9 @@
 #include "historymodels.h"
 #include "repository.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QMainWindow>
+RESTORE_COMPILER_WARNINGS
 
 #include <memory>
 

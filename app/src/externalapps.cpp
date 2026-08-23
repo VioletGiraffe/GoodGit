@@ -4,11 +4,13 @@
 #include "dialogs/messagebox.h"
 #include "settings/csettings.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QDesktopServices>
 #include <QDir>
 #include <QFileInfo>
 #include <QProcess>
 #include <QUrl>
+RESTORE_COMPILER_WARNINGS
 
 QString openInFileManagerActionText()
 {

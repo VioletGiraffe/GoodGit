@@ -2,7 +2,9 @@
 
 #include "unifieddiff.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QPlainTextEdit>
+RESTORE_COMPILER_WARNINGS
 
 #include <vector>
 

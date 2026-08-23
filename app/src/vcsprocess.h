@@ -1,5 +1,8 @@
 #pragma once
 
+#include "compiler/compiler_warnings_control.h"
+
+DISABLE_COMPILER_WARNINGS
 #include <QByteArray>
 #include <QObject>
 #include <QPointer>
@@ -7,6 +10,7 @@
 #include <QProcessEnvironment>
 #include <QString>
 #include <QStringList>
+RESTORE_COMPILER_WARNINGS
 
 #include <expected>
 #include <functional>

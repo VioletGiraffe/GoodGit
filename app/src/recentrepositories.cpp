@@ -3,8 +3,10 @@
 
 #include "settings/csettings.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QDateTime>
 #include <QSet>
+RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 

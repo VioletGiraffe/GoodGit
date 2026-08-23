@@ -3,8 +3,10 @@
 #include "commitgraph.h"
 #include "vcstypes.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QAbstractTableModel>
 #include <QSet>
+RESTORE_COMPILER_WARNINGS
 
 #include <map>
 #include <optional>

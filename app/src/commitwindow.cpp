@@ -26,6 +26,7 @@
 #include "widgets/cpersistentwindow.h"
 #include "widgets/widgetutils.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
@@ -51,6 +52,7 @@
 #include <QTextCursor>
 #include <QUrl>
 #include <QVBoxLayout>
+RESTORE_COMPILER_WARNINGS
 
 #include <assert.h>
 

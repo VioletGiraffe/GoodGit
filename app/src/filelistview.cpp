@@ -2,11 +2,13 @@
 #include "changedfilesmodel.h" // for the column layout and the sort key both file lists share
 #include "filelistdelegate.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QHeaderView>
 #include <QItemSelectionModel>
 #include <QMouseEvent>
 #include <QSortFilterProxyModel>
 #include <QStyleOption>
+RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 #include <assert.h>

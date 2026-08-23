@@ -3,7 +3,9 @@
 
 #include "settings/csettings.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QVersionNumber>
+RESTORE_COMPILER_WARNINGS
 
 namespace {
 

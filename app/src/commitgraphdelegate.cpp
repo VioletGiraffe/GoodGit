@@ -3,7 +3,9 @@
 #include "historymodels.h"
 #include "theme.h"
 
+DISABLE_COMPILER_WARNINGS
 #include <QPainter>
+RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 
