@@ -14,7 +14,7 @@ BranchHeader parseBranchHeader(const QByteArray& statusOutput)
 		if (!line.startsWith("# branch."))
 			continue;
 
-		const int space = line.indexOf(' ', 9);
+		const qsizetype space = line.indexOf(' ', 9);
 		if (space < 0)
 			continue;
 		const QByteArray key = line.mid(9, space - 9);
@@ -234,7 +234,7 @@ QStringList parseGitlinkPaths(const QByteArray& lsFilesOutput)
 	{
 		if (!record.startsWith("160000"))
 			continue;
-		const int tab = record.indexOf('\t');
+		const qsizetype tab = record.indexOf('\t');
 		if (tab > 0)
 			paths.push_back(QString::fromUtf8(record.mid(tab + 1)));
 	}
@@ -250,7 +250,7 @@ std::vector<GitlinkEntry> parseGitlinkEntries(const QByteArray& lsTreeOutput)
 		if (!record.startsWith("160000"))
 			continue;
 
-		const int tab = record.indexOf('\t');
+		const qsizetype tab = record.indexOf('\t');
 		if (tab <= 0)
 			continue;
 
