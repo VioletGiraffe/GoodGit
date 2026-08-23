@@ -1224,8 +1224,8 @@ void CommitWindow::restoreSelectionByPath(const SelectionByPath& selection)
 			currentRow = row;
 	}
 
-	if (currentRow < 0 && _filesModel.rowCount() > 0)
-		currentRow = 0; // the file is gone: committed, or discarded elsewhere
+	if (currentRow < 0) // the file is gone: committed, or discarded elsewhere
+		currentRow = _filesView->firstShownSourceIndex().row();
 
 	_filesView->setSelectedSourceRows(rows, currentRow);
 }

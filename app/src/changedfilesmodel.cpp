@@ -55,6 +55,22 @@ QColor changeTypeColor(ChangeType type)
 	return {};
 }
 
+int changeTypeRank(ChangeType type)
+{
+	// What blocks or needs attention first, the ordinary edits next, what is not tracked last
+	switch (type)
+	{
+	case ChangeType::Conflicted:  return 0;
+	case ChangeType::Modified:    return 1;
+	case ChangeType::Added:       return 2;
+	case ChangeType::Renamed:     return 3;
+	case ChangeType::TypeChanged: return 4;
+	case ChangeType::Deleted:     return 5;
+	case ChangeType::Untracked:   return 6;
+	}
+	return {};
+}
+
 QString lineCountText(const std::optional<LineCounts>& counts, bool added)
 {
 	if (!counts)
@@ -66,6 +82,19 @@ QColor lineCountColor(bool added)
 {
 	const Theme& t = activeTheme();
 	return added ? t.stAdded : t.stDeleted;
+}
+
+QVariant fileListHeaderData(int section, Qt::Orientation orientation, int role)
+{
+	if (orientation != Qt::Horizontal || role != Qt::DisplayRole)
+		return {};
+
+	switch (section)
+	{
+	case StateColumn: return QObject::tr("Status");
+	case PathColumn:  return QObject::tr("Path");
+	}
+	return {}; // the count columns carry no heading: the signs are in the counts, and neither column sorts
 }
 
 ChangedFilesModel::ChangedFilesModel(QObject* parent) :
@@ -283,6 +312,10 @@ QVariant ChangedFilesModel::data(const QModelIndex& index, int role) const
 		if (entry.isSubmodule && entry.contentBlocksPointer())
 			return QBrush{ activeTheme().blockedRowTint() };
 		return {};
+	case SortRankRole:
+		return entry.isSubmodule && entry.contentBlocksPointer() ? BlockedSubmoduleRank : changeTypeRank(entry.type);
+	case SortPathRole:
+		return entry.path;
 	case Qt::ToolTipRole:
 		if (!entry.isSubmodule)
 			return pathText(entry);
@@ -295,6 +328,11 @@ QVariant ChangedFilesModel::data(const QModelIndex& index, int role) const
 	default:
 		return {};
 	}
+}
+
+QVariant ChangedFilesModel::headerData(int section, Qt::Orientation orientation, int role) const
+{
+	return fileListHeaderData(section, orientation, role);
 }
 
 bool ChangedFilesModel::setData(const QModelIndex& index, const QVariant& value, int role)

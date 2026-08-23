@@ -65,9 +65,9 @@ ships with hg but is off by default, so the command enables it for itself.
 | `gitparsers` | Parsers for the git outputs the app consumes. UI- and process-free, so they can be tested directly |
 | `gitrepository` | The git backend: every `Repository` operation as `git` subprocesses plus parsing |
 | `hgprocess`, `hgparsers`, `hgrepository` | The same three for Mercurial. The parsers read `-T json` throughout, so nothing needs unquoting or positional pairing |
-| `changedfilesmodel` | The checkable file list, and the column layout both file lists share; row styling comes from the theme as item data roles |
+| `changedfilesmodel` | The checkable file list, and the column layout and status ranking both file lists share; row styling comes from the theme as item data roles |
 | `filelistdelegate` | Paints what item roles cannot express: the recolored deleted strikethrough and the selected-row accent stripe. Shared by both file lists |
-| `filelistview` | The file list widget both windows show: the column sizing and delegate they share. Answers and takes indexes in the model's coordinates, so no window handles the view's own row order |
+| `filelistview` | The file list widget both windows show: the column sizing and delegate they share, and the sort proxy its clickable header drives - status rank then path, or path alone. Answers and takes indexes in the source model's coordinates, so no window handles the shown order |
 | `theme` | The selectable themes and the stylesheet built from them, on qtutils' theming framework (`CThemeController` persists the scheme and per-polarity theme choice; `themeicon:/` serves runtime-tinted QSS glyphs). Reapplied live on any change; the system scheme is followed unless overridden |
 | `commitwindow` | One window = one repository. Owns a `Repository` and every user flow, and hosts the recent repositories dock. A submodule row opens another `CommitWindow` on the submodule; its `committed()` signal refreshes the parent. An unsent message survives the window closing and comes back on the next open while HEAD still points where it did |
 | `historywindow`, `historymodels` | The read-only commit history: log above, the selected commit's file list beside that file's diff. Narrowed to one path it is a file history. Owns its own `Repository`, so a submodule's history opens without a `CommitWindow` on that submodule |

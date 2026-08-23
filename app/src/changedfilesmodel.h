@@ -12,6 +12,10 @@
 // Shared with the history window's file list, so a row looks the same in both
 [[nodiscard]] QString changeTypeText(ChangeType type);
 [[nodiscard]] QColor changeTypeColor(ChangeType type);
+// Where a change type sorts when the list is ordered by status: lower first
+[[nodiscard]] int changeTypeRank(ChangeType type);
+// A submodule whose content blocks its pointer sorts ahead of every change type: it stops the commit
+inline constexpr int BlockedSubmoduleRank = -1;
 
 // For the two line-count columns; a file without counts gets an empty cell rather than a zero
 [[nodiscard]] QString lineCountText(const std::optional<LineCounts>& counts, bool added);
@@ -22,6 +26,13 @@
 // The layout of both file lists: checkbox + icon + state text, lines added, lines removed, path.
 // The counts take a column each so that a data role can color them.
 enum FileListColumn { StateColumn = 0, AddedColumn, RemovedColumn, PathColumn, FileListColumnCount };
+
+// The sort keys, each a property of the row rather than of one column: the sort proxy orders by these,
+// not by the text the columns show
+enum FileListRole { SortRankRole = Qt::UserRole, SortPathRole };
+
+// The headings both lists show, so their columns read the same
+[[nodiscard]] QVariant fileListHeaderData(int section, Qt::Orientation orientation, int role);
 
 // The checkable file list.
 // Row styling comes from the theme via item data roles; FileListDelegate paints what roles cannot express.
@@ -58,6 +69,7 @@ public:
 	int rowCount(const QModelIndex& parent = {}) const override;
 	int columnCount(const QModelIndex& parent = {}) const override;
 	QVariant data(const QModelIndex& index, int role) const override;
+	QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
 	bool setData(const QModelIndex& index, const QVariant& value, int role) override;
 	Qt::ItemFlags flags(const QModelIndex& index) const override;
 

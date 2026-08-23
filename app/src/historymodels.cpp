@@ -430,9 +430,18 @@ QVariant CommitFilesModel::data(const QModelIndex& index, int role) const
 			return font;
 		}
 		return monospaceFont(); // the counts line up down the column
+	case SortRankRole:
+		return changeTypeRank(entry.type);
+	case SortPathRole:
+		return entry.path;
 	case Qt::ToolTipRole:
 		return pathText(entry);
 	default:
 		return {};
 	}
+}
+
+QVariant CommitFilesModel::headerData(int section, Qt::Orientation orientation, int role) const
+{
+	return fileListHeaderData(section, orientation, role);
 }
