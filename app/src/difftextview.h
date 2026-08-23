@@ -37,6 +37,22 @@ public:
 	void showFileText(const QString& text);
 	void showMessage(const QString& text);
 
+	// Where the view sits among the hunks of the diff it shows. No hunks for anything but a diff, nor for a
+	// diff holding none - a binary file's, or one that is headers alone.
+	struct HunkPosition
+	{
+		int count = 0;
+		int current = 0; // 1-based, 0 only where there are no hunks
+		bool hasPrevious = false;
+		bool hasNext = false;
+	};
+	[[nodiscard]] HunkPosition hunkPosition() const;
+
+	// Brings the hunk before or after the one at the top of the viewport to the top. Does nothing where the
+	// matching flag of hunkPosition() is false.
+	void goToPreviousHunk();
+	void goToNextHunk();
+
 	// Called by the gutter widget, which owns nothing but its paint event
 	void paintGutter(QPaintEvent* event);
 
@@ -50,6 +66,7 @@ private:
 
 	void setContent(const QString& text, Content content);
 	void paintRemovedStrikes(const QRect& clip);
+	void scrollLineToTop(int line);
 	void applyDiffFormats();
 	void updateNumberWidths();
 	void updateGutterWidth();
@@ -58,6 +75,7 @@ private:
 private:
 	std::vector<DiffLine> _lines;       // one per block of the document, empty for a message
 	std::vector<DiffSpan> _spans;       // ascending by line, so the formatting pass walks it in step
+	std::vector<int> _hunkLines;        // the line each hunk header is on, ascending
 	Content _content = Content::Message;
 	int _maxOldLine = 0; // the widest number each column has to fit
 	int _maxNewLine = 0;

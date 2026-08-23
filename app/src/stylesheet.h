@@ -61,7 +61,7 @@ QPushButton:hover { background: @buttonHover@; }
 QPushButton:pressed { background: @buttonPressed@; }
 QPushButton:disabled { background: @surfaceAlt@; color: @textDim@; }
 QFrame#repoBar QPushButton, QFrame#counterBar QPushButton, QFrame#pushLogHeader QPushButton,
-QFrame#dockHeader QPushButton { padding: 3px 9px; }
+QFrame#dockHeader QPushButton, QFrame#diffHeader QPushButton { padding: 3px 9px; }
 QPushButton#commitButton, QPushButton#commitPushButton { padding: 8px 14px; }
 QPushButton#commitButton { background: @accent@; color: @accentFg@; border-color: @accent@; font-weight: 600; }
 QPushButton#commitButton:hover { background: @accentHover@; }

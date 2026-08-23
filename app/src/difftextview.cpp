@@ -7,6 +7,7 @@
 #include <QPainter>
 #include <QPaintEvent>
 #include <QResizeEvent>
+#include <QScrollBar>
 #include <QTextBlock>
 #include <QTextLayout>
 
@@ -115,6 +116,7 @@ void DiffTextView::setContent(const QString& text, Content content)
 	// Cleared before the text changes, so a paint arriving in between indexes nothing
 	_lines.clear();
 	_spans.clear();
+	_hunkLines.clear();
 	_maxOldLine = 0;
 	_maxNewLine = 0;
 
@@ -125,10 +127,13 @@ void DiffTextView::setContent(const QString& text, Content content)
 		setPlainText(parsed.text);
 		_lines = std::move(parsed.lines);
 		_spans = std::move(parsed.spans);
-		for (const DiffLine& line : _lines)
+		for (int index = 0, count = int(_lines.size()); index < count; ++index)
 		{
+			const DiffLine& line = _lines[size_t(index)];
 			_maxOldLine = std::max(_maxOldLine, line.oldLine);
 			_maxNewLine = std::max(_maxNewLine, line.newLine);
+			if (line.kind == DiffLineKind::HunkHeader)
+				_hunkLines.push_back(index);
 		}
 	}
 	else
@@ -155,6 +160,49 @@ void DiffTextView::setContent(const QString& text, Content content)
 	updateNumberWidths();
 	updateGutterWidth();
 	_gutter->update();
+}
+
+DiffTextView::HunkPosition DiffTextView::hunkPosition() const
+{
+	HunkPosition position;
+	position.count = int(_hunkLines.size());
+	if (position.count == 0)
+		return position;
+
+	const int topLine = firstVisibleBlock().blockNumber();
+	const auto begun = std::upper_bound(_hunkLines.begin(), _hunkLines.end(), topLine);
+	const auto passed = std::lower_bound(_hunkLines.begin(), _hunkLines.end(), topLine);
+
+	// The hunk being read is the last one begun at or above the top of the viewport. Above the first of
+	// them stands only the file's own header, which belongs with the hunk it introduces.
+	position.current = std::max(1, int(begun - _hunkLines.begin()));
+	position.hasPrevious = passed != _hunkLines.begin();
+	// A hunk already as high as the viewport can bring it is not one to go to: a diff shorter than the
+	// viewport holds hunks below the top line that no scrolling will reach.
+	position.hasNext = begun != _hunkLines.end() && verticalScrollBar()->value() < verticalScrollBar()->maximum();
+	return position;
+}
+
+void DiffTextView::goToPreviousHunk()
+{
+	const auto passed = std::lower_bound(_hunkLines.begin(), _hunkLines.end(), firstVisibleBlock().blockNumber());
+	if (passed != _hunkLines.begin())
+		scrollLineToTop(*std::prev(passed));
+}
+
+void DiffTextView::goToNextHunk()
+{
+	const auto begun = std::upper_bound(_hunkLines.begin(), _hunkLines.end(), firstVisibleBlock().blockNumber());
+	if (begun != _hunkLines.end())
+		scrollLineToTop(*begun);
+}
+
+// A cursor is scrolled to by the least the viewport can move, so one reached from the bottom lands at the top
+void DiffTextView::scrollLineToTop(int line)
+{
+	verticalScrollBar()->setValue(verticalScrollBar()->maximum());
+	setTextCursor(QTextCursor{ document()->findBlockByNumber(line) });
+	ensureCursorVisible();
 }
 
 void DiffTextView::applyDiffFormats()

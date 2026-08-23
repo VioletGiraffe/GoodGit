@@ -4,6 +4,7 @@
 #include <QWidget>
 
 class QLabel;
+class QPushButton;
 class CLabelElided;
 class DiffTextView;
 
@@ -24,9 +25,16 @@ public:
 
 private:
 	void setHeader(const QString& pathLabel, const QString& tag);
+	[[nodiscard]] QWidget* buildHunkNavigator();
+	// Follows the view's scrolling as well as its content: the hunk named is the one at the top of it
+	void updateHunkNavigator();
 
 private:
 	CLabelElided* _pathLabel = nullptr;
 	QLabel* _tagLabel = nullptr;
+	QWidget* _hunkNavigator = nullptr; // hidden whole where the content holds no hunk
+	QLabel* _hunkLabel = nullptr;
+	QPushButton* _previousHunkButton = nullptr;
+	QPushButton* _nextHunkButton = nullptr;
 	DiffTextView* _view = nullptr;
 };
