@@ -571,7 +571,7 @@ void CommitWindow::updateHeader()
 	_aheadLabel->setToolTip(unpushedTooltip);
 
 	const QString parentSubject = subjectOrPlaceholder(state.headSubject);
-	_parentCommitLabel->setText(state.unborn ? QString{} : tr("Parent commit: %1").arg(parentSubject));
+	_parentCommitLabel->setText(state.unborn ? QString{} : tr("Parent: %1").arg(parentSubject));
 	_parentCommitLabel->setToolTip(state.unborn ? QString{} : QStringLiteral("%1 %2").arg(shortHeadSha, parentSubject));
 
 	setWindowTitle(QStringLiteral("%1 [%2] - GoodGit").arg(_repo->name(), state.detached ? QStringLiteral("detached") : state.branch));
