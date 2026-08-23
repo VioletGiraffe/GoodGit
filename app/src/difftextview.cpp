@@ -158,6 +158,11 @@ void DiffTextView::setContent(const QString& text, Content content)
 
 	assert(content == Content::Message ? _lines.empty() : _lines.size() == size_t(document()->blockCount()));
 
+	// setPlainText seeds the whole text with the char format at the caret: a line applyDiffFormats leaves alone would keep it
+	QTextCursor cursor{ document() };
+	cursor.select(QTextCursor::Document);
+	cursor.setCharFormat(QTextCharFormat{});
+
 	applyDiffFormats();
 	updateNumberWidths();
 	updateGutterWidth();
