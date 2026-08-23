@@ -6,7 +6,7 @@ TEMPLATE = app
 TARGET   = gg
 macx:QMAKE_APPLICATION_BUNDLE_NAME = GoodGit   # the .app bundle is what the user sees on macOS; the binary inside it stays gg
 macx:QMAKE_INFO_PLIST = res/Info.plist   # qmake generates a plist with no CFBundleName and no version keys
-VERSION  = 1.0.0 # embedded in the exe's version resource; the installer reads its version from there
+VERSION  = 1.1.0
 DEFINES += GG_VERSION=\\\"$$VERSION\\\"
 
 include(../global.pri)
