@@ -20,6 +20,8 @@ OutputBaseFilename={#MyAppName}
 
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+; 10.0.17763 is 1809, the oldest Windows that Qt 6.8 supports
+MinVersion=10.0.17763
 WizardStyle=modern
 UninstallDisplayIcon={app}\{#MyAppExeName}
 SetupIconFile=app\res\goodgit.ico
