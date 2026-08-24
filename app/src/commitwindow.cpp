@@ -162,9 +162,9 @@ QStringList completionWordsFor(const std::vector<FileEntry>& files, QByteArray d
 }
 
 template <class F>
-inline void delayIfNecessary(F&& f) noexcept {
+inline void delayIfNecessary([[maybe_unused]] QObject* context, F&& f) noexcept {
 #ifdef __linux__
-	QTimer::singleShot(75, std::forward<F>(f));
+	QTimer::singleShot(75, context, std::forward<F>(f));
 #else
 	f();
 #endif
@@ -521,8 +521,8 @@ void CommitWindow::onRefreshed()
 
 	if (_initialWidthPending)
 	{
-		delayIfNecessary([this] {
-			_initialWidthPending = false;
+		_initialWidthPending = false;
+		delayIfNecessary(this, [this] {
 			fitInitialWidthToLeftPane();
 		});
 	}
