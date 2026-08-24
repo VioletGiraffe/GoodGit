@@ -54,13 +54,15 @@ DISABLE_COMPILER_WARNINGS
 #include <QVBoxLayout>
 RESTORE_COMPILER_WARNINGS
 
+#include <algorithm>
 #include <assert.h>
 
 namespace {
 
 constexpr int RecentRepositoriesDockWidth = 175; // first-run default; persists with the window state
-constexpr int SplitterWidth = 1180;  // first-run width of the two panes together
-constexpr int LeftColumnWidth = 520; // first-run default; persists with the splitter
+constexpr int SplitterWidth = 1180; // first-run width of the two panes together
+// The left pane's preferred width follows the repository and branch names, which are unbounded
+constexpr int MaxInitialLeftPanePercent = 40;
 constexpr qsizetype BinarySniffBytes = 8000; // git's own threshold: a NUL this early means the file is not text
 constexpr int MaxListedPathsInDialog = 20;
 constexpr int MaxIncomingCommits = 200; // a peek, not a history window
@@ -359,7 +361,7 @@ void CommitWindow::buildUi()
 	if (const QByteArray state = CSettings{}.value(Settings::CommitWindowSplitterKey).toByteArray(); !state.isEmpty())
 		_splitter->restoreState(state);
 	else
-		_splitter->setSizes({ LeftColumnWidth, SplitterWidth - LeftColumnWidth });
+		_initialLeftPaneWidthPending = true;
 	setCentralWidget(_splitter);
 	resize(SplitterWidth + RecentRepositoriesDockWidth, 740); // the dock is beside the two panes, not carved out of them
 	acceptRepositoryFolderDrops(this);
@@ -505,6 +507,12 @@ void CommitWindow::onRefreshed()
 	updateStrips();
 	updateControlStates();
 
+	if (_initialLeftPaneWidthPending)
+	{
+		_initialLeftPaneWidthPending = false;
+		setInitialLeftPaneWidth();
+	}
+
 	restoreSelectionByPath(selection);
 	// Even if the current row did not move: the list may have emptied, or the content changed underneath
 	showDiffForCurrentRow();
@@ -520,6 +528,14 @@ void CommitWindow::onRefreshed()
 	_wordPoolQuery = _repo->diffAllChanges(this, [this](std::expected<QByteArray, QString> diff) {
 		_messageEdit->setCompletionWords(completionWordsFor(_repo->files(), std::move(diff).value_or(QByteArray{})));
 	});
+}
+
+void CommitWindow::setInitialLeftPaneWidth()
+{
+	const QWidget* leftPane = _splitter->widget(0);
+	const int available = _splitter->width() - _splitter->handleWidth();
+	const int width = std::min(leftPane->sizeHint().width(), available * MaxInitialLeftPanePercent / 100);
+	_splitter->setSizes({ width, available - width });
 }
 
 void CommitWindow::updateHeader()

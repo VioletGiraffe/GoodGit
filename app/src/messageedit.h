@@ -18,6 +18,9 @@ public:
 
 	void setCompletionWords(QStringList words); // sorted internally
 
+	// Wide enough for the subject guide column, which the base's font-independent placeholder hint ignores
+	[[nodiscard]] QSize sizeHint() const override;
+
 protected:
 	void paintEvent(QPaintEvent* event) override;
 	void keyPressEvent(QKeyEvent* event) override;

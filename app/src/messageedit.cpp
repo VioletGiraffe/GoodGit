@@ -16,6 +16,17 @@ RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 
+namespace {
+
+constexpr int ColumnsPastGuide = 4; // the guide marks a limit to overrun, not the edge of the editor
+
+int subjectGuideColumn()
+{
+	return CSettings{}.value(Settings::SubjectGuideColumnKey, Settings::SubjectGuideColumnDefault).toInt();
+}
+
+}
+
 MessageEdit::MessageEdit(QWidget* parent) :
 	QPlainTextEdit(parent)
 {
@@ -34,6 +45,14 @@ MessageEdit::MessageEdit(QWidget* parent) :
 
 	// Installed after QCompleter's own popup filter, so ours runs first: Tab accepts, Enter stays a newline
 	_completer->popup()->installEventFilter(this);
+}
+
+QSize MessageEdit::sizeHint() const
+{
+	const qreal textWidth = fontMetrics().horizontalAdvance(QLatin1Char('x')) * (subjectGuideColumn() + ColumnsPastGuide)
+		+ 2 * document()->documentMargin();
+	// The scrollbar's width is counted in: the box has a fixed height a message routinely outgrows
+	return { qRound(textWidth) + 2 * frameWidth() + verticalScrollBar()->sizeHint().width(), QPlainTextEdit::sizeHint().height() };
 }
 
 void MessageEdit::setCompletionWords(QStringList words)
@@ -145,8 +164,7 @@ void MessageEdit::paintEvent(QPaintEvent* event)
 	QPlainTextEdit::paintEvent(event);
 
 	const qreal x = contentOffset().x() + document()->documentMargin()
-		+ fontMetrics().horizontalAdvance(QLatin1Char('x'))
-			* CSettings{}.value(Settings::SubjectGuideColumnKey, Settings::SubjectGuideColumnDefault).toInt();
+		+ fontMetrics().horizontalAdvance(QLatin1Char('x')) * subjectGuideColumn();
 	if (x >= viewport()->width())
 		return;
 
