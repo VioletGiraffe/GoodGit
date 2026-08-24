@@ -521,7 +521,7 @@ void CommitWindow::onRefreshed()
 
 	const RepoState& state = _repo->state();
 	_filesModel.setEntries(_repo->files(), state.operationInProgress());
-	RecentRepositories::setSubrepos(*_repo); // the only place the recent list learns a repository's subrepos
+	RecentRepositories::setSubmodules(*_repo); // the only place the recent list learns a repository's submodules
 
 	updateHeader();
 	updateStrips();

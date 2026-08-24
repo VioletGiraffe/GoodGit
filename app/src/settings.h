@@ -64,8 +64,8 @@ inline constexpr const char* RecentRepositoryRootKey = "root";
 inline constexpr const char* RecentRepositoryKindKey = "kind";
 inline constexpr const char* RecentRepositoryLastUsedKey = "lastUsed";
 // Two parallel lists
-inline constexpr const char* RecentRepositorySubrepoPathsKey = "subrepoPaths";
-inline constexpr const char* RecentRepositorySubrepoKindsKey = "subrepoKinds";
+inline constexpr const char* RecentRepositorySubmodulePathsKey = "submodulePaths";
+inline constexpr const char* RecentRepositorySubmoduleKindsKey = "submoduleKinds";
 inline constexpr const char* VcsKindGit = "git";
 inline constexpr const char* VcsKindMercurial = "hg";
 

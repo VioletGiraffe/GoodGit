@@ -14,14 +14,15 @@ RESTORE_COMPILER_WARNINGS
 
 enum class VcsKind : uint8_t { Git, Mercurial };
 
-// One subrepo of a repository: a git submodule, a Mercurial subrepo. The kind need not be the parent's - a
-// git subrepo may sit inside a Mercurial repository.
-struct Subrepo
+// One repository nested in another: a git submodule, or a Mercurial subrepository. Git's word is used for
+// both, as for every concept the two systems share; hg's survives only in the .hgsub parsers.
+// The kind need not be the parent's - a git submodule may sit inside a Mercurial repository.
+struct Submodule
 {
 	QString path; // relative to the repository that holds it
 	VcsKind kind;
 
-	[[nodiscard]] bool operator==(const Subrepo&) const = default;
+	[[nodiscard]] bool operator==(const Submodule&) const = default;
 };
 
 enum class ChangeType : uint8_t { Modified, Added, Untracked, Deleted, Renamed, TypeChanged, Conflicted };
@@ -109,7 +110,7 @@ struct RepoState
 	// Subjects of the commits the upstream has not seen, newest first; capped, `ahead` holds the true count
 	QStringList unpushedSubjects;
 
-	// Every subrepo this repository declares, repo-relative and in path order - not only the ones with a
+	// Every submodule this repository declares, repo-relative and in path order - not only the ones with a
 	// file list row. Their kind is the backend's to answer, through submoduleLocation().
 	QStringList submodules;
 

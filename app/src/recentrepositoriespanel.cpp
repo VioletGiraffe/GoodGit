@@ -21,7 +21,7 @@ namespace {
 
 enum ItemRole
 {
-	RootRole = Qt::UserRole, // absolute for subrepo rows too
+	RootRole = Qt::UserRole, // absolute for submodule rows too
 	PathRole,          // the line under the name, in native separators; empty where the name says it all
 	BadgeRole,         // the kind, where worth showing; empty otherwise
 	InvertedBadgeRole, // the badge is filled with its text colour instead of outlined
@@ -68,7 +68,7 @@ constexpr int MinimumTextWidth = 40;
 	return { path.left(split + 1), metrics.elidedText(path.mid(split + 1), Qt::ElideMiddle, width) };
 }
 
-// Two-line rows, a subrepo icon and a kind badge: none of which item roles can express
+// Two-line rows, a submodule icon and a kind badge: none of which item roles can express
 class RecentRepositoryDelegate final : public QStyledItemDelegate
 {
 public:
@@ -95,12 +95,12 @@ public:
 			painter->fillRect(QRect{ option.rect.left(), option.rect.top(), theme.metrics.selectionStripeWidth, option.rect.height() },
 				theme.palette.accent);
 
-		const bool subrepo = index.parent().isValid();
+		const bool submodule = index.parent().isValid();
 		const QFontMetrics nameMetrics{ option.font };
 		int x = option.rect.left() + HorizontalPadding;
 		int y = option.rect.top() + VerticalPadding;
 
-		if (subrepo)
+		if (submodule)
 		{
 			const QRect iconRect{ x, y + (nameMetrics.height() - IconSize) / 2, IconSize, IconSize };
 			submoduleIcon().paint(painter, iconRect);
@@ -179,9 +179,9 @@ private:
 	// asked for. Painting uses the same width, so both agree.
 	[[nodiscard]] int textWidth(const QModelIndex& index) const
 	{
-		const bool subrepo = index.parent().isValid();
-		const int indent = _view->indentation() * (subrepo ? 2 : 1);
-		const int icon = subrepo ? IconSize + IconSpacing : 0;
+		const bool submodule = index.parent().isValid();
+		const int indent = _view->indentation() * (submodule ? 2 : 1);
+		const int icon = submodule ? IconSize + IconSpacing : 0;
 		return std::max(MinimumTextWidth, _view->viewport()->width() - indent - icon - 2 * HorizontalPadding);
 	}
 
@@ -247,20 +247,20 @@ void RecentRepositoriesPanel::rebuild()
 		item->setData(0, CurrentRole, sameRepositoryPath(repository.root, _currentRoot));
 		item->setToolTip(0, QDir::toNativeSeparators(repository.root));
 
-		for (const Subrepo& subrepo : repository.subrepos)
+		for (const Submodule& submodule : repository.submodules)
 		{
-			const QString root = repository.root + QLatin1Char('/') + subrepo.path;
-			const QString name = subrepo.path.section(QLatin1Char('/'), -1);
+			const QString root = repository.root + QLatin1Char('/') + submodule.path;
+			const QString name = submodule.path.section(QLatin1Char('/'), -1);
 
-			auto* subrepoItem = new QTreeWidgetItem{ item };
-			subrepoItem->setText(0, name);
-			subrepoItem->setData(0, RootRole, root);
-			// Only shown for a subrepo deeper than the parent's root directory
-			subrepoItem->setData(0, PathRole, name == subrepo.path ? QString{} : QDir::toNativeSeparators(subrepo.path));
-			if (subrepo.kind != repository.kind) // only shown where the kind differs from the parent's
-				setBadge(subrepoItem, subrepo.kind);
-			subrepoItem->setData(0, CurrentRole, sameRepositoryPath(root, _currentRoot));
-			subrepoItem->setToolTip(0, QDir::toNativeSeparators(root));
+			auto* submoduleItem = new QTreeWidgetItem{ item };
+			submoduleItem->setText(0, name);
+			submoduleItem->setData(0, RootRole, root);
+			// Only shown for a submodule deeper than the parent's root directory
+			submoduleItem->setData(0, PathRole, name == submodule.path ? QString{} : QDir::toNativeSeparators(submodule.path));
+			if (submodule.kind != repository.kind) // only shown where the kind differs from the parent's
+				setBadge(submoduleItem, submodule.kind);
+			submoduleItem->setData(0, CurrentRole, sameRepositoryPath(root, _currentRoot));
+			submoduleItem->setToolTip(0, QDir::toNativeSeparators(root));
 		}
 	}
 
@@ -310,20 +310,20 @@ void RecentRepositoriesPanel::applyFilter()
 	for (int i = 0; i < topLevelItemCount(); ++i)
 	{
 		QTreeWidgetItem* item = topLevelItem(i);
-		// A repository that matches brings its subrepos with it: they are part of what was matched
+		// A repository that matches brings its submodules with it: they are part of what was matched
 		const bool repositoryMatches = matchesFilter(item);
 
-		int shownSubrepos = 0;
+		int shownSubmodules = 0;
 		for (int child = 0; child < item->childCount(); ++child)
 		{
 			const bool show = repositoryMatches || matchesFilter(item->child(child));
 			item->child(child)->setHidden(!show);
-			shownSubrepos += show ? 1 : 0;
+			shownSubmodules += show ? 1 : 0;
 		}
 
-		item->setHidden(!repositoryMatches && shownSubrepos == 0);
+		item->setHidden(!repositoryMatches && shownSubmodules == 0);
 		// A match inside a repository has to be unfolded to be seen; one on the repository itself does not
-		const bool matchIsInside = !repositoryMatches && shownSubrepos > 0;
+		const bool matchIsInside = !repositoryMatches && shownSubmodules > 0;
 		item->setExpanded(matchIsInside || _expandedRoots.contains(rootOf(item)));
 	}
 }
@@ -348,7 +348,7 @@ void RecentRepositoriesPanel::openRepository(const QString& root, const QString&
 	if (!window)
 		return;
 
-	// A commit in the subrepo moves the pointer row in the parent
+	// A commit in the submodule moves the pointer row in the parent
 	if (CommitWindow* parentWindow = repositoryWindow(parentRoot))
 		connect(window, &CommitWindow::committed, parentWindow, &CommitWindow::refreshRepository, Qt::UniqueConnection);
 }
@@ -366,12 +366,12 @@ void RecentRepositoriesPanel::showContextMenu(const QPoint& pos)
 	QMenu menu{ this };
 	menu.addAction(tr("&Open"), this, [this, root, parentRoot] { openRepository(root, parentRoot); });
 	menu.addAction(openInFileManagerActionText(), this, [root] { openInFileManager(root); });
-	if (parentRoot.isEmpty()) // a subrepo has no rows under it, and only its parent is listed
+	if (parentRoot.isEmpty()) // a submodule has no rows under it, and only its parent is listed
 	{
 		if (item->childCount() > 0)
 		{
 			const bool expanded = item->isExpanded();
-			menu.addAction(expanded ? tr("&Hide subrepos") : tr("&Show subrepos"), this,
+			menu.addAction(expanded ? tr("&Hide submodules") : tr("&Show submodules"), this,
 				[this, root, expanded] { setRepositoryExpanded(root, !expanded); });
 		}
 		menu.addAction(tr("&Remove from list"), this, [root] { RecentRepositories::forget(root); });

@@ -34,15 +34,15 @@ void sortByLastUsed(std::vector<RecentRepository>& repositories)
 	return text == QLatin1String(Settings::VcsKindMercurial) ? VcsKind::Mercurial : VcsKind::Git;
 }
 
-[[nodiscard]] QString subrepoRoot(const RecentRepository& repository, const Subrepo& subrepo)
+[[nodiscard]] QString submoduleRoot(const RecentRepository& repository, const Submodule& submodule)
 {
-	return repository.root + QLatin1Char('/') + subrepo.path;
+	return repository.root + QLatin1Char('/') + submodule.path;
 }
 
-[[nodiscard]] bool holdsSubrepoAt(const RecentRepository& repository, const QString& root)
+[[nodiscard]] bool holdsSubmoduleAt(const RecentRepository& repository, const QString& root)
 {
-	return std::ranges::any_of(repository.subrepos,
-		[&](const Subrepo& subrepo) { return sameRepositoryPath(subrepoRoot(repository, subrepo), root); });
+	return std::ranges::any_of(repository.submodules,
+		[&](const Submodule& submodule) { return sameRepositoryPath(submoduleRoot(repository, submodule), root); });
 }
 
 void save(const std::vector<RecentRepository>& repositories)
@@ -61,13 +61,13 @@ void save(const std::vector<RecentRepository>& repositories)
 		settings.setValue(QLatin1String(Settings::RecentRepositoryLastUsedKey), qint64(repository.lastUsedMSecs));
 
 		QStringList paths, kinds;
-		for (const Subrepo& subrepo : repository.subrepos)
+		for (const Submodule& submodule : repository.submodules)
 		{
-			paths << subrepo.path;
-			kinds << kindText(subrepo.kind);
+			paths << submodule.path;
+			kinds << kindText(submodule.kind);
 		}
-		settings.setValue(QLatin1String(Settings::RecentRepositorySubrepoPathsKey), paths);
-		settings.setValue(QLatin1String(Settings::RecentRepositorySubrepoKindsKey), kinds);
+		settings.setValue(QLatin1String(Settings::RecentRepositorySubmodulePathsKey), paths);
+		settings.setValue(QLatin1String(Settings::RecentRepositorySubmoduleKindsKey), kinds);
 	}
 	settings.endArray();
 
@@ -97,13 +97,13 @@ std::vector<RecentRepository> list()
 		// Absent before the field existed, and 0 is exactly what such an entry should sort by
 		repository.lastUsedMSecs = settings.value(QLatin1String(Settings::RecentRepositoryLastUsedKey)).toLongLong();
 
-		const QStringList paths = settings.value(QLatin1String(Settings::RecentRepositorySubrepoPathsKey)).toStringList();
-		const QStringList kinds = settings.value(QLatin1String(Settings::RecentRepositorySubrepoKindsKey)).toStringList();
-		for (qsizetype subrepo = 0; subrepo < paths.size(); ++subrepo)
+		const QStringList paths = settings.value(QLatin1String(Settings::RecentRepositorySubmodulePathsKey)).toStringList();
+		const QStringList kinds = settings.value(QLatin1String(Settings::RecentRepositorySubmoduleKindsKey)).toStringList();
+		for (qsizetype submodule = 0; submodule < paths.size(); ++submodule)
 		{
 			// A missing kind defaults to the parent's
-			const VcsKind kind = subrepo < kinds.size() ? kindFromText(kinds[subrepo]) : repository.kind;
-			repository.subrepos.push_back({ paths[subrepo], kind });
+			const VcsKind kind = submodule < kinds.size() ? kindFromText(kinds[submodule]) : repository.kind;
+			repository.submodules.push_back({ paths[submodule], kind });
 		}
 		repositories.push_back(std::move(repository));
 	}
@@ -122,7 +122,7 @@ void recordOpen(const RepositoryLocation& location)
 	};
 
 	const auto parent = std::ranges::find_if(repositories,
-		[&](const RecentRepository& repository) { return holdsSubrepoAt(repository, location.root); });
+		[&](const RecentRepository& repository) { return holdsSubmoduleAt(repository, location.root); });
 	if (parent != repositories.end())
 	{
 		parent->lastUsedMSecs = now;
@@ -159,12 +159,12 @@ size_t recordFound(const std::vector<FoundRepository>& found)
 	{
 		const QString& root = candidate.location.root;
 		const bool listed = std::ranges::any_of(repositories, [&](const RecentRepository& repository) {
-			return sameRepositoryPath(repository.root, root) || holdsSubrepoAt(repository, root);
+			return sameRepositoryPath(repository.root, root) || holdsSubmoduleAt(repository, root);
 		});
 		if (listed)
 			continue;
 
-		repositories.push_back(RecentRepository{ root, candidate.location.kind, candidate.lastUsedMSecs, candidate.subrepos });
+		repositories.push_back(RecentRepository{ root, candidate.location.kind, candidate.lastUsedMSecs, candidate.submodules });
 		addedRoots.insert(root);
 	}
 
@@ -185,7 +185,7 @@ size_t recordFound(const std::vector<FoundRepository>& found)
 	return added;
 }
 
-void setSubrepos(const Repository& repository)
+void setSubmodules(const Repository& repository)
 {
 	std::vector<RecentRepository> repositories = list();
 	const auto entry = std::ranges::find_if(repositories,
@@ -193,15 +193,15 @@ void setSubrepos(const Repository& repository)
 	if (entry == repositories.end())
 		return;
 
-	std::vector<Subrepo> subrepos;
-	subrepos.reserve(size_t(repository.state().submodules.size()));
+	std::vector<Submodule> submodules;
+	submodules.reserve(size_t(repository.state().submodules.size()));
 	for (const QString& path : repository.state().submodules)
-		subrepos.push_back({ path, repository.submoduleLocation(path).kind });
+		submodules.push_back({ path, repository.submoduleLocation(path).kind });
 
-	if (subrepos == entry->subrepos)
+	if (submodules == entry->submodules)
 		return; // nothing to write or announce
 
-	entry->subrepos = std::move(subrepos);
+	entry->submodules = std::move(submodules);
 	save(repositories);
 }
 

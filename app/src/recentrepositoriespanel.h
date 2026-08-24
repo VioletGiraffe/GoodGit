@@ -7,7 +7,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QTreeWidget>
 RESTORE_COMPILER_WARNINGS
 
-// The recent repositories dock: one row per repository, expanding to the subrepos its last refresh found (one level).
+// The recent repositories dock: one row per repository, expanding to the submodules its last refresh found (one level).
 // Activating a row opens that repository in its own window.
 // The rows come from the stored list alone; nothing here starts a process, so a moved or deleted repository
 // looks like any other until opened.
@@ -17,7 +17,7 @@ public:
 	// `currentRepositoryRoot` is the repository of the window this panel belongs to, marked in the list
 	explicit RecentRepositoriesPanel(QString currentRepositoryRoot, QWidget* parent = nullptr);
 
-	// Keeps the rows whose absolute path contains `text`, plus the parent of every subrepo kept, and
+	// Keeps the rows whose absolute path contains `text`, plus the parent of every submodule kept, and
 	// expands those parents. An empty filter keeps everything and restores the expansion the user left.
 	void setFilter(const QString& text);
 
@@ -31,7 +31,7 @@ private:
 	void rememberExpansion();
 	void applyFilter();
 	[[nodiscard]] bool matchesFilter(const QTreeWidgetItem* item) const;
-	// `parentRoot` is empty for a listed repository, set for a subrepo of one. By root rather than item:
+	// `parentRoot` is empty for a listed repository, set for a submodule of one. By root rather than item:
 	// opening a repository rebuilds this tree, so no row survives it.
 	void openRepository(const QString& root, const QString& parentRoot);
 	void showContextMenu(const QPoint& pos);

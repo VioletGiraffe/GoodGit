@@ -59,8 +59,8 @@ ships with hg but is off by default, so the command enables it for itself.
 | `repository` | `Repository`: one repository's state, file entries, refresh and every action, as the windows see them. The backend boundary. Its queries parse their output before answering, and each takes the object that will show the answer as its context, so a query dies with its view rather than with the repository. Also owns the refresh policy every backend shares |
 | `repositoryfactory` | `findRepository()`: which kind of repository a path is inside and where its root is. `openRepository()`: a `Repository` of that kind. The only place that names every backend |
 | `repositorywindows` | Opening a repository in a window, from wherever the request comes: resolves the path, reports one nothing claims, raises the window already on that repository or creates one, records the open. The only place a top-level `CommitWindow` is constructed |
-| `recentrepositories` | The stored list of repositories opened before, each with the subrepos its last refresh found. Capped, and announced on every write so every open panel rebuilds |
-| `recentrepositoriespanel` | That list as the dock beside a commit window: one row per repository, one level of subrepos under it, narrowed by the filter field above |
+| `recentrepositories` | The stored list of repositories opened before, each with the submodules its last refresh found. Capped, and announced on every write so every open panel rebuilds |
+| `recentrepositoriespanel` | That list as the dock beside a commit window: one row per repository, one level of submodules under it, narrowed by the filter field above |
 | `gitprocess` | `Git::run()`, `Git::runSync()`: the git executable and the invocation invariants, over `vcsprocess` |
 | `gitparsers` | Parsers for the git outputs the app consumes. UI- and process-free, so they can be tested directly |
 | `gitrepository` | The git backend: every `Repository` operation as `git` subprocesses plus parsing |
@@ -98,11 +98,11 @@ Screen` opens it at any time, and any open through `openRepositoryWindow()` clos
 last window quits.
 
 One repository has one window: a second request raises the existing one. The open windows are the
-registry; nothing else tracks them. The recent list is stored, and so are the subrepos under each entry,
-harvested from `RepoState::submodules` on refresh (every subrepo the repository declares, not only the
+registry; nothing else tracks them. The recent list is stored, and so are the submodules under each entry,
+harvested from `RepoState::submodules` on refresh (every submodule the repository declares, not only the
 changed ones in the file list). The panel therefore expands an entry without running anything, shows nothing
-under one never opened, and is as stale as the rest of the entry. Opening a subrepo records its parent: the
-list names workspaces, and a subrepo is part of one rather than one of its own.
+under one never opened, and is as stale as the rest of the entry. Opening a submodule records its parent: the
+list names workspaces, and a submodule is part of one rather than one of its own.
 
 Every entry carries when it was last used: the moment it was opened, or, for one a folder scan found, the
 timestamp of the file everyday work rewrites - git's index, Mercurial's dirstate, since a repository
@@ -113,20 +113,22 @@ migrates them.
 A folder scan is the one way an entry joins the list unopened. Which folders are repositories, of which
 kind, and when each was last worked in all come off the filesystem - the marker in a subfolder's root, what
 that marker must hold, the timestamp of the file everyday work rewrites - so only working trees are found
-and nothing is launched to find them. Subrepos are the exception: git keeps them in the index, so every git
+and nothing is launched to find them. Submodules are the exception: git keeps them in the index, so every git
 repository found costs one `ls-files`, launched through the queue that caps every other query and joined by
 a `QueryRound`; Mercurial declares its own in `.hgsub`, which the scan reads. A repository whose query fails
-is listed without subrepos, as one never opened is. The cap applies to the merged list once it is sorted, so
+is listed without submodules, as one never opened is. The cap applies to the merged list once it is sorted, so
 a scan can push out an entry that was already there.
 
 ## Backends
 
 `Repository` is the boundary. Above it the windows and models use one vocabulary and never learn which
-system answered; below it a backend turns each operation into subprocesses and parses the output. A backend
-supplies three things: every pure virtual (the actions, the read-only queries, and `startRefresh()`, which
-runs whatever queries its kind needs and calls `completeRefresh()` once); its own knowledge of itself (the
-ignore file and where a pattern belongs in it, the label the push log shows, where a submodule row's
-repository is and of what kind, how the external diff tool is launched); and a line in `repositoryfactory`.
+system answered; below it a backend turns each operation into subprocesses and parses the output. That
+vocabulary is git's: it names every concept both systems have, and Mercurial's own words survive only where
+git has none - `CommitRecord`'s revision number, the `.hgsub` parsers. A backend supplies three things:
+every pure virtual (the actions, the read-only queries, and `startRefresh()`, which runs whatever queries
+its kind needs and calls `completeRefresh()` once); its own knowledge of itself (the ignore file and where a
+pattern belongs in it, the label the push log shows, where a submodule row's repository is and of what kind,
+how the external diff tool is launched); and a line in `repositoryfactory`.
 
 The refresh policy is the base class's, not the backend's: re-entry is coalesced, and a run is applied
 whole or not at all.
@@ -182,7 +184,7 @@ re-scans. Check state survives a refresh by path; the state a newly listed row s
 
 `GitRepository` refreshes in two rounds of parallel queries, the second depending on the first's answers.
 `HgRepository` uses a single round, since every hg invocation has a fixed cost: one `hg status` answers
-tracked changes, untracked files and rename sources together, alongside the unpushed set, each subrepo's
+tracked changes, untracked files and rename sources together, alongside the unpushed set, each submodule's
 pointer and dirtiness, and the conflicted paths where a mergestate exists.
 
 Some queries the state cannot be established without (the branch header, the submodule list, the git
@@ -256,16 +258,16 @@ would check out over every nested submodule it covers, detaching one that has no
 discard. Paths the submodule's last commit does not have (files added there, a rename's new name) come out
 of version control and stay on disk, and untracked files are untouched, as in the repository's own discard.
 
-Mercurial subrepos are the same rows, read from `.hgsub` and `.hgsubstate`. A subrepo may be a git
-repository inside an hg parent, which is why `submoduleLocation()` answers with a kind and why per-subrepo
-refresh queries go to whichever tool owns the directory. What is uncommitted inside a subrepo is asked of
-the subrepo itself, never of the parent's recursing `hg status`: that compares against the node `.hgsubstate`
-records rather than the subrepo's own parent changeset, and so reports a committed pointer move as modified
-files inside. One level down, the query does recurse (`-S`): a nested subrepo the enclosing one has not
-recorded yet is uncommitted work there.
+Mercurial's subrepositories are the same rows, read from `.hgsub` and `.hgsubstate`. A submodule may be a
+git repository inside an hg parent, which is why `submoduleLocation()` answers with a kind and why
+per-submodule refresh queries go to whichever tool owns the directory. What is uncommitted inside a
+submodule is asked of the submodule itself, never of the parent's recursing `hg status`: that compares
+against the node `.hgsubstate` records rather than the submodule's own parent changeset, and so reports a
+committed pointer move as modified files inside. One level down, the query does recurse (`-S`): a nested
+submodule the enclosing one has not recorded yet is uncommitted work there.
 
 History shows submodule rows too. Git's file listing reads them from the modes (`--raw` rather than
-`--name-status`). Mercurial's names only `.hgsubstate`, so that row is replaced with one row per subrepo
+`--name-status`). Mercurial's names only `.hgsubstate`, so that row is replaced with one row per submodule
 from that file's own diff, which also serves as such a row's diff. Such a row carries the commit its pointer
 names, and activating it opens the submodule's history there: a selection within the ordinary walk, so the
 surrounding history stays visible. A commit the walk did not cover (the submodule's checkout moved on, or
@@ -290,7 +292,7 @@ reintroduce the mismatch. Both are explicit because `submodule.recurse` varies b
 needs pushing but cannot be (not on a branch, or on a branch that does not contain its recorded commit) is
 refused before any step runs.
 
-`hg push -r .` recurses into subrepos itself, so Mercurial's plan is one step.
+`hg push -r .` recurses into submodules itself, so Mercurial's plan is one step.
 
 ## Fetching
 

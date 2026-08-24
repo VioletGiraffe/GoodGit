@@ -7,7 +7,7 @@
 namespace Git {
 
 // The git answers behind Repository::submoduleDiscardPlan and discardSubmoduleContent, for the repository
-// at `workDir`. Free functions: a Mercurial parent may host a git subrepo, and answers for it in git's terms.
+// at `workDir`. Free functions: a Mercurial parent may host a git submodule, and answers for it in git's terms.
 [[nodiscard]] SubmoduleDiscardPlan uncommittedDiscardPlan(const QString& workDir);
 void discardAllUncommitted(const QString& workDir, const SubmoduleDiscardPlan& plan, const QObject* context, Vcs::Answer<void> onDone);
 

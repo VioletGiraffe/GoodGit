@@ -65,23 +65,23 @@ bool isMercurialDirectory(const QString& path)
 	return QFileInfo::exists(path + QStringLiteral("/requires"));
 }
 
-// When the repository was last worked in: git rewrites the index and Mercurial the dirstate on every add,
-// commit, checkout and merge. Neither exists before the first of those, so a repository that has none falls
-// back to the stamp init left on the directory.
-// Declared in .hgsub, which is what a refresh lists them from as well. No process: Mercurial keeps the
-// declaration in the working tree.
-std::vector<Subrepo> mercurialSubrepos(const QString& root)
+// Declared in .hgsub, the same file a refresh lists them from. No process: Mercurial keeps the declaration
+// in the working tree.
+std::vector<Submodule> mercurialSubmodules(const QString& root)
 {
 	QFile declarations{ root + QStringLiteral("/.hgsub") };
 	if (!declarations.open(QIODevice::ReadOnly))
 		return {};
 
-	std::vector<Subrepo> subrepos;
+	std::vector<Submodule> submodules;
 	for (const auto& [path, source] : Hg::parseSubrepoSources(declarations.readAll()))
-		subrepos.push_back({ path, Hg::subrepoKind(source) });
-	return subrepos;
+		submodules.push_back({ path, Hg::subrepoKind(source) });
+	return submodules;
 }
 
+// When the repository was last worked in: git rewrites the index and Mercurial the dirstate on every add,
+// commit, checkout and merge. Neither exists before the first of those, so a repository that has none falls
+// back to the stamp init left on the directory.
 int64_t lastActivity(const QString& repositoryDirectory, const QString& activityFileName)
 {
 	const QFileInfo activity{ repositoryDirectory + QLatin1Char('/') + activityFileName };
@@ -97,7 +97,7 @@ Claim claimedByMercurial(const QString& startPath)
 	return { std::move(root), std::move(result) };
 }
 
-// Everything a scan can read off the filesystem alone; the git subrepos are the one thing left to ask for
+// Everything a scan can read off the filesystem alone; the git submodules are the one thing left to ask for
 std::vector<FoundRepository> repositoriesInFolder(const QString& folder)
 {
 	std::vector<FoundRepository> found;
@@ -118,7 +118,7 @@ std::vector<FoundRepository> repositoriesInFolder(const QString& folder)
 		if (!gitDirectory.isEmpty())
 			found.push_back({ { VcsKind::Git, root }, {}, lastActivity(gitDirectory, QStringLiteral("index")) });
 		else if (const QString hgDirectory = root + QStringLiteral("/.hg"); isMercurialDirectory(hgDirectory))
-			found.push_back({ { VcsKind::Mercurial, root }, mercurialSubrepos(root), lastActivity(hgDirectory, QStringLiteral("dirstate")) });
+			found.push_back({ { VcsKind::Mercurial, root }, mercurialSubmodules(root), lastActivity(hgDirectory, QStringLiteral("dirstate")) });
 	}
 
 	// Stable, so repositories worked in at the same moment keep the name order entryInfoList returned them in
@@ -133,7 +133,7 @@ std::vector<FoundRepository> repositoriesInFolder(const QString& folder)
 std::expected<RepositoryLocation, std::vector<ProcessResult>> findRepository(const QString& startPath)
 {
 	// git first: the cheaper process and the common answer. The cost is that an hg repository nested inside a
-	// git one resolves to the outer git root; a git subrepo inside an hg parent is found correctly.
+	// git one resolves to the outer git root; a git submodule inside an hg parent is found correctly.
 	Claim git = claimedByGit(startPath);
 	if (!git.root.isEmpty())
 		return RepositoryLocation{ VcsKind::Git, std::move(git.root) };
@@ -169,10 +169,10 @@ void findRepositoriesInFolder(const QString& folder, const QObject* context,
 			{ QStringLiteral("ls-files"), QStringLiteral("--stage"), QStringLiteral("-z") },
 			[found, index](const ProcessResult& result) {
 				if (!result.ok)
-					return; // listed without subrepos, as a repository never opened is
+					return; // listed without submodules, as a repository never opened is
 
 				for (const QString& path : Git::parseGitlinkPaths(result.out))
-					(*found)[index].subrepos.push_back({ path, VcsKind::Git });
+					(*found)[index].submodules.push_back({ path, VcsKind::Git });
 			});
 	}
 }
