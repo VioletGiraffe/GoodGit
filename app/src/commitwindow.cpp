@@ -51,6 +51,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QShortcut>
 #include <QSplitter>
 #include <QTextCursor>
+#include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
 RESTORE_COMPILER_WARNINGS
