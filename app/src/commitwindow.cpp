@@ -160,6 +160,15 @@ QStringList completionWordsFor(const std::vector<FileEntry>& files, QByteArray d
 	return QString::fromLatin1(Settings::CommitDraftsGroupKey) + QLatin1Char('/') + QString::number(hash, 16);
 }
 
+template <class F>
+inline void delayIfNecessary(F&& f) noexcept {
+#ifdef __linux__
+	QTimer::singleShot(75, std::forward<F>(f));
+#else
+	f();
+#endif
+}
+
 } // namespace
 
 CommitWindow::CommitWindow(const RepositoryLocation& location) :
@@ -169,7 +178,7 @@ CommitWindow::CommitWindow(const RepositoryLocation& location) :
 	buildUi();
 
 	// One geometry for every commit window
-	installEventFilter(new CPersistenceEnabler(QStringLiteral("CommitWindow"), this));
+	installEventFilter(new CPersistenceEnabler(QStringLiteral("CommitWindow"), this, CPersistenceEnabler::Delayed{ true }, CPersistenceEnabler::SetDefaultSize{ false }));
 
 	connect(_repo.get(), &Repository::refreshed, this, &CommitWindow::onRefreshed);
 	_repo->refresh();
@@ -511,8 +520,10 @@ void CommitWindow::onRefreshed()
 
 	if (_initialWidthPending)
 	{
-		_initialWidthPending = false;
-		fitInitialWidthToLeftPane();
+		delayIfNecessary([this] {
+			_initialWidthPending = false;
+			fitInitialWidthToLeftPane();
+		});
 	}
 
 	restoreSelectionByPath(selection);
@@ -540,13 +551,15 @@ void CommitWindow::fitInitialWidthToLeftPane()
 	const int preferred = std::min(leftPane->sizeHint().width(), MaxInitialLeftPaneWidth);
 	const int available = _splitter->width() - _splitter->handleWidth();
 	const QRect screenArea = screen()->availableGeometry();
-	const int growth = std::clamp(preferred + FirstRunDiffPaneWidth - available, 0, std::max(0, screenArea.width() - frameGeometry().width()));
+	// What has to fit the screen is the frame, while resize() takes the client width; both grow by the same amount
+	const QRect frame = frameGeometry();
+	const int growth = std::clamp(preferred + FirstRunDiffPaneWidth - available, 0, std::max(0, screenArea.width() - frame.width()));
 	if (growth > 0)
 	{
 		resize(width() + growth, height());
 		// The window grows to the right, from wherever the system placed it
-		if (const int overflow = frameGeometry().right() - screenArea.right(); overflow > 0)
-			move(std::max(screenArea.left(), x() - overflow), y());
+		if (const int overflow = frame.right() + growth - screenArea.right(); overflow > 0)
+			move(std::max(screenArea.left(), frame.left() - overflow), frame.top());
 	}
 
 	// A shortfall the screen leaves unfilled comes out of the left pane: it elides, the diff pane does not
