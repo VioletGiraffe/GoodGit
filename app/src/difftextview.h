@@ -6,6 +6,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QPlainTextEdit>
 RESTORE_COMPILER_WARNINGS
 
+#include <stdint.h>
 #include <vector>
 
 class QPaintEvent;

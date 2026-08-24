@@ -5,7 +5,6 @@
 DISABLE_COMPILER_WARNINGS
 #include <QAbstractTableModel>
 #include <QColor>
-#include <QIcon>
 RESTORE_COMPILER_WARNINGS
 
 #include <functional>
@@ -22,8 +21,6 @@ inline constexpr int BlockedSubmoduleRank = -1;
 // For the two line-count columns; a file without counts gets an empty cell rather than a zero
 [[nodiscard]] QString lineCountText(const std::optional<LineCounts>& counts, bool added);
 [[nodiscard]] QColor lineCountColor(bool added);
-
-[[nodiscard]] QIcon submoduleIcon();
 
 // The layout of both file lists: checkbox + icon + state text, lines added, lines removed, path.
 // The counts take a column each so that a data role can color them.

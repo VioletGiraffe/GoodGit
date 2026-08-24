@@ -1,6 +1,7 @@
 #include "hgcommandserver.h"
 
 DISABLE_COMPILER_WARNINGS
+#include <QProcess>
 #include <QTimer>
 #include <QtEndian>
 RESTORE_COMPILER_WARNINGS

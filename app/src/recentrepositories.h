@@ -1,13 +1,16 @@
 #pragma once
 
-#include "repositoryfactory.h"
+#include "repository.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QObject>
 #include <QString>
 RESTORE_COMPILER_WARNINGS
 
+#include <stdint.h>
 #include <vector>
+
+struct FoundRepository;
 
 struct RecentRepository
 {

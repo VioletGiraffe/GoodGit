@@ -1,4 +1,5 @@
 #include "recentrepositories.h"
+#include "repositoryfactory.h"
 #include "settings.h"
 
 #include "settings/csettings.h"

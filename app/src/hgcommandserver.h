@@ -6,6 +6,7 @@
 #include <memory>
 #include <vector>
 
+class QProcess;
 class HgCommandServer;
 class HgServerPool;
 

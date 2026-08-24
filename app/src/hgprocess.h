@@ -2,6 +2,8 @@
 
 #include "vcsprocess.h"
 
+#include <stdint.h>
+
 // Every hg invocation goes through here. The job contract is Vcs::Job's, whichever transport carries it.
 // Invariants applied to every call:
 //   HGPLAIN=1

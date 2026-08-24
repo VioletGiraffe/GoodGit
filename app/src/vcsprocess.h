@@ -6,7 +6,6 @@ DISABLE_COMPILER_WARNINGS
 #include <QByteArray>
 #include <QObject>
 #include <QPointer>
-#include <QProcess>
 #include <QProcessEnvironment>
 #include <QString>
 #include <QStringList>
