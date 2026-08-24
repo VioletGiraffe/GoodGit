@@ -53,7 +53,7 @@ private:
 	void onRefreshed();
 	// The left pane's preferred width, capped, taken by widening the window rather than out of the diff pane.
 	// Called from the first refresh: only by then do the header labels carry the text their bar sizes to.
-	void fitInitialWidthToLeftPane();
+	void applyDefaultWindowSize();
 	void updateHeader();
 	void updateStrips();
 	void updateControlStates();

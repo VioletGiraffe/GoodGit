@@ -6,6 +6,8 @@
 #include "recentrepositoriespanel.h"
 #include "repositorywindows.h"
 
+#include "widgets/widgetutils.h"
+
 DISABLE_COMPILER_WARNINGS
 #include <QApplication>
 #include <QFont>
@@ -13,7 +15,6 @@ DISABLE_COMPILER_WARNINGS
 #include <QIcon>
 #include <QLabel>
 #include <QPushButton>
-#include <QScreen>
 #include <QVBoxLayout>
 RESTORE_COMPILER_WARNINGS
 
@@ -118,6 +119,5 @@ WelcomeWindow::WelcomeWindow()
 	acceptRepositoryFolderDrops(this);
 
 	resize(WindowWidth, anyRecent ? WithRecentListHeight : IntroOnlyHeight);
-	if (const QScreen* screen = QApplication::primaryScreen())
-		move(screen->availableGeometry().center() - rect().center());
+	WidgetUtils::centerWidgetOnScreen(this);
 }

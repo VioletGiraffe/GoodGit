@@ -523,7 +523,7 @@ void CommitWindow::onRefreshed()
 	{
 		_initialWidthPending = false;
 		delayIfNecessary(this, [this] {
-			fitInitialWidthToLeftPane();
+			applyDefaultWindowSize();
 		});
 	}
 
@@ -544,7 +544,7 @@ void CommitWindow::onRefreshed()
 	});
 }
 
-void CommitWindow::fitInitialWidthToLeftPane()
+void CommitWindow::applyDefaultWindowSize()
 {
 	assert(isVisible()); // the widths below are the laid-out ones, which show() establishes
 
@@ -559,15 +559,14 @@ void CommitWindow::fitInitialWidthToLeftPane()
 	if (delta != 0)
 	{
 		resize(width() + delta, height());
-		// The window grows to the right, from wherever the system placed it
-		if (const int overflow = frame.right() + delta - screenArea.right(); overflow > 0)
-			move(std::max(screenArea.left(), frame.left() - overflow), frame.top());
 	}
 
 	// A shortfall the screen leaves unfilled comes out of the left pane: it elides, the diff pane does not
 	const int total = available + delta;
 	const int left = std::min(preferred, total - FirstRunDiffPaneWidth);
 	_splitter->setSizes({ left, total - left });
+
+	WidgetUtils::centerWidgetOnScreen(this);
 }
 
 void CommitWindow::updateHeader()
