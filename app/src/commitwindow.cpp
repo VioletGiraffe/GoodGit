@@ -63,7 +63,7 @@ namespace {
 
 constexpr int RecentRepositoriesDockWidth = 175; // first-run default; persists with the window state
 constexpr int SplitterWidth = 1180; // width of the two panes together until the first refresh widens the window
-constexpr int FirstRunDiffPaneWidth = 660; // what the diff keeps while the left pane takes its preferred width
+constexpr int FirstRunDiffPaneWidth = 440; // what the diff keeps while the left pane takes its preferred width
 // The left pane's preferred width follows the repository and branch names, which are unbounded
 constexpr int MaxInitialLeftPaneWidth = 1000;
 constexpr qsizetype BinarySniffBytes = 8000; // git's own threshold: a NUL this early means the file is not text
