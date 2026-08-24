@@ -51,9 +51,9 @@ private:
 	[[nodiscard]] QAction* buildRecentRepositoriesDock();
 
 	void onRefreshed();
-	// The left pane's preferred width, capped. Called from the first refresh: only by then do the header
-	// labels carry the text their bar sizes to, and only by then has the splitter been laid out.
-	void setInitialLeftPaneWidth();
+	// The left pane's preferred width, capped, taken by widening the window rather than out of the diff pane.
+	// Called from the first refresh: only by then do the header labels carry the text their bar sizes to.
+	void fitInitialWidthToLeftPane();
 	void updateHeader();
 	void updateStrips();
 	void updateControlStates();
@@ -162,5 +162,5 @@ private:
 	bool _peekInFlight = false; // a fetch is slow, and a refresh landing meanwhile must not re-enable the button
 	// A refresh has established the state at least once: before that there is no parent sha to judge a stored draft by
 	bool _stateWasRead = false;
-	bool _initialLeftPaneWidthPending = false; // set when no stored splitter state was restored
+	bool _initialWidthPending = false; // set when no stored splitter state was restored
 };

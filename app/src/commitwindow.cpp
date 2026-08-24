@@ -46,6 +46,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QScreen>
 #include <QSet>
 #include <QShortcut>
 #include <QSplitter>
@@ -60,9 +61,10 @@ RESTORE_COMPILER_WARNINGS
 namespace {
 
 constexpr int RecentRepositoriesDockWidth = 175; // first-run default; persists with the window state
-constexpr int SplitterWidth = 1180; // first-run width of the two panes together
+constexpr int SplitterWidth = 1180; // width of the two panes together until the first refresh widens the window
+constexpr int FirstRunDiffPaneWidth = 660; // what the diff keeps while the left pane takes its preferred width
 // The left pane's preferred width follows the repository and branch names, which are unbounded
-constexpr int MaxInitialLeftPanePercent = 40;
+constexpr int MaxInitialLeftPaneWidth = 1000;
 constexpr qsizetype BinarySniffBytes = 8000; // git's own threshold: a NUL this early means the file is not text
 constexpr int MaxListedPathsInDialog = 20;
 constexpr int MaxIncomingCommits = 200; // a peek, not a history window
@@ -361,7 +363,7 @@ void CommitWindow::buildUi()
 	if (const QByteArray state = CSettings{}.value(Settings::CommitWindowSplitterKey).toByteArray(); !state.isEmpty())
 		_splitter->restoreState(state);
 	else
-		_initialLeftPaneWidthPending = true;
+		_initialWidthPending = true;
 	setCentralWidget(_splitter);
 	resize(SplitterWidth + RecentRepositoriesDockWidth, 740); // the dock is beside the two panes, not carved out of them
 	acceptRepositoryFolderDrops(this);
@@ -507,10 +509,10 @@ void CommitWindow::onRefreshed()
 	updateStrips();
 	updateControlStates();
 
-	if (_initialLeftPaneWidthPending)
+	if (_initialWidthPending)
 	{
-		_initialLeftPaneWidthPending = false;
-		setInitialLeftPaneWidth();
+		_initialWidthPending = false;
+		fitInitialWidthToLeftPane();
 	}
 
 	restoreSelectionByPath(selection);
@@ -530,12 +532,27 @@ void CommitWindow::onRefreshed()
 	});
 }
 
-void CommitWindow::setInitialLeftPaneWidth()
+void CommitWindow::fitInitialWidthToLeftPane()
 {
+	assert(isVisible()); // the widths below are the laid-out ones, which show() establishes
+
 	const QWidget* leftPane = _splitter->widget(0);
+	const int preferred = std::min(leftPane->sizeHint().width(), MaxInitialLeftPaneWidth);
 	const int available = _splitter->width() - _splitter->handleWidth();
-	const int width = std::min(leftPane->sizeHint().width(), available * MaxInitialLeftPanePercent / 100);
-	_splitter->setSizes({ width, available - width });
+	const QRect screenArea = screen()->availableGeometry();
+	const int growth = std::clamp(preferred + FirstRunDiffPaneWidth - available, 0, std::max(0, screenArea.width() - frameGeometry().width()));
+	if (growth > 0)
+	{
+		resize(width() + growth, height());
+		// The window grows to the right, from wherever the system placed it
+		if (const int overflow = frameGeometry().right() - screenArea.right(); overflow > 0)
+			move(std::max(screenArea.left(), x() - overflow), y());
+	}
+
+	// A shortfall the screen leaves unfilled comes out of the left pane: it elides, the diff pane does not
+	const int total = available + growth;
+	const int left = std::min(preferred, total - FirstRunDiffPaneWidth);
+	_splitter->setSizes({ left, total - left });
 }
 
 void CommitWindow::updateHeader()
