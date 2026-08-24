@@ -48,7 +48,7 @@ QColor changeTypeColor(ChangeType type)
 	{
 	case ChangeType::Modified:    return t.stModified;
 	case ChangeType::Added:       return t.stAdded;
-	case ChangeType::Untracked:   return t.stUntracked;
+	case ChangeType::Untracked:   return t.palette.textDim; // dim on purpose: not a tracked state
 	case ChangeType::Deleted:     return t.stDeleted;
 	case ChangeType::Renamed:     return t.stRenamed;
 	case ChangeType::TypeChanged: return t.stSubmodule; // same amber family

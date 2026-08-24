@@ -39,7 +39,7 @@ struct Theme
 	QColor errBg;      // merge/cherry-pick/revert/rebase strip
 	QColor errFg;
 
-	QColor stModified, stAdded, stUntracked, stDeleted, stRenamed, stSubmodule;
+	QColor stModified, stAdded, stDeleted, stRenamed, stSubmodule;
 
 	QColor diffAddBg, diffAddFg;
 	QColor diffDelBg, diffDelFg;
