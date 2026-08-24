@@ -3,7 +3,6 @@
 DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QFileInfo>
-#include <QPointer>
 #include <QProcess>
 #include <QTemporaryFile>
 RESTORE_COMPILER_WARNINGS

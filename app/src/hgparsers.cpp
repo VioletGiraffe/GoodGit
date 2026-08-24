@@ -10,7 +10,6 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
-#include <functional>
 #include <utility>
 
 namespace {
