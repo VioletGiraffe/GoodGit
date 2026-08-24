@@ -83,6 +83,14 @@ bool discardable(const FileEntry& entry, bool operationInProgress)
 	return entry.type != ChangeType::Untracked;
 }
 
+// A submodule row whose content, not its pointer, is what there is to discard. Whether the pointer moved is
+// beside the point: the content blocks committing it either way.
+// Unreadable content is not offered: nothing is known about what would be destroyed.
+bool contentDiscardable(const FileEntry& entry, bool operationInProgress)
+{
+	return !operationInProgress && entry.isSubmodule && entry.content == SubmoduleContent::DirtyTracked;
+}
+
 QString listedPaths(const QStringList& paths)
 {
 	QStringList shown = paths.mid(0, MaxListedPathsInDialog);
@@ -1235,8 +1243,11 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 		QApplication::clipboard()->setText(paths.join(QLatin1Char('\n')));
 	});
 	menu.addSeparator();
+	// A lone submodule row discards what is uncommitted inside it instead. One row only: the dialog lists the
+	// paths inside that one submodule.
+	const bool contentOfOneSubmodule = entries.size() == 1 && contentDiscardable(entries.front(), operationInProgress);
 	QAction* discardAction = menu.addAction(tr("Discard changes"), this, &CommitWindow::discardSelection);
-	discardAction->setEnabled(anyDiscardable && canAct);
+	discardAction->setEnabled((anyDiscardable || contentOfOneSubmodule) && canAct);
 	QAction* deleteAction = menu.addAction(tr("Delete to Recycle Bin"), this, &CommitWindow::deleteSelection);
 	deleteAction->setEnabled(anyDeletable && canAct);
 	// Display only: the view's event filter handles the key. WidgetShortcut on an action belonging to no
@@ -1379,14 +1390,23 @@ void CommitWindow::deleteSelection()
 void CommitWindow::discardSelection()
 {
 	const bool operationInProgress = _repo->state().operationInProgress();
+	// Everything is read from the model up front: the dialog below spins an event loop, and a refresh in it resets the rows.
+	const std::vector<FileEntry> selection = selectedEntries();
+
+	// A lone submodule row discards what is uncommitted inside it. No row is ever both: a submodule whose
+	// content blocks its pointer is not discardable() at all.
+	if (selection.size() == 1 && contentDiscardable(selection.front(), operationInProgress))
+	{
+		discardSubmoduleContent(selection.front());
+		return;
+	}
 
 	// Added rows are un-added rather than restored: discardChanges() would delete the file, and nothing in this
 	// window destroys content that was never committed.
-	// Everything is read from the model up front: the dialog below spins an event loop, and a refresh in it resets the rows.
 	QStringList pathspec, promptPaths, addedPaths;
 	bool anySubmodule = false;
 	int skippedRows = 0;
-	for (const FileEntry& entry : selectedEntries())
+	for (const FileEntry& entry : selection)
 	{
 		if (!discardable(entry, operationInProgress))
 		{
@@ -1455,6 +1475,41 @@ void CommitWindow::discardSelection()
 			return;
 		}
 		unAddThenRefresh();
+	});
+}
+
+void CommitWindow::discardSubmoduleContent(const FileEntry& submodule)
+{
+	const QString path = submodule.path;
+	const SubmoduleDiscardPlan plan = _repo->submoduleDiscardPlan(path);
+	if (!plan.refusal.isEmpty())
+	{
+		showError(tr("Cannot discard the changes inside '%1'").arg(path), plan.refusal);
+		return;
+	}
+
+	if (!plan.restored.isEmpty()) // taking files out of tracking alone loses nothing, as in discardSelection()
+	{
+		QString text = tr("Discard all changes inside '%1'? This cannot be undone.\n\n%2")
+			.arg(path, listedPaths(plan.restored));
+		if (!plan.keptOnDisk.isEmpty())
+			text += tr("\n\n%1 file(s) its last commit does not have will be taken out of version control and left on disk.")
+				.arg(plan.keptOnDisk.size());
+		text += tr("\n\nUntracked files are left alone, and the submodule stays on its branch.");
+
+		const auto answer = MessageBox::question(this, tr("Discard changes?"), text, { tr("Discard") });
+		if (answer != 0)
+			return;
+	}
+
+	beginMutation();
+	_repo->discardSubmoduleContent(path, plan, [this, path](std::expected<void, QString> result) {
+		endMutation();
+		if (!result)
+			showError(tr("Discard failed"), result.error());
+		_repo->refresh();
+		if (CommitWindow* window = repositoryWindow(_repo->submoduleLocation(path).root))
+			window->refreshRepository(); // its rows are stale: its working tree was changed from here
 	});
 }
 

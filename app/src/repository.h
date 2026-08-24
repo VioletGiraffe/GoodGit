@@ -36,6 +36,20 @@ struct PushStep
 	QString branch;  // what this step pushes, for the offer to set an upstream. Empty where the backend has no such notion
 };
 
+// What discarding everything uncommitted inside one submodule would do, or why it cannot be done
+struct SubmoduleDiscardPlan
+{
+	QString refusal;        // non-empty: nothing is discarded. A sentence about the submodule, which the caller's message names
+	QStringList restored;   // paths that go back to the submodule's last commit
+	QStringList keptOnDisk; // paths that commit does not have: taken out of version control, left on disk
+};
+
+// What one repository's uncommitted changes amount to for a discard of all of them. A path its last commit
+// does not have is left on disk rather than deleted: nothing here destroys content that was never committed.
+// `nestedSubmoduleChanged`: one of the changes is a nested submodule's - a moved pointer, or uncommitted
+// changes inside it - which the discard would check out over.
+[[nodiscard]] SubmoduleDiscardPlan discardPlanFor(const std::vector<CommitFileChange>& changes, bool nestedSubmoduleChanged);
+
 // One repository of any kind: its state, file entries and every action on it. A submodule is another Repository.
 // The windows and models are written against this interface; a backend supplies the commands.
 // Every operation is asynchronous.
@@ -99,6 +113,15 @@ public:
 	//   an added-but-not-committed path - deleted outright
 	//   a submodule with changes inside - checked out to the recorded commit, silently overwriting them
 	virtual void discardChanges(const QStringList& pathspec, Vcs::Answer<void> onDone) = 0;
+
+	// Discarding everything uncommitted inside the submodule at a repo-relative path, which is what a row
+	// whose content blocks its pointer needs. The pointer itself is not touched.
+	// Blocking: read-only queries inside the submodule, run when the user picks the action.
+	[[nodiscard]] virtual SubmoduleDiscardPlan submoduleDiscardPlan(const QString& repoRelativePath) const = 0;
+	// Carries out that plan: `restored` goes back to the submodule's last commit, `keptOnDisk` comes out of
+	// version control and stays on disk. Untracked files are untouched and the submodule stays on its branch.
+	// Only called with a plan that carries no refusal.
+	virtual void discardSubmoduleContent(const QString& repoRelativePath, const SubmoduleDiscardPlan& plan, Vcs::Answer<void> onDone) = 0;
 
 	virtual void checkoutBranch(const QString& branch, Vcs::Answer<void> onDone) = 0;
 	// Creates `localName` tracking `remoteBranch` (e.g. "origin/master") at HEAD, without moving the working tree

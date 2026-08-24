@@ -15,6 +15,7 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
+#include <assert.h>
 #include <map>
 
 namespace {
@@ -96,6 +97,29 @@ QStringList trackedDiffArgs(const QString& base, const QString& outputFormat, co
 QStringList trackedChangesArgs(const QString& base)
 {
 	return trackedDiffArgs(base, QStringLiteral("--name-status"));
+}
+
+// Only the branch header and the unmerged entries are read, so the flags keep git from scanning the working
+// tree and recursing into submodules
+QStringList branchAndUnmergedStatusArgs()
+{
+	return { QStringLiteral("status"), QStringLiteral("--porcelain=v2"), QStringLiteral("--branch"),
+		QStringLiteral("--untracked-files=no"), QStringLiteral("--ignore-submodules=all"), QStringLiteral("-z") };
+}
+
+// The operation an unfinished merge, cherry-pick, revert or rebase leaves marked in the git directory
+RepoOp operationInGitDir(const QString& gitDirPath)
+{
+	const QDir gitDir{ gitDirPath };
+	if (gitDir.exists(QStringLiteral("MERGE_HEAD")))
+		return RepoOp::Merge;
+	if (gitDir.exists(QStringLiteral("CHERRY_PICK_HEAD")))
+		return RepoOp::CherryPick;
+	if (gitDir.exists(QStringLiteral("REVERT_HEAD")))
+		return RepoOp::Revert;
+	if (gitDir.exists(QStringLiteral("rebase-merge")) || gitDir.exists(QStringLiteral("rebase-apply")))
+		return RepoOp::Rebase;
+	return RepoOp::None;
 }
 
 // Whether a line-endings-only change shows as a change is a display setting.
@@ -353,10 +377,7 @@ void GitRepository::startRefresh()
 		round.launch(path(), { QStringLiteral("hash-object"), QStringLiteral("-t"), QStringLiteral("tree"), QStringLiteral("--stdin") },
 			[this](const ProcessResult& r) { _emptyTreeSha = QString::fromUtf8(r.out.trimmed()); });
 	}
-	// Only the branch header and the unmerged entries are read, so the flags keep git from scanning the
-	// working tree and recursing into submodules
-	round.launch(path(), { QStringLiteral("status"), QStringLiteral("--porcelain=v2"), QStringLiteral("--branch"),
-			QStringLiteral("--untracked-files=no"), QStringLiteral("--ignore-submodules=all"), QStringLiteral("-z") },
+	round.launch(path(), branchAndUnmergedStatusArgs(),
 		[run](const ProcessResult& r) {
 			if (r.ok)
 			{
@@ -507,17 +528,7 @@ RepoState GitRepository::stateFromRun(const RefreshRun& run) const
 	state.submodules = run.submodules; // ls-files lists the index, which is ordered by path
 
 	if (!_gitDir.isEmpty())
-	{
-		const QDir gitDir{ _gitDir };
-		if (gitDir.exists(QStringLiteral("MERGE_HEAD")))
-			state.op = RepoOp::Merge;
-		else if (gitDir.exists(QStringLiteral("CHERRY_PICK_HEAD")))
-			state.op = RepoOp::CherryPick;
-		else if (gitDir.exists(QStringLiteral("REVERT_HEAD")))
-			state.op = RepoOp::Revert;
-		else if (gitDir.exists(QStringLiteral("rebase-merge")) || gitDir.exists(QStringLiteral("rebase-apply")))
-			state.op = RepoOp::Rebase;
-	}
+		state.op = operationInGitDir(_gitDir);
 	return state;
 }
 
@@ -757,6 +768,16 @@ void GitRepository::discardChanges(const QStringList& pathspec, Vcs::Answer<void
 		QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") }, this, Vcs::reporting(std::move(onDone)), Vcs::nulJoined(pathspec));
 }
 
+SubmoduleDiscardPlan GitRepository::submoduleDiscardPlan(const QString& repoRelativePath) const
+{
+	return Git::uncommittedDiscardPlan(path() + QLatin1Char('/') + repoRelativePath);
+}
+
+void GitRepository::discardSubmoduleContent(const QString& repoRelativePath, const SubmoduleDiscardPlan& plan, Vcs::Answer<void> onDone)
+{
+	Git::discardAllUncommitted(path() + QLatin1Char('/') + repoRelativePath, plan, this, std::move(onDone));
+}
+
 void GitRepository::checkoutBranch(const QString& branch, Vcs::Answer<void> onDone)
 {
 	Git::run(path(), { QStringLiteral("checkout"), branch }, this, Vcs::reporting(std::move(onDone)));
@@ -916,3 +937,59 @@ void GitRepository::launchExternalDiffTool(const QString& repoRelativePath) cons
 		{ QStringLiteral("difftool"), QStringLiteral("-y"), QStringLiteral("HEAD"), QStringLiteral("--"), repoRelativePath },
 		path());
 }
+
+namespace Git {
+
+SubmoduleDiscardPlan uncommittedDiscardPlan(const QString& workDir)
+{
+	const ProcessResult gitDir = Git::runSync(workDir, { QStringLiteral("rev-parse"), QStringLiteral("--absolute-git-dir") });
+	if (!gitDir.ok)
+		return { .refusal = QObject::tr("Its git directory could not be found: %1").arg(gitDir.errorText()) };
+	if (operationInGitDir(QString::fromUtf8(gitDir.out.trimmed())) != RepoOp::None)
+		return { .refusal = QObject::tr("A merge, rebase, cherry-pick or revert is in progress there. Finish or abort it first.") };
+
+	// The unmerged entries, which no diff names: a conflict is reported as an ordinary modification, and
+	// restoring one to HEAD would resolve it
+	const ProcessResult status = Git::runSync(workDir, branchAndUnmergedStatusArgs());
+	if (!status.ok)
+		return { .refusal = QObject::tr("Its status could not be read: %1").arg(status.errorText()) };
+	if (!Git::parseUnmergedPaths(status.out).isEmpty())
+		return { .refusal = QObject::tr("There are unresolved conflicts there. Resolve or abort them first.") };
+
+	// --raw rather than --name-status for the modes: a gitlink among the changes is a nested submodule.
+	// No --ignore-submodules, unlike the row listing: the restore destroys dirt inside a nested submodule as
+	// surely as it does a moved pointer, so both must show up here.
+	const ProcessResult changes = Git::runSync(workDir, { QStringLiteral("diff"), QStringLiteral("--raw"),
+		QStringLiteral("--no-abbrev"), QStringLiteral("-M"), QStringLiteral("-z"), QStringLiteral("HEAD") });
+	if (!changes.ok)
+		return { .refusal = QObject::tr("Its changes could not be listed: %1").arg(changes.errorText()) };
+
+	const std::vector<CommitFileChange> entries = Git::parseRawZ(changes.out);
+	const bool nestedSubmoduleChanged = std::ranges::any_of(entries, [](const CommitFileChange& entry) { return entry.isSubmodule; });
+	return discardPlanFor(entries, nestedSubmoduleChanged);
+}
+
+void discardAllUncommitted(const QString& workDir, const SubmoduleDiscardPlan& plan, const QObject* context, Vcs::Answer<void> onDone)
+{
+	assert(!plan.restored.isEmpty() || !plan.keptOnDisk.isEmpty());
+
+	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
+	// Exactly the paths the plan named, never a whole-tree pathspec: a restore checks out over every nested
+	// submodule its pathspec covers, detaching one that has nothing to do with this discard.
+	// The reset comes first and takes both lists: with the paths the last commit does not have out of the
+	// index, the restore below cannot delete them.
+	Git::run(workDir, { QStringLiteral("reset"), QStringLiteral("-q"), QStringLiteral("--pathspec-from-file=-"),
+			QStringLiteral("--pathspec-file-nul") }, context,
+		[workDir, restored = plan.restored, context, report](const ProcessResult& resetResult) {
+			if (!resetResult.ok || restored.isEmpty()) // nothing to restore: the reset was the whole discard
+			{
+				report(resetResult);
+				return;
+			}
+			Git::run(workDir, { QStringLiteral("restore"), QStringLiteral("--source=HEAD"), QStringLiteral("--staged"),
+					QStringLiteral("--worktree"), QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") },
+				context, report, Vcs::nulJoined(restored));
+		}, Vcs::nulJoined(plan.restored + plan.keptOnDisk));
+}
+
+} // namespace Git

@@ -247,6 +247,15 @@ not masquerade as a committable pointer change. Discarding a submodule row check
 inside it, leaving a detached HEAD; the same dirtiness that blocks committing the pointer blocks discarding
 it, because that checkout would overwrite the changes inside.
 
+Those changes are discarded by the same Discard action: on a lone submodule row it runs the discard inside
+the submodule instead of checking its pointer out, so its branch is not moved. `submoduleDiscardPlan()`
+reads what that would do and refuses what it must not touch: an operation in progress, unresolved conflicts,
+a nested submodule that moved or holds uncommitted changes of its own. It blocks, the plan being what the
+confirmation lists. The plan's paths are also the pathspec the discard runs with - a whole-tree pathspec
+would check out over every nested submodule it covers, detaching one that has nothing to do with the
+discard. Paths the submodule's last commit does not have (files added there, a rename's new name) come out
+of version control and stay on disk, and untracked files are untouched, as in the repository's own discard.
+
 Mercurial subrepos are the same rows, read from `.hgsub` and `.hgsubstate`. A subrepo may be a git
 repository inside an hg parent, which is why `submoduleLocation()` answers with a kind and why per-subrepo
 refresh queries go to whichever tool owns the directory. What is uncommitted inside a subrepo is asked of

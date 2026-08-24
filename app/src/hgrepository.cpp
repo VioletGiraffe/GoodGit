@@ -1,6 +1,7 @@
 #include "hgrepository.h"
 #include "gitparsers.h"
 #include "gitprocess.h"
+#include "gitrepository.h"
 #include "hgparsers.h"
 #include "hgprocess.h"
 #include "queryround.h"
@@ -541,6 +542,57 @@ void HgRepository::discardChanges(const QStringList& pathspec, Vcs::Answer<void>
 
 	// -C: without it every reverted file leaves a .orig copy, which the next refresh would list as untracked
 	Hg::run(path(), { QStringLiteral("revert"), QStringLiteral("-C"), QStringLiteral("--rev"), QStringLiteral("."),
+			listfilePattern(pathspecFile) }, this,
+		[pathspecFile, report](const ProcessResult& result) { report(result); });
+}
+
+SubmoduleDiscardPlan HgRepository::submoduleDiscardPlan(const QString& repoRelativePath) const
+{
+	const QString workDir = QDir{ path() }.filePath(repoRelativePath);
+	if (isGitSubrepo(repoRelativePath))
+		return Git::uncommittedDiscardPlan(workDir);
+
+	// A mergestate outlives its command until the resolve is committed or aborted (see startRefresh), so its
+	// presence answers for every command that can conflict
+	if (QFileInfo::exists(QDir{ workDir }.filePath(QStringLiteral(".hg/merge"))))
+		return { .refusal = QObject::tr("An unfinished merge, graft or rebase is in progress there. Finish or abort it first.") };
+
+	const ProcessResult workingDir = Hg::runSync(workDir,
+		{ QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("wdir()"), QStringLiteral("-T"), QStringLiteral("json") });
+	if (!workingDir.ok)
+		return { .refusal = QObject::tr("Its working directory could not be read: %1").arg(workingDir.errorText()) };
+	if (Hg::parseWorkingDirectory(workingDir.out).parents.size() > 1)
+		return { .refusal = QObject::tr("A merge is in progress there. Commit or abort it first.") };
+
+	// Not recursing: `revert` does not either, and a nested subrepo's own content is discarded in its window
+	const ProcessResult status = Hg::runSync(workDir,
+		{ QStringLiteral("status"), QStringLiteral("-C"), QStringLiteral("-T"), QStringLiteral("json") });
+	if (!status.ok)
+		return { .refusal = QObject::tr("Its status could not be read: %1").arg(status.errorText()) };
+
+	const std::vector<CommitFileChange> changes = Hg::parseStatus(status.out);
+	const bool nestedSubmoduleChanged = std::ranges::any_of(changes,
+		[](const CommitFileChange& change) { return change.path == QLatin1String(".hgsubstate"); });
+	return discardPlanFor(changes, nestedSubmoduleChanged);
+}
+
+void HgRepository::discardSubmoduleContent(const QString& repoRelativePath, const SubmoduleDiscardPlan& plan, Vcs::Answer<void> onDone)
+{
+	const QString workDir = QDir{ path() }.filePath(repoRelativePath);
+	if (isGitSubrepo(repoRelativePath))
+	{
+		Git::discardAllUncommitted(workDir, plan, this, std::move(onDone));
+		return;
+	}
+
+	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
+	const auto pathspecFile = openPathspecFile(plan.restored + plan.keptOnDisk, report);
+	if (!pathspecFile)
+		return;
+
+	// Reverting a path the parent changeset does not have only takes it out of tracking, so both lists go in
+	// one command. -C for the same reason as in discardChanges().
+	Hg::run(workDir, { QStringLiteral("revert"), QStringLiteral("-C"), QStringLiteral("--rev"), QStringLiteral("."),
 			listfilePattern(pathspecFile) }, this,
 		[pathspecFile, report](const ProcessResult& result) { report(result); });
 }

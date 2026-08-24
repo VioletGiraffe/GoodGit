@@ -12,8 +12,9 @@ namespace Git {
 Vcs::Job* run(const QString& workDir, QStringList args, const QObject* context, Vcs::Callback callback,
 	QByteArray stdinData = {}, bool readOnlyQuery = false);
 
-// Blocking variant with the same invariants, for before the event loop exists (resolving the repo root at
-// startup). Read-only queries only.
+// Blocking variant with the same invariants. Read-only queries only, and only where the answer is needed
+// before the next line: the repository root at startup, before the event loop exists, and the plan a
+// destructive action shows the user before it runs.
 ProcessResult runSync(const QString& workDir, QStringList args, int timeoutMs = 10000);
 
 // The message for a git older than these invocations need, otherwise nullopt.

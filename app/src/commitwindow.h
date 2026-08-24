@@ -114,6 +114,9 @@ private:
 	void toggleCheckOnSelection();
 	void deleteSelection();
 	void discardSelection();
+	// Where discardSelection() sends a lone submodule row: what is uncommitted inside it, as opposed to its
+	// pointer, is what there is to discard
+	void discardSubmoduleContent(const FileEntry& submodule);
 	void addSelectionToIndex();
 	void unAddSelection();
 	void addPatternToIgnoreFile(const IgnorePattern& pattern);

@@ -4,6 +4,15 @@
 
 #include <memory>
 
+namespace Git {
+
+// The git answers behind Repository::submoduleDiscardPlan and discardSubmoduleContent, for the repository
+// at `workDir`. Free functions: a Mercurial parent may host a git subrepo, and answers for it in git's terms.
+[[nodiscard]] SubmoduleDiscardPlan uncommittedDiscardPlan(const QString& workDir);
+void discardAllUncommitted(const QString& workDir, const SubmoduleDiscardPlan& plan, const QObject* context, Vcs::Answer<void> onDone);
+
+} // namespace Git
+
 // The git backend: every Repository operation as one or more `git` subprocesses plus parsing of their
 // output. No libgit2, no reimplemented git logic.
 class GitRepository final : public Repository
@@ -32,6 +41,8 @@ public:
 	void addToIndex(const QStringList& paths, Vcs::Answer<void> onDone) override;
 	void unAdd(const QStringList& paths, Vcs::Answer<void> onDone) override;
 	void discardChanges(const QStringList& pathspec, Vcs::Answer<void> onDone) override;
+	[[nodiscard]] SubmoduleDiscardPlan submoduleDiscardPlan(const QString& repoRelativePath) const override;
+	void discardSubmoduleContent(const QString& repoRelativePath, const SubmoduleDiscardPlan& plan, Vcs::Answer<void> onDone) override;
 
 	void checkoutBranch(const QString& branch, Vcs::Answer<void> onDone) override;
 	void createTrackingBranch(const QString& localName, const QString& remoteBranch, Vcs::Answer<void> onDone) override;
