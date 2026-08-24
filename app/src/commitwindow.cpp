@@ -554,17 +554,18 @@ void CommitWindow::fitInitialWidthToLeftPane()
 	const QRect screenArea = screen()->availableGeometry();
 	// What has to fit the screen is the frame, while resize() takes the client width; both grow by the same amount
 	const QRect frame = frameGeometry();
-	const int growth = std::clamp(preferred + FirstRunDiffPaneWidth - available, 0, std::max(0, screenArea.width() - frame.width()));
-	if (growth > 0)
+	// The window follows the two panes in both directions: width the left pane does not take is not the diff's to keep
+	const int delta = std::min(preferred + FirstRunDiffPaneWidth - available, std::max(0, screenArea.width() - frame.width()));
+	if (delta != 0)
 	{
-		resize(width() + growth, height());
+		resize(width() + delta, height());
 		// The window grows to the right, from wherever the system placed it
-		if (const int overflow = frame.right() + growth - screenArea.right(); overflow > 0)
+		if (const int overflow = frame.right() + delta - screenArea.right(); overflow > 0)
 			move(std::max(screenArea.left(), frame.left() - overflow), frame.top());
 	}
 
 	// A shortfall the screen leaves unfilled comes out of the left pane: it elides, the diff pane does not
-	const int total = available + growth;
+	const int total = available + delta;
 	const int left = std::min(preferred, total - FirstRunDiffPaneWidth);
 	_splitter->setSizes({ left, total - left });
 }
