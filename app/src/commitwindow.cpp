@@ -1224,12 +1224,15 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 
 	// An action this selection can never reach is hidden; one only the repository's state blocks is disabled.
 	QMenu menu{ this };
+
 	QAction* addAction = menu.addAction(tr("Add"), this, &CommitWindow::addSelectionToIndex);
 	addAction->setVisible(anyUntracked);
 	addAction->setEnabled(canAct);
+
 	QAction* unAddAction = menu.addAction(tr("Un-add"), this, &CommitWindow::unAddSelection);
 	unAddAction->setVisible(anyAdded);
 	unAddAction->setEnabled(canAct);
+
 	const bool singleUntracked = entries.size() == 1 && !entries.front().isSubmodule && entries.front().type == ChangeType::Untracked;
 	QMenu* ignoreMenu = menu.addMenu(tr("Add to %1").arg(_repo->ignoreFileName()));
 	ignoreMenu->menuAction()->setVisible(singleUntracked);
@@ -1243,21 +1246,26 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 				this, [this, pattern] { addPatternToIgnoreFile(pattern); });
 		}
 	}
+
 	menu.addSeparator();
+
 	QAction* openAction = menu.addAction(tr("Open"), this, [this, entry = entries.front()] {
 		QDesktopServices::openUrl(QUrl::fromLocalFile(absolutePath(entry)));
 	});
 	openAction->setVisible(singleFile);
+
 	QAction* editAction = menu.addAction(tr("Edit"), this, [this, entry = entries.front()] {
 		openInTextEditor(absolutePath(entry), this);
 	});
 	editAction->setVisible(singleFile);
+
 	QAction* submoduleHistoryAction = menu.addAction(tr("View commit history"), this, [this, entry = entries.front()] {
 		// Not deduplicated like this repo's own history window, matching openSubmoduleWindow
 		auto* window = new HistoryWindow(_repo->submoduleLocation(entry.path), this);
 		window->show();
 	});
 	submoduleHistoryAction->setVisible(entries.size() == 1 && entries.front().isSubmodule);
+
 	QAction* fileHistoryAction = menu.addAction(tr("View file history"), this, [this, entry = entries.front()] {
 		// Nothing is committed at a rename's new path yet
 		const QString& path = entry.oldPath.isEmpty() ? entry.path : entry.oldPath;
@@ -1267,17 +1275,25 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	// A submodule's history is its own repo's, offered above; an untracked or newly added file is in no commit
 	fileHistoryAction->setVisible(entries.size() == 1 && !entries.front().isSubmodule
 		&& entries.front().type != ChangeType::Untracked && entries.front().type != ChangeType::Added);
+
 	QAction* showInFileManagerAction = menu.addAction(showInFileManagerActionText(), this, [this, entry = entries.front()] {
 		showInFileManager(absolutePath(entry));
 	});
+
 	showInFileManagerAction->setVisible(singleFile); // a deleted path has nothing to reveal
-	menu.addAction(tr("Copy path"), this, [this, entries] {
+	// Only the full path is nativized: the relative one is pasted into an ignore file, a message or a command,
+	// which take forward slashes.
+	const auto copyPaths = [this, entries](bool full) {
 		QStringList paths;
 		for (const FileEntry& entry : entries)
-			paths.push_back(QDir::toNativeSeparators(absolutePath(entry)));
+			paths.push_back(full ? QDir::toNativeSeparators(absolutePath(entry)) : entry.path);
 		QApplication::clipboard()->setText(paths.join(QLatin1Char('\n')));
-	});
+	};
+
+	menu.addAction(tr("Copy relative path"), this, [copyPaths] { copyPaths(false); });
+	menu.addAction(tr("Copy full path"), this, [copyPaths] { copyPaths(true); });
 	menu.addSeparator();
+
 	// A lone submodule row discards what is uncommitted inside it instead. One row only: the dialog lists the
 	// paths inside that one submodule.
 	const bool contentOfOneSubmodule = entries.size() == 1 && contentDiscardable(entries.front());
@@ -1285,6 +1301,7 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	discardAction->setVisible(anyDiscardable || contentOfOneSubmodule);
 	// Disabled, not hidden: the operation ends, and _opStrip says one is running
 	discardAction->setEnabled(canAct && !operationInProgress);
+
 	QAction* deleteAction = menu.addAction(tr("Delete to Recycle Bin"), this, &CommitWindow::deleteSelection);
 	deleteAction->setVisible(anyDeletable);
 	deleteAction->setEnabled(canAct);
@@ -1382,11 +1399,13 @@ void CommitWindow::deleteSelection()
 	if (untrackedPaths.isEmpty() && addedPaths.isEmpty() && trackedPaths.isEmpty())
 		return;
 
+	// Untracked files alone go to the Recycle Bin unprompted, as they would from a file manager; in a mixed
+	// selection the dialog must name them too, since they are deleted along with the rest.
 	if (!trackedPaths.isEmpty() || !addedPaths.isEmpty())
 	{
-		const QStringList prompted = trackedPaths + addedPaths;
+		const QStringList prompted = trackedPaths + addedPaths + untrackedPaths;
 		const auto answer = MessageBox::question(this, tr("Delete files?"),
-			tr("Move %1 tracked file(s) to the Recycle Bin?\n\n%2").arg(prompted.size()).arg(listedPaths(prompted)),
+			tr("Move %1 file(s) to the Recycle Bin?\n\n%2").arg(prompted.size()).arg(listedPaths(prompted)),
 			{ tr("Delete") });
 		if (answer != 0)
 			return;
