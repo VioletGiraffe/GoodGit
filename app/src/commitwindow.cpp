@@ -73,11 +73,9 @@ constexpr int IncomingPopupWidth = 560;
 constexpr int IncomingPopupHeight = 320;
 
 // Untracked files have nothing to restore to. A submodule with changes inside would be checked out over.
-// Mid-operation nothing is discardable: restoring a path to HEAD would silently drop the operation's result for it.
-bool discardable(const FileEntry& entry, bool operationInProgress)
+// Row shape only: an operation in progress blocks discarding every row, and each caller must gate on it.
+bool discardable(const FileEntry& entry)
 {
-	if (operationInProgress)
-		return false;
 	if (entry.isSubmodule)
 		return entry.committable();
 	return entry.type != ChangeType::Untracked;
@@ -86,9 +84,31 @@ bool discardable(const FileEntry& entry, bool operationInProgress)
 // A submodule row whose content, not its pointer, is what there is to discard. Whether the pointer moved is
 // beside the point: the content blocks committing it either way.
 // Unreadable content is not offered: nothing is known about what would be destroyed.
-bool contentDiscardable(const FileEntry& entry, bool operationInProgress)
+bool contentDiscardable(const FileEntry& entry)
 {
-	return !operationInProgress && entry.isSubmodule && entry.content == SubmoduleContent::DirtyTracked;
+	return entry.isSubmodule && entry.content == SubmoduleContent::DirtyTracked;
+}
+
+// A separator survives only between two visible items, so a group hidden whole leaves no gap behind it
+void hideRedundantSeparators(QMenu& menu)
+{
+	QAction* lastSeparator = nullptr;
+	bool anyVisibleItem = false;
+	for (QAction* action : menu.actions())
+	{
+		if (action->isSeparator())
+		{
+			action->setVisible(false);
+			lastSeparator = anyVisibleItem ? action : nullptr;
+		}
+		else if (action->isVisible())
+		{
+			if (lastSeparator)
+				lastSeparator->setVisible(true);
+			lastSeparator = nullptr;
+			anyVisibleItem = true;
+		}
+	}
 }
 
 QString listedPaths(const QStringList& paths)
@@ -1193,7 +1213,7 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	bool anyUntracked = false, anyAdded = false, anyDeletable = false, anyDiscardable = false;
 	for (const FileEntry& entry : entries)
 	{
-		anyDiscardable |= discardable(entry, operationInProgress);
+		anyDiscardable |= discardable(entry);
 		if (entry.isSubmodule)
 			continue;
 		anyUntracked |= entry.type == ChangeType::Untracked;
@@ -1202,14 +1222,18 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	}
 	const bool singleFile = entries.size() == 1 && !entries.front().isSubmodule && entries.front().type != ChangeType::Deleted;
 
+	// An action this selection can never reach is hidden; one only the repository's state blocks is disabled.
 	QMenu menu{ this };
 	QAction* addAction = menu.addAction(tr("Add"), this, &CommitWindow::addSelectionToIndex);
-	addAction->setEnabled(anyUntracked && canAct);
+	addAction->setVisible(anyUntracked);
+	addAction->setEnabled(canAct);
 	QAction* unAddAction = menu.addAction(tr("Un-add"), this, &CommitWindow::unAddSelection);
-	unAddAction->setEnabled(anyAdded && canAct);
-	QMenu* ignoreMenu = menu.addMenu(tr("Add to %1").arg(_repo->ignoreFileName()));
+	unAddAction->setVisible(anyAdded);
+	unAddAction->setEnabled(canAct);
 	const bool singleUntracked = entries.size() == 1 && !entries.front().isSubmodule && entries.front().type == ChangeType::Untracked;
-	ignoreMenu->setEnabled(singleUntracked && canAct); // the pattern comes from the row, so it is as stale as the row
+	QMenu* ignoreMenu = menu.addMenu(tr("Add to %1").arg(_repo->ignoreFileName()));
+	ignoreMenu->menuAction()->setVisible(singleUntracked);
+	ignoreMenu->setEnabled(canAct); // the pattern comes from the row, so it is as stale as the row
 	if (singleUntracked)
 	{
 		for (const IgnorePattern& pattern : _repo->ignorePatternsFor(entries.front().path))
@@ -1223,17 +1247,17 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	QAction* openAction = menu.addAction(tr("Open"), this, [this, entry = entries.front()] {
 		QDesktopServices::openUrl(QUrl::fromLocalFile(absolutePath(entry)));
 	});
-	openAction->setEnabled(singleFile);
+	openAction->setVisible(singleFile);
 	QAction* editAction = menu.addAction(tr("Edit"), this, [this, entry = entries.front()] {
 		openInTextEditor(absolutePath(entry), this);
 	});
-	editAction->setEnabled(singleFile);
+	editAction->setVisible(singleFile);
 	QAction* submoduleHistoryAction = menu.addAction(tr("View commit history"), this, [this, entry = entries.front()] {
 		// Not deduplicated like this repo's own history window, matching openSubmoduleWindow
 		auto* window = new HistoryWindow(_repo->submoduleLocation(entry.path), this);
 		window->show();
 	});
-	submoduleHistoryAction->setEnabled(entries.size() == 1 && entries.front().isSubmodule);
+	submoduleHistoryAction->setVisible(entries.size() == 1 && entries.front().isSubmodule);
 	QAction* fileHistoryAction = menu.addAction(tr("View file history"), this, [this, entry = entries.front()] {
 		// Nothing is committed at a rename's new path yet
 		const QString& path = entry.oldPath.isEmpty() ? entry.path : entry.oldPath;
@@ -1241,12 +1265,12 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 		window->show();
 	});
 	// A submodule's history is its own repo's, offered above; an untracked or newly added file is in no commit
-	fileHistoryAction->setEnabled(entries.size() == 1 && !entries.front().isSubmodule
+	fileHistoryAction->setVisible(entries.size() == 1 && !entries.front().isSubmodule
 		&& entries.front().type != ChangeType::Untracked && entries.front().type != ChangeType::Added);
 	QAction* showInFileManagerAction = menu.addAction(showInFileManagerActionText(), this, [this, entry = entries.front()] {
 		showInFileManager(absolutePath(entry));
 	});
-	showInFileManagerAction->setEnabled(entries.size() == 1 && !entries.front().isSubmodule);
+	showInFileManagerAction->setVisible(singleFile); // a deleted path has nothing to reveal
 	menu.addAction(tr("Copy path"), this, [this, entries] {
 		QStringList paths;
 		for (const FileEntry& entry : entries)
@@ -1256,17 +1280,21 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	menu.addSeparator();
 	// A lone submodule row discards what is uncommitted inside it instead. One row only: the dialog lists the
 	// paths inside that one submodule.
-	const bool contentOfOneSubmodule = entries.size() == 1 && contentDiscardable(entries.front(), operationInProgress);
+	const bool contentOfOneSubmodule = entries.size() == 1 && contentDiscardable(entries.front());
 	QAction* discardAction = menu.addAction(tr("Discard changes"), this, &CommitWindow::discardSelection);
-	discardAction->setEnabled((anyDiscardable || contentOfOneSubmodule) && canAct);
+	discardAction->setVisible(anyDiscardable || contentOfOneSubmodule);
+	// Disabled, not hidden: the operation ends, and _opStrip says one is running
+	discardAction->setEnabled(canAct && !operationInProgress);
 	QAction* deleteAction = menu.addAction(tr("Delete to Recycle Bin"), this, &CommitWindow::deleteSelection);
-	deleteAction->setEnabled(anyDeletable && canAct);
+	deleteAction->setVisible(anyDeletable);
+	deleteAction->setEnabled(canAct);
 	// Display only: the view's event filter handles the key. WidgetShortcut on an action belonging to no
 	// widget never registers, so the key cannot trigger twice.
 	deleteAction->setShortcut(QKeySequence::Delete);
 	deleteAction->setShortcutContext(Qt::WidgetShortcut);
 	deleteAction->setShortcutVisibleInContextMenu(true);
 
+	hideRedundantSeparators(menu);
 	menu.exec(_filesView->viewport()->mapToGlobal(pos));
 }
 
@@ -1400,13 +1428,17 @@ void CommitWindow::deleteSelection()
 
 void CommitWindow::discardSelection()
 {
-	const bool operationInProgress = _repo->state().operationInProgress();
+	// Restoring a path to HEAD mid-operation would silently drop the operation's result for it. Re-read rather
+	// than taken from the menu: a refresh during the menu's event loop can start one.
+	if (_repo->state().operationInProgress())
+		return;
+
 	// Everything is read from the model up front: the dialog below spins an event loop, and a refresh in it resets the rows.
 	const std::vector<FileEntry> selection = selectedEntries();
 
 	// A lone submodule row discards what is uncommitted inside it. No row is ever both: a submodule whose
 	// content blocks its pointer is not discardable() at all.
-	if (selection.size() == 1 && contentDiscardable(selection.front(), operationInProgress))
+	if (selection.size() == 1 && contentDiscardable(selection.front()))
 	{
 		discardSubmoduleContent(selection.front());
 		return;
@@ -1419,7 +1451,7 @@ void CommitWindow::discardSelection()
 	int skippedRows = 0;
 	for (const FileEntry& entry : selection)
 	{
-		if (!discardable(entry, operationInProgress))
+		if (!discardable(entry))
 		{
 			++skippedRows; // a deliberate no-op in a mixed selection
 			continue;
