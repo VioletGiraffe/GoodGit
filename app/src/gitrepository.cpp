@@ -663,11 +663,12 @@ void GitRepository::commitMergeState(const QString& message, const QStringList& 
 		return;
 
 	const auto runCommit = [this, messageFile, untrackedPaths, report] {
-		// No pathspec: the index already holds the merge result, and staging conflicted files marks them resolved
+		// No pathspec: the index already holds the merge result. add -u above staged the working tree over it,
+		// so every conflict must already have been marked resolved (see the declaration)
 		Git::run(path(), { QStringLiteral("commit"), QStringLiteral("-F"), messageFile->fileName() }, this,
 			[this, messageFile, untrackedPaths, report](const ProcessResult& result) {
-				// Only the untracked add is rolled back: resetting a path `add -u` marked resolved would drop
-				// the user's resolution
+				// Only the untracked add is rolled back: resetting a tracked path would drop the resolution
+				// staged for it
 				rollBackAddThenReport(path(), this, untrackedPaths, result, report);
 			});
 	};
@@ -754,6 +755,12 @@ void GitRepository::addToIndex(const QStringList& paths, Vcs::Answer<void> onDon
 {
 	Git::run(path(), { QStringLiteral("add"), QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") },
 		this, Vcs::reporting(std::move(onDone)), Vcs::nulJoined(paths));
+}
+
+// Staging a path drops its unmerged entries, which is the whole of git's record of a resolution
+void GitRepository::markResolved(const QStringList& paths, Vcs::Answer<void> onDone)
+{
+	addToIndex(paths, std::move(onDone));
 }
 
 void GitRepository::unAdd(const QStringList& paths, Vcs::Answer<void> onDone)

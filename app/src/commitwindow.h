@@ -119,6 +119,7 @@ private:
 	void discardSubmoduleContent(const FileEntry& submodule);
 	void addSelectionToIndex();
 	void unAddSelection();
+	void markResolvedSelection();
 	void addPatternToIgnoreFile(const IgnorePattern& pattern);
 
 	void showError(const QString& title, const QString& details);

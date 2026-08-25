@@ -522,6 +522,18 @@ void HgRepository::addToIndex(const QStringList& paths, Vcs::Answer<void> onDone
 		[pathspecFile, report](const ProcessResult& result) { report(result); });
 }
 
+// The mergestate entry goes from U to R; the file itself is not touched
+void HgRepository::markResolved(const QStringList& paths, Vcs::Answer<void> onDone)
+{
+	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
+	const auto pathspecFile = openPathspecFile(paths, report);
+	if (!pathspecFile)
+		return;
+
+	Hg::run(path(), { QStringLiteral("resolve"), QStringLiteral("-m"), listfilePattern(pathspecFile) }, this,
+		[pathspecFile, report](const ProcessResult& result) { report(result); });
+}
+
 void HgRepository::unAdd(const QStringList& paths, Vcs::Answer<void> onDone)
 {
 	const Vcs::Callback report = Vcs::reporting(std::move(onDone));

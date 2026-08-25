@@ -31,9 +31,11 @@ Deliberate consequences:
   files are outside it (git aborts the whole command on an unknown path), and an added file is only
   un-added, since restore would delete it.
 - A merge, cherry-pick, revert or rebase in progress is a separate mode: the index already holds that
-  operation's result, conflict resolutions included, so the commit takes every tracked change rather than
-  the checked rows, and discarding is refused because restoring a path to HEAD would drop the operation's
-  result for it.
+  operation's result, so the commit takes every tracked change rather than the checked rows, and discarding
+  is refused because restoring a path to HEAD would drop the operation's result for it.
+- A conflict is resolved in two steps, as both VCSs record it: edit the file, then mark it resolved (`git
+  add`, `hg resolve -m`). Committing is refused while any row still reads Conflicted, since the commit
+  would take that row's working tree copy, markers and all.
 
 ## Undoing the last commit
 

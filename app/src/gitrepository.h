@@ -40,6 +40,7 @@ public:
 
 	void addToIndex(const QStringList& paths, Vcs::Answer<void> onDone) override;
 	void unAdd(const QStringList& paths, Vcs::Answer<void> onDone) override;
+	void markResolved(const QStringList& paths, Vcs::Answer<void> onDone) override;
 	void discardChanges(const QStringList& pathspec, Vcs::Answer<void> onDone) override;
 	[[nodiscard]] SubmoduleDiscardPlan submoduleDiscardPlan(const QString& repoRelativePath) const override;
 	void discardSubmoduleContent(const QString& repoRelativePath, const SubmoduleDiscardPlan& plan, Vcs::Answer<void> onDone) override;

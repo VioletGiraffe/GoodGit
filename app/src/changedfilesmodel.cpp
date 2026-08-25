@@ -159,6 +159,17 @@ bool ChangedFilesModel::isUserCheckable(int row) const
 	return !r.forced && r.entry.committable();
 }
 
+QStringList ChangedFilesModel::unresolvedConflictPaths() const
+{
+	QStringList paths;
+	for (const Row& row : _rows)
+	{
+		if (row.entry.type == ChangeType::Conflicted)
+			paths.push_back(row.entry.path);
+	}
+	return paths;
+}
+
 int ChangedFilesModel::checkedCount() const
 {
 	int count = 0;

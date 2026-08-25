@@ -32,6 +32,7 @@ public:
 
 	void addToIndex(const QStringList& paths, Vcs::Answer<void> onDone) override;
 	void unAdd(const QStringList& paths, Vcs::Answer<void> onDone) override;
+	void markResolved(const QStringList& paths, Vcs::Answer<void> onDone) override;
 	void discardChanges(const QStringList& pathspec, Vcs::Answer<void> onDone) override;
 	// A subrepo may be a git repository, which answers in git's terms
 	[[nodiscard]] SubmoduleDiscardPlan submoduleDiscardPlan(const QString& repoRelativePath) const override;

@@ -60,6 +60,8 @@ public:
 	// Includes both sides of every rename
 	[[nodiscard]] QStringList checkedPathspec() const;
 	[[nodiscard]] QStringList checkedUntrackedPaths() const;
+	// Every row still reading Conflicted. A merge commit takes all of them, so one left here blocks committing.
+	[[nodiscard]] QStringList unresolvedConflictPaths() const;
 
 	void setRowChecked(int row, bool checked);
 	void setAllChecked(bool checked);

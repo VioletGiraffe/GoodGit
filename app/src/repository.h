@@ -79,6 +79,8 @@ public:
 
 	// Merge/rebase mode: commits every tracked change plus the given untracked paths, with no pathspec -
 	// backends that have in-progress operations forbid a path-limited commit during one.
+	// The caller must screen out a still-conflicted path: a backend may take the working tree copy as the
+	// resolution, committing the conflict markers with it.
 	virtual void commitMergeState(const QString& message, const QStringList& untrackedPaths, Vcs::Answer<void> onDone) = 0;
 
 	// Undoes the last commit, leaving its changes as uncommitted changes.
@@ -106,6 +108,10 @@ public:
 	// not committed" state, under some name.
 	virtual void addToIndex(const QStringList& paths, Vcs::Answer<void> onDone) = 0;
 	virtual void unAdd(const QStringList& paths, Vcs::Answer<void> onDone) = 0;
+
+	// Records conflicted paths as resolved, the working tree copy standing as the resolution. Kept apart from
+	// the file's content by every backend, so a resolved file is an ordinary modification from then on.
+	virtual void markResolved(const QStringList& paths, Vcs::Answer<void> onDone) = 0;
 
 	// Restores the pathspec (both sides of every rename) to the last commit, on disk and in the staging area.
 	// The caller must screen out:

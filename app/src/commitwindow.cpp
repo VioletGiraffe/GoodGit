@@ -675,6 +675,9 @@ void CommitWindow::updateStrips()
 	case RepoOp::Rebase:     opText = tr("Rebase in progress: all changes must be committed together."); break;
 	case RepoOp::None:       break;
 	}
+	// A row reads Conflicted only while an operation is in progress, so this always extends the line above
+	if (const qsizetype unresolved = _filesModel.unresolvedConflictPaths().size(); unresolved > 0)
+		opText += tr(" %1 file(s) are still conflicted and must be marked resolved first.").arg(unresolved);
 	_opStrip->setText(opText);
 	_opStrip->setVisible(!opText.isEmpty());
 
@@ -792,6 +795,16 @@ void CommitWindow::startCommit(bool pushAfterwards)
 {
 	if (_mutationInFlight)
 		return;
+
+	// A merge commit takes every tracked change, so an unresolved row would go in with its conflict markers
+	const QStringList unresolved = _filesModel.unresolvedConflictPaths();
+	if (!unresolved.isEmpty())
+	{
+		MessageBox::notice(this, tr("Unresolved conflicts"),
+			tr("%1 file(s) still have conflicts. Edit each one, then mark it resolved from the file list's "
+			   "context menu:\n\n%2").arg(unresolved.size()).arg(listedPaths(unresolved)), {});
+		return;
+	}
 
 	beginMutation();
 	if (!_repo->state().detached)
@@ -1210,7 +1223,7 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	const bool operationInProgress = _repo->state().operationInProgress();
 	// Only gates the writing actions; a stale row is still worth inspecting
 	const bool canAct = canActOnList();
-	bool anyUntracked = false, anyAdded = false, anyDeletable = false, anyDiscardable = false;
+	bool anyUntracked = false, anyAdded = false, anyDeletable = false, anyDiscardable = false, anyConflicted = false;
 	for (const FileEntry& entry : entries)
 	{
 		anyDiscardable |= discardable(entry);
@@ -1218,6 +1231,7 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 			continue;
 		anyUntracked |= entry.type == ChangeType::Untracked;
 		anyAdded |= entry.type == ChangeType::Added;
+		anyConflicted |= entry.type == ChangeType::Conflicted;
 		anyDeletable |= entry.type != ChangeType::Deleted;
 	}
 	const bool singleFile = entries.size() == 1 && !entries.front().isSubmodule && entries.front().type != ChangeType::Deleted;
@@ -1225,6 +1239,9 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	// An action this selection can never reach is hidden; one only the repository's state blocks is disabled.
 	QMenu menu{ this };
 
+	QAction* markResolvedAction = menu.addAction(tr("Mark resolved"), this, &CommitWindow::markResolvedSelection);
+	markResolvedAction->setVisible(anyConflicted);
+	markResolvedAction->setEnabled(canAct);
 	QAction* addAction = menu.addAction(tr("Add"), this, &CommitWindow::addSelectionToIndex);
 	addAction->setVisible(anyUntracked);
 	addAction->setEnabled(canAct);
@@ -1638,6 +1655,25 @@ void CommitWindow::addSelectionToIndex()
 		endMutation();
 		if (!result)
 			showError(tr("Add failed"), result.error());
+		_repo->refresh();
+	});
+}
+
+void CommitWindow::markResolvedSelection()
+{
+	QStringList paths;
+	for (const FileEntry& entry : selectedEntries())
+	{
+		if (entry.type == ChangeType::Conflicted)
+			paths.push_back(entry.path);
+	}
+	if (paths.isEmpty())
+		return;
+	beginMutation();
+	_repo->markResolved(paths, [this](std::expected<void, QString> result) {
+		endMutation();
+		if (!result)
+			showError(tr("Failed to mark resolved"), result.error());
 		_repo->refresh();
 	});
 }
