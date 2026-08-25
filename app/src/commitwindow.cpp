@@ -22,6 +22,7 @@
 #include "hash/wheathash.hpp"
 #include "settings/csettings.h"
 #include "settingsui/csettingsdialog.h"
+#include "string/stringutils.h"
 #include "widgets/clabelelided.h"
 #include "widgets/cpersistentwindow.h"
 #include "widgets/widgetutils.h"
@@ -67,7 +68,6 @@ constexpr int SplitterWidth = 1180; // width of the two panes together until the
 constexpr int FirstRunDiffPaneWidth = 440; // what the diff keeps while the left pane takes its preferred width
 // The left pane's preferred width follows the repository and branch names, which are unbounded
 constexpr int MaxInitialLeftPaneWidth = 1000;
-constexpr qsizetype BinarySniffBytes = 8000; // git's own threshold: a NUL this early means the file is not text
 constexpr int MaxListedPathsInDialog = 20;
 constexpr int MaxIncomingCommits = 200; // a peek, not a history window
 constexpr int IncomingPopupWidth = 560;
@@ -1187,13 +1187,14 @@ void CommitWindow::showFileContents(const FileEntry& entry)
 		_diffPane->showMessage(entry.path, tag, tr("The file is empty."));
 		return;
 	}
-	if (contents.left(BinarySniffBytes).contains('\0'))
+	const std::optional<QString> text = decodedAsText(contents);
+	if (!text)
 	{
 		_diffPane->showMessage(entry.path, tag, tr("Binary file (%1 bytes).").arg(contents.size()));
 		return;
 	}
 
-	_diffPane->showFileText(entry.path, tag, QString::fromUtf8(contents));
+	_diffPane->showFileText(entry.path, tag, *text);
 }
 
 void CommitWindow::onRowActivated(const QModelIndex& sourceIndex)

@@ -36,6 +36,10 @@ inline constexpr int HistoryMaxCommitsDefault = 20000;
 inline constexpr const char* MaxShownDiffBytesKey = "MaxShownDiffBytes";
 inline constexpr qlonglong MaxShownDiffBytesDefault = 2LL * 1024LL * 1024LL;
 
+// The viewer window renders far more than the diff pane; this bounds what is held in memory, not what can be drawn
+inline constexpr const char* MaxViewedFileBytesKey = "MaxViewedFileBytes";
+inline constexpr qlonglong MaxViewedFileBytesDefault = 256LL * 1024LL * 1024LL;
+
 inline constexpr const char* ShowLineEndingOnlyChangesKey = "ShowLineEndingOnlyChanges";
 inline constexpr bool ShowLineEndingOnlyChangesDefault = false;
 

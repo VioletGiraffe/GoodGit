@@ -2,6 +2,7 @@
 #include "commitgraphdelegate.h"
 #include "diffpane.h"
 #include "filelistview.h"
+#include "fileviewerwindow.h"
 #include "repositoryfactory.h"
 #include "settings.h"
 #include "theme.h"
@@ -494,6 +495,11 @@ void HistoryWindow::showFileContextMenu(const QPoint& pos)
 		return;
 	const CommitFileChange& entry = *rowEntry;
 
+	// The rows listed are the current commit's, so it is read alongside them
+	const QModelIndex commitIndex = _logView->currentIndex();
+	const bool commitKnown = commitIndex.isValid() && commitIndex.row() < _logModel.rowCount();
+	const CommitRecord commit = commitKnown ? _logModel.commitAt(commitIndex.row()) : CommitRecord{};
+
 	QMenu menu{ this };
 	if (entry.isSubmodule)
 	{
@@ -504,6 +510,18 @@ void HistoryWindow::showFileContextMenu(const QPoint& pos)
 	{
 		QAction* action = menu.addAction(tr("View file history"), this, [this, path = entry.path] { openFileHistory(path); });
 		action->setEnabled(entry.path != _query.path); // this window already is that file's history
+
+		menu.addSeparator();
+		QAction* atThisCommit = menu.addAction(tr("View file at this commit"), this,
+			[this, sha = commit.sha, path = entry.path] { openFileViewer(sha, path); });
+		atThisCommit->setEnabled(commitKnown && entry.type != ChangeType::Deleted);
+
+		// A rename is under its old name in the parent; a merge never gets here, so the first parent is the only one
+		const QString parentSha = commit.parents.value(0);
+		const QString pathInParent = entry.oldPath.isEmpty() ? entry.path : entry.oldPath;
+		QAction* atParentCommit = menu.addAction(tr("View file at parent commit"), this,
+			[this, parentSha, pathInParent] { openFileViewer(parentSha, pathInParent); });
+		atParentCommit->setEnabled(commitKnown && !parentSha.isEmpty() && entry.type != ChangeType::Added);
 	}
 	menu.exec(_filesView->viewport()->mapToGlobal(pos));
 }
@@ -511,6 +529,12 @@ void HistoryWindow::showFileContextMenu(const QPoint& pos)
 void HistoryWindow::openFileHistory(const QString& filePath)
 {
 	auto* window = new HistoryWindow(_repo->location(), filePath, this);
+	window->show();
+}
+
+void HistoryWindow::openFileViewer(const QString& sha, const QString& repoRelativePath)
+{
+	auto* window = new FileViewerWindow(*_repo, sha, repoRelativePath, this);
 	window->show();
 }
 

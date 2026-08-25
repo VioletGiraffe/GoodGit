@@ -894,6 +894,14 @@ Vcs::Query GitRepository::commitFileDiff(const QString& sha, const CommitFileCha
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
 }
 
+Vcs::Query GitRepository::fileAtRevision(const QString& sha, const QString& repoRelativePath, const QObject* context, Vcs::Answer<QByteArray> onDone)
+{
+	// --filters runs the checkout conversion: the bytes arrive as a working tree would hold them, LFS content
+	// and line endings included
+	return runQuery(path(), { QStringLiteral("cat-file"), QStringLiteral("--filters"), sha + QLatin1Char(':') + repoRelativePath },
+		context, Vcs::answering(std::move(onDone), std::identity{}));
+}
+
 Vcs::Query GitRepository::unpushedCommits(const QObject* context, Vcs::Answer<QSet<QString>> onDone)
 {
 	return runQuery(path(), { QStringLiteral("rev-list"), QStringLiteral("@{upstream}..HEAD") },

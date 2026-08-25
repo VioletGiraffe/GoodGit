@@ -806,6 +806,13 @@ Vcs::Query HgRepository::commitFileDiff(const QString& sha, const CommitFileChan
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
 }
 
+Vcs::Query HgRepository::fileAtRevision(const QString& sha, const QString& repoRelativePath, const QObject* context, Vcs::Answer<QByteArray> onDone)
+{
+	// --decode applies the [decode] filters: the bytes arrive as a working tree would hold them
+	return runQuery(path(), { QStringLiteral("cat"), QStringLiteral("--decode"), QStringLiteral("-r"), sha,
+		QStringLiteral("--"), repoRelativePath }, context, Vcs::answering(std::move(onDone), std::identity{}));
+}
+
 Vcs::Query HgRepository::unpushedCommits(const QObject* context, Vcs::Answer<QSet<QString>> onDone)
 {
 	// Every draft changeset, wherever it sits; the header's count covers only what one push would send

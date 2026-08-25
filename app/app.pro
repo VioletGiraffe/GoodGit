@@ -47,6 +47,7 @@ HEADERS += \
 	src/externalapps.h \
 	src/filelistdelegate.h \
 	src/filelistview.h \
+	src/fileviewerwindow.h \
 	src/gitparsers.h \
 	src/gitprocess.h \
 	src/gitrepository.h \
@@ -84,6 +85,7 @@ SOURCES += \
 	src/externalapps.cpp \
 	src/filelistdelegate.cpp \
 	src/filelistview.cpp \
+	src/fileviewerwindow.cpp \
 	src/gitparsers.cpp \
 	src/gitprocess.cpp \
 	src/gitrepository.cpp \

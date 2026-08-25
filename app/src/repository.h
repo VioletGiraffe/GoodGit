@@ -182,6 +182,10 @@ public:
 	// A file the backend cannot count is absent rather than zero; a backend that cannot count at all answers empty.
 	virtual Vcs::Query commitFileCounts(const QString& sha, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone) = 0;
 	virtual Vcs::Query commitFileDiff(const QString& sha, const CommitFileChange& file, const QObject* context, Vcs::Answer<QByteArray> onDone) = 0;
+	// One file's whole content as of one commit, converted the way a checkout would write it: a caller that
+	// compares it against the working tree sees the differences in content alone.
+	// Fails where the commit does not have the path, so the caller decides which revision has it.
+	virtual Vcs::Query fileAtRevision(const QString& sha, const QString& repoRelativePath, const QObject* context, Vcs::Answer<QByteArray> onDone) = 0;
 	// Commits the upstream does not have. A backend names as many as it can cheaply (git: only those on HEAD's
 	// line), so an unlisted commit is not necessarily pushed.
 	// Fails without an upstream to compare against (none configured, or detached HEAD); not an error to report.

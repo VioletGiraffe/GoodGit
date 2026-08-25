@@ -54,6 +54,8 @@ private:
 	void showCommitContextMenu(const QPoint& pos);
 	void showFileContextMenu(const QPoint& pos);
 	void openFileHistory(const QString& filePath);
+	// One file's content as of one commit, in a window of its own
+	void openFileViewer(const QString& sha, const QString& repoRelativePath);
 	// A submodule row opens its own repository's history at the commit the pointer names
 	void onFileRowActivated(const QModelIndex& sourceIndex);
 	// Absent when the index is not a row of the listing shown
