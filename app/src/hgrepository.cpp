@@ -20,6 +20,7 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
+#include <assert.h>
 #include <functional>
 #include <utility>
 
@@ -483,6 +484,13 @@ void HgRepository::undoLastCommit(Vcs::Answer<void> onDone)
 	Hg::run(path(), { QStringLiteral("--config"), QStringLiteral("extensions.uncommit="),
 		QStringLiteral("uncommit"), QStringLiteral("--allow-dirty-working-copy") },
 		this, Vcs::reporting(std::move(onDone)));
+}
+
+void HgRepository::abortOperation(Vcs::Answer<void> onDone)
+{
+	// stateFromRun reads a merge and nothing else, so a merge is the only operation that reaches this
+	assert(state().op == RepoOp::Merge);
+	Hg::run(path(), { QStringLiteral("merge"), QStringLiteral("--abort") }, this, Vcs::reporting(std::move(onDone)));
 }
 
 void HgRepository::planPush(Vcs::Answer<std::vector<PushStep>> onDone)

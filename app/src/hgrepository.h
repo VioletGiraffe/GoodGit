@@ -21,6 +21,7 @@ public:
 	void commitMergeState(const QString& message, const QStringList& untrackedPaths, Vcs::Answer<void> onDone) override;
 
 	void undoLastCommit(Vcs::Answer<void> onDone) override;
+	void abortOperation(Vcs::Answer<void> onDone) override;
 
 	// `hg push -r .` recurses into subrepositories itself, so the plan is this repository alone.
 	// `setUpstream` never arrives true: the window offers it only after a git-specific failure message.

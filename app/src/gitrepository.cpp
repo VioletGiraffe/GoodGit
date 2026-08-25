@@ -705,6 +705,25 @@ void GitRepository::undoLastCommit(Vcs::Answer<void> onDone)
 		this, Vcs::reporting(std::move(onDone)));
 }
 
+void GitRepository::abortOperation(Vcs::Answer<void> onDone)
+{
+	// Each operation is abandoned through the command that started it
+	const QString command = [op = state().op] {
+		switch (op)
+		{
+		case RepoOp::Merge:      return QStringLiteral("merge");
+		case RepoOp::CherryPick: return QStringLiteral("cherry-pick");
+		case RepoOp::Revert:     return QStringLiteral("revert");
+		case RepoOp::Rebase:     return QStringLiteral("rebase");
+		case RepoOp::None:       break;
+		}
+		return QString{};
+	}();
+	assert(!command.isEmpty());
+
+	Git::run(path(), { command, QStringLiteral("--abort") }, this, Vcs::reporting(std::move(onDone)));
+}
+
 void GitRepository::planPush(Vcs::Answer<std::vector<PushStep>> onDone)
 {
 	auto run = std::make_shared<PushPlanRun>();

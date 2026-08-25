@@ -246,6 +246,8 @@ void CommitWindow::buildUi()
 	repositoryMenu->addSeparator();
 	repositoryMenu->addAction(tr("&Refresh"), _repo.get(), &Repository::refresh)->setShortcut(QKeySequence::Refresh);
 	_uncommitAction = repositoryMenu->addAction(tr("&Undo Last Commit"), this, &CommitWindow::undoLastCommit);
+	// One item for every operation: the dialog names the one running, which no menu label has room to do
+	_abortAction = repositoryMenu->addAction(tr("&Abort Operation..."), this, &CommitWindow::abortOperation);
 	QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
 	helpMenu->addAction(tr("&About"), this, [this] {
 		CAboutDialog aboutDialog{ QStringLiteral(GG_VERSION), this };
@@ -729,6 +731,7 @@ void CommitWindow::updateControlStates()
 	_peekButton->setEnabled(!state.upstream.isEmpty() && !_peekInFlight);
 	// undoLastCommit() reports every refusal, so only a write in flight disables this
 	_uncommitAction->setEnabled(canActOnList());
+	_abortAction->setEnabled(state.operationInProgress() && canActOnList());
 }
 
 QString CommitWindow::subjectOrPlaceholder(const QString& subject)
@@ -1196,6 +1199,43 @@ void CommitWindow::showHistoryWindow()
 	_historyWindow->show();
 	_historyWindow->raise();
 	_historyWindow->activateWindow();
+}
+
+void CommitWindow::abortOperation()
+{
+	if (_mutationInFlight)
+		return;
+
+	const RepoOp op = _repo->state().op;
+	assert(op != RepoOp::None); // the action is disabled without one
+
+	const QString title = [op] {
+		switch (op)
+		{
+		case RepoOp::Merge:      return tr("Abort the merge?");
+		case RepoOp::CherryPick: return tr("Abort the cherry-pick?");
+		case RepoOp::Revert:     return tr("Abort the revert?");
+		case RepoOp::Rebase:     return tr("Abort the rebase?");
+		case RepoOp::None:       break;
+		}
+		return QString{};
+	}();
+
+	const auto answer = MessageBox::question(this, title,
+		tr("The repository goes back to where it was before the operation started, and every conflict "
+		   "resolution goes with it.\n\nA change that was already uncommitted when the operation began may "
+		   "not survive either."),
+		{ tr("Abort") });
+	if (answer != 0)
+		return;
+
+	beginMutation();
+	_repo->abortOperation([this](std::expected<void, QString> result) {
+		endMutation();
+		if (!result)
+			showError(tr("Abort failed"), result.error());
+		_repo->refresh();
+	});
 }
 
 void CommitWindow::showPreferencesDialog()

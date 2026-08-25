@@ -88,6 +88,11 @@ public:
 	// A backend that refuses anyway reports it like any failure.
 	virtual void undoLastCommit(Vcs::Answer<void> onDone) = 0;
 
+	// Returns the repository to the state it was in before the operation in progress started. Every conflict
+	// resolution is lost with it, and a change already uncommitted when the operation began may not survive.
+	// Only called while an operation is in progress; which one it is, the backend reads off its own state.
+	virtual void abortOperation(Vcs::Answer<void> onDone) = 0;
+
 	// The commands the push needs, in the order they must run; this repository's own is last. Nothing has
 	// run yet, so a submodule that cannot be pushed is a refusal here rather than a failure halfway through.
 	virtual void planPush(Vcs::Answer<std::vector<PushStep>> onDone) = 0;

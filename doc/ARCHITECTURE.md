@@ -36,6 +36,9 @@ Deliberate consequences:
 - A conflict is resolved in two steps, as both VCSs record it: edit the file, then mark it resolved (`git
   add`, `hg resolve -m`). Committing is refused while any row still reads Conflicted, since the commit
   would take that row's working tree copy, markers and all.
+- The way out is Abort, which hands the operation back to the command that started it (`git <op> --abort`,
+  `hg merge --abort`) and loses every resolution with it. Git alone can abort all four operations: hg reads
+  only a merge as one.
 
 ## Undoing the last commit
 
