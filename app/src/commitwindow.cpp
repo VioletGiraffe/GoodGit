@@ -318,6 +318,7 @@ void CommitWindow::buildUi()
 	_parentCommitLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 	// A long subject must elide rather than widen the column
 	_parentCommitLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+	_parentCommitLabel->setContextMenuPolicy(Qt::CustomContextMenu);
 	messageHeaderLayout->addWidget(_parentCommitLabel, 1);
 	leftLayout->addWidget(messageHeader);
 
@@ -401,6 +402,21 @@ void CommitWindow::buildUi()
 	connect(_filesView, &FileListView::rowActivated, this, &CommitWindow::onRowActivated);
 	connect(_filesView, &QWidget::customContextMenuRequested, this, &CommitWindow::showContextMenu);
 	connect(_filesView->selectionModel(), &QItemSelectionModel::currentChanged, this, &CommitWindow::showDiffForCurrentRow);
+	connect(_parentCommitLabel, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+		// Copied before exec() spins an event loop, in which a finishing refresh could replace the state
+		const RepoState& state = _repo->state();
+		const QString sha = state.headSha;
+		const QString subject = state.headSubject;
+		if (sha.isEmpty())
+			return;
+
+		QMenu menu{ this };
+		QAction* copyTitleAction = menu.addAction(tr("Copy commit title"), this, [subject] { QApplication::clipboard()->setText(subject); });
+		copyTitleAction->setEnabled(!subject.isEmpty());
+		menu.addAction(tr("Copy long hash"), this, [sha] { QApplication::clipboard()->setText(sha); });
+		menu.addAction(tr("Copy short hash"), this, [sha] { QApplication::clipboard()->setText(shortSha(sha)); });
+		menu.exec(_parentCommitLabel->mapToGlobal(pos));
+	});
 
 	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] {
 		_branchLabel->setFont(monospaceFont());
