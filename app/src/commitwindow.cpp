@@ -528,7 +528,7 @@ QAction* CommitWindow::buildRecentRepositoriesDock()
 void CommitWindow::closeEvent(QCloseEvent* event)
 {
 	// A write in flight would be orphaned: nothing cancels a Vcs::Job, and its process outlives the window
-	if (_mutationInFlight || _pushInFlight)
+	if (writeInFlight())
 	{
 		event->ignore();
 		if (_pushInFlight)
@@ -738,13 +738,13 @@ void CommitWindow::updateControlStates()
 	const bool canCommit = checkedCount > 0 && !_messageEdit->toPlainText().trimmed().isEmpty()
 		&& !detachedAndStuck && canActOnList();
 	_commitButton->setEnabled(canCommit);
-	_commitPushButton->setEnabled(canCommit);
+	_commitPushButton->setEnabled(canCommit && !_pushInFlight);
 	_commitButton->setText(state.operationInProgress() ? tr("Commit (%1 files)").arg(checkedCount)
 		: tr("Commit %1 file(s)").arg(checkedCount));
 
-	_pushButton->setEnabled(!_pushInFlight);
+	_pushButton->setEnabled(!writeInFlight());
 	_peekButton->setEnabled(!state.upstream.isEmpty() && !_peekInFlight);
-	// undoLastCommit() reports every refusal, so only a write in flight disables this
+	// undoLastCommit() reports every refusal, so only a mutation in flight disables this
 	_uncommitAction->setEnabled(canActOnList());
 	_abortAction->setEnabled(state.operationInProgress() && canActOnList());
 }
@@ -794,6 +794,11 @@ void CommitWindow::restoreDraftIfParentUnchanged()
 bool CommitWindow::canActOnList() const
 {
 	return !_mutationInFlight && _repo->state().known();
+}
+
+bool CommitWindow::writeInFlight() const
+{
+	return _mutationInFlight || _pushInFlight;
 }
 
 void CommitWindow::beginMutation()
@@ -961,10 +966,7 @@ void CommitWindow::doCommit(bool pushAfterwards)
 
 void CommitWindow::startPush()
 {
-	// Reachable through Commit & Push, which the disabled push button does not gate: two chains would share _pushSteps
-	if (_pushInFlight)
-		return;
-
+	assert(!_pushInFlight); // doCommit reaches this too, but Commit & Push is off while a push runs
 	_pushInFlight = true;
 	updateControlStates();
 	_pushLogView->clearLog();

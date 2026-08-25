@@ -68,8 +68,10 @@ private:
 	// controls that would start a second one
 	void beginMutation();
 	void endMutation();
-	// False while a write is in flight, and while the rows are only the last state that could be read
+	// False while a mutation is in flight, and while the rows are only the last state that could be read
 	[[nodiscard]] bool canActOnList() const;
+	// True while a command that writes the repository or the remote is running
+	[[nodiscard]] bool writeInFlight() const;
 
 	void startCommit(bool pushAfterwards);
 	void confirmUntrackedThenCommit(bool pushAfterwards);
