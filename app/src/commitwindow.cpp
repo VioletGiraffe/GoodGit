@@ -1146,15 +1146,10 @@ void CommitWindow::onRowActivated(const QModelIndex& sourceIndex)
 		openSubmoduleWindow(entry);
 		return;
 	}
-	if (entry.type == ChangeType::Untracked)
-	{
-		QDesktopServices::openUrl(QUrl::fromLocalFile(absolutePath(entry)));
-		return;
-	}
 	if (entry.type == ChangeType::Deleted)
-		return;
+		return; // nothing on disk to open
 
-	_repo->launchExternalDiffTool(entry.path);
+	QDesktopServices::openUrl(QUrl::fromLocalFile(absolutePath(entry)));
 }
 
 void CommitWindow::showHistoryWindow()
