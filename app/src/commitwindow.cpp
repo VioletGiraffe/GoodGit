@@ -1294,14 +1294,6 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	menu.addAction(tr("Copy full path"), this, [copyPaths] { copyPaths(true); });
 	menu.addSeparator();
 
-	// A lone submodule row discards what is uncommitted inside it instead. One row only: the dialog lists the
-	// paths inside that one submodule.
-	const bool contentOfOneSubmodule = entries.size() == 1 && contentDiscardable(entries.front());
-	QAction* discardAction = menu.addAction(tr("Discard changes"), this, &CommitWindow::discardSelection);
-	discardAction->setVisible(anyDiscardable || contentOfOneSubmodule);
-	// Disabled, not hidden: the operation ends, and _opStrip says one is running
-	discardAction->setEnabled(canAct && !operationInProgress);
-
 	QAction* deleteAction = menu.addAction(tr("Delete to Recycle Bin"), this, &CommitWindow::deleteSelection);
 	deleteAction->setVisible(anyDeletable);
 	deleteAction->setEnabled(canAct);
@@ -1310,6 +1302,16 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	deleteAction->setShortcut(QKeySequence::Delete);
 	deleteAction->setShortcutContext(Qt::WidgetShortcut);
 	deleteAction->setShortcutVisibleInContextMenu(true);
+
+	menu.addSeparator();
+
+	// A lone submodule row discards what is uncommitted inside it instead. One row only: the dialog lists the
+	// paths inside that one submodule.
+	const bool contentOfOneSubmodule = entries.size() == 1 && contentDiscardable(entries.front());
+	QAction* discardAction = menu.addAction(tr("Discard changes"), this, &CommitWindow::discardSelection);
+	discardAction->setVisible(anyDiscardable || contentOfOneSubmodule);
+	// Disabled, not hidden: the operation ends, and _opStrip says one is running
+	discardAction->setEnabled(canAct && !operationInProgress);
 
 	hideRedundantSeparators(menu);
 	menu.exec(_filesView->viewport()->mapToGlobal(pos));
