@@ -166,6 +166,7 @@ private:
 	// runs: two flows would meet at index.lock, and the second would commit a pathspec the first already took
 	bool _mutationInFlight = false;
 	bool _peekInFlight = false; // a fetch is slow, and a refresh landing meanwhile must not re-enable the button
+	bool _pushInFlight = false; // held across the whole push: the plan, every step, and the upstream dialog
 	// A refresh has established the state at least once: before that there is no parent sha to judge a stored draft by
 	bool _stateWasRead = false;
 	bool _initialWidthPending = false; // set when no stored splitter state was restored

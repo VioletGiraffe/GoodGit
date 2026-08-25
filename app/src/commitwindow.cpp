@@ -30,6 +30,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QCloseEvent>
 #include <QDesktopServices>
 #include <QDir>
 #include <QDockWidget>
@@ -526,6 +527,19 @@ QAction* CommitWindow::buildRecentRepositoriesDock()
 
 void CommitWindow::closeEvent(QCloseEvent* event)
 {
+	// A write in flight would be orphaned: nothing cancels a Vcs::Job, and its process outlives the window
+	if (_mutationInFlight || _pushInFlight)
+	{
+		event->ignore();
+		if (_pushInFlight)
+			_pushLogPane->show(); // may have been hidden mid-push; it shows how far the push has got
+
+		MessageBox::notice(this, tr("Cannot close yet"), _pushInFlight
+			? tr("A push is running. Wait for it to finish, then close the window.")
+			: tr("An operation that changes the repository is running. Wait for it to finish, then close the window."), {});
+		return;
+	}
+
 	CSettings{}.setValue(Settings::CommitWindowSplitterKey, _splitter->saveState());
 	saveDraftMessage();
 	QMainWindow::closeEvent(event);
@@ -728,6 +742,7 @@ void CommitWindow::updateControlStates()
 	_commitButton->setText(state.operationInProgress() ? tr("Commit (%1 files)").arg(checkedCount)
 		: tr("Commit %1 file(s)").arg(checkedCount));
 
+	_pushButton->setEnabled(!_pushInFlight);
 	_peekButton->setEnabled(!state.upstream.isEmpty() && !_peekInFlight);
 	// undoLastCommit() reports every refusal, so only a write in flight disables this
 	_uncommitAction->setEnabled(canActOnList());
@@ -946,13 +961,19 @@ void CommitWindow::doCommit(bool pushAfterwards)
 
 void CommitWindow::startPush()
 {
-	_pushButton->setEnabled(false);
+	// Reachable through Commit & Push, which the disabled push button does not gate: two chains would share _pushSteps
+	if (_pushInFlight)
+		return;
+
+	_pushInFlight = true;
+	updateControlStates();
 	_pushLogView->clearLog();
 
 	_repo->planPush([this](std::expected<std::vector<PushStep>, QString> steps) {
 		if (!steps)
 		{
-			_pushButton->setEnabled(true);
+			_pushInFlight = false;
+			updateControlStates();
 			showError(tr("Cannot push"), steps.error());
 			return;
 		}
@@ -980,7 +1001,8 @@ void CommitWindow::runPushStep(size_t index, bool setUpstream)
 				runPushStep(index + 1, /*setUpstream=*/false);
 				return;
 			}
-			_pushButton->setEnabled(true);
+			_pushInFlight = false;
+			updateControlStates();
 			_repo->refresh();
 			emit pushed();
 			return;
@@ -990,7 +1012,8 @@ void CommitWindow::runPushStep(size_t index, bool setUpstream)
 		if (upstreamOffered && offerUpstreamThenRetry(index))
 			return;
 
-		_pushButton->setEnabled(true);
+		_pushInFlight = false;
+		updateControlStates();
 		if (!upstreamOffered) // a declined offer already named this failure
 			showError(tr("Push failed"), result.errorText());
 	};
