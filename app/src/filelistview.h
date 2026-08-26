@@ -33,8 +33,8 @@ public:
 	void setSelectedSourceRows(const std::vector<int>& rows, int currentRow);
 
 signals:
-	// Double-click or Enter on a row
-	void rowActivated(const QModelIndex& sourceIndex);
+	// Double-click or Enter on a row, with the modifiers held at that moment
+	void rowActivated(const QModelIndex& sourceIndex, Qt::KeyboardModifiers modifiers);
 
 private:
 	QSortFilterProxyModel* const _proxy;

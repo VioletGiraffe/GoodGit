@@ -56,10 +56,13 @@ private:
 	void openFileHistory(const QString& filePath);
 	// One file's content as of one commit, in a window of its own
 	void openFileViewer(const QString& sha, const QString& repoRelativePath);
-	// A submodule row opens its own repository's history at the commit the pointer names
-	void onFileRowActivated(const QModelIndex& sourceIndex);
+	// A submodule row opens its own repository's history at the commit the pointer names; a file row opens
+	// the viewer, on the parent commit where Shift is held
+	void onFileRowActivated(const QModelIndex& sourceIndex, Qt::KeyboardModifiers modifiers);
 	// Absent when the index is not a row of the listing shown
 	[[nodiscard]] std::optional<CommitFileChange> fileEntryAt(const QModelIndex& sourceIndex) const;
+	// The commit whose files are listed; absent while none is selected
+	[[nodiscard]] std::optional<CommitRecord> currentCommit() const;
 	void openSubmoduleHistory(const CommitFileChange& entry);
 	// The second phase of a cold open: the same walk at the full limit, extending the shown batch in place
 	void loadRemainingCommits();

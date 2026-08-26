@@ -44,6 +44,25 @@ constexpr int MaxFilePathLabelWidth = 420; // beyond this the path elides
 constexpr int PickaxeEditWidth = 320;
 constexpr qsizetype MaxShownPickaxeTerm = 24;
 
+// Where one listed change's content can be read from. An empty sha means that revision does not hold the file.
+struct FileRevisionTargets
+{
+	QString thisSha;
+	QString parentSha;
+	QString pathInParent;
+};
+
+FileRevisionTargets fileRevisionTargets(const CommitFileChange& entry, const CommitRecord& commit)
+{
+	FileRevisionTargets targets;
+	if (entry.type != ChangeType::Deleted)
+		targets.thisSha = commit.sha;
+	if (entry.type != ChangeType::Added)
+		targets.parentSha = commit.parents.value(0); // a merge lists no files, so the first parent is the only one
+	targets.pathInParent = entry.oldPath.isEmpty() ? entry.path : entry.oldPath; // a rename is under its old name there
+	return targets;
+}
+
 } // namespace
 
 HistoryWindow::HistoryWindow(const RepositoryLocation& location, QWidget* parent) :
@@ -350,11 +369,26 @@ void HistoryWindow::selectLoadedCommit()
 		_logView->setCurrentIndex(_logModel.index(0, CommitLogModel::CommitColumn));
 }
 
-void HistoryWindow::onFileRowActivated(const QModelIndex& sourceIndex)
+void HistoryWindow::onFileRowActivated(const QModelIndex& sourceIndex, Qt::KeyboardModifiers modifiers)
 {
 	const std::optional<CommitFileChange> entry = fileEntryAt(sourceIndex);
-	if (entry && entry->isSubmodule)
-		openSubmoduleHistory(*entry);
+	if (!entry)
+		return;
+	if (entry->isSubmodule)
+	{
+		openSubmoduleHistory(*entry); // a pointer has no content to view at either revision
+		return;
+	}
+
+	const std::optional<CommitRecord> commit = currentCommit();
+	if (!commit)
+		return;
+
+	const FileRevisionTargets targets = fileRevisionTargets(*entry, *commit);
+	const bool atParent = modifiers.testFlag(Qt::ShiftModifier);
+	const QString& sha = atParent ? targets.parentSha : targets.thisSha;
+	if (!sha.isEmpty()) // the revision asked for does not hold the file
+		openFileViewer(sha, atParent ? targets.pathInParent : entry->path);
 }
 
 std::optional<CommitFileChange> HistoryWindow::fileEntryAt(const QModelIndex& sourceIndex) const
@@ -362,6 +396,14 @@ std::optional<CommitFileChange> HistoryWindow::fileEntryAt(const QModelIndex& so
 	if (!sourceIndex.isValid() || sourceIndex.row() >= _filesModel.rowCount())
 		return {};
 	return _filesModel.entryAt(sourceIndex.row());
+}
+
+std::optional<CommitRecord> HistoryWindow::currentCommit() const
+{
+	const QModelIndex current = _logView->currentIndex();
+	if (!current.isValid() || current.row() >= _logModel.rowCount())
+		return {};
+	return _logModel.commitAt(current.row());
 }
 
 void HistoryWindow::openSubmoduleHistory(const CommitFileChange& entry)
@@ -495,10 +537,8 @@ void HistoryWindow::showFileContextMenu(const QPoint& pos)
 		return;
 	const CommitFileChange& entry = *rowEntry;
 
-	// The rows listed are the current commit's, so it is read alongside them
-	const QModelIndex commitIndex = _logView->currentIndex();
-	const bool commitKnown = commitIndex.isValid() && commitIndex.row() < _logModel.rowCount();
-	const CommitRecord commit = commitKnown ? _logModel.commitAt(commitIndex.row()) : CommitRecord{};
+	// No current commit leaves both shas empty, which disables the two items that need one
+	const FileRevisionTargets targets = fileRevisionTargets(entry, currentCommit().value_or(CommitRecord{}));
 
 	QMenu menu{ this };
 	if (entry.isSubmodule)
@@ -513,15 +553,17 @@ void HistoryWindow::showFileContextMenu(const QPoint& pos)
 
 		menu.addSeparator();
 		QAction* atThisCommit = menu.addAction(tr("View file at this commit"), this,
-			[this, sha = commit.sha, path = entry.path] { openFileViewer(sha, path); });
-		atThisCommit->setEnabled(commitKnown && entry.type != ChangeType::Deleted);
+			[this, sha = targets.thisSha, path = entry.path] { openFileViewer(sha, path); });
+		atThisCommit->setEnabled(!targets.thisSha.isEmpty());
 
-		// A rename is under its old name in the parent; a merge never gets here, so the first parent is the only one
-		const QString parentSha = commit.parents.value(0);
-		const QString pathInParent = entry.oldPath.isEmpty() ? entry.path : entry.oldPath;
 		QAction* atParentCommit = menu.addAction(tr("View file at parent commit"), this,
-			[this, parentSha, pathInParent] { openFileViewer(parentSha, pathInParent); });
-		atParentCommit->setEnabled(commitKnown && !parentSha.isEmpty() && entry.type != ChangeType::Added);
+			[this, sha = targets.parentSha, path = targets.pathInParent] { openFileViewer(sha, path); });
+		atParentCommit->setEnabled(!targets.parentSha.isEmpty());
+		// Display only: the row's activation handles the key. WidgetShortcut on an action belonging to no
+		// widget never registers, so the key cannot trigger twice.
+		atParentCommit->setShortcut(Qt::SHIFT | Qt::Key_Return);
+		atParentCommit->setShortcutContext(Qt::WidgetShortcut);
+		atParentCommit->setShortcutVisibleInContextMenu(true);
 	}
 	menu.exec(_filesView->viewport()->mapToGlobal(pos));
 }
@@ -595,12 +637,12 @@ void HistoryWindow::showDiffForCurrentFile()
 	_diffQuery.cancel();
 
 	const std::optional<CommitFileChange> currentFile = fileEntryAt(_filesView->currentSourceIndex());
-	const QModelIndex currentCommit = _logView->currentIndex();
-	if (!currentFile || !currentCommit.isValid() || currentCommit.row() >= _logModel.rowCount())
+	const std::optional<CommitRecord> commit = currentCommit();
+	if (!currentFile || !commit)
 		return; // no file picked: the pane keeps the commit message
 
 	const CommitFileChange& entry = *currentFile;
-	const QString sha = _logModel.commitAt(currentCommit.row()).sha;
+	const QString sha = commit->sha;
 	const QString tag = shortSha(sha);
 
 	_diffPane->showMessage(entry.path, tag, tr("Loading..."));

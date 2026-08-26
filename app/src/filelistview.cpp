@@ -3,6 +3,7 @@
 #include "filelistdelegate.h"
 
 DISABLE_COMPILER_WARNINGS
+#include <QGuiApplication>
 #include <QHeaderView>
 #include <QItemSelectionModel>
 #include <QMouseEvent>
@@ -81,8 +82,10 @@ FileListView::FileListView(QWidget* parent) :
 	setContextMenuPolicy(Qt::CustomContextMenu);
 	setHeader(new FileListHeader{ this });
 
+	// QAbstractItemView::activated carries no modifiers: the activating event is the last one delivered, so
+	// the application still reports its state
 	connect(this, &QAbstractItemView::activated, this,
-		[this](const QModelIndex& index) { emit rowActivated(_proxy->mapToSource(index)); });
+		[this](const QModelIndex& index) { emit rowActivated(_proxy->mapToSource(index), QGuiApplication::keyboardModifiers()); });
 }
 
 void FileListView::setModel(QAbstractItemModel* sourceModel)
