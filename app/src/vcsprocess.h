@@ -147,8 +147,7 @@ template <typename T, typename Parse>
 	};
 }
 
-// NUL-separated path list, for passing paths that may contain any text separator - on stdin, or in a file
-// named as an argument
+// NUL-separated path list, for passing paths that may contain any text separator on stdin
 [[nodiscard]] QByteArray nulJoined(const QStringList& paths);
 
 // A temp file holding `contents`, for a command that takes input by file name (a commit message, a long pathspec).
