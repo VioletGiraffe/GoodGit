@@ -107,7 +107,8 @@ QStringList branchAndUnmergedStatusArgs()
 		QStringLiteral("--untracked-files=no"), QStringLiteral("--ignore-submodules=all"), QStringLiteral("-z") };
 }
 
-// The operation an unfinished merge, cherry-pick, revert or rebase leaves marked in the git directory
+// The operation an unfinished merge, cherry-pick, revert, rebase or bisect leaves marked in the git directory.
+// The conflict-resolution ops come first: one started mid-bisect owns the commit until it ends.
 RepoOp operationInGitDir(const QString& gitDirPath)
 {
 	const QDir gitDir{ gitDirPath };
@@ -119,6 +120,8 @@ RepoOp operationInGitDir(const QString& gitDirPath)
 		return RepoOp::Revert;
 	if (gitDir.exists(QStringLiteral("rebase-merge")) || gitDir.exists(QStringLiteral("rebase-apply")))
 		return RepoOp::Rebase;
+	if (gitDir.exists(QStringLiteral("BISECT_LOG")))
+		return RepoOp::Bisect;
 	return RepoOp::None;
 }
 
@@ -729,21 +732,22 @@ void GitRepository::undoLastCommit(Vcs::Answer<void> onDone)
 
 void GitRepository::abortOperation(Vcs::Answer<void> onDone)
 {
-	// Each operation is abandoned through the command that started it
-	const QString command = [op = state().op] {
+	// Each operation is abandoned through the command that started it; bisect's own ender is `reset`
+	QStringList args = [op = state().op]() -> QStringList {
 		switch (op)
 		{
-		case RepoOp::Merge:      return QStringLiteral("merge");
-		case RepoOp::CherryPick: return QStringLiteral("cherry-pick");
-		case RepoOp::Revert:     return QStringLiteral("revert");
-		case RepoOp::Rebase:     return QStringLiteral("rebase");
+		case RepoOp::Merge:      return { QStringLiteral("merge"), QStringLiteral("--abort") };
+		case RepoOp::CherryPick: return { QStringLiteral("cherry-pick"), QStringLiteral("--abort") };
+		case RepoOp::Revert:     return { QStringLiteral("revert"), QStringLiteral("--abort") };
+		case RepoOp::Rebase:     return { QStringLiteral("rebase"), QStringLiteral("--abort") };
+		case RepoOp::Bisect:     return { QStringLiteral("bisect"), QStringLiteral("reset") };
 		case RepoOp::None:       break;
 		}
-		return QString{};
+		return {};
 	}();
-	assert(!command.isEmpty());
+	assert(!args.isEmpty());
 
-	Git::run(path(), { command, QStringLiteral("--abort") }, this, Vcs::reporting(std::move(onDone)));
+	Git::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));
 }
 
 void GitRepository::planPush(Vcs::Answer<std::vector<PushStep>> onDone)
@@ -1017,7 +1021,7 @@ void uncommittedDiscardPlan(const QString& workDir, const QObject* context, std:
 			if (!run->gitDir.ok)
 				return onDone({ .refusal = QObject::tr("Its git directory could not be found: %1").arg(run->gitDir.errorText()) });
 			if (operationInGitDir(QString::fromUtf8(run->gitDir.out.trimmed())) != RepoOp::None)
-				return onDone({ .refusal = QObject::tr("A merge, rebase, cherry-pick or revert is in progress there. Finish or abort it first.") });
+				return onDone({ .refusal = QObject::tr("A merge, rebase, cherry-pick, revert or bisect is in progress there. Finish or abort it first.") });
 			if (!run->status.ok)
 				return onDone({ .refusal = QObject::tr("Its status could not be read: %1").arg(run->status.errorText()) });
 			if (!Git::parseUnmergedPaths(run->status.out).isEmpty())

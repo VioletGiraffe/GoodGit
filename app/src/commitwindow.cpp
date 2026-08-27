@@ -573,7 +573,7 @@ void CommitWindow::onRefreshed()
 	const SelectionByPath selection = captureSelectionByPath();
 
 	const RepoState& state = _repo->state();
-	_filesModel.setEntries(_repo->files(), state.operationInProgress());
+	_filesModel.setEntries(_repo->files(), state.mergeCommitRequired());
 	RecentRepositories::setSubmodules(*_repo); // the only place the recent list learns a repository's submodules
 
 	updateHeader();
@@ -695,6 +695,8 @@ void CommitWindow::updateStrips()
 	case RepoOp::CherryPick: opText = tr("Cherry-pick in progress: all changes must be committed together."); break;
 	case RepoOp::Revert:     opText = tr("Revert in progress: all changes must be committed together."); break;
 	case RepoOp::Rebase:     opText = tr("Rebase in progress: all changes must be committed together."); break;
+	case RepoOp::Bisect:     opText = tr("Bisect in progress: committing is disabled until it ends, since a new commit "
+									     "would fall outside the search range."); break;
 	case RepoOp::None:       break;
 	}
 	// A row reads Conflicted only while an operation is in progress, so this always extends the line above
@@ -704,7 +706,8 @@ void CommitWindow::updateStrips()
 	_opStrip->setVisible(!opText.isEmpty());
 
 	QString detachedText;
-	if (state.detached)
+	// A bisect detaches HEAD as a matter of course; the op strip explains, and no commit will reattach
+	if (state.detached && state.op != RepoOp::Bisect)
 	{
 		if (state.localBranchesAtHead.size() == 1)
 			detachedText = tr("Not on a branch. '%1' points here and will be checked out when you commit.").arg(state.localBranchesAtHead.front());
@@ -741,11 +744,12 @@ void CommitWindow::updateControlStates()
 		: QString{});
 
 	const bool detachedAndStuck = state.detached && state.localBranchesAtHead.isEmpty() && state.remoteBranchesAtHead.isEmpty();
+	// op != Bisect: a commit made mid-bisect falls outside the search range and poisons the session (the op strip says so)
 	const bool canCommit = checkedCount > 0 && !_messageEdit->toPlainText().trimmed().isEmpty()
-		&& !detachedAndStuck && canActOnList();
+		&& !detachedAndStuck && state.op != RepoOp::Bisect && canActOnList();
 	_commitButton->setEnabled(canCommit);
 	_commitPushButton->setEnabled(canCommit && !_pushInFlight);
-	_commitButton->setText(state.operationInProgress() ? tr("Commit (%1 files)").arg(checkedCount)
+	_commitButton->setText(state.mergeCommitRequired() ? tr("Commit (%1 files)").arg(checkedCount)
 		: tr("Commit %1 file(s)").arg(checkedCount));
 
 	_pushButton->setEnabled(!writeInFlight());
@@ -1003,7 +1007,7 @@ void CommitWindow::doCommit(bool pushAfterwards, StateStamp decisionStamp)
 			startPush();
 	};
 
-	if (_repo->state().operationInProgress())
+	if (_repo->state().mergeCommitRequired())
 		_repo->commitMergeState(message, untracked, onDone);
 	else
 		_repo->commit(message, pathspec, untracked, onDone);
@@ -1299,17 +1303,22 @@ void CommitWindow::abortOperation()
 		case RepoOp::CherryPick: return tr("Abort the cherry-pick?");
 		case RepoOp::Revert:     return tr("Abort the revert?");
 		case RepoOp::Rebase:     return tr("Abort the rebase?");
+		case RepoOp::Bisect:     return tr("End the bisect?");
 		case RepoOp::None:       break;
 		}
 		return QString{};
 	}();
 
+	// Ending a bisect loses nothing: it only checks the pre-bisect branch out again
+	const bool bisect = op == RepoOp::Bisect;
+	const QString text = bisect
+		? tr("The bisect session ends, and the branch that was checked out before it started is checked out again.")
+		: tr("The repository goes back to where it was before the operation started, and every conflict "
+			 "resolution goes with it.\n\nA change that was already uncommitted when the operation began may "
+			 "not survive either.");
+
 	const StateStamp stamp = stateStamp();
-	const auto answer = MessageBox::question(this, title,
-		tr("The repository goes back to where it was before the operation started, and every conflict "
-		   "resolution goes with it.\n\nA change that was already uncommitted when the operation began may "
-		   "not survive either."),
-		{ tr("Abort") });
+	const auto answer = MessageBox::question(this, title, text, { bisect ? tr("End bisect") : tr("Abort") });
 	if (answer != 0 || stateMovedSince(stamp))
 		return;
 
@@ -1749,7 +1758,7 @@ void CommitWindow::undoLastCommit()
 			case UndoRefusal::Detached:
 				return tr("HEAD is detached, so there is no upstream to check whether the last commit has been pushed.");
 			case UndoRefusal::OperationInProgress:
-				return tr("A merge, rebase, cherry-pick or revert is in progress. Finish or abort it first.");
+				return tr("A merge, rebase, cherry-pick, revert or bisect is in progress. Finish or abort it first.");
 			case UndoRefusal::MergeCommit: return tr("The last commit is a merge, and undoing it would leave the merge half done.");
 			case UndoRefusal::RootCommit:
 				return tr("The last commit is the only one in this repository, so there is no earlier commit to go back to.");

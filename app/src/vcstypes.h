@@ -75,7 +75,7 @@ struct CommitRecord
 	[[nodiscard]] QString subject() const { return message.section(QLatin1Char('\n'), 0, 0); }
 };
 
-enum class RepoOp : uint8_t { None, Merge, CherryPick, Revert, Rebase };
+enum class RepoOp : uint8_t { None, Merge, CherryPick, Revert, Rebase, Bisect };
 
 // Why the last commit cannot be undone. Decided here rather than in a backend: git and Mercurial refuse on
 // the same grounds.
@@ -124,6 +124,9 @@ struct RepoState
 
 	[[nodiscard]] bool known() const { return readFailure.isEmpty(); }
 	[[nodiscard]] bool operationInProgress() const { return op != RepoOp::None; }
+	// The conflict-resolution ops forbid a path-limited commit, so theirs takes every tracked change.
+	// Bisect does not constrain the commit; committing during one is refused by the window instead.
+	[[nodiscard]] bool mergeCommitRequired() const { return op != RepoOp::None && op != RepoOp::Bisect; }
 
 	[[nodiscard]] UndoRefusal lastCommitUndoRefusal() const
 	{
