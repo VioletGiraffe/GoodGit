@@ -20,14 +20,6 @@ RESTORE_COMPILER_WARNINGS
 
 namespace {
 
-constexpr int MaxUnpushedLogEntries = 30; // for the tooltip; state.ahead carries the true count
-
-// In a temp file: the message is the one argument with no bound on its length
-std::shared_ptr<QTemporaryFile> openMessageFile(const QString& message, QObject* context, const Vcs::Callback& onDone)
-{
-	return Vcs::openTempFile(message.toUtf8(), QStringLiteral("commit message"), context, onDone);
-}
-
 // A failed commit would leave the untracked paths staged, and their rows would read Added instead of
 // Untracked. The commit's result is what gets reported; the reset's says nothing about why the commit failed.
 void rollBackAddThenReport(const QString& workDir, const QObject* context, const QStringList& untrackedPaths,
@@ -192,11 +184,6 @@ QSet<QString> shaSet(const QByteArray& output)
 	return QSet<QString>{ shas.begin(), shas.end() };
 }
 
-QString outputAsText(const QByteArray& output)
-{
-	return QString::fromUtf8(output);
-}
-
 Vcs::Query runQuery(const QString& workDir, QStringList args, const QObject* context, Vcs::Callback callback)
 {
 	return Vcs::Query{ Git::run(workDir, std::move(args), context, std::move(callback), {}, /*readOnlyQuery=*/true) };
@@ -297,14 +284,7 @@ void scanSubmodulesForPush(const std::shared_ptr<PushPlanRun>& run, const std::s
 // Glob metacharacters in a file name must stay literal; '#' and '!' are special at line start
 QString escapedForGitIgnore(const QString& text)
 {
-	QString out;
-	out.reserve(text.size());
-	for (const QChar c : text)
-	{
-		if (c == QLatin1Char('\\') || c == QLatin1Char('*') || c == QLatin1Char('?') || c == QLatin1Char('[') || c == QLatin1Char(']'))
-			out += QLatin1Char('\\');
-		out += c;
-	}
+	QString out = backslashEscaped(text, u"\\*?[]");
 	if (out.startsWith(QLatin1Char('#')) || out.startsWith(QLatin1Char('!')))
 		out.prepend(QLatin1Char('\\'));
 	return out;
@@ -603,7 +583,7 @@ void GitRepository::commit(const QString& message, const QStringList& pathspec, 
 	// The steps below pass ProcessResults between them (the rollback reports the commit's result, not its
 	// own), so the conversion to an Answer happens once, here
 	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
-	const auto messageFile = openMessageFile(message, this, report);
+	const auto messageFile = Vcs::openMessageFile(message.toUtf8(), this, report);
 	if (!messageFile)
 		return;
 
@@ -673,7 +653,7 @@ void GitRepository::commit(const QString& message, const QStringList& pathspec, 
 void GitRepository::commitMergeState(const QString& message, const QStringList& untrackedPaths, Vcs::Answer<void> onDone)
 {
 	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
-	const auto messageFile = openMessageFile(message, this, report);
+	const auto messageFile = Vcs::openMessageFile(message.toUtf8(), this, report);
 	if (!messageFile)
 		return;
 
@@ -938,7 +918,7 @@ Vcs::Query GitRepository::submodulePointerLog(const QString& repoRelativePath, c
 			}
 			const QString oldSha = QString::fromUtf8(revResult.out.trimmed());
 			query.attach(Git::run(subPath, { QStringLiteral("log"), QStringLiteral("--oneline"), QStringLiteral("--no-decorate"),
-				oldSha + QStringLiteral("..HEAD") }, context, Vcs::answering(std::move(onDone), outputAsText), {}, /*readOnlyQuery=*/true));
+				oldSha + QStringLiteral("..HEAD") }, context, Vcs::answering(std::move(onDone), Vcs::outputAsText), {}, /*readOnlyQuery=*/true));
 		}, {}, /*readOnlyQuery=*/true));
 	return query;
 }
@@ -981,10 +961,7 @@ QByteArray GitRepository::ignoreFileWithPatternAdded(QByteArray content, const I
 
 void GitRepository::launchExternalDiffTool(const QString& repoRelativePath) const
 {
-	QString executable = CSettings{}.value(Settings::GitExecutableKey).toString();
-	if (executable.isEmpty())
-		executable = QLatin1String(Settings::GitExecutableDefault);
-	QProcess::startDetached(executable,
+	QProcess::startDetached(Git::executablePath(),
 		{ QStringLiteral("difftool"), QStringLiteral("-y"), QStringLiteral("HEAD"), QStringLiteral("--"), repoRelativePath },
 		path());
 }

@@ -11,9 +11,15 @@ RESTORE_COMPILER_WARNINGS
 #include <map>
 #include <vector>
 
+// `text` with a backslash before every character in `metacharacters`
+[[nodiscard]] QString backslashEscaped(const QString& text, QStringView metacharacters);
+
 // Escapes the metacharacters common to extended and Python regular expressions. LogQuery::contentSearch is
 // always a literal, but every backend's content search takes a pattern.
 [[nodiscard]] QString escapedForRegex(const QString& literal);
+
+// Caps RepoState::unpushedSubjects, which feed the ahead-count tooltip; state.ahead carries the true count
+inline constexpr int MaxUnpushedLogEntries = 30;
 
 // What a repository window is opened on
 struct RepositoryLocation

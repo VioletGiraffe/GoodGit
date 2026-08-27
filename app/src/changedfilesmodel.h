@@ -33,6 +33,10 @@ enum FileListRole { SortRankRole = Qt::UserRole, SortPathRole };
 // The headings both lists show, so their columns read the same
 [[nodiscard]] QVariant fileListHeaderData(int section, Qt::Orientation orientation, int role);
 
+// The roles both lists answer identically: alignment, submodule icon, count-column colors, fonts.
+// Empty where the model answers for itself (the state-column foreground differs between them).
+[[nodiscard]] QVariant fileListSharedRoleData(int column, int role, bool isSubmodule, ChangeType type);
+
 // The checkable file list.
 // Row styling comes from the theme via item data roles; FileListDelegate paints what roles cannot express.
 class ChangedFilesModel final : public QAbstractTableModel

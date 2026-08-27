@@ -6,17 +6,34 @@ RESTORE_COMPILER_WARNINGS
 
 namespace Git {
 
+namespace {
+
+// Iterates the records of porcelain-v2 -z output. A rename record ('2') is followed by its origin path as
+// a bare NUL token, which is skipped: a filename is arbitrary text and must not be read as a record.
+template <typename OnRecord>
+void forEachStatusV2Record(const QByteArray& statusOutput, OnRecord onRecord)
+{
+	const auto tokens = statusOutput.split('\0');
+	for (qsizetype i = 0; i < tokens.size(); ++i)
+	{
+		onRecord(tokens[i]);
+		if (tokens[i].startsWith("2 "))
+			++i;
+	}
+}
+
+} // namespace
+
 BranchHeader parseBranchHeader(const QByteArray& statusOutput)
 {
 	BranchHeader header;
-	for (const QByteArray& line : statusOutput.split('\0'))
-	{
+	forEachStatusV2Record(statusOutput, [&header](const QByteArray& line) {
 		if (!line.startsWith("# branch."))
-			continue;
+			return;
 
 		const qsizetype space = line.indexOf(' ', 9);
 		if (space < 0)
-			continue;
+			return;
 		const QByteArray key = line.mid(9, space - 9);
 		const QByteArray value = line.mid(space + 1);
 
@@ -39,7 +56,7 @@ BranchHeader parseBranchHeader(const QByteArray& statusOutput)
 				header.aheadBehindKnown = aheadParsed && behindParsed;
 			}
 		}
-	}
+	});
 	return header;
 }
 
@@ -50,10 +67,9 @@ QStringList parseUnmergedPaths(const QByteArray& statusOutput)
 	constexpr int fieldsBeforePath = 10;
 
 	QStringList paths;
-	for (const QByteArray& record : statusOutput.split('\0'))
-	{
+	forEachStatusV2Record(statusOutput, [&paths](const QByteArray& record) {
 		if (!record.startsWith("u "))
-			continue;
+			return;
 
 		qsizetype pathStart = 0;
 		for (int field = 0; field < fieldsBeforePath && pathStart >= 0; ++field)
@@ -63,7 +79,7 @@ QStringList parseUnmergedPaths(const QByteArray& statusOutput)
 		}
 		if (pathStart > 0)
 			paths.push_back(QString::fromUtf8(record.mid(pathStart)));
-	}
+	});
 	return paths;
 }
 

@@ -10,6 +10,10 @@
 // and `--no-optional-locks` on read-only queries.
 namespace Git {
 
+// The configured executable, or the default. For the one command started detached rather than through
+// run(), which alone applies the environment and invariants.
+[[nodiscard]] QString executablePath();
+
 Vcs::Job* run(const QString& workDir, QStringList args, const QObject* context, Vcs::Callback callback,
 	QByteArray stdinData = {}, bool readOnlyQuery = false);
 

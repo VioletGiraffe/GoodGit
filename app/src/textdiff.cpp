@@ -20,6 +20,8 @@ public:
 			else if (_text[pos].isSpace())
 				while (pos < _text.size() && _text[pos].isSpace())
 					++pos;
+			else if (_text[pos].isHighSurrogate() && pos + 1 < _text.size() && _text[pos + 1].isLowSurrogate())
+				pos += 2; // one non-BMP character is one token: half of a split pair would diff as a broken glyph
 			else
 				++pos;
 

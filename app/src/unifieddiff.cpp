@@ -218,16 +218,18 @@ void appendPair(ParsedDiff& parsed, const std::vector<DiffLine>& lines, const st
 	appendLine(parsed, lines[size_t(addedIndex)], addedText);
 }
 
-// Renders the removed lines [removedBegin, addedBegin) against the added lines [addedBegin, addedEnd),
+// Renders the removed lines [removedBegin, removedEnd) against the added lines [addedBegin, addedEnd),
 // pairing each removed line with the added line it was most likely edited into.
 void appendRun(ParsedDiff& parsed, const std::vector<DiffLine>& lines, const std::vector<QStringView>& texts,
-	int removedBegin, int addedBegin, int addedEnd)
+	int removedBegin, int removedEnd, int addedBegin, int addedEnd)
 {
-	const int removedCount = addedBegin - removedBegin;
+	const int removedCount = removedEnd - removedBegin;
 	const int addedCount = addedEnd - addedBegin;
 	if (addedCount == 0 || int64_t(removedCount) * addedCount > MaxRunPairings)
 	{
-		for (int k = removedBegin; k < addedEnd; ++k)
+		for (int k = removedBegin; k < removedEnd; ++k)
+			appendLine(parsed, lines[size_t(k)], texts[size_t(k)]);
+		for (int k = addedBegin; k < addedEnd; ++k)
 			appendLine(parsed, lines[size_t(k)], texts[size_t(k)]);
 		return;
 	}
@@ -313,14 +315,23 @@ ParsedDiff parseUnifiedDiff(QStringView diff)
 
 		// A modification prints its removed lines and then its added ones. Anything else between them - a
 		// hunk header, a context line - ends the run, and the removed lines are a deletion of their own.
-		int addedBegin = i;
-		while (addedBegin < count && lines[size_t(addedBegin)].kind == DiffLineKind::Removed)
+		int removedEnd = i;
+		while (removedEnd < count && lines[size_t(removedEnd)].kind == DiffLineKind::Removed)
+			++removedEnd;
+
+		// Except the no-newline marker, which annotates the removed line before it rather than ending the
+		// run; it is shown after the pair it interrupted
+		int addedBegin = removedEnd;
+		if (addedBegin + 1 < count && lines[size_t(addedBegin)].kind == DiffLineKind::NoNewline
+			&& lines[size_t(addedBegin + 1)].kind == DiffLineKind::Added)
 			++addedBegin;
 		int addedEnd = addedBegin;
 		while (addedEnd < count && lines[size_t(addedEnd)].kind == DiffLineKind::Added)
 			++addedEnd;
 
-		appendRun(parsed, lines, texts, i, addedBegin, addedEnd);
+		appendRun(parsed, lines, texts, i, removedEnd, addedBegin, addedEnd);
+		if (addedBegin != removedEnd)
+			appendLine(parsed, lines[size_t(removedEnd)], texts[size_t(removedEnd)]);
 		i = addedEnd;
 	}
 

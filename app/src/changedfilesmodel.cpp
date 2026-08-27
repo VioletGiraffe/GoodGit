@@ -99,6 +99,40 @@ QVariant fileListHeaderData(int section, Qt::Orientation orientation, int role)
 	return {}; // the count columns carry no heading: the signs are in the counts, and neither column sorts
 }
 
+QVariant fileListSharedRoleData(int column, int role, bool isSubmodule, ChangeType type)
+{
+	switch (role)
+	{
+	case Qt::TextAlignmentRole:
+		if (column == AddedColumn || column == RemovedColumn)
+			return int(Qt::AlignRight | Qt::AlignVCenter);
+		return {};
+	case Qt::DecorationRole:
+		if (column == StateColumn && isSubmodule)
+			return submoduleIcon();
+		return {};
+	case Qt::ForegroundRole:
+		if (column == AddedColumn || column == RemovedColumn)
+			return QBrush{ lineCountColor(column == AddedColumn) };
+		return {};
+	case Qt::FontRole:
+		if (column == StateColumn)
+		{
+			QFont font = QApplication::font();
+			font.setWeight(QFont::DemiBold);
+			return font;
+		}
+		if (column == PathColumn) // FileListDelegate recolors the strikethrough
+		{
+			QFont font = monospaceFont();
+			font.setStrikeOut(type == ChangeType::Deleted);
+			return font;
+		}
+		return monospaceFont(); // the counts line up down the column
+	}
+	return {};
+}
+
 ChangedFilesModel::ChangedFilesModel(QObject* parent) :
 	QAbstractTableModel(parent)
 {
@@ -305,38 +339,18 @@ QVariant ChangedFilesModel::data(const QModelIndex& index, int role) const
 		case PathColumn:    return pathText(entry);
 		}
 		return {};
-	case Qt::TextAlignmentRole:
-		if (index.column() == AddedColumn || index.column() == RemovedColumn)
-			return int(Qt::AlignRight | Qt::AlignVCenter);
-		return {};
 	case Qt::CheckStateRole:
 		if (index.column() == StateColumn && (row.forced || entry.committable()))
 			return row.checked ? Qt::Checked : Qt::Unchecked;
 		return {};
-	case Qt::DecorationRole:
-		if (index.column() == StateColumn && entry.isSubmodule)
-			return submoduleIcon();
-		return {};
 	case Qt::ForegroundRole:
 		if (index.column() == StateColumn)
 			return QBrush{ stateColor(entry) };
-		if (index.column() == AddedColumn || index.column() == RemovedColumn)
-			return QBrush{ lineCountColor(index.column() == AddedColumn) };
-		return {};
+		return fileListSharedRoleData(index.column(), role, entry.isSubmodule, entry.type);
+	case Qt::TextAlignmentRole:
+	case Qt::DecorationRole:
 	case Qt::FontRole:
-		if (index.column() == StateColumn)
-		{
-			QFont font = QApplication::font();
-			font.setWeight(QFont::DemiBold);
-			return font;
-		}
-		else if (index.column() == PathColumn) // FileListDelegate recolors the strikethrough
-		{
-			QFont font = monospaceFont();
-			font.setStrikeOut(entry.type == ChangeType::Deleted);
-			return font;
-		}
-		return monospaceFont(); // the counts line up down the column
+		return fileListSharedRoleData(index.column(), role, entry.isSubmodule, entry.type);
 	case Qt::BackgroundRole:
 		if (entry.isSubmodule && entry.contentBlocksPointer())
 			return QBrush{ activeTheme().blockedRowTint() };

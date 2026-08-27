@@ -16,7 +16,6 @@ DISABLE_COMPILER_WARNINGS
 #include <QPointer>
 #include <QProcess>
 #include <QTemporaryFile>
-#include <QTimer>
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
@@ -25,8 +24,6 @@ RESTORE_COMPILER_WARNINGS
 #include <utility>
 
 namespace {
-
-constexpr int MaxUnpushedLogEntries = 30; // for the tooltip; state.ahead carries the true count
 
 QByteArray fileContents(const QString& path)
 {
@@ -44,14 +41,7 @@ QString listfilePattern(const std::shared_ptr<QTemporaryFile>& file)
 // git's ignore syntax there is no '!' negation to escape.
 QString escapedForHgIgnore(const QString& text)
 {
-	QString out;
-	out.reserve(text.size());
-	for (const QChar c : text)
-	{
-		if (c == QLatin1Char('\\') || c == QLatin1Char('*') || c == QLatin1Char('?') || c == QLatin1Char('[') || c == QLatin1Char(']'))
-			out += QLatin1Char('\\');
-		out += c;
-	}
+	QString out = backslashEscaped(text, u"\\*?[]");
 	if (out.startsWith(QLatin1Char('#')))
 		out.prepend(QLatin1Char('\\'));
 	return out;
@@ -66,11 +56,6 @@ Vcs::Callback tolerantOfEmptyResult(Vcs::Callback callback)
 		corrected.ok = result.outcome == ProcessOutcome::Exited && result.exitCode <= 1;
 		callback(corrected);
 	};
-}
-
-QString outputAsText(const QByteArray& output)
-{
-	return QString::fromUtf8(output);
 }
 
 Vcs::Query runQuery(const QString& workDir, QStringList args, const QObject* context, Vcs::Callback callback)
@@ -456,10 +441,21 @@ std::shared_ptr<QTemporaryFile> HgRepository::openPathspecFile(const QStringList
 	return Vcs::openTempFile(joined, QStringLiteral("pathspec"), this, onFailure);
 }
 
+void HgRepository::runWithPathspec(const QString& workDir, QStringList args, const QStringList& paths, Vcs::Answer<void> onDone)
+{
+	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
+	const auto pathspecFile = openPathspecFile(paths, report);
+	if (!pathspecFile)
+		return;
+
+	args << listfilePattern(pathspecFile);
+	Hg::run(workDir, std::move(args), this, [pathspecFile, report](const ProcessResult& result) { report(result); });
+}
+
 void HgRepository::commit(const QString& message, const QStringList& pathspec, const QStringList& /*untrackedPaths*/, Vcs::Answer<void> onDone)
 {
 	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
-	const auto messageFile = Vcs::openTempFile(Hg::localBytes(message), QStringLiteral("commit message"), this, report);
+	const auto messageFile = Vcs::openMessageFile(Hg::localBytes(message), this, report);
 	if (!messageFile)
 		return;
 	const auto pathspecFile = openPathspecFile(pathspec, report);
@@ -478,7 +474,7 @@ void HgRepository::commit(const QString& message, const QStringList& pathspec, c
 void HgRepository::commitMergeState(const QString& message, const QStringList& untrackedPaths, Vcs::Answer<void> onDone)
 {
 	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
-	const auto messageFile = Vcs::openTempFile(Hg::localBytes(message), QStringLiteral("commit message"), this, report);
+	const auto messageFile = Vcs::openMessageFile(Hg::localBytes(message), this, report);
 	if (!messageFile)
 		return;
 
@@ -538,10 +534,7 @@ void HgRepository::abortOperation(Vcs::Answer<void> onDone)
 
 void HgRepository::planPush(Vcs::Answer<std::vector<PushStep>> onDone)
 {
-	// Answered from the event loop, like every other operation
-	QTimer::singleShot(0, this, [onDone = std::move(onDone), root = path()] {
-		onDone(std::vector<PushStep>{ { .workDir = root } });
-	});
+	Vcs::answerLater(this, std::move(onDone), std::vector<PushStep>{ { .workDir = path() } });
 }
 
 Vcs::Job* HgRepository::runPushStep(const PushStep& step, bool /*setUpstream*/, Vcs::Callback onDone)
@@ -559,54 +552,30 @@ QString HgRepository::pushCommandLabel(const PushStep& /*step*/, bool /*setUpstr
 void HgRepository::fetch(Vcs::Answer<void> onDone)
 {
 	// Nothing to do: Mercurial keeps no remote-tracking state, incomingCommits() reads the remote directly
-	QTimer::singleShot(0, this, [onDone = std::move(onDone)] { onDone({}); });
+	Vcs::answerLater(this, std::move(onDone), std::expected<void, QString>{});
 }
 
 void HgRepository::addToIndex(const QStringList& paths, Vcs::Answer<void> onDone)
 {
-	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
-	const auto pathspecFile = openPathspecFile(paths, report);
-	if (!pathspecFile)
-		return;
-
-	Hg::run(path(), { QStringLiteral("add"), listfilePattern(pathspecFile) }, this,
-		[pathspecFile, report](const ProcessResult& result) { report(result); });
+	runWithPathspec(path(), { QStringLiteral("add") }, paths, std::move(onDone));
 }
 
 // The mergestate entry goes from U to R; the file itself is not touched
 void HgRepository::markResolved(const QStringList& paths, Vcs::Answer<void> onDone)
 {
-	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
-	const auto pathspecFile = openPathspecFile(paths, report);
-	if (!pathspecFile)
-		return;
-
-	Hg::run(path(), { QStringLiteral("resolve"), QStringLiteral("-m"), listfilePattern(pathspecFile) }, this,
-		[pathspecFile, report](const ProcessResult& result) { report(result); });
+	runWithPathspec(path(), { QStringLiteral("resolve"), QStringLiteral("-m") }, paths, std::move(onDone));
 }
 
 void HgRepository::unAdd(const QStringList& paths, Vcs::Answer<void> onDone)
 {
-	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
-	const auto pathspecFile = openPathspecFile(paths, report);
-	if (!pathspecFile)
-		return;
-
-	Hg::run(path(), { QStringLiteral("forget"), listfilePattern(pathspecFile) }, this,
-		[pathspecFile, report](const ProcessResult& result) { report(result); });
+	runWithPathspec(path(), { QStringLiteral("forget") }, paths, std::move(onDone));
 }
 
 void HgRepository::discardChanges(const QStringList& pathspec, Vcs::Answer<void> onDone)
 {
-	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
-	const auto pathspecFile = openPathspecFile(pathspec, report);
-	if (!pathspecFile)
-		return;
-
 	// -C: without it every reverted file leaves a .orig copy, which the next refresh would list as untracked
-	Hg::run(path(), { QStringLiteral("revert"), QStringLiteral("-C"), QStringLiteral("--rev"), QStringLiteral("."),
-			listfilePattern(pathspecFile) }, this,
-		[pathspecFile, report](const ProcessResult& result) { report(result); });
+	runWithPathspec(path(), { QStringLiteral("revert"), QStringLiteral("-C"), QStringLiteral("--rev"), QStringLiteral(".") },
+		pathspec, std::move(onDone));
 }
 
 void HgRepository::submoduleDiscardPlan(const QString& repoRelativePath, const QObject* context,
@@ -627,9 +596,7 @@ void HgRepository::submoduleDiscardPlan(const QString& repoRelativePath, const Q
 			? QObject::tr("A bisect is in progress there. Finish or reset it first.") : QString{};
 	if (!refusal.isEmpty())
 	{
-		QTimer::singleShot(0, context, [refusal, onDone = std::move(onDone)] {
-			onDone({ .refusal = refusal });
-		});
+		Vcs::answerLater(context, std::move(onDone), SubmoduleDiscardPlan{ .refusal = refusal });
 		return;
 	}
 
@@ -679,16 +646,10 @@ void HgRepository::discardSubmoduleContent(const QString& repoRelativePath, cons
 		return;
 	}
 
-	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
-	const auto pathspecFile = openPathspecFile(plan.restored + plan.keptOnDisk, report);
-	if (!pathspecFile)
-		return;
-
 	// Reverting a path the parent changeset does not have only takes it out of tracking, so both lists go in
 	// one command. -C for the same reason as in discardChanges().
-	Hg::run(workDir, { QStringLiteral("revert"), QStringLiteral("-C"), QStringLiteral("--rev"), QStringLiteral("."),
-			listfilePattern(pathspecFile) }, this,
-		[pathspecFile, report](const ProcessResult& result) { report(result); });
+	runWithPathspec(workDir, { QStringLiteral("revert"), QStringLiteral("-C"), QStringLiteral("--rev"), QStringLiteral(".") },
+		plan.restored + plan.keptOnDisk, std::move(onDone));
 }
 
 void HgRepository::checkoutBranch(const QString& branch, Vcs::Answer<void> onDone)
@@ -698,9 +659,7 @@ void HgRepository::checkoutBranch(const QString& branch, Vcs::Answer<void> onDon
 
 void HgRepository::createTrackingBranch(const QString& /*localName*/, const QString& /*remoteBranch*/, Vcs::Answer<void> onDone)
 {
-	QTimer::singleShot(0, this, [onDone = std::move(onDone)] {
-		onDone(std::unexpected(QObject::tr("Mercurial has no remote branches to create a local branch from.")));
-	});
+	Vcs::answerLater(this, std::move(onDone), std::unexpected(QObject::tr("Mercurial has no remote branches to create a local branch from.")));
 }
 
 void HgRepository::localBranchExists(const QString& name, const QObject* context, std::function<void(bool)> onDone)
@@ -905,23 +864,21 @@ Vcs::Query HgRepository::submodulePointerLog(const QString& repoRelativePath, co
 	const auto recorded = _subrepoNodes.find(repoRelativePath);
 	if (recorded == _subrepoNodes.end())
 	{
-		QTimer::singleShot(0, context, [onDone = std::move(onDone), path = repoRelativePath] {
-			onDone(std::unexpected(QStringLiteral("'%1' is not recorded in .hgsubstate.").arg(path)));
-		});
-		return {};
+		return Vcs::Query{ Vcs::answerLater(context, std::move(onDone),
+			std::unexpected(QStringLiteral("'%1' is not recorded in .hgsubstate.").arg(repoRelativePath))) };
 	}
 
 	const QString workDir = QDir{ path() }.filePath(repoRelativePath);
 	if (isGitSubrepo(repoRelativePath))
 	{
 		return Vcs::Query{ Git::run(workDir, { QStringLiteral("log"), QStringLiteral("--oneline"), QStringLiteral("--no-decorate"),
-			recorded->second + QStringLiteral("..HEAD") }, context, Vcs::answering(std::move(onDone), outputAsText), {}, /*readOnlyQuery=*/true) };
+			recorded->second + QStringLiteral("..HEAD") }, context, Vcs::answering(std::move(onDone), Vcs::outputAsText), {}, /*readOnlyQuery=*/true) };
 	}
 
 	// only(., X): what the working directory's parent has and X does not
 	return Vcs::Query{ Hg::run(workDir, { QStringLiteral("log"), QStringLiteral("-r"),
 		QStringLiteral("only(., %1)").arg(recorded->second), QStringLiteral("-T"), QStringLiteral("{node|short} {desc|firstline}\n") },
-		context, Vcs::answering(std::move(onDone), outputAsText)) };
+		context, Vcs::answering(std::move(onDone), Vcs::outputAsText)) };
 }
 
 RepositoryLocation HgRepository::submoduleLocation(const QString& repoRelativePath) const
@@ -996,10 +953,7 @@ QByteArray HgRepository::ignoreFileWithPatternAdded(QByteArray content, const Ig
 void HgRepository::launchExternalDiffTool(const QString& repoRelativePath) const
 {
 	// extdiff ships with hg but is off by default; which tool it starts is the user's `[extdiff]` configuration
-	QString executable = CSettings{}.value(Settings::HgExecutableKey).toString();
-	if (executable.isEmpty())
-		executable = QLatin1String(Settings::HgExecutableDefault);
-	QProcess::startDetached(executable,
+	QProcess::startDetached(Hg::executablePath(),
 		Hg::invariantArgs() + QStringList{ QStringLiteral("--config"), QStringLiteral("extensions.extdiff="),
 			QStringLiteral("extdiff"), QStringLiteral("--"), repoRelativePath },
 		path());

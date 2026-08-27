@@ -9,6 +9,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QProcessEnvironment>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 RESTORE_COMPILER_WARNINGS
 
 #include <expected>
@@ -49,6 +50,9 @@ struct ProcessResult
 };
 
 namespace Vcs {
+
+// Bounds the wait for a killed process to exit; it should be gone at once
+inline constexpr int KillWaitMs = 2000;
 
 // The program one backend drives. This layer knows no version control system: arguments arrive with the
 // backend's invariants already applied.
@@ -147,6 +151,46 @@ template <typename T, typename Parse>
 	};
 }
 
+// The parse for a query whose output text is the answer: the overloaded QString::fromUtf8 cannot be
+// passed as a callable
+[[nodiscard]] inline QString outputAsText(const QByteArray& output)
+{
+	return QString::fromUtf8(output);
+}
+
+// An answer decided without running a command, still delivered from the event loop: like a run()
+// callback, it never arrives before the asking call has returned. Skipped if `context` dies first.
+// The returned job makes it cancellable, for a caller handing out a Query; everyone else ignores it.
+template <typename Callable, typename Value>
+Job* answerLater(const QObject* context, Callable onDone, Value answer)
+{
+	class QueuedAnswer final : public Job
+	{
+	public:
+		QueuedAnswer(const QObject* context, Callable onDone, Value answer) :
+			Job{ {}, {}, {}, {}, context, {} },
+			_onDone{ std::move(onDone) },
+			_answer{ std::move(answer) }
+		{
+			// Explicit this->: in a lambda within a local class, MSVC resolves bare members against the
+			// enclosing function scope and fails (C2327)
+			QTimer::singleShot(0, this, [this] {
+				if (!this->_cancelled && (!this->_hasContext || this->_context))
+					this->_onDone(std::move(this->_answer));
+				this->deleteLater();
+			});
+		}
+
+		void cancel() override { _cancelled = true; } // the queued delivery still runs, to self-delete
+
+	private:
+		Callable _onDone;
+		Value _answer;
+	};
+
+	return new QueuedAnswer{ context, std::move(onDone), std::move(answer) };
+}
+
 // NUL-separated path list, for passing paths that may contain any text separator on stdin
 [[nodiscard]] QByteArray nulJoined(const QStringList& paths);
 
@@ -156,6 +200,10 @@ template <typename T, typename Parse>
 // The file is removed when the last owner drops the pointer: hold it until the command has run.
 std::shared_ptr<QTemporaryFile> openTempFile(const QByteArray& contents, const QString& description,
 	QObject* context, const Callback& onFailure);
+
+// The commit message in a temp file: it is the one argument with no bound on its length. Same failure
+// contract as openTempFile. The caller encodes the message: the backends' encodings differ.
+std::shared_ptr<QTemporaryFile> openMessageFile(const QByteArray& message, QObject* context, const Callback& onFailure);
 
 // Runs `tool` in workDir.
 // Concurrent processes are capped; excess is queued. A queued job whose `context` dies is discarded unstarted.

@@ -70,6 +70,9 @@ private:
 	// controls that would start a second one
 	void beginMutation();
 	void endMutation();
+	// The completion for a mutation with no follow-up work: endMutation, `errorTitle` on failure, refresh.
+	// `changesHistory`: success reshapes the log, so historyChanged is emitted too.
+	[[nodiscard]] Vcs::Answer<void> mutationDone(const QString& errorTitle, bool changesHistory = false);
 	// False while a mutation is in flight, and while the rows are only the last state that could be read
 	[[nodiscard]] bool canActOnList() const;
 	// True while a command that writes the repository or the remote is running

@@ -11,15 +11,20 @@ Vcs::Tool hgTool()
 	auto environment = QProcessEnvironment::systemEnvironment();
 	// No localisation, user aliases or defaults rewriting the command
 	environment.insert(QStringLiteral("HGPLAIN"), QStringLiteral("1"));
-	QString executable = CSettings{}.value(Settings::HgExecutableKey).toString();
-	if (executable.isEmpty())
-		executable = QLatin1String(Settings::HgExecutableDefault);
-	return { std::move(executable), QStringLiteral("hg"), std::move(environment) };
+	return { Hg::executablePath(), QStringLiteral("hg"), std::move(environment) };
 }
 
 } // namespace
 
 namespace Hg {
+
+QString executablePath()
+{
+	QString executable = CSettings{}.value(Settings::HgExecutableKey).toString();
+	if (executable.isEmpty())
+		executable = QLatin1String(Settings::HgExecutableDefault);
+	return executable;
+}
 
 QStringList invariantArgs()
 {

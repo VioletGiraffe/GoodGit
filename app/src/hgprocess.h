@@ -26,6 +26,10 @@ Vcs::Job* run(const QString& workDir, QStringList args, const QObject* context, 
 // carries run() alone.
 ProcessResult runSync(const QString& workDir, QStringList args, int timeoutMs = 10000);
 
+// The configured executable, or the default. For the one command started detached rather than through
+// run(), which alone applies the environment.
+[[nodiscard]] QString executablePath();
+
 // For the one command started detached rather than through run()
 [[nodiscard]] QStringList invariantArgs();
 

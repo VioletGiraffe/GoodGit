@@ -91,6 +91,9 @@ private:
 	// A temp file of NUL-separated paths, to pass as `listfile0:<name>`. Null if the file could not be
 	// created; `onFailure` is then already queued with the reason.
 	[[nodiscard]] std::shared_ptr<QTemporaryFile> openPathspecFile(const QStringList& paths, const Vcs::Callback& onFailure);
+	// Runs `args` with the listfile pattern for `paths` appended, holding the pathspec file until the command
+	// is done. A failure to create the file answers `onDone` without running anything.
+	void runWithPathspec(const QString& workDir, QStringList args, const QStringList& paths, Vcs::Answer<void> onDone);
 
 private:
 	// .hgsubstate and .hgsub, re-read at the start of every refresh: the recorded node per subrepo path, and

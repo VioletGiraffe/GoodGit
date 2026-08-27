@@ -7,19 +7,22 @@ RESTORE_COMPILER_WARNINGS
 
 #include <utility>
 
-QString escapedForRegex(const QString& literal)
+QString backslashEscaped(const QString& text, QStringView metacharacters)
 {
-	static const QString metacharacters = QStringLiteral(".^$*+?()[]{}|\\");
-
 	QString escaped;
-	escaped.reserve(literal.size() * 2);
-	for (const QChar c : literal)
+	escaped.reserve(text.size() * 2);
+	for (const QChar c : text)
 	{
 		if (metacharacters.contains(c))
 			escaped += QLatin1Char('\\');
 		escaped += c;
 	}
 	return escaped;
+}
+
+QString escapedForRegex(const QString& literal)
+{
+	return backslashEscaped(literal, u".^$*+?()[]{}|\\");
 }
 
 bool sameRepositoryPath(const QString& left, const QString& right)

@@ -828,6 +828,18 @@ void CommitWindow::endMutation()
 	updateControlStates();
 }
 
+Vcs::Answer<void> CommitWindow::mutationDone(const QString& errorTitle, bool changesHistory)
+{
+	return [this, errorTitle, changesHistory](std::expected<void, QString> result) {
+		endMutation();
+		if (!result)
+			showError(errorTitle, result.error());
+		else if (changesHistory)
+			emit historyChanged();
+		_repo->refresh();
+	};
+}
+
 CommitWindow::StateStamp CommitWindow::stateStamp() const
 {
 	return { _repo->refreshGeneration(), _repo->probeOperation() };
@@ -1328,14 +1340,7 @@ void CommitWindow::abortOperation()
 		return;
 
 	beginMutation();
-	_repo->abortOperation([this](std::expected<void, QString> result) {
-		endMutation();
-		if (!result)
-			showError(tr("Abort failed"), result.error());
-		else
-			emit historyChanged();
-		_repo->refresh();
-	});
+	_repo->abortOperation(mutationDone(tr("Abort failed"), /*changesHistory=*/true));
 }
 
 void CommitWindow::showPreferencesDialog()
@@ -1672,12 +1677,7 @@ void CommitWindow::discardSelection()
 			_repo->refresh();
 			return;
 		}
-		_repo->unAdd(addedPaths, [this](std::expected<void, QString> result) {
-			endMutation();
-			if (!result)
-				showError(tr("Un-add failed"), result.error());
-			_repo->refresh();
-		});
+		_repo->unAdd(addedPaths, mutationDone(tr("Un-add failed")));
 	};
 
 	beginMutation();
@@ -1789,14 +1789,7 @@ void CommitWindow::undoLastCommit()
 		return;
 
 	beginMutation();
-	_repo->undoLastCommit([this](std::expected<void, QString> result) {
-		endMutation();
-		if (!result)
-			showError(tr("Undo failed"), result.error());
-		else
-			emit historyChanged();
-		_repo->refresh();
-	});
+	_repo->undoLastCommit(mutationDone(tr("Undo failed"), /*changesHistory=*/true));
 }
 
 void CommitWindow::addSelectionToIndex()
@@ -1810,12 +1803,7 @@ void CommitWindow::addSelectionToIndex()
 	if (paths.isEmpty())
 		return;
 	beginMutation();
-	_repo->addToIndex(paths, [this](std::expected<void, QString> result) {
-		endMutation();
-		if (!result)
-			showError(tr("Add failed"), result.error());
-		_repo->refresh();
-	});
+	_repo->addToIndex(paths, mutationDone(tr("Add failed")));
 }
 
 void CommitWindow::markResolvedSelection()
@@ -1829,12 +1817,7 @@ void CommitWindow::markResolvedSelection()
 	if (paths.isEmpty())
 		return;
 	beginMutation();
-	_repo->markResolved(paths, [this](std::expected<void, QString> result) {
-		endMutation();
-		if (!result)
-			showError(tr("Failed to mark resolved"), result.error());
-		_repo->refresh();
-	});
+	_repo->markResolved(paths, mutationDone(tr("Failed to mark resolved")));
 }
 
 void CommitWindow::unAddSelection()
@@ -1848,12 +1831,7 @@ void CommitWindow::unAddSelection()
 	if (paths.isEmpty())
 		return;
 	beginMutation();
-	_repo->unAdd(paths, [this](std::expected<void, QString> result) {
-		endMutation();
-		if (!result)
-			showError(tr("Un-add failed"), result.error());
-		_repo->refresh();
-	});
+	_repo->unAdd(paths, mutationDone(tr("Un-add failed")));
 }
 
 void CommitWindow::addPatternToIgnoreFile(const IgnorePattern& pattern)

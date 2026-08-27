@@ -421,34 +421,14 @@ QVariant CommitFilesModel::data(const QModelIndex& index, int role) const
 		case PathColumn:    return pathText(entry);
 		}
 		return {};
-	case Qt::TextAlignmentRole:
-		if (index.column() == AddedColumn || index.column() == RemovedColumn)
-			return int(Qt::AlignRight | Qt::AlignVCenter);
-		return {};
-	case Qt::DecorationRole:
-		if (index.column() == StateColumn && entry.isSubmodule)
-			return submoduleIcon();
-		return {};
 	case Qt::ForegroundRole:
 		if (index.column() == StateColumn)
 			return QBrush{ changeTypeColor(entry.type) };
-		if (index.column() == AddedColumn || index.column() == RemovedColumn)
-			return QBrush{ lineCountColor(index.column() == AddedColumn) };
-		return {};
+		return fileListSharedRoleData(index.column(), role, entry.isSubmodule, entry.type);
+	case Qt::TextAlignmentRole:
+	case Qt::DecorationRole:
 	case Qt::FontRole:
-		if (index.column() == StateColumn)
-		{
-			QFont font = QApplication::font();
-			font.setWeight(QFont::DemiBold);
-			return font;
-		}
-		else if (index.column() == PathColumn)
-		{
-			QFont font = monospaceFont();
-			font.setStrikeOut(entry.type == ChangeType::Deleted);
-			return font;
-		}
-		return monospaceFont(); // the counts line up down the column
+		return fileListSharedRoleData(index.column(), role, entry.isSubmodule, entry.type);
 	case SortRankRole:
 		return changeTypeRank(entry.type);
 	case SortPathRole:

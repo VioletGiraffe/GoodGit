@@ -64,7 +64,6 @@ QString ProcessResult::errorText() const
 namespace Vcs {
 
 static constexpr int MaxConcurrentProcesses = 24;
-static constexpr int KillWaitMs = 2000; // only bounds the wait; a killed process should be gone at once
 
 // The process transport: one QProcess per job, capped by JobQueue
 class ProcessJob final : public Job
@@ -266,10 +265,8 @@ std::shared_ptr<QTemporaryFile> openTempFile(const QByteArray& contents, const Q
 	auto file = std::make_shared<QTemporaryFile>();
 	if (!file->open())
 	{
-		QMetaObject::invokeMethod(context, [onFailure, description] {
-			// The default outcome, Exited, makes errorText() return this err
-			onFailure(ProcessResult{ .err = QObject::tr("Failed to create the %1 temp file").arg(description).toUtf8() });
-		}, Qt::QueuedConnection);
+		// The default outcome, Exited, makes errorText() return this err
+		answerLater(context, onFailure, ProcessResult{ .err = QObject::tr("Failed to create the %1 temp file").arg(description).toUtf8() });
 		return nullptr;
 	}
 
@@ -277,13 +274,16 @@ std::shared_ptr<QTemporaryFile> openTempFile(const QByteArray& contents, const Q
 	// Qt buffers small writes, so a short write (disk full) surfaces only at flush; close() discards its error
 	if (!file->flush())
 	{
-		QMetaObject::invokeMethod(context, [onFailure, description] {
-			onFailure(ProcessResult{ .err = QObject::tr("Failed to write the %1 temp file to disk").arg(description).toUtf8() });
-		}, Qt::QueuedConnection);
+		answerLater(context, onFailure, ProcessResult{ .err = QObject::tr("Failed to write the %1 temp file to disk").arg(description).toUtf8() });
 		return nullptr;
 	}
 	file->close(); // releases the handle for the tool; the file lives as long as the QTemporaryFile does
 	return file;
+}
+
+std::shared_ptr<QTemporaryFile> openMessageFile(const QByteArray& message, QObject* context, const Callback& onFailure)
+{
+	return openTempFile(message, QStringLiteral("commit message"), context, onFailure);
 }
 
 void Job::finish(ProcessResult result)

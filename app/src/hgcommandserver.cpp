@@ -17,7 +17,6 @@ RESTORE_COMPILER_WARNINGS
 namespace {
 
 constexpr int CancelGraceMs = 2000;
-constexpr int KillWaitMs = 2000; // only bounds the wait; a killed server should be gone at once
 
 void appendBigEndianU32(QByteArray& buffer, quint32 value)
 {
@@ -110,7 +109,7 @@ HgCommandServer::~HgCommandServer()
 	if (_process->state() != QProcess::NotRunning)
 	{
 		_process->kill();
-		_process->waitForFinished(KillWaitMs);
+		_process->waitForFinished(Vcs::KillWaitMs);
 	}
 }
 
