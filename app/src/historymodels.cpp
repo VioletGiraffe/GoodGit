@@ -135,11 +135,27 @@ bool CommitLogModel::extendCommits(std::vector<CommitRecord> commits)
 		setCommits(std::move(commits));
 		return false;
 	}
-	if (commits.size() == _commits.size())
-		return true;
+
+	const size_t firstNew = _commits.size();
+	if (!_searchText.isEmpty())
+	{
+		// A prefix commit's refs can change between the walks and flip its search match; the insert-rows
+		// announcement below requires the shown prefix to stay identical
+		std::vector<int> prefixVisible;
+		prefixVisible.reserve(_visible.size());
+		for (size_t i = 0; i < firstNew; ++i)
+		{
+			if (matchesSearch(commits[i], _searchText))
+				prefixVisible.push_back(int(i));
+		}
+		if (prefixVisible != _visible)
+		{
+			setCommits(std::move(commits));
+			return false;
+		}
+	}
 
 	// The appended commits' visible rows form one block at the end, since _visible is in index order
-	const size_t firstNew = _commits.size();
 	int appendedVisible = 0;
 	for (size_t i = firstNew; i < commits.size(); ++i)
 	{
@@ -160,10 +176,10 @@ bool CommitLogModel::extendCommits(std::vector<CommitRecord> commits)
 
 	if (appendedVisible > 0)
 		endInsertRows();
-	// Deeper history can extend lanes through rows already shown and grow the lane count, so the whole
-	// column repaints
+	// Deeper history can extend lanes through rows already shown, and a prefix row's refs may be fresher,
+	// so every column repaints
 	if (!_visible.empty())
-		emit dataChanged(index(0, GraphColumn), index(int(_visible.size()) - 1, GraphColumn));
+		emit dataChanged(index(0, 0), index(int(_visible.size()) - 1, ColumnCount - 1));
 	return true;
 }
 

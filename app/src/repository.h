@@ -73,6 +73,16 @@ public:
 	// run after it, so two runs' answers never interleave.
 	void refresh();
 
+	// Counts the refreshes that replaced the state. A flow whose dialog spins an event loop captures this
+	// before and compares after: a difference means the state its decision was made from is gone.
+	[[nodiscard]] uint64_t refreshGeneration() const { return _refreshGeneration; }
+
+	// The operation the on-disk markers show right now, read fresh rather than from the cached state.
+	// Not comparable to RepoState::op: a backend's markers may over- or under-report (hg's mergestate
+	// outlives a resolved conflict and misses a conflict-free merge). Compare two probes with each other:
+	// a difference means an operation started or ended outside the app, unseen by any refresh.
+	[[nodiscard]] virtual RepoOp probeOperation() const = 0;
+
 	// Commits the pathspec (which must include both sides of every rename). untrackedPaths (a subset of the
 	// pathspec) is added to tracking first, and un-added if the commit fails.
 	virtual void commit(const QString& message, const QStringList& pathspec, const QStringList& untrackedPaths, Vcs::Answer<void> onDone) = 0;
@@ -230,4 +240,5 @@ private:
 
 	bool _refreshing = false;
 	bool _refreshPending = false;
+	uint64_t _refreshGeneration = 0;
 };

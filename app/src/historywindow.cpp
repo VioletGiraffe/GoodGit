@@ -192,8 +192,13 @@ void HistoryWindow::buildUi()
 
 	connect(refreshButton, &QPushButton::clicked, this, &HistoryWindow::reload);
 	connect(_loadMoreButton, &QPushButton::clicked, this, [this] {
+		// Disabled until the walk answers: a repeat click would cancel it and double the limit again
+		_loadMoreButton->setEnabled(false);
 		_query.maxCommits *= 2;
-		reload();
+		// The pickaxe result is capped like the listing, so it deepens with it
+		if (!_query.contentSearch.isEmpty())
+			startPickaxeQuery();
+		loadRemainingCommits();
 	});
 	connect(_searchEdit, &QLineEdit::textChanged, this, &HistoryWindow::applySearch);
 	connect(_pickaxeButton, &QPushButton::clicked, this, &HistoryWindow::showPickaxePopup);
@@ -251,6 +256,16 @@ void HistoryWindow::refreshUnpushedMarks()
 	});
 }
 
+// The narrower half of the content search, run alongside the listing; its result marks rows within it
+void HistoryWindow::startPickaxeQuery()
+{
+	_pickaxeQuery.cancel();
+	_pickaxeQuery = _repo->commitsAddingOrRemovingText(_query, this, [this](std::expected<QSet<QString>, QString> shas) {
+		_logModel.setAddingOrRemovingShas(std::move(shas).value_or(QSet<QString>{}));
+		updateCountLabel();
+	});
+}
+
 void HistoryWindow::reload()
 {
 	_logQuery.cancel(); // including a pending full-depth phase
@@ -267,12 +282,7 @@ void HistoryWindow::reload()
 	// The narrower half of the search runs in parallel with the listing and marks rows within it
 	_logModel.setAddingOrRemovingShas({});
 	if (!_query.contentSearch.isEmpty())
-	{
-		_pickaxeQuery = _repo->commitsAddingOrRemovingText(_query, this, [this](std::expected<QSet<QString>, QString> shas) {
-			_logModel.setAddingOrRemovingShas(std::move(shas).value_or(QSet<QString>{}));
-			updateCountLabel();
-		});
-	}
+		startPickaxeQuery();
 
 	// A cold open starts with a small batch and extends to the full depth in the background. A window already
 	// showing rows re-runs in one phase: shrinking to the batch and growing back would be a visible collapse.
@@ -282,9 +292,14 @@ void HistoryWindow::reload()
 
 	_logQuery = _repo->commitLog(firstQuery, this,
 		[this, phase1Limit = firstQuery.maxCommits](std::expected<std::vector<CommitRecord>, QString> result) {
+		_loadMoreButton->setEnabled(true); // disabled since a Load-more click
 		if (!result)
 		{
 			_logCapped = false;
+			// The next walk must not stay rooted at a revision this one could not resolve: F5 would
+			// re-run the same failing query forever
+			_query.startRevision.clear();
+			_revealSha.clear();
 			_logModel.setCommits({}); // the reset clears the panes below through currentChanged
 			_countLabel->clear();
 			_loadMoreButton->setVisible(false);
@@ -311,7 +326,9 @@ void HistoryWindow::reload()
 
 void HistoryWindow::loadRemainingCommits()
 {
+	_logQuery.cancel(); // a reload the Load-more click raced with
 	_logQuery = _repo->commitLog(_query, this, [this](std::expected<std::vector<CommitRecord>, QString> result) {
+		_loadMoreButton->setEnabled(true); // disabled since a Load-more click
 		_fullLoadPending = false;
 		if (!result)
 		{

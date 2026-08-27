@@ -404,6 +404,12 @@ std::vector<FileEntry> HgRepository::filesFromRun(const RefreshRun& run) const
 	return files;
 }
 
+RepoOp HgRepository::probeOperation() const
+{
+	// The mergestate is the only marker hg leaves; the base contract covers what it can and cannot show
+	return QFileInfo::exists(QDir{ path() }.filePath(QStringLiteral(".hg/merge"))) ? RepoOp::Merge : RepoOp::None;
+}
+
 bool HgRepository::isGitSubrepo(const QString& subrepoPath) const
 {
 	const auto source = _subrepoSources.find(subrepoPath);

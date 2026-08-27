@@ -29,8 +29,9 @@ public:
 	void setCommits(std::vector<CommitRecord> commits);
 	// For the same walk re-run with a longer limit: only the rows beyond the loaded prefix are inserted, so
 	// the selection and scroll position survive.
-	// Returns false if the prefix does not match (the repository changed between the walks); the call was then
-	// an ordinary setCommits(), and the selection is gone with the reset.
+	// Returns false if the prefix does not match, or an active search's matches within it changed (the
+	// repository changed between the walks); the call was then an ordinary setCommits(), and the selection is
+	// gone with the reset.
 	[[nodiscard]] bool extendCommits(std::vector<CommitRecord> commits);
 	// Hides every commit without `text` in its sha, author, refs, date or message. Empty text shows all.
 	void setSearchText(const QString& text);

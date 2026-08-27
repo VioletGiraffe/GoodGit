@@ -38,8 +38,10 @@ public:
 	void refreshRepository();
 
 signals:
-	void committed(); // the parent window refreshes its gitlink row off this
-	void pushed();    // the history window's unpushed marks are stale until it hears this
+	// A commit, undo or abort here changed the history other windows show: the parent's gitlink row, the
+	// history listing
+	void historyChanged();
+	void pushed(); // the history window's unpushed marks are stale until it hears this
 
 protected:
 	bool eventFilter(QObject* watched, QEvent* event) override;
@@ -73,11 +75,22 @@ private:
 	// True while a command that writes the repository or the remote is running
 	[[nodiscard]] bool writeInFlight() const;
 
+	// What a write was decided against, captured before any dialog that precedes it
+	struct StateStamp
+	{
+		uint64_t refreshGeneration = 0;
+		RepoOp probedOp = RepoOp::None;
+	};
+	[[nodiscard]] StateStamp stateStamp() const;
+	// True when the repository no longer matches `stamp`: a refresh landed in a dialog's event loop, or an
+	// operation started or ended outside the app. Tells the user and queues a refresh before returning true.
+	[[nodiscard]] bool stateMovedSince(const StateStamp& stamp);
+
 	void startCommit(bool pushAfterwards);
-	void confirmUntrackedThenCommit(bool pushAfterwards);
+	void confirmUntrackedThenCommit(bool pushAfterwards, StateStamp decisionStamp);
 	// Always calls back, refusal included: the caller is mid-commit and has to end its flow either way
 	void reattachHead(std::function<void(bool reattached)> onDone);
-	void doCommit(bool pushAfterwards);
+	void doCommit(bool pushAfterwards, StateStamp decisionStamp);
 	// Runs the steps the repository plans one after another, logged as one console session. The first
 	// failure ends the push.
 	void startPush();

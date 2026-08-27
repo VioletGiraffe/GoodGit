@@ -51,6 +51,7 @@ private:
 	void updateCountLabel();
 	void showPickaxePopup();
 	void runPickaxe(const QString& text, bool ignoreCase);
+	void startPickaxeQuery();
 	void showCommitContextMenu(const QPoint& pos);
 	void showFileContextMenu(const QPoint& pos);
 	void openFileHistory(const QString& filePath);
@@ -64,7 +65,8 @@ private:
 	// The commit whose files are listed; absent while none is selected
 	[[nodiscard]] std::optional<CommitRecord> currentCommit() const;
 	void openSubmoduleHistory(const CommitFileChange& entry);
-	// The second phase of a cold open: the same walk at the full limit, extending the shown batch in place
+	// The same walk at the full _query.maxCommits, extending the shown batch in place: a cold open's second
+	// phase, and every Load more
 	void loadRemainingCommits();
 	// Selects the commit revealCommit() asked for, or the newest row
 	void selectLoadedCommit();

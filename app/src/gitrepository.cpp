@@ -532,6 +532,12 @@ RepoState GitRepository::stateFromRun(const RefreshRun& run) const
 	return state;
 }
 
+RepoOp GitRepository::probeOperation() const
+{
+	// The markers are complete for git; the cached value stands in only until the first refresh resolves the git dir
+	return _gitDir.isEmpty() ? state().op : operationInGitDir(_gitDir);
+}
+
 std::vector<FileEntry> GitRepository::filesFromRun(const RefreshRun& run) const
 {
 	std::vector<FileEntry> files;

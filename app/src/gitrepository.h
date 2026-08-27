@@ -21,6 +21,7 @@ public:
 	explicit GitRepository(QString rootPath, QObject* parent = nullptr);
 
 	[[nodiscard]] VcsKind kind() const override { return VcsKind::Git; }
+	[[nodiscard]] RepoOp probeOperation() const override;
 
 	void commit(const QString& message, const QStringList& pathspec, const QStringList& untrackedPaths, Vcs::Answer<void> onDone) override;
 	void commitMergeState(const QString& message, const QStringList& untrackedPaths, Vcs::Answer<void> onDone) override;

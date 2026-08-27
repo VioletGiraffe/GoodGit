@@ -744,9 +744,10 @@ void CommitWindow::updateControlStates()
 
 	_pushButton->setEnabled(!writeInFlight());
 	_peekButton->setEnabled(!state.upstream.isEmpty() && !_peekInFlight);
-	// undoLastCommit() reports every refusal, so only a mutation in flight disables this
-	_uncommitAction->setEnabled(canActOnList());
-	_abortAction->setEnabled(state.operationInProgress() && canActOnList());
+	// undoLastCommit() reports every refusal, so only a write in flight disables this; a push counts as one,
+	// since its success invalidates the pre-push AlreadyPushed answer
+	_uncommitAction->setEnabled(canActOnList() && !_pushInFlight);
+	_abortAction->setEnabled(state.operationInProgress() && canActOnList() && !_pushInFlight);
 }
 
 QString CommitWindow::subjectOrPlaceholder(const QString& subject)
@@ -814,10 +815,30 @@ void CommitWindow::endMutation()
 	updateControlStates();
 }
 
+CommitWindow::StateStamp CommitWindow::stateStamp() const
+{
+	return { _repo->refreshGeneration(), _repo->probeOperation() };
+}
+
+bool CommitWindow::stateMovedSince(const StateStamp& stamp)
+{
+	if (_repo->refreshGeneration() == stamp.refreshGeneration && _repo->probeOperation() == stamp.probedOp)
+		return false;
+
+	MessageBox::notice(this, tr("Repository changed"),
+		tr("The repository changed while the dialog was open, so nothing was done.\n"
+		   "Review the new state and retry."), {});
+	_repo->refresh();
+	return true;
+}
+
 void CommitWindow::startCommit(bool pushAfterwards)
 {
 	if (_mutationInFlight)
 		return;
+
+	// doCommit re-checks this stamp: the reattach and confirm dialogs below outlive the state decided against
+	const StateStamp stamp = stateStamp();
 
 	// A merge commit takes every tracked change, so an unresolved row would go in with its conflict markers
 	const QStringList unresolved = _filesModel.unresolvedConflictPaths();
@@ -832,18 +853,18 @@ void CommitWindow::startCommit(bool pushAfterwards)
 	beginMutation();
 	if (!_repo->state().detached)
 	{
-		confirmUntrackedThenCommit(pushAfterwards);
+		confirmUntrackedThenCommit(pushAfterwards, stamp);
 		return;
 	}
-	reattachHead([this, pushAfterwards](bool reattached) {
+	reattachHead([this, pushAfterwards, stamp](bool reattached) {
 		if (reattached)
-			confirmUntrackedThenCommit(pushAfterwards);
+			confirmUntrackedThenCommit(pushAfterwards, stamp);
 		else
 			endMutation();
 	});
 }
 
-void CommitWindow::confirmUntrackedThenCommit(bool pushAfterwards)
+void CommitWindow::confirmUntrackedThenCommit(bool pushAfterwards, StateStamp decisionStamp)
 {
 	const QStringList untracked = _filesModel.checkedUntrackedPaths();
 	if (!untracked.isEmpty())
@@ -858,13 +879,16 @@ void CommitWindow::confirmUntrackedThenCommit(bool pushAfterwards)
 			return;
 		}
 	}
-	doCommit(pushAfterwards);
+	doCommit(pushAfterwards, decisionStamp);
 }
 
 // Reattachment rule (doc/ARCHITECTURE.md): only ever attach to a branch whose tip is exactly HEAD, so the
 // working tree never moves. Anything else refuses.
 void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 {
+	// `state` is a reference into the live Repository; every branch below that passed through a dialog or an
+	// asynchronous query re-checks the stamp before acting on what was read from it
+	const StateStamp stamp = stateStamp();
 	const RepoState& state = _repo->state();
 
 	const auto checkoutAndGo = [this, onDone](const QString& branch) {
@@ -886,7 +910,7 @@ void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 		const auto answer = MessageBox::question(this, tr("Not on a branch"),
 			tr("Several branches point at the current commit. Which one should be checked out for this commit?"),
 			state.localBranchesAtHead);
-		if (answer)
+		if (answer && !stateMovedSince(stamp))
 			checkoutAndGo(state.localBranchesAtHead[*answer]);
 		else
 			onDone(false);
@@ -901,7 +925,7 @@ void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 			const auto answer = MessageBox::question(this, tr("Not on a branch"),
 				tr("HEAD matches several remote branches. Which one should the new local branch track?"),
 				state.remoteBranchesAtHead);
-			if (!answer)
+			if (!answer || stateMovedSince(stamp))
 			{
 				onDone(false);
 				return;
@@ -910,13 +934,18 @@ void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 		}
 
 		const QString localName = remoteBranch.mid(remoteBranch.indexOf(QLatin1Char('/')) + 1);
-		_repo->localBranchExists(localName, this, [this, localName, remoteBranch, onDone](bool exists) {
+		_repo->localBranchExists(localName, this, [this, stamp, localName, remoteBranch, onDone](bool exists) {
 			if (exists)
 			{
 				// Checking it out would move the working tree
 				MessageBox::notice(this, tr("Cannot reattach"),
 					tr("HEAD matches %1, but the local branch '%2' already exists and points elsewhere.\n"
 					   "Committing is blocked - resolve the branch state first.").arg(remoteBranch, localName), {});
+				onDone(false);
+				return;
+			}
+			if (stateMovedSince(stamp))
+			{
 				onDone(false);
 				return;
 			}
@@ -935,8 +964,16 @@ void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 	onDone(false);
 }
 
-void CommitWindow::doCommit(bool pushAfterwards)
+void CommitWindow::doCommit(bool pushAfterwards, StateStamp decisionStamp)
 {
+	// The last check before the write: the whole chain from startCommit - dialogs and the asynchronous
+	// reattach - acted on the stamped state, and the commit mode below is chosen from it
+	if (stateMovedSince(decisionStamp))
+	{
+		endMutation();
+		return;
+	}
+
 	const QString message = _messageEdit->toPlainText();
 	const QStringList pathspec = _filesModel.checkedPathspec();
 	const QStringList untracked = _filesModel.checkedUntrackedPaths();
@@ -952,7 +989,7 @@ void CommitWindow::doCommit(bool pushAfterwards)
 			return;
 		}
 		_messageEdit->clear();
-		emit committed();
+		emit historyChanged();
 		_repo->refresh();
 		if (pushAfterwards)
 			startPush();
@@ -1219,7 +1256,7 @@ void CommitWindow::showHistoryWindow()
 	if (!_historyWindow)
 	{
 		_historyWindow = new HistoryWindow(_repo->location(), this);
-		connect(this, &CommitWindow::committed, _historyWindow, &HistoryWindow::reload);
+		connect(this, &CommitWindow::historyChanged, _historyWindow, &HistoryWindow::reload);
 		connect(this, &CommitWindow::pushed, _historyWindow, &HistoryWindow::refreshUnpushedMarks);
 	}
 	_historyWindow->show();
@@ -1229,7 +1266,7 @@ void CommitWindow::showHistoryWindow()
 
 void CommitWindow::abortOperation()
 {
-	if (_mutationInFlight)
+	if (writeInFlight())
 		return;
 
 	const RepoOp op = _repo->state().op;
@@ -1247,12 +1284,13 @@ void CommitWindow::abortOperation()
 		return QString{};
 	}();
 
+	const StateStamp stamp = stateStamp();
 	const auto answer = MessageBox::question(this, title,
 		tr("The repository goes back to where it was before the operation started, and every conflict "
 		   "resolution goes with it.\n\nA change that was already uncommitted when the operation began may "
 		   "not survive either."),
 		{ tr("Abort") });
-	if (answer != 0)
+	if (answer != 0 || stateMovedSince(stamp))
 		return;
 
 	beginMutation();
@@ -1260,6 +1298,8 @@ void CommitWindow::abortOperation()
 		endMutation();
 		if (!result)
 			showError(tr("Abort failed"), result.error());
+		else
+			emit historyChanged();
 		_repo->refresh();
 	});
 }
@@ -1276,7 +1316,7 @@ void CommitWindow::openSubmoduleWindow(const FileEntry& entry)
 {
 	CommitWindow* window = openRepositoryWindow(_repo->submoduleLocation(entry.path));
 	// The window may already be open, and so already connected
-	connect(window, &CommitWindow::committed, this, &CommitWindow::refreshRepository, Qt::UniqueConnection);
+	connect(window, &CommitWindow::historyChanged, this, &CommitWindow::refreshRepository, Qt::UniqueConnection);
 }
 
 void CommitWindow::showContextMenu(const QPoint& pos)
@@ -1586,8 +1626,9 @@ void CommitWindow::discardSelection()
 			text += tr("\n\n%1 other selected row(s) will be left as they are: untracked files, and submodules with "
 					   "modified or unreadable content, cannot be discarded.").arg(skippedRows);
 
+		const StateStamp stamp = stateStamp();
 		const auto answer = MessageBox::question(this, tr("Discard changes?"), text, { tr("Discard") });
-		if (answer != 0)
+		if (answer != 0 || stateMovedSince(stamp))
 			return;
 	}
 
@@ -1644,8 +1685,9 @@ void CommitWindow::discardSubmoduleContent(const FileEntry& submodule)
 				.arg(plan.keptOnDisk.size());
 		text += tr("\n\nUntracked files are left alone, and the submodule stays on its branch.");
 
+		const StateStamp stamp = stateStamp();
 		const auto answer = MessageBox::question(this, tr("Discard changes?"), text, { tr("Discard") });
-		if (answer != 0)
+		if (answer != 0 || stateMovedSince(stamp))
 			return;
 	}
 
@@ -1662,7 +1704,9 @@ void CommitWindow::discardSubmoduleContent(const FileEntry& submodule)
 
 void CommitWindow::undoLastCommit()
 {
-	if (_mutationInFlight)
+	// A push in flight blocks this too: the refusal below is computed from pre-push state, and undoing the
+	// commit a running push is publishing is the rewrite AlreadyPushed exists to prevent
+	if (writeInFlight())
 		return;
 
 	const RepoState& state = _repo->state();
@@ -1690,11 +1734,12 @@ void CommitWindow::undoLastCommit()
 		return;
 	}
 
+	const StateStamp stamp = stateStamp();
 	const auto answer = MessageBox::question(this, tr("Undo the last commit?"),
 		tr("'%1' will be undone. Its changes return to this list as uncommitted changes; the working tree "
 			"is not modified.").arg(subjectOrPlaceholder(state.headSubject)),
 		{ tr("Undo commit") });
-	if (answer != 0)
+	if (answer != 0 || stateMovedSince(stamp))
 		return;
 
 	beginMutation();
@@ -1702,6 +1747,8 @@ void CommitWindow::undoLastCommit()
 		endMutation();
 		if (!result)
 			showError(tr("Undo failed"), result.error());
+		else
+			emit historyChanged();
 		_repo->refresh();
 	});
 }

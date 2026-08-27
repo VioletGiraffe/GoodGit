@@ -187,6 +187,12 @@ there is no file watcher. The list may be stale by design: **the checked rows ar
 verbatim**, and a stale list produces ordinary VCS errors through the normal failure path, not silent
 re-scans. Check state survives a refresh by path; the state a newly listed row starts with is a setting.
 
+A confirmation dialog spins a nested event loop that a refresh can complete inside, and an operation can
+start or end outside the app with no refresh seeing it. Every write decided before a dialog therefore
+captures a `StateStamp` (`CommitWindow`) - the refresh generation plus a fresh probe of the on-disk
+operation markers - and re-checks it before writing; a mismatch refuses the action and asks the user to
+retry against the new state.
+
 `GitRepository` refreshes in two rounds of parallel queries, the second depending on the first's answers.
 `HgRepository` uses a single round, since every hg invocation has a fixed cost: one `hg status` answers
 tracked changes, untracked files and rename sources together, alongside the unpushed set, each submodule's
@@ -203,8 +209,9 @@ correctness, so those fail silently.
 
 Read-only, bounded rather than paged: one `log --max-count=N` builds the list (N is a setting) and "Load
 more" re-runs it with N doubled. A cold open runs the walk twice, a small batch for an instant list and
-then the full limit in the background, appended in place: the shorter walk's result is verified to be a
-prefix of the longer one's, with a plain reset as the fallback when the repository changed in between. A
+then the full limit in the background. Load more and that background phase both extend the shown rows in
+place, keeping the selection and scroll position: the shorter walk's result is verified to be a prefix of
+the longer one's, with a plain reset as the fallback when the repository changed in between. A
 file history is the same window with a path and `--follow`, so it traces renames; search, marks and panes
 are shared. **Such a walk has no resumable cursor**: continuing from the last sha's ancestors drops every
 commit on a parallel branch, and `--skip` re-walks the skipped commits anyway, which is what the re-run

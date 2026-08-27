@@ -348,9 +348,9 @@ void RecentRepositoriesPanel::openRepository(const QString& root, const QString&
 	if (!window)
 		return;
 
-	// A commit in the submodule moves the pointer row in the parent
+	// A commit or undo in the submodule moves the pointer row in the parent
 	if (CommitWindow* parentWindow = repositoryWindow(parentRoot))
-		connect(window, &CommitWindow::committed, parentWindow, &CommitWindow::refreshRepository, Qt::UniqueConnection);
+		connect(window, &CommitWindow::historyChanged, parentWindow, &CommitWindow::refreshRepository, Qt::UniqueConnection);
 }
 
 void RecentRepositoriesPanel::showContextMenu(const QPoint& pos)
