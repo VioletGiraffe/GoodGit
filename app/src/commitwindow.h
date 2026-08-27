@@ -133,8 +133,10 @@ private:
 	void deleteSelection();
 	void discardSelection();
 	// Where discardSelection() sends a lone submodule row: what is uncommitted inside it, as opposed to its
-	// pointer, is what there is to discard
+	// pointer, is what there is to discard. Builds the plan asynchronously, confirms, then writes.
 	void discardSubmoduleContent(const FileEntry& submodule);
+	// The write half: only called with a confirmed plan that carries no refusal
+	void startSubmoduleContentDiscard(const QString& path, const SubmoduleDiscardPlan& plan);
 	void addSelectionToIndex();
 	void unAddSelection();
 	void markResolvedSelection();
@@ -183,6 +185,9 @@ private:
 	// runs: two flows would meet at index.lock, and the second would commit a pathspec the first already took
 	bool _mutationInFlight = false;
 	bool _peekInFlight = false; // a fetch is slow, and a refresh landing meanwhile must not re-enable the button
+	// A submodule discard plan is being built; disables the menu's discard action, or a second plan's dialog
+	// could stack over the first's
+	bool _discardPlanInFlight = false;
 	bool _pushInFlight = false; // held across the whole push: the plan, every step, and the upstream dialog
 	// A refresh has established the state at least once: before that there is no parent sha to judge a stored draft by
 	bool _stateWasRead = false;

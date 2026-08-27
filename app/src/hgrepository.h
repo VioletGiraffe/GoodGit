@@ -37,7 +37,8 @@ public:
 	void markResolved(const QStringList& paths, Vcs::Answer<void> onDone) override;
 	void discardChanges(const QStringList& pathspec, Vcs::Answer<void> onDone) override;
 	// A subrepo may be a git repository, which answers in git's terms
-	[[nodiscard]] SubmoduleDiscardPlan submoduleDiscardPlan(const QString& repoRelativePath) const override;
+	void submoduleDiscardPlan(const QString& repoRelativePath, const QObject* context,
+		std::function<void(SubmoduleDiscardPlan)> onDone) const override;
 	void discardSubmoduleContent(const QString& repoRelativePath, const SubmoduleDiscardPlan& plan, Vcs::Answer<void> onDone) override;
 
 	void checkoutBranch(const QString& branch, Vcs::Answer<void> onDone) override;

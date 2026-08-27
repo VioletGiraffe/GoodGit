@@ -199,11 +199,11 @@ Vcs::Query runQuery(const QString& workDir, QStringList args, const QObject* con
 	return Vcs::Query{ Git::run(workDir, std::move(args), context, std::move(callback), {}, /*readOnlyQuery=*/true) };
 }
 
-// Read-only queries scoped to the repository; what a refresh and a push plan are made of
-QueryRound::Launcher readOnlyQueries(const QObject* repo)
+// Read-only queries that die with `context`; what a refresh, a push plan and a discard plan are made of
+QueryRound::Launcher readOnlyQueries(const QObject* context)
 {
-	return [repo](const QString& workDir, QStringList args, Vcs::Callback onResult) {
-		Git::run(workDir, std::move(args), repo, std::move(onResult), {}, /*readOnlyQuery=*/true);
+	return [context](const QString& workDir, QStringList args, Vcs::Callback onResult) {
+		Git::run(workDir, std::move(args), context, std::move(onResult), {}, /*readOnlyQuery=*/true);
 	};
 }
 
@@ -816,9 +816,10 @@ void GitRepository::discardChanges(const QStringList& pathspec, Vcs::Answer<void
 		QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") }, this, Vcs::reporting(std::move(onDone)), Vcs::nulJoined(pathspec));
 }
 
-SubmoduleDiscardPlan GitRepository::submoduleDiscardPlan(const QString& repoRelativePath) const
+void GitRepository::submoduleDiscardPlan(const QString& repoRelativePath, const QObject* context,
+	std::function<void(SubmoduleDiscardPlan)> onDone) const
 {
-	return Git::uncommittedDiscardPlan(path() + QLatin1Char('/') + repoRelativePath);
+	Git::uncommittedDiscardPlan(path() + QLatin1Char('/') + repoRelativePath, context, std::move(onDone));
 }
 
 void GitRepository::discardSubmoduleContent(const QString& repoRelativePath, const SubmoduleDiscardPlan& plan, Vcs::Answer<void> onDone)
@@ -996,33 +997,51 @@ void GitRepository::launchExternalDiffTool(const QString& repoRelativePath) cons
 
 namespace Git {
 
-SubmoduleDiscardPlan uncommittedDiscardPlan(const QString& workDir)
+void uncommittedDiscardPlan(const QString& workDir, const QObject* context, std::function<void(SubmoduleDiscardPlan)> onDone)
 {
-	const ProcessResult gitDir = Git::runSync(workDir, { QStringLiteral("rev-parse"), QStringLiteral("--absolute-git-dir") });
-	if (!gitDir.ok)
-		return { .refusal = QObject::tr("Its git directory could not be found: %1").arg(gitDir.errorText()) };
-	if (operationInGitDir(QString::fromUtf8(gitDir.out.trimmed())) != RepoOp::None)
-		return { .refusal = QObject::tr("A merge, rebase, cherry-pick or revert is in progress there. Finish or abort it first.") };
+	// The queries are independent, so they run concurrently; the refusal precedence is applied once all
+	// have answered
+	struct PlanQueries
+	{
+		ProcessResult gitDir;
+		ProcessResult status;
+		ProcessResult changes;
+	};
+	auto run = std::make_shared<PlanQueries>();
 
+	QueryRound round{ readOnlyQueries(context),
+		[run, context = QPointer<const QObject>{ context }, onDone = std::move(onDone)] {
+			if (!context)
+				return; // the queries died with it, unanswered
+
+			if (!run->gitDir.ok)
+				return onDone({ .refusal = QObject::tr("Its git directory could not be found: %1").arg(run->gitDir.errorText()) });
+			if (operationInGitDir(QString::fromUtf8(run->gitDir.out.trimmed())) != RepoOp::None)
+				return onDone({ .refusal = QObject::tr("A merge, rebase, cherry-pick or revert is in progress there. Finish or abort it first.") });
+			if (!run->status.ok)
+				return onDone({ .refusal = QObject::tr("Its status could not be read: %1").arg(run->status.errorText()) });
+			if (!Git::parseUnmergedPaths(run->status.out).isEmpty())
+				return onDone({ .refusal = QObject::tr("There are unresolved conflicts there. Resolve or abort them first.") });
+			if (!run->changes.ok)
+				return onDone({ .refusal = QObject::tr("Its changes could not be listed: %1").arg(run->changes.errorText()) });
+
+			const std::vector<CommitFileChange> entries = Git::parseRawZ(run->changes.out);
+			const bool nestedSubmoduleChanged = std::ranges::any_of(entries, [](const CommitFileChange& entry) { return entry.isSubmodule; });
+			onDone(discardPlanFor(entries, nestedSubmoduleChanged));
+		} };
+
+	round.launch(workDir, { QStringLiteral("rev-parse"), QStringLiteral("--absolute-git-dir") },
+		[run](const ProcessResult& r) { run->gitDir = r; });
 	// The unmerged entries, which no diff names: a conflict is reported as an ordinary modification, and
 	// restoring one to HEAD would resolve it
-	const ProcessResult status = Git::runSync(workDir, branchAndUnmergedStatusArgs());
-	if (!status.ok)
-		return { .refusal = QObject::tr("Its status could not be read: %1").arg(status.errorText()) };
-	if (!Git::parseUnmergedPaths(status.out).isEmpty())
-		return { .refusal = QObject::tr("There are unresolved conflicts there. Resolve or abort them first.") };
-
+	round.launch(workDir, branchAndUnmergedStatusArgs(),
+		[run](const ProcessResult& r) { run->status = r; });
 	// --raw rather than --name-status for the modes: a gitlink among the changes is a nested submodule.
 	// No --ignore-submodules, unlike the row listing: the restore destroys dirt inside a nested submodule as
 	// surely as it does a moved pointer, so both must show up here.
-	const ProcessResult changes = Git::runSync(workDir, { QStringLiteral("diff"), QStringLiteral("--raw"),
-		QStringLiteral("--no-abbrev"), QStringLiteral("-M"), QStringLiteral("-z"), QStringLiteral("HEAD") });
-	if (!changes.ok)
-		return { .refusal = QObject::tr("Its changes could not be listed: %1").arg(changes.errorText()) };
-
-	const std::vector<CommitFileChange> entries = Git::parseRawZ(changes.out);
-	const bool nestedSubmoduleChanged = std::ranges::any_of(entries, [](const CommitFileChange& entry) { return entry.isSubmodule; });
-	return discardPlanFor(entries, nestedSubmoduleChanged);
+	round.launch(workDir, { QStringLiteral("diff"), QStringLiteral("--raw"),
+			QStringLiteral("--no-abbrev"), QStringLiteral("-M"), QStringLiteral("-z"), QStringLiteral("HEAD") },
+		[run](const ProcessResult& r) { run->changes = r; });
 }
 
 void discardAllUncommitted(const QString& workDir, const SubmoduleDiscardPlan& plan, const QObject* context, Vcs::Answer<void> onDone)

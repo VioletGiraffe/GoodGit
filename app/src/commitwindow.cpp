@@ -1454,7 +1454,7 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	QAction* discardAction = menu.addAction(tr("Discard changes"), this, &CommitWindow::discardSelection);
 	discardAction->setVisible(anyDiscardable || contentOfOneSubmodule);
 	// Disabled, not hidden: the operation ends, and _opStrip says one is running
-	discardAction->setEnabled(canAct && !operationInProgress);
+	discardAction->setEnabled(canAct && !operationInProgress && !_discardPlanInFlight);
 
 	hideRedundantSeparators(menu);
 	menu.exec(_filesView->viewport()->mapToGlobal(pos));
@@ -1688,28 +1688,38 @@ void CommitWindow::discardSelection()
 void CommitWindow::discardSubmoduleContent(const FileEntry& submodule)
 {
 	const QString path = submodule.path;
-	const SubmoduleDiscardPlan plan = _repo->submoduleDiscardPlan(path);
-	if (!plan.refusal.isEmpty())
-	{
-		showError(tr("Cannot discard the changes inside '%1'").arg(path), plan.refusal);
-		return;
-	}
-
-	if (!plan.restored.isEmpty()) // taking files out of tracking alone loses nothing, as in discardSelection()
-	{
-		QString text = tr("Discard all changes inside '%1'? This cannot be undone.\n\n%2")
-			.arg(path, listedPaths(plan.restored));
-		if (!plan.keptOnDisk.isEmpty())
-			text += tr("\n\n%1 file(s) its last commit does not have will be taken out of version control and left on disk.")
-				.arg(plan.keptOnDisk.size());
-		text += tr("\n\nUntracked files are left alone, and the submodule stays on its branch.");
-
-		const StateStamp stamp = stateStamp();
-		const auto answer = MessageBox::question(this, tr("Discard changes?"), text, { tr("Discard") });
-		if (answer != 0 || stateMovedSince(stamp))
+	// The stamp spans the plan queries and the dialog: the state the plan describes must still stand at the write
+	const StateStamp stamp = stateStamp();
+	_discardPlanInFlight = true;
+	_repo->submoduleDiscardPlan(path, this, [this, path, stamp](SubmoduleDiscardPlan plan) {
+		_discardPlanInFlight = false;
+		if (!plan.refusal.isEmpty())
+		{
+			showError(tr("Cannot discard the changes inside '%1'").arg(path), plan.refusal);
 			return;
-	}
+		}
 
+		if (!plan.restored.isEmpty()) // taking files out of tracking alone loses nothing, as in discardSelection()
+		{
+			QString text = tr("Discard all changes inside '%1'? This cannot be undone.\n\n%2")
+				.arg(path, listedPaths(plan.restored));
+			if (!plan.keptOnDisk.isEmpty())
+				text += tr("\n\n%1 file(s) its last commit does not have will be taken out of version control and left on disk.")
+					.arg(plan.keptOnDisk.size());
+			text += tr("\n\nUntracked files are left alone, and the submodule stays on its branch.");
+
+			if (MessageBox::question(this, tr("Discard changes?"), text, { tr("Discard") }) != 0)
+				return;
+		}
+		if (stateMovedSince(stamp))
+			return;
+
+		startSubmoduleContentDiscard(path, plan);
+	});
+}
+
+void CommitWindow::startSubmoduleContentDiscard(const QString& path, const SubmoduleDiscardPlan& plan)
+{
 	beginMutation();
 	_repo->discardSubmoduleContent(path, plan, [this, path](std::expected<void, QString> result) {
 		endMutation();

@@ -141,8 +141,9 @@ public:
 
 	// Discarding everything uncommitted inside the submodule at a repo-relative path, which is what a row
 	// whose content blocks its pointer needs. The pointer itself is not touched.
-	// Blocking: read-only queries inside the submodule, run when the user picks the action.
-	[[nodiscard]] virtual SubmoduleDiscardPlan submoduleDiscardPlan(const QString& repoRelativePath) const = 0;
+	// Read-only queries inside the submodule; the answer dies with `context`. A refusal is in the plan.
+	virtual void submoduleDiscardPlan(const QString& repoRelativePath, const QObject* context,
+		std::function<void(SubmoduleDiscardPlan)> onDone) const = 0;
 	// Carries out that plan: `restored` goes back to the submodule's last commit, `keptOnDisk` comes out of
 	// version control and stays on disk. Untracked files are untouched and the submodule stays on its branch.
 	// Only called with a plan that carries no refusal.

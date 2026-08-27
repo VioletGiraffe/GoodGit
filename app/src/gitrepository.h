@@ -8,7 +8,7 @@ namespace Git {
 
 // The git answers behind Repository::submoduleDiscardPlan and discardSubmoduleContent, for the repository
 // at `workDir`. Free functions: a Mercurial parent may host a git submodule, and answers for it in git's terms.
-[[nodiscard]] SubmoduleDiscardPlan uncommittedDiscardPlan(const QString& workDir);
+void uncommittedDiscardPlan(const QString& workDir, const QObject* context, std::function<void(SubmoduleDiscardPlan)> onDone);
 void discardAllUncommitted(const QString& workDir, const SubmoduleDiscardPlan& plan, const QObject* context, Vcs::Answer<void> onDone);
 
 } // namespace Git
@@ -44,7 +44,8 @@ public:
 	void unAdd(const QStringList& paths, Vcs::Answer<void> onDone) override;
 	void markResolved(const QStringList& paths, Vcs::Answer<void> onDone) override;
 	void discardChanges(const QStringList& pathspec, Vcs::Answer<void> onDone) override;
-	[[nodiscard]] SubmoduleDiscardPlan submoduleDiscardPlan(const QString& repoRelativePath) const override;
+	void submoduleDiscardPlan(const QString& repoRelativePath, const QObject* context,
+		std::function<void(SubmoduleDiscardPlan)> onDone) const override;
 	void discardSubmoduleContent(const QString& repoRelativePath, const SubmoduleDiscardPlan& plan, Vcs::Answer<void> onDone) override;
 
 	void checkoutBranch(const QString& branch, Vcs::Answer<void> onDone) override;

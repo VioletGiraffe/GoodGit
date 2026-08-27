@@ -596,34 +596,61 @@ void HgRepository::discardChanges(const QStringList& pathspec, Vcs::Answer<void>
 		[pathspecFile, report](const ProcessResult& result) { report(result); });
 }
 
-SubmoduleDiscardPlan HgRepository::submoduleDiscardPlan(const QString& repoRelativePath) const
+void HgRepository::submoduleDiscardPlan(const QString& repoRelativePath, const QObject* context,
+	std::function<void(SubmoduleDiscardPlan)> onDone) const
 {
 	const QString workDir = QDir{ path() }.filePath(repoRelativePath);
 	if (isGitSubrepo(repoRelativePath))
-		return Git::uncommittedDiscardPlan(workDir);
+	{
+		Git::uncommittedDiscardPlan(workDir, context, std::move(onDone));
+		return;
+	}
 
 	// A mergestate outlives its command until the resolve is committed or aborted (see startRefresh), so its
 	// presence answers for every command that can conflict
 	if (QFileInfo::exists(QDir{ workDir }.filePath(QStringLiteral(".hg/merge"))))
-		return { .refusal = QObject::tr("An unfinished merge, graft or rebase is in progress there. Finish or abort it first.") };
+	{
+		QTimer::singleShot(0, context, [onDone = std::move(onDone)] {
+			onDone({ .refusal = QObject::tr("An unfinished merge, graft or rebase is in progress there. Finish or abort it first.") });
+		});
+		return;
+	}
 
-	const ProcessResult workingDir = Hg::runSync(workDir,
-		{ QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("wdir()"), QStringLiteral("-T"), QStringLiteral("json") });
-	if (!workingDir.ok)
-		return { .refusal = QObject::tr("Its working directory could not be read: %1").arg(workingDir.errorText()) };
-	if (Hg::parseWorkingDirectory(workingDir.out).parents.size() > 1)
-		return { .refusal = QObject::tr("A merge is in progress there. Commit or abort it first.") };
+	// The queries are independent, so they run concurrently; the refusal precedence is applied once both
+	// have answered
+	struct PlanQueries
+	{
+		ProcessResult workingDir;
+		ProcessResult status;
+	};
+	auto run = std::make_shared<PlanQueries>();
 
+	QueryRound round{
+		[context](const QString& dir, QStringList args, Vcs::Callback onResult) {
+			Hg::run(dir, std::move(args), context, std::move(onResult));
+		},
+		[run, context = QPointer<const QObject>{ context }, onDone = std::move(onDone)] {
+			if (!context)
+				return; // the queries died with it, unanswered
+
+			if (!run->workingDir.ok)
+				return onDone({ .refusal = QObject::tr("Its working directory could not be read: %1").arg(run->workingDir.errorText()) });
+			if (Hg::parseWorkingDirectory(run->workingDir.out).parents.size() > 1)
+				return onDone({ .refusal = QObject::tr("A merge is in progress there. Commit or abort it first.") });
+			if (!run->status.ok)
+				return onDone({ .refusal = QObject::tr("Its status could not be read: %1").arg(run->status.errorText()) });
+
+			const std::vector<CommitFileChange> changes = Hg::parseStatus(run->status.out);
+			const bool nestedSubmoduleChanged = std::ranges::any_of(changes,
+				[](const CommitFileChange& change) { return change.path == QLatin1String(".hgsubstate"); });
+			onDone(discardPlanFor(changes, nestedSubmoduleChanged));
+		} };
+
+	round.launch(workDir, { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("wdir()"), QStringLiteral("-T"), QStringLiteral("json") },
+		[run](const ProcessResult& r) { run->workingDir = r; });
 	// Not recursing: `revert` does not either, and a nested subrepo's own content is discarded in its window
-	const ProcessResult status = Hg::runSync(workDir,
-		{ QStringLiteral("status"), QStringLiteral("-C"), QStringLiteral("-T"), QStringLiteral("json") });
-	if (!status.ok)
-		return { .refusal = QObject::tr("Its status could not be read: %1").arg(status.errorText()) };
-
-	const std::vector<CommitFileChange> changes = Hg::parseStatus(status.out);
-	const bool nestedSubmoduleChanged = std::ranges::any_of(changes,
-		[](const CommitFileChange& change) { return change.path == QLatin1String(".hgsubstate"); });
-	return discardPlanFor(changes, nestedSubmoduleChanged);
+	round.launch(workDir, { QStringLiteral("status"), QStringLiteral("-C"), QStringLiteral("-T"), QStringLiteral("json") },
+		[run](const ProcessResult& r) { run->status = r; });
 }
 
 void HgRepository::discardSubmoduleContent(const QString& repoRelativePath, const SubmoduleDiscardPlan& plan, Vcs::Answer<void> onDone)
