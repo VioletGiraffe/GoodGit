@@ -230,6 +230,11 @@ QStringList parseLineList(const QByteArray& output)
 	return lines;
 }
 
+QStringList submoduleListingArgs()
+{
+	return { QStringLiteral("ls-files"), QStringLiteral("--stage"), QStringLiteral("-z") };
+}
+
 QStringList parseGitlinkPaths(const QByteArray& lsFilesOutput)
 {
 	// Record format: <mode> <sha1> <stage>\t<path>, mode 160000 being a gitlink

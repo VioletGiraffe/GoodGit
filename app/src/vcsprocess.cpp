@@ -274,6 +274,14 @@ std::shared_ptr<QTemporaryFile> openTempFile(const QByteArray& contents, const Q
 	}
 
 	file->write(contents);
+	// Qt buffers small writes, so a short write (disk full) surfaces only at flush; close() discards its error
+	if (!file->flush())
+	{
+		QMetaObject::invokeMethod(context, [onFailure, description] {
+			onFailure(ProcessResult{ .err = QObject::tr("Failed to write the %1 temp file to disk").arg(description).toUtf8() });
+		}, Qt::QueuedConnection);
+		return nullptr;
+	}
 	file->close(); // releases the handle for the tool; the file lives as long as the QTemporaryFile does
 	return file;
 }

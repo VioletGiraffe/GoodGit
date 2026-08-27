@@ -202,14 +202,6 @@ Vcs::Query runQuery(const QString& workDir, QStringList args, const QObject* con
 	return Vcs::Query{ Git::run(workDir, std::move(args), context, std::move(callback), {}, /*readOnlyQuery=*/true) };
 }
 
-// Read-only queries that die with `context`; what a refresh, a push plan and a discard plan are made of
-QueryRound::Launcher readOnlyQueries(const QObject* context)
-{
-	return [context](const QString& workDir, QStringList args, Vcs::Callback onResult) {
-		Git::run(workDir, std::move(args), context, std::move(onResult), {}, /*readOnlyQuery=*/true);
-	};
-}
-
 // A submodule the push plan visits. Filled as the scan answers and read only once every query has, so the
 // plan does not depend on the order they finished in.
 struct SubmoduleScan
@@ -358,7 +350,7 @@ void GitRepository::startRefresh()
 	_run = run;
 
 	// The independent base queries, plus the one-time per-repository resolutions
-	QueryRound round{ readOnlyQueries(this), [self = QPointer<GitRepository>{ this }, run] {
+	QueryRound round{ Git::readOnlyQueries(this), [self = QPointer<GitRepository>{ this }, run] {
 		if (self)
 			self->startDependentQueries(run);
 	} };
@@ -417,9 +409,7 @@ void GitRepository::startRefresh()
 	// Failure costs the untracked rows, which is a shorter list rather than a wrong one
 	round.launch(path(), { QStringLiteral("ls-files"), QStringLiteral("--others"), QStringLiteral("--exclude-standard"), QStringLiteral("-z") },
 		[run](const ProcessResult& r) { run->untracked = Git::parseZList(r.out); });
-	// Submodules are read from the index rather than `git submodule status`: that is a shell script in Git
-	// for Windows and costs more than every other refresh query combined
-	round.launch(path(), { QStringLiteral("ls-files"), QStringLiteral("--stage"), QStringLiteral("-z") },
+	round.launch(path(), Git::submoduleListingArgs(),
 		[run](const ProcessResult& r) {
 			if (r.ok)
 				run->submodules = Git::parseGitlinkPaths(r.out);
@@ -432,7 +422,7 @@ void GitRepository::startRefresh()
 // independent of each other.
 void GitRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run)
 {
-	QueryRound round{ readOnlyQueries(this), [self = QPointer<GitRepository>{ this }] {
+	QueryRound round{ Git::readOnlyQueries(this), [self = QPointer<GitRepository>{ this }] {
 		if (self)
 			self->finishRefresh();
 	} };
@@ -755,7 +745,7 @@ void GitRepository::planPush(Vcs::Answer<std::vector<PushStep>> onDone)
 	auto run = std::make_shared<PushPlanRun>();
 	run->root->workDir = path();
 
-	QueryRound round{ readOnlyQueries(this), [run, onDone = std::move(onDone), self = QPointer<GitRepository>{ this }] {
+	QueryRound round{ Git::readOnlyQueries(this), [run, onDone = std::move(onDone), self = QPointer<GitRepository>{ this }] {
 		if (!self)
 			return; // the round also ends when its context dies
 

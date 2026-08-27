@@ -1,5 +1,6 @@
 #pragma once
 
+#include "queryround.h"
 #include "vcsprocess.h"
 
 #include <optional>
@@ -11,6 +12,10 @@ namespace Git {
 
 Vcs::Job* run(const QString& workDir, QStringList args, const QObject* context, Vcs::Callback callback,
 	QByteArray stdinData = {}, bool readOnlyQuery = false);
+
+// Read-only queries that die with `context`; what a refresh, a push plan, a discard plan and the folder
+// scan are made of
+[[nodiscard]] QueryRound::Launcher readOnlyQueries(const QObject* context);
 
 // Blocking variant with the same invariants. Read-only queries only, and only where the answer is needed
 // before the next line: the repository root at startup, before the event loop exists, and the plan a

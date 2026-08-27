@@ -143,6 +143,7 @@ void HgCommandServer::execute(Hg::ServerJob* job)
 
 void HgCommandServer::killServer()
 {
+	_dying = true; // idle() must refuse new jobs until died() runs
 	_buffer.clear(); // consumeChunks may still be in its loop
 	_process->kill(); // died() runs from the finished signal
 }

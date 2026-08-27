@@ -67,6 +67,9 @@ struct StagedEntry
 // Input: any newline-separated list; blank lines and surrounding whitespace are dropped
 [[nodiscard]] QStringList parseLineList(const QByteArray& output);
 
+// The query whose output parseGitlinkPaths reads. The index rather than `git submodule status`: that is a
+// shell script in Git for Windows and costs more than every other refresh query combined.
+[[nodiscard]] QStringList submoduleListingArgs();
 // Input: `ls-files --stage -z` output. Returns the paths of the gitlink entries, i.e. the submodules
 [[nodiscard]] QStringList parseGitlinkPaths(const QByteArray& lsFilesOutput);
 

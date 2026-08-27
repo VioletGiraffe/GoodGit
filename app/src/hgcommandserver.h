@@ -59,7 +59,7 @@ public:
 
 	[[nodiscard]] const QString& bindRoot() const { return _bindRoot; }
 	[[nodiscard]] bool helloSeen() const { return _helloSeen; }
-	[[nodiscard]] bool idle() const { return _helloSeen && !_dead && !_currentJob; }
+	[[nodiscard]] bool idle() const { return _helloSeen && !_dead && !_dying && !_currentJob; }
 	[[nodiscard]] Hg::ServerJob* currentJob() const { return _currentJob; }
 	[[nodiscard]] const QByteArray& ownStderr() const { return _ownStderr; }
 
@@ -84,6 +84,7 @@ private:
 	QByteArray _ownStderr; // the server's own stderr (extension warnings, crash text), never a command's output
 	Hg::ServerJob* _currentJob = nullptr;
 	bool _helloSeen = false;
+	bool _dying = false; // killServer() ran; the finished signal has not arrived yet
 	bool _dead = false;
 };
 

@@ -191,8 +191,10 @@ QStringList completionWordsFor(const std::vector<FileEntry>& files, QByteArray d
 	return QString::fromLatin1(Settings::CommitDraftsGroupKey) + QLatin1Char('/') + QString::number(hash, 16);
 }
 
+// Linux: the X11 frame extents applyDefaultWindowSize depends on arrive only after a window-manager round
+// trip Qt exposes no event for; 75 ms is an empirical bound
 template <class F>
-inline void delayIfNecessary([[maybe_unused]] QObject* context, F&& f) noexcept {
+inline void delayIfNecessary([[maybe_unused]] QObject* context, F&& f) {
 #ifdef __linux__
 	QTimer::singleShot(75, context, std::forward<F>(f));
 #else
@@ -634,7 +636,7 @@ void CommitWindow::applyDefaultWindowSize()
 void CommitWindow::updateHeader()
 {
 	const RepoState& state = _repo->state();
-	const QString shortHeadSha = state.headSha.left(7);
+	const QString shortHeadSha = shortSha(state.headSha);
 
 	_repoNameLabel->setText(_repo->name());
 	const QString branchText = state.detached ? tr("detached HEAD at %1").arg(shortHeadSha)

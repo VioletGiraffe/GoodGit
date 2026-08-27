@@ -161,22 +161,15 @@ void findRepositoriesInFolder(const QString& folder, const QObject* context,
 	// Shared with every query: each fills its own entry, and the last to answer hands the whole list over
 	auto found = std::make_shared<std::vector<FoundRepository>>(repositoriesInFolder(folder));
 
-	QueryRound round{
-		[context](const QString& workDir, QStringList args, Vcs::Callback onResult) {
-			Git::run(workDir, std::move(args), context, std::move(onResult), {}, /*readOnlyQuery=*/true);
-		},
-		[found, onDone = std::move(onDone)] { onDone(std::move(*found)); }
-	};
+	QueryRound round{ Git::readOnlyQueries(context),
+		[found, onDone = std::move(onDone)] { onDone(std::move(*found)); } };
 
 	for (size_t index = 0; index < found->size(); ++index)
 	{
 		if ((*found)[index].location.kind != VcsKind::Git)
 			continue; // Mercurial's came out of .hgsub with the rest
 
-		// The index, which is where a refresh reads them from too: `git submodule status` is a shell script
-		// in Git for Windows and costs more than the whole scan
-		round.launch((*found)[index].location.root,
-			{ QStringLiteral("ls-files"), QStringLiteral("--stage"), QStringLiteral("-z") },
+		round.launch((*found)[index].location.root, Git::submoduleListingArgs(),
 			[found, index](const ProcessResult& result) {
 				if (!result.ok)
 					return; // listed without submodules, as a repository never opened is

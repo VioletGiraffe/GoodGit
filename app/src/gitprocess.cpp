@@ -45,6 +45,13 @@ ProcessResult runSync(const QString& workDir, QStringList args, int timeoutMs)
 	return Vcs::runSync(gitTool(), workDir, std::move(args), timeoutMs);
 }
 
+QueryRound::Launcher readOnlyQueries(const QObject* context)
+{
+	return [context](const QString& workDir, QStringList args, Vcs::Callback onResult) {
+		run(workDir, std::move(args), context, std::move(onResult), {}, /*readOnlyQuery=*/true);
+	};
+}
+
 std::optional<QString> versionProblem(const QString& workDir)
 {
 	// --pathspec-from-file and --pathspec-file-nul, which staging, un-staging and discarding all pass, arrived in git 2.25
