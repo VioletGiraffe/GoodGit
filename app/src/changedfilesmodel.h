@@ -64,6 +64,8 @@ public:
 	[[nodiscard]] QStringList unresolvedConflictPaths() const;
 
 	void setRowChecked(int row, bool checked);
+	// One checksChanged for the whole batch: every emit triggers full-model scans in the listeners
+	void setRowsChecked(const QModelIndexList& rows, bool checked);
 	void setAllChecked(bool checked);
 	void checkAllExceptUntracked();
 

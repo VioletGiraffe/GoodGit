@@ -162,6 +162,7 @@ QStringList completionWordsFor(const std::vector<FileEntry>& files, QByteArray d
 	}
 
 	diff.truncate(MaxDiffBytesForWords);
+	// Wontfix: split copies the capped diff into lines on every refresh; a skip-when-unchanged check is not worth the complication
 	for (const QByteArray& rawLine : diff.split('\n'))
 	{
 		if (words.size() >= MaxWords)
@@ -1521,8 +1522,7 @@ void CommitWindow::toggleCheckOnSelection()
 			break;
 		}
 	}
-	for (const QModelIndex& index : rows)
-		_filesModel.setRowChecked(index.row(), !allChecked);
+	_filesModel.setRowsChecked(rows, !allChecked);
 }
 
 void CommitWindow::deleteSelection()
@@ -1543,9 +1543,9 @@ void CommitWindow::deleteSelection()
 	if (untrackedPaths.isEmpty() && addedPaths.isEmpty() && trackedPaths.isEmpty())
 		return;
 
-	// Untracked files alone go to the Recycle Bin unprompted, as they would from a file manager; in a mixed
-	// selection the dialog must name them too, since they are deleted along with the rest.
-	if (!trackedPaths.isEmpty() || !addedPaths.isEmpty())
+	// A single untracked file goes to the Recycle Bin unprompted, as it would from a file manager.
+	// Anything more asks first, and the dialog names the untracked files too: they are deleted with the rest.
+	if (!trackedPaths.isEmpty() || !addedPaths.isEmpty() || untrackedPaths.size() > 1)
 	{
 		const QStringList prompted = trackedPaths + addedPaths + untrackedPaths;
 		const auto answer = MessageBox::question(this, tr("Delete files?"),

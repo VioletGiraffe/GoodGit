@@ -236,6 +236,22 @@ void ChangedFilesModel::setRowChecked(int row, bool checked)
 	emit checksChanged();
 }
 
+void ChangedFilesModel::setRowsChecked(const QModelIndexList& rows, bool checked)
+{
+	bool anyChanged = false;
+	for (const QModelIndex& modelIndex : rows)
+	{
+		const int row = modelIndex.row();
+		if (!isUserCheckable(row) || _rows[size_t(row)].checked == checked)
+			continue;
+		_rows[size_t(row)].checked = checked;
+		emit dataChanged(index(row, StateColumn), index(row, StateColumn), { Qt::CheckStateRole });
+		anyChanged = true;
+	}
+	if (anyChanged)
+		emit checksChanged();
+}
+
 void ChangedFilesModel::setAllChecked(bool checked)
 {
 	applyChecked([checked](const FileEntry&) { return checked; });
