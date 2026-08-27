@@ -29,4 +29,9 @@ ProcessResult runSync(const QString& workDir, QStringList args, int timeoutMs = 
 // For the one command started detached rather than through run()
 [[nodiscard]] QStringList invariantArgs();
 
+// The bytes hg reads for `text`: local 8-bit, with a lone surrogate U+DC80..DCFF becoming its original
+// byte - the inverse of hg's utf8b encoding of undecodable path bytes (see jsonRecords in hgparsers.cpp).
+// Every byte handed to hg goes through this: argv, listfile and logfile contents, ignore patterns.
+[[nodiscard]] QByteArray localBytes(const QString& text);
+
 } // namespace Hg

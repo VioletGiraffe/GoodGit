@@ -414,13 +414,20 @@ QueryRound::Launcher HgRepository::refreshQueries()
 
 std::shared_ptr<QTemporaryFile> HgRepository::openPathspecFile(const QStringList& paths, const Vcs::Callback& onFailure)
 {
-	return Vcs::openTempFile(Vcs::nulJoined(paths), QStringLiteral("pathspec"), this, onFailure);
+	// Not Vcs::nulJoined: hg reads the listfile as local-encoding bytes, not UTF-8
+	QByteArray joined;
+	for (const QString& path : paths)
+	{
+		joined += Hg::localBytes(path);
+		joined += '\0';
+	}
+	return Vcs::openTempFile(joined, QStringLiteral("pathspec"), this, onFailure);
 }
 
 void HgRepository::commit(const QString& message, const QStringList& pathspec, const QStringList& /*untrackedPaths*/, Vcs::Answer<void> onDone)
 {
 	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
-	const auto messageFile = Vcs::openTempFile(message.toUtf8(), QStringLiteral("commit message"), this, report);
+	const auto messageFile = Vcs::openTempFile(Hg::localBytes(message), QStringLiteral("commit message"), this, report);
 	if (!messageFile)
 		return;
 	const auto pathspecFile = openPathspecFile(pathspec, report);
@@ -439,7 +446,7 @@ void HgRepository::commit(const QString& message, const QStringList& pathspec, c
 void HgRepository::commitMergeState(const QString& message, const QStringList& untrackedPaths, Vcs::Answer<void> onDone)
 {
 	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
-	const auto messageFile = Vcs::openTempFile(message.toUtf8(), QStringLiteral("commit message"), this, report);
+	const auto messageFile = Vcs::openTempFile(Hg::localBytes(message), QStringLiteral("commit message"), this, report);
 	if (!messageFile)
 		return;
 
@@ -909,14 +916,14 @@ QByteArray HgRepository::ignoreFileWithPatternAdded(QByteArray content, const Ig
 		QByteArray addition;
 		if (insertAt > 0 && content.at(insertAt - 1) != '\n')
 			addition += eol; // the section's last line is unterminated
-		addition += pattern.text.toUtf8() + eol;
+		addition += Hg::localBytes(pattern.text) + eol;
 		content.insert(insertAt, addition);
 		return content;
 	}
 
 	if (!content.isEmpty() && !content.endsWith('\n'))
 		content += eol;
-	return content + "syntax: " + section + eol + pattern.text.toUtf8() + eol;
+	return content + "syntax: " + section + eol + Hg::localBytes(pattern.text) + eol;
 }
 
 void HgRepository::launchExternalDiffTool(const QString& repoRelativePath) const

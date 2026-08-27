@@ -44,4 +44,29 @@ ProcessResult runSync(const QString& workDir, QStringList args, int timeoutMs)
 	return Vcs::runSync(hgTool(), workDir, std::move(args), timeoutMs);
 }
 
+QByteArray localBytes(const QString& text)
+{
+	QByteArray bytes;
+	qsizetype runStart = 0; // the text between lone surrogates, encoded as one run
+	for (qsizetype i = 0; i < text.size(); ++i)
+	{
+		const QChar c = text.at(i);
+		if (c.isHighSurrogate() && i + 1 < text.size() && text.at(i + 1).isLowSurrogate())
+		{
+			++i; // a valid pair; its low half is not a lone surrogate
+			continue;
+		}
+		const char16_t unit = c.unicode();
+		if (unit < 0xDC80 || unit > 0xDCFF)
+			continue;
+		bytes += QStringView{ text }.mid(runStart, i - runStart).toLocal8Bit();
+		bytes += char(unit & 0xFF);
+		runStart = i + 1;
+	}
+	if (runStart == 0)
+		return text.toLocal8Bit();
+	bytes += QStringView{ text }.mid(runStart).toLocal8Bit();
+	return bytes;
+}
+
 } // namespace Hg

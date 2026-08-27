@@ -1,4 +1,5 @@
 #include "hgcommandserver.h"
+#include "hgprocess.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QProcess>
@@ -122,13 +123,13 @@ void HgCommandServer::execute(Hg::ServerJob* job)
 	if (job->_workDir != _bindRoot)
 		args = QStringList{ QStringLiteral("-R"), job->_workDir, QStringLiteral("--cwd"), job->_workDir } + args;
 
-	// Local 8-bit, matching what hg reads from a real command line
+	// The same bytes hg would read from a real command line
 	QByteArray block;
 	for (const QString& arg : args)
 	{
 		if (!block.isEmpty())
 			block += '\0';
-		block += arg.toLocal8Bit();
+		block += Hg::localBytes(arg);
 	}
 
 	QByteArray message = QByteArrayLiteral("runcommand\n");

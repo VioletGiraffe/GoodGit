@@ -16,6 +16,31 @@ namespace {
 
 constexpr char GitSubrepoPrefix[] = "[git]"; // the only source prefix naming another system
 
+// hg writes a path byte the local encoding cannot decode as a lone surrogate U+DC80..DCFF (its utf8b
+// scheme), in raw WTF-8 that fails Qt's JSON parse of the whole document. Those sequences become \udcXX
+// escapes, which Qt parses into the lone surrogate; Hg::localBytes restores the byte when the path
+// travels back to hg.
+QByteArray withLoneSurrogatesEscaped(const QByteArray& json)
+{
+	QByteArray escaped;
+	qsizetype copied = 0;
+	for (qsizetype at = json.indexOf('\xED'); at >= 0 && at + 2 < json.size(); at = json.indexOf('\xED', at + 1))
+	{
+		// U+DC80..DCFF in WTF-8 is ED B2..B3 80..BF; an ED B2/B3 pair is never valid UTF-8
+		const uchar b1 = uchar(json.at(at + 1)), b2 = uchar(json.at(at + 2));
+		if ((b1 & 0xFE) != 0xB2 || (b2 & 0xC0) != 0x80)
+			continue;
+		escaped.append(json.constData() + copied, at - copied);
+		escaped += "\\u" + QByteArray::number(0xD000 + ((b1 & 0x3F) << 6) + (b2 & 0x3F), 16);
+		copied = at + 3;
+		at += 2; // with the loop's +1, the search resumes past the sequence
+	}
+	if (copied == 0)
+		return json;
+	escaped.append(json.constData() + copied, json.size() - copied);
+	return escaped;
+}
+
 // `incoming` and `outgoing` print "comparing with ..." before their JSON, and no JSON at all when they found
 // nothing. The array starts on a line of its own, which distinguishes it from a bracket in a remote path.
 QJsonArray jsonRecords(const QByteArray& output)
@@ -28,7 +53,7 @@ QJsonArray jsonRecords(const QByteArray& output)
 			return {};
 		++start;
 	}
-	return QJsonDocument::fromJson(output.mid(start)).array();
+	return QJsonDocument::fromJson(withLoneSurrogatesEscaped(output.mid(start))).array();
 }
 
 // hg's dates are [seconds since the epoch, seconds *west* of UTC]; QTimeZone counts them east
