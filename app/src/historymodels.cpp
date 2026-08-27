@@ -112,13 +112,8 @@ void CommitLogModel::setCommits(std::vector<CommitRecord> commits)
 	beginResetModel();
 	_commits = std::move(commits);
 
-	// Formatted once, against one clock reading: parsing per paint is too slow, and one instant keeps the
-	// ages comparable
-	const QDateTime now = QDateTime::currentDateTime();
-	_displayedDates.clear();
-	_displayedDates.reserve(_commits.size());
-	for (const CommitRecord& commit : _commits)
-		_displayedDates.push_back(displayedDate(commit.date, now));
+	_loadedAt = QDateTime::currentDateTime();
+	_displayedDates.assign(_commits.size(), QString{});
 
 	_graph = buildCommitGraph(_commits);
 	rebuildVisible();
@@ -167,9 +162,7 @@ bool CommitLogModel::extendCommits(std::vector<CommitRecord> commits)
 	if (appendedVisible > 0)
 		beginInsertRows({}, oldVisibleCount, oldVisibleCount + appendedVisible - 1);
 
-	const QDateTime now = QDateTime::currentDateTime();
-	for (size_t i = firstNew; i < commits.size(); ++i)
-		_displayedDates.push_back(displayedDate(commits[i].date, now));
+	_displayedDates.resize(commits.size()); // the new rows format lazily, against the same _loadedAt
 	_commits = std::move(commits); // the prefix is the same commits, at worst with fresher refs
 	_graph = buildCommitGraph(_commits);
 	rebuildVisible();
@@ -252,6 +245,14 @@ void CommitLogModel::rebuildVisible()
 	_searchGraph = _searchText.isEmpty() ? CommitGraph{} : filteredCommitGraph(_graph, _visible);
 }
 
+const QString& CommitLogModel::displayedDateAt(size_t commitIndex) const
+{
+	QString& cached = _displayedDates[commitIndex];
+	if (cached.isEmpty())
+		cached = displayedDate(_commits[commitIndex].date, _loadedAt);
+	return cached;
+}
+
 const GraphRow& CommitLogModel::graphRowAt(int row) const
 {
 	const CommitGraph& graph = _searchText.isEmpty() ? _graph : _searchGraph;
@@ -286,7 +287,7 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 		// On the subject, since the commit column already carries the unpushed mark and a commit can be both
 		case SubjectColumn: return addsOrRemoves ? QStringLiteral("± ") + subjectText(commit) : subjectText(commit);
 		case AuthorColumn:  return commit.author;
-		case DateColumn:    return _displayedDates[size_t(commitIndexAt(index.row()))];
+		case DateColumn:    return displayedDateAt(size_t(commitIndexAt(index.row())));
 		}
 		return {};
 	case Qt::TextAlignmentRole:

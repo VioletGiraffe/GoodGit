@@ -115,10 +115,20 @@ QModelIndex FileListView::sourceIndexAt(const QPoint& viewportPos) const
 
 QModelIndexList FileListView::selectedSourceRows() const
 {
-	QModelIndexList rows = selectionModel()->selectedRows(StateColumn);
-	std::sort(rows.begin(), rows.end(), [](const QModelIndex& left, const QModelIndex& right) { return left.row() < right.row(); });
-	for (QModelIndex& row : rows)
-		row = _proxy->mapToSource(row);
+	// Rows come off the selection ranges directly: selectedRows() rescans every range per row, quadratic on
+	// a fragmented selection
+	std::vector<int> proxyRows;
+	for (const QItemSelectionRange& range : selectionModel()->selection())
+	{
+		for (int row = range.top(); row <= range.bottom(); ++row)
+			proxyRows.push_back(row);
+	}
+	std::sort(proxyRows.begin(), proxyRows.end());
+
+	QModelIndexList rows;
+	rows.reserve(qsizetype(proxyRows.size()));
+	for (const int row : proxyRows)
+		rows.push_back(_proxy->mapToSource(_proxy->index(row, StateColumn)));
 	return rows;
 }
 
@@ -131,11 +141,21 @@ void FileListView::setSelectedSourceRows(const std::vector<int>& rows, int curre
 {
 	const QAbstractItemModel* source = _proxy->sourceModel();
 
-	QItemSelection selection;
+	// Maximal runs of adjacent proxy rows, one range each: painting scans every range per visible cell
+	std::vector<int> proxyRows;
+	proxyRows.reserve(rows.size());
 	for (const int row : rows)
+		proxyRows.push_back(_proxy->mapFromSource(source->index(row, 0)).row());
+	std::sort(proxyRows.begin(), proxyRows.end());
+
+	QItemSelection selection;
+	for (size_t first = 0; first < proxyRows.size(); )
 	{
-		const QModelIndex index = _proxy->mapFromSource(source->index(row, 0));
-		selection.select(index, index.siblingAtColumn(FileListColumnCount - 1));
+		size_t last = first;
+		while (last + 1 < proxyRows.size() && proxyRows[last + 1] == proxyRows[last] + 1)
+			++last;
+		selection.select(_proxy->index(proxyRows[first], 0), _proxy->index(proxyRows[last], FileListColumnCount - 1));
+		first = last + 1;
 	}
 
 	if (currentRow >= 0)

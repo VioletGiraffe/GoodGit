@@ -5,6 +5,7 @@
 
 DISABLE_COMPILER_WARNINGS
 #include <QAbstractTableModel>
+#include <QDateTime>
 #include <QSet>
 RESTORE_COMPILER_WARNINGS
 
@@ -60,11 +61,15 @@ public:
 private:
 	void rebuildVisible();
 	[[nodiscard]] int commitIndexAt(int row) const { return _visible[size_t(row)]; }
+	[[nodiscard]] const QString& displayedDateAt(size_t commitIndex) const;
 	[[nodiscard]] const GraphRow& graphRowAt(int row) const;
 
 private:
 	std::vector<CommitRecord> _commits;
-	std::vector<QString> _displayedDates; // parallel to _commits; ages are as of the load
+	// Parallel to _commits, formatted on first paint: only visible rows need it, and eager formatting is the
+	// bulk of a 20k-row reset. One clock reading (_loadedAt) keeps the ages comparable.
+	mutable std::vector<QString> _displayedDates;
+	QDateTime _loadedAt;
 	std::vector<int> _visible; // indexes into _commits; all of them while the search is empty
 	CommitGraph _graph;        // over _commits
 	CommitGraph _searchGraph;  // over _visible, built only while a search is active
