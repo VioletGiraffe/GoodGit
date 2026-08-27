@@ -4,6 +4,7 @@
 
 #include "assert/advanced_assert.h"
 #include "settings/csettings.h"
+#include "settingsui/csettingsdialog.h"
 #include "theme/cthemecontroller.h"
 #include "theme/cthemeiconhandler.h"
 #include "theme/ctintedsvgiconengine.h"
@@ -15,10 +16,15 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
+#include <optional>
 
 namespace {
 
 Theme s_active;
+
+// Cached: each read is a registry query, and FontRole answers ask hundreds of times per repaint.
+// Reset on settingsChanged, connected in applyTheme().
+std::optional<QFont> s_monospaceFont;
 
 inline QColor c(QRgb rgb) { return QColor::fromRgb(rgb); }
 
@@ -57,15 +63,21 @@ QColor Theme::blockedRowTint() const
 
 QFont monospaceFont()
 {
-	const CSettings settings;
-	const QString family = settings.value(Settings::MonospaceFontFamilyKey).toString();
-	if (family.isEmpty())
-		return QFontDatabase::systemFont(QFontDatabase::FixedFont);
-
-	QFont font{ family };
-	if (const int pointSize = settings.value(Settings::MonospaceFontPointSizeKey).toInt(); pointSize > 0)
-		font.setPointSize(pointSize);
-	return font;
+	if (!s_monospaceFont)
+	{
+		const CSettings settings;
+		const QString family = settings.value(Settings::MonospaceFontFamilyKey).toString();
+		if (family.isEmpty())
+			s_monospaceFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+		else
+		{
+			QFont font{ family };
+			if (const int pointSize = settings.value(Settings::MonospaceFontPointSizeKey).toInt(); pointSize > 0)
+				font.setPointSize(pointSize);
+			s_monospaceFont = std::move(font);
+		}
+	}
+	return *s_monospaceFont;
 }
 
 QIcon submoduleIcon()
@@ -80,6 +92,10 @@ void applyTheme(QApplication& app)
 	// Serves the tinted QSS glyphs; must exist before any stylesheet references themeicon:/ URLs, and for the
 	// application's whole lifetime
 	static const CThemeIconHandler iconHandler{ QStringLiteral(":/theme") };
+
+	// Connected here, before any widget exists: the cache must reset ahead of every widget's own
+	// settingsChanged slot re-reading the font
+	QObject::connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, &app, [] { s_monospaceFont.reset(); });
 
 	QObject::connect(&CThemeController::instance(), &CThemeController::themeChanged, &app, &applyActiveTheme);
 	applyActiveTheme();

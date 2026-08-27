@@ -28,11 +28,16 @@ int subjectGuideColumn()
 }
 
 MessageEdit::MessageEdit(QWidget* parent) :
-	QPlainTextEdit(parent)
+	QPlainTextEdit(parent),
+	_guideColumn{ subjectGuideColumn() }
 {
 	setFont(monospaceFont());
 	// update() for a guide-column change under an unchanged font
-	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] { setFont(monospaceFont()); viewport()->update(); });
+	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] {
+		_guideColumn = subjectGuideColumn();
+		setFont(monospaceFont());
+		viewport()->update();
+	});
 	setTabChangesFocus(true);
 
 	_completerModel = new QStringListModel(this);
@@ -49,7 +54,7 @@ MessageEdit::MessageEdit(QWidget* parent) :
 
 QSize MessageEdit::sizeHint() const
 {
-	const qreal textWidth = fontMetrics().horizontalAdvance(QLatin1Char('x')) * (subjectGuideColumn() + ColumnsPastGuide)
+	const qreal textWidth = fontMetrics().horizontalAdvance(QLatin1Char('x')) * (_guideColumn + ColumnsPastGuide)
 		+ 2 * document()->documentMargin();
 	// The scrollbar's width is counted in: the box has a fixed height a message routinely outgrows
 	return { qRound(textWidth) + 2 * frameWidth() + verticalScrollBar()->sizeHint().width(), QPlainTextEdit::sizeHint().height() };
@@ -164,7 +169,7 @@ void MessageEdit::paintEvent(QPaintEvent* event)
 	QPlainTextEdit::paintEvent(event);
 
 	const qreal x = contentOffset().x() + document()->documentMargin()
-		+ fontMetrics().horizontalAdvance(QLatin1Char('x')) * subjectGuideColumn();
+		+ fontMetrics().horizontalAdvance(QLatin1Char('x')) * _guideColumn;
 	if (x >= viewport()->width())
 		return;
 

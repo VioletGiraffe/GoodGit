@@ -34,4 +34,6 @@ private:
 
 	QCompleter* _completer = nullptr;
 	QStringListModel* _completerModel = nullptr;
+	// Cached: the setting is a registry read, and paintEvent runs per keystroke and cursor blink
+	int _guideColumn = 0;
 };
