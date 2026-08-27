@@ -25,17 +25,29 @@ static constexpr char EditedMarker = '~';
 
 namespace {
 
+// One fragment of the diff text between block terminators. `continuation`: the fragment was cut off from
+// the previous one by an in-line terminator rather than a line feed - it is the same diff line, continued.
+struct SplitLine
+{
+	QStringView text;
+	bool continuation = false;
+};
+
 // Reads a unified diff one line at a time, classifying each line and numbering it against both files.
 // Lines must arrive in the order the diff prints them: numbering counts forward from each hunk header.
 class UnifiedDiffScanner
 {
 public:
-	[[nodiscard]] DiffLine scan(QStringView line);
+	[[nodiscard]] DiffLine scan(const SplitLine& line);
+
+private:
+	[[nodiscard]] DiffLine classify(QStringView line);
 
 private:
 	int _oldLine = 0;
 	int _newLine = 0;
 	bool _inHunk = false;
+	DiffLineKind _lastKind = DiffLineKind::FileHeader;
 };
 
 // Reads the digits at `pos`, leaving it on the first character after them. -1 where there are none, or
@@ -75,7 +87,19 @@ std::pair<int, int> parseHunkHeader(QStringView line)
 	return { oldStart, newStart };
 }
 
-DiffLine UnifiedDiffScanner::scan(QStringView line)
+DiffLine UnifiedDiffScanner::scan(const SplitLine& line)
+{
+	// The same diff line, split for display at an in-line terminator: it keeps the kind, and the numbers
+	// stay on the first fragment
+	if (line.continuation)
+		return { _lastKind };
+
+	const DiffLine result = classify(line.text);
+	_lastKind = result.kind;
+	return result;
+}
+
+DiffLine UnifiedDiffScanner::classify(QStringView line)
 {
 	if (line.startsWith(QLatin1String("@@")))
 	{
@@ -118,25 +142,29 @@ bool isBlockTerminator(QChar c)
 
 // Views into `diff`, so nothing is copied. A trailing terminator ends the last line rather than opening
 // an empty one.
-std::vector<QStringView> splitLines(QStringView diff)
+std::vector<SplitLine> splitLines(QStringView diff)
 {
-	std::vector<QStringView> lines;
+	std::vector<SplitLine> lines;
 	qsizetype start = 0;
+	bool continuation = false;
 	for (qsizetype pos = 0; pos < diff.size(); ++pos)
 	{
 		if (!isBlockTerminator(diff[pos]))
 			continue;
 
-		lines.push_back(diff.sliced(start, pos - start));
-		if (diff[pos] == QLatin1Char('\r') && pos + 1 < diff.size() && diff[pos + 1] == QLatin1Char('\n'))
+		lines.push_back({ diff.sliced(start, pos - start), continuation });
+		// Only a line feed ends the diff's own line; the other terminators are file content
+		const bool crlf = diff[pos] == QLatin1Char('\r') && pos + 1 < diff.size() && diff[pos + 1] == QLatin1Char('\n');
+		continuation = diff[pos] != QLatin1Char('\n') && !crlf;
+		if (crlf)
 			++pos;
 		start = pos + 1;
 	}
 
 	if (start < diff.size())
-		lines.push_back(diff.sliced(start));
+		lines.push_back({ diff.sliced(start), continuation });
 	if (lines.empty())
-		lines.push_back(diff); // empty text is one empty line, as it is one empty block
+		lines.push_back({ diff, false }); // empty text is one empty line, as it is one empty block
 	return lines;
 }
 
@@ -291,13 +319,18 @@ void appendRun(ParsedDiff& parsed, const std::vector<DiffLine>& lines, const std
 
 ParsedDiff parseUnifiedDiff(QStringView diff)
 {
-	const std::vector<QStringView> texts = splitLines(diff);
+	const std::vector<SplitLine> splits = splitLines(diff);
 
 	std::vector<DiffLine> lines;
-	lines.reserve(texts.size());
+	std::vector<QStringView> texts;
+	lines.reserve(splits.size());
+	texts.reserve(splits.size());
 	UnifiedDiffScanner scanner;
-	for (QStringView text : texts)
-		lines.push_back(scanner.scan(text));
+	for (const SplitLine& split : splits)
+	{
+		lines.push_back(scanner.scan(split));
+		texts.push_back(split.text);
+	}
 
 	ParsedDiff parsed;
 	parsed.text.reserve(diff.size());
@@ -306,7 +339,8 @@ ParsedDiff parseUnifiedDiff(QStringView diff)
 	const int count = int(lines.size());
 	for (int i = 0; i < count; )
 	{
-		if (lines[size_t(i)].kind != DiffLineKind::Removed)
+		// A continuation carries no marker char, so it cannot join a run's pairing: shown as it stands
+		if (lines[size_t(i)].kind != DiffLineKind::Removed || splits[size_t(i)].continuation)
 		{
 			appendLine(parsed, lines[size_t(i)], texts[size_t(i)]);
 			++i;
@@ -314,9 +348,10 @@ ParsedDiff parseUnifiedDiff(QStringView diff)
 		}
 
 		// A modification prints its removed lines and then its added ones. Anything else between them - a
-		// hunk header, a context line - ends the run, and the removed lines are a deletion of their own.
+		// hunk header, a context line, a continuation - ends the run, and the removed lines are a deletion
+		// of their own.
 		int removedEnd = i;
-		while (removedEnd < count && lines[size_t(removedEnd)].kind == DiffLineKind::Removed)
+		while (removedEnd < count && lines[size_t(removedEnd)].kind == DiffLineKind::Removed && !splits[size_t(removedEnd)].continuation)
 			++removedEnd;
 
 		// Except the no-newline marker, which annotates the removed line before it rather than ending the
@@ -326,7 +361,7 @@ ParsedDiff parseUnifiedDiff(QStringView diff)
 			&& lines[size_t(addedBegin + 1)].kind == DiffLineKind::Added)
 			++addedBegin;
 		int addedEnd = addedBegin;
-		while (addedEnd < count && lines[size_t(addedEnd)].kind == DiffLineKind::Added)
+		while (addedEnd < count && lines[size_t(addedEnd)].kind == DiffLineKind::Added && !splits[size_t(addedEnd)].continuation)
 			++addedEnd;
 
 		appendRun(parsed, lines, texts, i, removedEnd, addedBegin, addedEnd);
