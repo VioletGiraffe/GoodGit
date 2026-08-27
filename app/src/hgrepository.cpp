@@ -63,6 +63,20 @@ Vcs::Query runQuery(const QString& workDir, QStringList args, const QObject* con
 	return Vcs::Query{ Hg::run(workDir, std::move(args), context, std::move(callback)) };
 }
 
+// The configured [paths], whose names pushPathName reads
+QStringList configuredPathsArgs()
+{
+	return { QStringLiteral("paths"), QStringLiteral("-T"), QStringLiteral("json") };
+}
+
+// hg has no per-branch upstream: a push contacts default-push where configured, else default.
+// Empty: nowhere to push to.
+QString pushPathName(const QStringList& pathNames)
+{
+	return pathNames.contains(QLatin1String("default-push")) ? QStringLiteral("default-push")
+		: pathNames.contains(QLatin1String("default")) ? QStringLiteral("default") : QString{};
+}
+
 // The base of every commit-listing query; the caller appends the walk.
 // -f: the ancestors of `.` (or of the -r revision) only; a plain `hg log` lists every changeset, unrelated heads included.
 // With a path, -f also follows that file across renames.
@@ -228,7 +242,7 @@ void HgRepository::startRefresh()
 				run->noteFailure(r); // unread, a merge in progress is indistinguishable from none
 		});
 	// No configured path is an answer, not a failure: nowhere to push to
-	round.launch(path(), { QStringLiteral("paths"), QStringLiteral("-T"), QStringLiteral("json") },
+	round.launch(path(), configuredPathsArgs(),
 		[run](const ProcessResult& r) { run->pathNames = Hg::parsePathNames(r.out); });
 	// Drafts among the ancestors of the parent: what `push -r .` sends, next to which this count is shown.
 	// Without a remote every changeset is draft, so stateFromRun only reads this when there is one.
@@ -318,9 +332,7 @@ RepoState HgRepository::stateFromRun(const RefreshRun& run) const
 	state.headParentCount = int(head.parents.size()); // the parser already drops a root changeset's null parent
 	// The named branch (`default` unless another was created); bookmarks are not read, and hg has no detached state
 	state.branch = run.workingDir.branch;
-	// hg has no per-branch upstream; a push contacts default-push where configured, else default
-	state.upstream = run.pathNames.contains(QLatin1String("default-push")) ? QStringLiteral("default-push")
-		: run.pathNames.contains(QLatin1String("default")) ? QStringLiteral("default") : QString{};
+	state.upstream = pushPathName(run.pathNames);
 	state.behind = _behind;
 
 	if (!state.upstream.isEmpty())
@@ -848,15 +860,30 @@ Vcs::Query HgRepository::fileAtRevision(const QString& sha, const QString& repoR
 
 Vcs::Query HgRepository::unpushedCommits(const QObject* context, Vcs::Answer<QSet<QString>> onDone)
 {
-	// Every draft changeset, wherever it sits; the header's count covers only what one push would send
-	const auto nodes = [](const QByteArray& output) {
-		QSet<QString> shas;
-		for (const CommitRecord& commit : Hg::parseCommitLog(output))
-			shas.insert(commit.sha);
-		return shas;
-	};
-	return runQuery(path(), { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("draft()"),
-		QStringLiteral("-T"), QStringLiteral("json") }, context, Vcs::answering(std::move(onDone), nodes));
+	// The configured paths are read here rather than taken from state(): a history window owns a Repository
+	// it never refreshes, so its state is the default one.
+	Vcs::Query query;
+	query.attach(Hg::run(path(), configuredPathsArgs(), context,
+		[query, workDir = path(), context, onDone = std::move(onDone)](const ProcessResult& result) mutable {
+			// Where nothing is configured to push to, every changeset is draft and the whole history would
+			// ring. The header count is suppressed on the same condition (stateFromRun).
+			if (pushPathName(Hg::parsePathNames(result.out)).isEmpty())
+			{
+				onDone(std::unexpected(QStringLiteral("No push path is configured.")));
+				return;
+			}
+
+			// Every draft changeset, wherever it sits; the header's count covers only what one push would send
+			const auto nodes = [](const QByteArray& output) {
+				QSet<QString> shas;
+				for (const CommitRecord& commit : Hg::parseCommitLog(output))
+					shas.insert(commit.sha);
+				return shas;
+			};
+			query.attach(Hg::run(workDir, { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("draft()"),
+				QStringLiteral("-T"), QStringLiteral("json") }, context, Vcs::answering(std::move(onDone), nodes)));
+		}));
+	return query;
 }
 
 Vcs::Query HgRepository::submodulePointerLog(const QString& repoRelativePath, const QObject* context, Vcs::Answer<QString> onDone)

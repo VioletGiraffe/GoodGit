@@ -43,6 +43,9 @@ Deliberate consequences:
   a commit takes. Committing is refused during one: a new commit would fall outside the search range.
   Abort maps to the session's own ender (`git bisect reset`, `hg bisect --reset`); only git's returns to
   the pre-bisect branch, hg's leaves the working directory where the bisect left it.
+- Committing is refused during a rebase as well: a rebase is finished by continuing it, and there is no
+  command for that here, so a commit made mid-rebase would strand the operation. Abort is what the window
+  offers; continuing is done from a command line.
 
 ## Undoing the last commit
 
@@ -327,6 +330,10 @@ tip at HEAD is checked out silently, several are offered as a choice, and a remo
 whose local name is free becomes a tracking branch. Everything else refuses with an explanation, and the
 header strip announces the applicable case before the user commits. The same code path serves the main
 repository and submodules. Mercurial has no detached state, so the flow is never entered there.
+
+The operations that detach HEAD themselves - bisect and rebase - are the exception: committing is refused
+while one is in progress, so the flow is never reached and the strip promises nothing. Every other
+operation leaves HEAD on its branch, and a commit made during one attaches exactly as any other does.
 
 ## Failure reporting
 

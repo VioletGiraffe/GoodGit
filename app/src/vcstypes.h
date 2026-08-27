@@ -127,6 +127,10 @@ struct RepoState
 	// The conflict-resolution ops forbid a path-limited commit, so theirs takes every tracked change.
 	// Bisect does not constrain the commit; committing during one is refused by the window instead.
 	[[nodiscard]] bool mergeCommitRequired() const { return op != RepoOp::None && op != RepoOp::Bisect; }
+	// Whether a commit may be made at all, as against what one would take (above). The op strip gives the
+	// reason: a bisect commit falls outside the search range, a rebase is finished by continuing it instead.
+	// Both detach HEAD and neither reattaches, so the detached strip stays silent for them.
+	[[nodiscard]] bool opBlocksCommit() const { return op == RepoOp::Bisect || op == RepoOp::Rebase; }
 
 	[[nodiscard]] UndoRefusal lastCommitUndoRefusal() const
 	{

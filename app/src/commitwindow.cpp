@@ -696,7 +696,8 @@ void CommitWindow::updateStrips()
 	case RepoOp::Merge:      opText = tr("Merge in progress: all changes must be committed together."); break;
 	case RepoOp::CherryPick: opText = tr("Cherry-pick in progress: all changes must be committed together."); break;
 	case RepoOp::Revert:     opText = tr("Revert in progress: all changes must be committed together."); break;
-	case RepoOp::Rebase:     opText = tr("Rebase in progress: all changes must be committed together."); break;
+	case RepoOp::Rebase:     opText = tr("Rebase in progress: committing is disabled, since GoodGit cannot continue "
+									     "a rebase. Finish it from a command line, or abort it here."); break;
 	case RepoOp::Bisect:     opText = tr("Bisect in progress: committing is disabled until it ends, since a new commit "
 									     "would fall outside the search range."); break;
 	case RepoOp::None:       break;
@@ -708,8 +709,8 @@ void CommitWindow::updateStrips()
 	_opStrip->setVisible(!opText.isEmpty());
 
 	QString detachedText;
-	// A bisect detaches HEAD as a matter of course; the op strip explains, and no commit will reattach
-	if (state.detached && state.op != RepoOp::Bisect)
+	// A bisect and a rebase detach HEAD as a matter of course; the op strip explains, and no commit will reattach
+	if (state.detached && !state.opBlocksCommit())
 	{
 		if (state.localBranchesAtHead.size() == 1)
 			detachedText = tr("Not on a branch. '%1' points here and will be checked out when you commit.").arg(state.localBranchesAtHead.front());
@@ -746,9 +747,8 @@ void CommitWindow::updateControlStates()
 		: QString{});
 
 	const bool detachedAndStuck = state.detached && state.localBranchesAtHead.isEmpty() && state.remoteBranchesAtHead.isEmpty();
-	// op != Bisect: a commit made mid-bisect falls outside the search range and poisons the session (the op strip says so)
 	const bool canCommit = checkedCount > 0 && !_messageEdit->toPlainText().trimmed().isEmpty()
-		&& !detachedAndStuck && state.op != RepoOp::Bisect && canActOnList();
+		&& !detachedAndStuck && !state.opBlocksCommit() && canActOnList();
 	_commitButton->setEnabled(canCommit);
 	_commitPushButton->setEnabled(canCommit && !_pushInFlight);
 	_commitButton->setText(state.mergeCommitRequired() ? tr("Commit (%1 files)").arg(checkedCount)
