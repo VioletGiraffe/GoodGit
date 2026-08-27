@@ -28,12 +28,15 @@ BranchHeader parseBranchHeader(const QByteArray& statusOutput)
 			header.upstream = QString::fromUtf8(value);
 		else if (key == "ab")
 		{
-			// "+<ahead> -<behind>"
+			// "+<ahead> -<behind>". Presence comes from the parse, not the key: --no-ahead-behind's
+			// "+? -?" would otherwise read as known zeros.
 			const auto parts = value.split(' ');
 			if (parts.size() == 2)
 			{
-				header.ahead = parts[0].mid(1).toInt();
-				header.behind = parts[1].mid(1).toInt();
+				bool aheadParsed = false, behindParsed = false;
+				header.ahead = parts[0].mid(1).toInt(&aheadParsed);
+				header.behind = parts[1].mid(1).toInt(&behindParsed);
+				header.aheadBehindKnown = aheadParsed && behindParsed;
 			}
 		}
 	}

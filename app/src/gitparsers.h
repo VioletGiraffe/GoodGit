@@ -21,6 +21,9 @@ struct BranchHeader
 	QString upstream; // empty if none configured
 	int ahead = 0;
 	int behind = 0;
+	// The `ab` field was present and parsed. With an upstream set, absent means its ref does not resolve
+	// (deleted on the remote and pruned): the counts are then unknown, not zero.
+	bool aheadBehindKnown = false;
 };
 
 // Input: `status --porcelain=v2 --branch --untracked-files=no -z` output

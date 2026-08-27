@@ -522,6 +522,8 @@ RepoState GitRepository::stateFromRun(const RefreshRun& run) const
 	state.upstream = run.header.upstream;
 	state.ahead = run.header.ahead;
 	state.behind = run.header.behind;
+	// Not on an unborn HEAD: the ab field is absent there for want of a commit, not of the upstream ref
+	state.upstreamGone = !state.unborn && !run.header.upstream.isEmpty() && !run.header.aheadBehindKnown;
 	state.localBranchesAtHead = run.localBranchesAtHead;
 	state.remoteBranchesAtHead = run.remoteBranchesAtHead;
 	state.unpushedSubjects = run.unpushedSubjects;

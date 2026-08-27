@@ -642,6 +642,8 @@ void CommitWindow::updateHeader()
 
 	if (state.upstream.isEmpty())
 		_aheadLabel->setText(state.unborn || state.detached ? QString{} : tr("no upstream"));
+	else if (state.upstreamGone)
+		_aheadLabel->setText(tr("upstream %1 is gone").arg(state.upstream));
 	else if (state.ahead > 0 && state.behind > 0)
 		_aheadLabel->setText(tr("%1 to push, %2 behind %3").arg(state.ahead).arg(state.behind).arg(state.upstream));
 	else if (state.ahead > 0)
@@ -663,7 +665,9 @@ void CommitWindow::updateHeader()
 	}
 	_pushButton->setToolTip(unpushedTooltip.isEmpty() ? QStringLiteral("Ctrl+Shift+P")
 		: QStringLiteral("Ctrl+Shift+P\n") + unpushedTooltip);
-	_aheadLabel->setToolTip(unpushedTooltip);
+	_aheadLabel->setToolTip(state.upstreamGone
+		? tr("The upstream branch no longer exists on the remote - deleted or pruned. Pushing recreates it.")
+		: unpushedTooltip);
 
 	const QString parentSubject = subjectOrPlaceholder(state.headSubject);
 	_parentCommitLabel->setText(state.unborn ? QString{} : tr("Parent: %1").arg(parentSubject));
@@ -743,7 +747,8 @@ void CommitWindow::updateControlStates()
 		: tr("Commit %1 file(s)").arg(checkedCount));
 
 	_pushButton->setEnabled(!writeInFlight());
-	_peekButton->setEnabled(!state.upstream.isEmpty() && !_peekInFlight);
+	// A gone upstream leaves Peek's HEAD..@{upstream} nothing to resolve against
+	_peekButton->setEnabled(!state.upstream.isEmpty() && !state.upstreamGone && !_peekInFlight);
 	// undoLastCommit() reports every refusal, so only a write in flight disables this; a push counts as one,
 	// since its success invalidates the pre-push AlreadyPushed answer
 	_uncommitAction->setEnabled(canActOnList() && !_pushInFlight);
@@ -1726,6 +1731,9 @@ void CommitWindow::undoLastCommit()
 				return tr("The last commit is the only one in this repository, so there is no earlier commit to go back to.");
 			case UndoRefusal::AlreadyPushed:
 				return tr("The last commit has already been pushed to %1. Undoing it would rewrite published history.").arg(state.upstream);
+			case UndoRefusal::UpstreamGone:
+				return tr("The upstream branch %1 is gone - deleted on the remote - so whether the last commit "
+					"was pushed cannot be checked.").arg(state.upstream);
 			case UndoRefusal::None: break;
 			}
 			return QString{};

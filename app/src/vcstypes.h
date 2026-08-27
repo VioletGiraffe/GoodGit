@@ -88,6 +88,7 @@ enum class UndoRefusal : uint8_t
 	MergeCommit,         // would be left half undone
 	RootCommit,          // nothing to move back to
 	AlreadyPushed,       // the upstream would have the commit rewritten out from under it
+	UpstreamGone,        // whether the commit was pushed cannot be checked against a ref that is gone
 };
 
 struct RepoState
@@ -99,6 +100,9 @@ struct RepoState
 	QString upstream;    // empty if none configured
 	int ahead = 0; // commits one push would send
 	int behind = 0;
+	// The upstream is configured but its ref no longer resolves (deleted on the remote and pruned):
+	// `ahead` and `behind` are then unknown, not zero
+	bool upstreamGone = false;
 	bool detached = false;
 	bool unborn = false;
 	RepoOp op = RepoOp::None;
@@ -133,6 +137,8 @@ struct RepoState
 			return UndoRefusal::MergeCommit;
 		if (headParentCount == 0)
 			return UndoRefusal::RootCommit;
+		if (upstreamGone) // the counts below are unknown then
+			return UndoRefusal::UpstreamGone;
 		if (!upstream.isEmpty() && ahead == 0) // no upstream at all means nothing can have been pushed
 			return UndoRefusal::AlreadyPushed;
 
