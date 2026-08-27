@@ -280,6 +280,14 @@ QStringList parseBranchNames(const QByteArray& branchesOutput)
 	return names;
 }
 
+QStringList parsePathNames(const QByteArray& pathsOutput)
+{
+	QStringList names;
+	for (const QJsonValue& value : jsonRecords(pathsOutput))
+		names << value.toObject().value(QLatin1String("name")).toString();
+	return names;
+}
+
 std::vector<GrepMatch> parseGrepDiff(const QByteArray& grepOutput)
 {
 	std::map<QString, GrepMatch> byNode;

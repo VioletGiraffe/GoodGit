@@ -550,6 +550,11 @@ std::vector<FileEntry> GitRepository::filesFromRun(const RefreshRun& run) const
 		return it != run.submoduleContent.end() ? it->second : SubmoduleContent::Clean;
 	};
 
+	// List membership per row would make the loop O(rows x lists)
+	const QSet<QString> submodulePaths{ run.submodules.begin(), run.submodules.end() };
+	const QSet<QString> conflictedPaths{ run.conflicted.begin(), run.conflicted.end() };
+	QSet<QString> submoduleRowPaths; // the moved-pointer rows, for the dedup below
+
 	// Tracked changes; a diff row at a submodule path is a moved pointer
 	for (const CommitFileChange& diffEntry : run.diffEntries)
 	{
@@ -557,16 +562,17 @@ std::vector<FileEntry> GitRepository::filesFromRun(const RefreshRun& run) const
 		entry.path = diffEntry.path;
 		entry.oldPath = diffEntry.oldPath;
 		entry.type = diffEntry.type;
-		if (run.submodules.contains(diffEntry.path))
+		if (submodulePaths.contains(diffEntry.path))
 		{
 			entry.isSubmodule = true;
 			entry.pointerMoved = true;
 			entry.content = contentOf(diffEntry.path);
+			submoduleRowPaths.insert(diffEntry.path);
 		}
 		else
 		{
 			// The diff cannot tell a conflict from an edit; the unmerged index entries can
-			if (run.conflicted.contains(diffEntry.path))
+			if (conflictedPaths.contains(diffEntry.path))
 				entry.type = ChangeType::Conflicted;
 			if (const auto it = run.changeCounts.find(diffEntry.path); it != run.changeCounts.end())
 				entry.lineCounts = it->second;
@@ -592,7 +598,7 @@ std::vector<FileEntry> GitRepository::filesFromRun(const RefreshRun& run) const
 		FileEntry entry{ .path = subPath, .isSubmodule = true, .content = contentOf(subPath) };
 		if (!entry.contentBlocksPointer())
 			continue;
-		if (std::ranges::any_of(files, [&](const FileEntry& f) { return f.isSubmodule && f.path == subPath; }))
+		if (submoduleRowPaths.contains(subPath))
 			continue; // already present as a moved-pointer row
 		files.push_back(std::move(entry));
 	}

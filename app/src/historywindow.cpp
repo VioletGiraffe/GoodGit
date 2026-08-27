@@ -28,6 +28,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QPushButton>
 #include <QShortcut>
 #include <QSplitter>
+#include <QTimer>
 #include <QTreeView>
 #include <QVBoxLayout>
 RESTORE_COMPILER_WARNINGS
@@ -39,6 +40,7 @@ namespace {
 // A cold open lists this many first, then extends to the full depth in the background: the walk's cost is
 // proportional to its depth
 constexpr int InitialCommitBatch = 500;
+constexpr int SearchDebounceMs = 200; // a keystroke rescans every commit and relaunches the detail queries
 constexpr int FileListWidth = 320;
 constexpr int MaxFilePathLabelWidth = 420; // beyond this the path elides
 constexpr int PickaxeEditWidth = 320;
@@ -200,7 +202,11 @@ void HistoryWindow::buildUi()
 			startPickaxeQuery();
 		loadRemainingCommits();
 	});
-	connect(_searchEdit, &QLineEdit::textChanged, this, &HistoryWindow::applySearch);
+	_searchDebounce = new QTimer(this);
+	_searchDebounce->setSingleShot(true);
+	_searchDebounce->setInterval(SearchDebounceMs);
+	connect(_searchDebounce, &QTimer::timeout, this, &HistoryWindow::applySearch);
+	connect(_searchEdit, &QLineEdit::textChanged, _searchDebounce, qOverload<>(&QTimer::start));
 	connect(_pickaxeButton, &QPushButton::clicked, this, &HistoryWindow::showPickaxePopup);
 	connect(_logView, &QWidget::customContextMenuRequested, this, &HistoryWindow::showCommitContextMenu);
 	connect(_filesView, &QWidget::customContextMenuRequested, this, &HistoryWindow::showFileContextMenu);
@@ -225,13 +231,18 @@ void HistoryWindow::buildUi()
 
 bool HistoryWindow::eventFilter(QObject* watched, QEvent* event)
 {
-	// Down and Enter move focus from the search box to the list. applySearch has already made the first
-	// match current, so the arrows work straight away.
+	// Down and Enter move focus from the search box to the list, applying a still-pending debounced search
+	// first: applySearch makes the first match current, so the arrows work straight away
 	if (watched == _searchEdit && event->type() == QEvent::KeyPress)
 	{
 		const int key = static_cast<QKeyEvent*>(event)->key();
 		if (key == Qt::Key_Down || key == Qt::Key_Return || key == Qt::Key_Enter)
 		{
+			if (_searchDebounce->isActive())
+			{
+				_searchDebounce->stop();
+				applySearch();
+			}
 			_logView->setFocus();
 			return true;
 		}

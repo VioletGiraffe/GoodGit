@@ -344,7 +344,7 @@ void RecentRepositoriesPanel::openRepository(const QString& root, const QString&
 		return;
 	}
 
-	CommitWindow* window = openRepositoryWindowAt(root, this);
+	CommitWindow* window = openSubmoduleRepositoryWindow(root, this);
 	if (!window)
 		return;
 

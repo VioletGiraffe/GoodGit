@@ -110,6 +110,8 @@ private:
 	void showDiffForCurrentRow();
 	// For an untracked file, which has no diff: the pane shows the file itself, unhighlighted
 	void showFileContents(const FileEntry& entry);
+	// The file in its default application; failure is reported - a row can outlive its file
+	void openEntryExternally(const FileEntry& entry);
 	void onRowActivated(const QModelIndex& index);
 	void openSubmoduleWindow(const FileEntry& entry);
 	void showContextMenu(const QPoint& pos);

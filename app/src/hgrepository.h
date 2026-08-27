@@ -85,6 +85,8 @@ private:
 
 	// Whether .hgsub names this subrepo's source as a git repository
 	[[nodiscard]] bool isGitSubrepo(const QString& subrepoPath) const;
+	// Whether the subrepo's directory holds its kind's repository marker; only then may it be queried
+	[[nodiscard]] bool subrepoCloned(const QString& subrepoPath) const;
 	// A temp file of NUL-separated paths, to pass as `listfile0:<name>`. Null if the file could not be
 	// created; `onFailure` is then already queued with the reason.
 	[[nodiscard]] std::shared_ptr<QTemporaryFile> openPathspecFile(const QStringList& paths, const Vcs::Callback& onFailure);

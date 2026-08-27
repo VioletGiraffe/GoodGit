@@ -53,6 +53,9 @@ struct WorkingDirectory
 // Input: `branches -T json`
 [[nodiscard]] QStringList parseBranchNames(const QByteArray& branchesOutput);
 
+// Input: `paths -T json`. The configured path names ("default", "default-push"), in hg's order.
+[[nodiscard]] QStringList parsePathNames(const QByteArray& pathsOutput);
+
 // `grep --diff` reports one record per changed line, so these count matching lines: a changeset whose two
 // counts differ gained or lost the text rather than editing around it
 struct GrepMatch

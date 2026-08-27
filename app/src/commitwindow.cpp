@@ -606,7 +606,8 @@ void CommitWindow::onRefreshed()
 
 void CommitWindow::applyDefaultWindowSize()
 {
-	assert(isVisible()); // the widths below are the laid-out ones, which show() establishes
+	if (!isVisible())
+		return; // the widths below are the laid-out ones, which show() establishes; a closed window has none
 
 	const QWidget* leftPane = _splitter->widget(0);
 	const int preferred = std::min(leftPane->sizeHint().width(), MaxInitialLeftPaneWidth);
@@ -993,7 +994,8 @@ void CommitWindow::doCommit(bool pushAfterwards, StateStamp decisionStamp)
 			_repo->refresh();
 			return;
 		}
-		_messageEdit->clear();
+		if (_messageEdit->toPlainText() == message) // text typed while the commit ran stays put
+			_messageEdit->clear();
 		emit historyChanged();
 		_repo->refresh();
 		if (pushAfterwards)
@@ -1088,17 +1090,22 @@ void CommitWindow::peekIncoming()
 	updateControlStates();
 
 	_repo->fetch([this](std::expected<void, QString> fetchResult) {
-		_peekInFlight = false;
-		updateControlStates();
-
 		if (!fetchResult)
 		{
+			_peekInFlight = false;
+			updateControlStates();
 			showError(tr("Fetch failed"), fetchResult.error());
 			return;
 		}
-		_repo->refresh(); // the fetch moved the remote-tracking ref, so the header counts are stale
 
+		// _peekInFlight is held to the answer: a second peek would otherwise race this one and re-show a
+		// dismissed popup
 		_repo->incomingCommits(MaxIncomingCommits, this, [this](std::expected<std::vector<CommitRecord>, QString> commits) {
+			_peekInFlight = false;
+			updateControlStates();
+			// After the answer: hg's behind count comes from it, and the fetch moved git's remote-tracking
+			// refs - the header counts are stale until this refresh either way
+			_repo->refresh();
 			if (!commits)
 			{
 				showError(tr("Could not list the incoming commits"), commits.error());
@@ -1253,7 +1260,14 @@ void CommitWindow::onRowActivated(const QModelIndex& sourceIndex)
 	if (entry.type == ChangeType::Deleted)
 		return; // nothing on disk to open
 
-	QDesktopServices::openUrl(QUrl::fromLocalFile(absolutePath(entry)));
+	openEntryExternally(entry);
+}
+
+void CommitWindow::openEntryExternally(const FileEntry& entry)
+{
+	const QString path = absolutePath(entry);
+	if (!QDesktopServices::openUrl(QUrl::fromLocalFile(path)))
+		showError(tr("Failed to open the file"), QDir::toNativeSeparators(path));
 }
 
 void CommitWindow::showHistoryWindow()
@@ -1378,7 +1392,7 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	menu.addSeparator();
 
 	QAction* openAction = menu.addAction(tr("Open"), this, [this, entry = entries.front()] {
-		QDesktopServices::openUrl(QUrl::fromLocalFile(absolutePath(entry)));
+		openEntryExternally(entry);
 	});
 	openAction->setVisible(singleFile);
 

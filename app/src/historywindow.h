@@ -15,6 +15,7 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QSplitter;
+class QTimer;
 class QTreeView;
 class CLabelElided;
 class DiffPane;
@@ -98,6 +99,7 @@ private:
 	CLabelElided* _filePathLabel = nullptr; // shown only in a file history
 	QLabel* _countLabel = nullptr;
 	QLineEdit* _searchEdit = nullptr;
+	QTimer* _searchDebounce = nullptr; // batches keystrokes before applySearch
 	QPushButton* _pickaxeButton = nullptr;
 	QFrame* _pickaxePopup = nullptr; // built on first use; Qt::Popup, so a click outside dismisses it
 	QLineEdit* _pickaxeEdit = nullptr;

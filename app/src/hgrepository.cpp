@@ -178,7 +178,7 @@ struct HgRepository::RefreshRun
 	std::map<QString, LineCounts> changeCounts; // by path; only files with countable lines have one
 	std::vector<CommitRecord> head; // `.`; the null changeset in an unborn repository
 	Hg::WorkingDirectory workingDir;
-	bool hasDefaultPath = false;
+	QStringList pathNames; // the configured [paths] names; which one a push contacts is stateFromRun's call
 	std::vector<CommitRecord> unpushed; // the drafts `push -r .` would send
 	QStringList conflicted; // only queried while a mergestate exists
 	std::map<QString, QString> subrepoNodes; // the changeset each subrepo is actually on; absent if unread
@@ -242,9 +242,9 @@ void HgRepository::startRefresh()
 			else
 				run->noteFailure(r); // unread, a merge in progress is indistinguishable from none
 		});
-	// No default path is an answer, not a failure: nowhere to push to
-	round.launch(path(), { QStringLiteral("paths"), QStringLiteral("default") },
-		[run](const ProcessResult& r) { run->hasDefaultPath = r.ok; });
+	// No configured path is an answer, not a failure: nowhere to push to
+	round.launch(path(), { QStringLiteral("paths"), QStringLiteral("-T"), QStringLiteral("json") },
+		[run](const ProcessResult& r) { run->pathNames = Hg::parsePathNames(r.out); });
 	// Drafts among the ancestors of the parent: what `push -r .` sends, next to which this count is shown.
 	// Without a remote every changeset is draft, so stateFromRun only reads this when there is one.
 	round.launch(path(), { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("draft() and ::."),
@@ -270,8 +270,8 @@ void HgRepository::launchSubrepoQueries(QueryRound& round, const std::shared_ptr
 	{
 		const QString& subPath = subrepo.first;
 		const QString workDir = QDir{ path() }.filePath(subPath);
-		if (!QFileInfo::exists(workDir))
-			continue; // never cloned
+		if (!subrepoCloned(subPath))
+			continue; // never cloned, or not a repository anymore
 
 		// Dirtiness is queried in the subrepo, not via the parent's recursing status: that compares against the
 		// node .hgsubstate records rather than the subrepo's parent changeset, so after a committed pointer move
@@ -333,11 +333,12 @@ RepoState HgRepository::stateFromRun(const RefreshRun& run) const
 	state.headParentCount = int(head.parents.size()); // the parser already drops a root changeset's null parent
 	// The named branch (`default` unless another was created); bookmarks are not read, and hg has no detached state
 	state.branch = run.workingDir.branch;
-	// hg has no per-branch upstream; `default` is the path a push contacts
-	state.upstream = run.hasDefaultPath ? QStringLiteral("default") : QString{};
+	// hg has no per-branch upstream; a push contacts default-push where configured, else default
+	state.upstream = run.pathNames.contains(QLatin1String("default-push")) ? QStringLiteral("default-push")
+		: run.pathNames.contains(QLatin1String("default")) ? QStringLiteral("default") : QString{};
 	state.behind = _behind;
 
-	if (run.hasDefaultPath)
+	if (!state.upstream.isEmpty())
 	{
 		state.ahead = int(run.unpushed.size());
 		for (const CommitRecord& commit : run.unpushed)
@@ -382,8 +383,8 @@ std::vector<FileEntry> HgRepository::filesFromRun(const RefreshRun& run) const
 
 	for (const auto& [subPath, recordedNode] : _subrepoNodes)
 	{
-		if (!QFileInfo::exists(QDir{ path() }.filePath(subPath)))
-			continue; // never cloned
+		if (!subrepoCloned(subPath))
+			continue; // never cloned, or not a repository anymore
 
 		const auto contentInside = run.subrepoContent.find(subPath);
 		const auto currentNode = run.subrepoNodes.find(subPath);
@@ -414,6 +415,14 @@ bool HgRepository::isGitSubrepo(const QString& subrepoPath) const
 {
 	const auto source = _subrepoSources.find(subrepoPath);
 	return source != _subrepoSources.end() && Hg::subrepoKind(source->second) == VcsKind::Git;
+}
+
+// Directory existence is not enough: hg queried in a marker-less directory resolves upward and answers for
+// the parent. A submodule's .git may be a file, which exists() covers.
+bool HgRepository::subrepoCloned(const QString& subrepoPath) const
+{
+	const QDir workDir{ QDir{ path() }.filePath(subrepoPath) };
+	return QFileInfo::exists(workDir.filePath(isGitSubrepo(subrepoPath) ? QStringLiteral(".git") : QStringLiteral(".hg")));
 }
 
 QueryRound::Launcher HgRepository::refreshQueries()

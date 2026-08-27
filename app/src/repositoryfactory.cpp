@@ -132,6 +132,16 @@ std::vector<FoundRepository> repositoriesInFolder(const QString& folder)
 
 std::expected<RepositoryLocation, std::vector<ProcessResult>> findRepository(const QString& startPath)
 {
+	// Probing a vanished directory would fail with FailedToStart, whose default advice points at tool installation
+	if (!QFileInfo{ startPath }.isDir())
+	{
+		ProcessResult missing; // Exited, so errorText() returns this err
+		missing.err = (QFileInfo::exists(startPath)
+			? QObject::tr("The path is a file; a repository is opened from a folder.")
+			: QObject::tr("The folder does not exist - deleted, renamed, or on an unmounted drive.")).toUtf8();
+		return std::unexpected(std::vector<ProcessResult>{ std::move(missing) });
+	}
+
 	// git first: the cheaper process and the common answer. The cost is that an hg repository nested inside a
 	// git one resolves to the outer git root; a git submodule inside an hg parent is found correctly.
 	Claim git = claimedByGit(startPath);

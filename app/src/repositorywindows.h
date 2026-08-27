@@ -23,6 +23,11 @@ CommitWindow* openRepositoryWindow(const RepositoryLocation& location, QWidget* 
 // Opens the repository containing `path`, whichever kind claims it. Reports a path that none does.
 CommitWindow* openRepositoryWindowAt(const QString& path, QWidget* dialogParent);
 
+// For a submodule row: `root` must be the repository's own root. Refused when discovery resolves elsewhere -
+// an uninitialized submodule's empty directory answers as the parent, and opening the parent in its place
+// would only look like the submodule opened.
+CommitWindow* openSubmoduleRepositoryWindow(const QString& root, QWidget* dialogParent);
+
 // The same for a root from the recent list; on failure offers to drop the entry
 CommitWindow* openRecentRepository(const QString& root, QWidget* dialogParent);
 
