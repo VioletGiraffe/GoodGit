@@ -238,7 +238,10 @@ QStringList parseUnresolvedPaths(const QByteArray& resolveOutput)
 	for (const QJsonValue& value : jsonRecords(resolveOutput))
 	{
 		const QJsonObject record = value.toObject();
-		if (record.value(QLatin1String("mergestatus")).toString() == QLatin1String("U"))
+		const QString status = record.value(QLatin1String("mergestatus")).toString();
+		// U: unresolved content conflict. P: unresolved path conflict, whose incoming file lands under a
+		// ~<hash> name; hg's own commit gate counts both.
+		if (status == QLatin1String("U") || status == QLatin1String("P"))
 			paths << record.value(QLatin1String("path")).toString();
 	}
 	return paths;

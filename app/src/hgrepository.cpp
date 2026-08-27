@@ -372,6 +372,14 @@ std::vector<FileEntry> HgRepository::filesFromRun(const RefreshRun& run) const
 		files.push_back(std::move(entry));
 	}
 
+	// A modified-here/deleted-there conflict keeps the local file with an empty status, so it has no row;
+	// the mergestate is the only evidence
+	for (const QString& conflictedPath : run.conflicted)
+	{
+		if (std::ranges::none_of(files, [&](const FileEntry& f) { return f.path == conflictedPath; }))
+			files.push_back({ .path = conflictedPath, .type = ChangeType::Conflicted });
+	}
+
 	for (const auto& [subPath, recordedNode] : _subrepoNodes)
 	{
 		if (!QFileInfo::exists(QDir{ path() }.filePath(subPath)))

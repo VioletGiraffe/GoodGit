@@ -66,8 +66,9 @@ QStringList parseUnmergedPaths(const QByteArray& statusOutput)
 
 namespace {
 
-// The status letter of --name-status and --raw alike. `diff --name-status HEAD` reports an unmerged path as
-// M, so 'U' does not occur during a merge; parseUnmergedPaths names the conflicted rows.
+// The status letter of --name-status and --raw alike. `diff --name-status HEAD` never reports 'U' during a
+// merge: a UU path shows as M, a UD path (worktree equal to HEAD) not at all; parseUnmergedPaths names the
+// conflicted rows either way.
 ChangeType changeTypeOfLetter(char letter)
 {
 	switch (letter)

@@ -27,8 +27,8 @@ struct BranchHeader
 [[nodiscard]] BranchHeader parseBranchHeader(const QByteArray& statusOutput);
 
 // The unmerged paths from the same output.
-// The only refresh query that names them: a diff reports an unmerged path as modified, and not every
-// conflict leaves a marker in the git directory (an interrupted `stash pop` leaves none).
+// The only refresh query that names them: a diff reports an unmerged path as modified or (UD) not at all,
+// and not every conflict leaves a marker in the git directory (an interrupted `stash pop` leaves none).
 [[nodiscard]] QStringList parseUnmergedPaths(const QByteArray& statusOutput);
 
 // Input: `diff --name-status -M -z HEAD` output

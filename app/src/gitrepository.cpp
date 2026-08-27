@@ -566,6 +566,14 @@ std::vector<FileEntry> GitRepository::filesFromRun(const RefreshRun& run) const
 		files.push_back(std::move(entry));
 	}
 
+	// A UD conflict (modified here, deleted there) leaves the worktree equal to HEAD, so the diff has no
+	// row for it; the unmerged list is the only evidence
+	for (const QString& conflictedPath : run.conflicted)
+	{
+		if (std::ranges::none_of(files, [&](const FileEntry& f) { return f.path == conflictedPath; }))
+			files.push_back({ .path = conflictedPath, .type = ChangeType::Conflicted });
+	}
+
 	for (const QString& path : run.untracked)
 		files.push_back({ .path = path, .type = ChangeType::Untracked });
 
