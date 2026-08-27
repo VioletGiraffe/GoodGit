@@ -1,7 +1,10 @@
 #include "hgcommandserver.h"
 #include "hgprocess.h"
 
+#include "settingsui/csettingsdialog.h"
+
 DISABLE_COMPILER_WARNINGS
+#include <QApplication>
 #include <QProcess>
 #include <QTimer>
 #include <QtEndian>
@@ -236,10 +239,19 @@ HgServerPool& HgServerPool::instance()
 	return pool;
 }
 
+HgServerPool::HgServerPool()
+{
+	// The executable path is a setting, so a settings change may have fixed what the latches remember
+	QObject::connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, qApp, [this] {
+		_unavailable = false;
+		_failedRoots.clear();
+	});
+}
+
 Vcs::Job* HgServerPool::run(const Vcs::Tool& tool, const QString& workDir, QStringList args, const QObject* context,
 	Vcs::Callback callback, QByteArray stdinData)
 {
-	if (_unavailable || !stdinData.isEmpty())
+	if (_unavailable || _failedRoots.contains(workDir) || !stdinData.isEmpty())
 		return Vcs::run(tool, workDir, std::move(args), context, std::move(callback), std::move(stdinData));
 
 	auto* job = new Hg::ServerJob{ tool, workDir, std::move(args), context, std::move(callback) };
@@ -297,7 +309,6 @@ void HgServerPool::removeQueued(Hg::ServerJob* job)
 
 void HgServerPool::serverReady(HgCommandServer* /*server*/)
 {
-	_everReady = true;
 	dispatch();
 }
 
@@ -309,6 +320,8 @@ void HgServerPool::serverFreed(HgCommandServer* /*server*/)
 void HgServerPool::serverDied(HgCommandServer* server, ProcessOutcome outcome, const QString& launchError)
 {
 	const QByteArray serverStderr = server->ownStderr();
+	const QString deadRoot = server->bindRoot();
+	const bool cameUp = server->helloSeen();
 
 	// Called from the server's own signal handler, so it is deleted from the event loop
 	const auto owned = std::ranges::find_if(_servers, [server](const std::unique_ptr<HgCommandServer>& s) { return s.get() == server; });
@@ -318,16 +331,35 @@ void HgServerPool::serverDied(HgCommandServer* server, ProcessOutcome outcome, c
 		_servers.erase(owned);
 	}
 
-	if (_everReady)
+	if (cameUp)
 	{
+		// A crash under a command already failed that command with its own diagnosis
 		dispatch(); // respawns on demand if the queue calls for it
 		return;
 	}
 
-	// No server has ever come up, so this hg cannot serve: fail the queue, use processes from here on
-	_unavailable = true;
-	const std::deque<Hg::ServerJob*> stranded = std::move(_queue);
-	_queue.clear();
+	// The server never came up, and the death names its cause:
+	//   launch failure - the executable's, so no root will fare better
+	//   crash before the hello - the bound repository's (broken repo hgrc or extension)
+	// Only the jobs the cause diagnoses are failed with this server's stderr; the rest stay queued, and
+	// dispatch() respawns for them bound to their own front job's repository.
+	if (outcome == ProcessOutcome::LaunchFailed)
+		_unavailable = true;
+	else
+		_failedRoots.insert(deadRoot);
+
+	std::deque<Hg::ServerJob*> stranded;
+	for (auto it = _queue.begin(); it != _queue.end(); )
+	{
+		if (_unavailable || (*it)->_workDir == deadRoot)
+		{
+			stranded.push_back(*it);
+			it = _queue.erase(it);
+		}
+		else
+			++it;
+	}
 	for (Hg::ServerJob* job : stranded)
 		job->failed(outcome, serverStderr, launchError);
+	dispatch();
 }

@@ -2,6 +2,10 @@
 
 #include "vcsprocess.h"
 
+DISABLE_COMPILER_WARNINGS
+#include <QSet>
+RESTORE_COMPILER_WARNINGS
+
 #include <deque>
 #include <memory>
 #include <vector>
@@ -54,6 +58,7 @@ public:
 	~HgCommandServer() override;
 
 	[[nodiscard]] const QString& bindRoot() const { return _bindRoot; }
+	[[nodiscard]] bool helloSeen() const { return _helloSeen; }
 	[[nodiscard]] bool idle() const { return _helloSeen && !_dead && !_currentJob; }
 	[[nodiscard]] Hg::ServerJob* currentJob() const { return _currentJob; }
 	[[nodiscard]] const QByteArray& ownStderr() const { return _ownStderr; }
@@ -84,7 +89,9 @@ private:
 
 // Up to MaxServers servers, spawned on demand, each bound to the repository of the job waiting at the time.
 // Jobs queue FIFO; a free server prefers a job for its own repository.
-// If no server ever becomes ready (hg missing or too old), the pool routes everything through plain processes.
+// A server dying before its hello latches its cause: a launch failure (hg missing) routes everything
+// through plain processes, a pre-hello crash (broken repo config) routes only that repository's jobs there.
+// A settings change resets both latches: the executable path is a setting.
 class HgServerPool final
 {
 public:
@@ -99,6 +106,8 @@ private:
 	friend class HgCommandServer;
 	friend class Hg::ServerJob;
 
+	HgServerPool(); // installs the settings hook that resets the failure latches
+
 	void dispatch();
 	void removeQueued(Hg::ServerJob* job);
 	void serverReady(HgCommandServer* server);
@@ -110,6 +119,10 @@ private:
 
 	std::vector<std::unique_ptr<HgCommandServer>> _servers;
 	std::deque<Hg::ServerJob*> _queue;
-	bool _everReady = false;   // one server coming up proves this hg can serve
-	bool _unavailable = false; // none ever did
+	// hg itself cannot launch: everything goes through plain processes until a settings change resets this
+	bool _unavailable = false;
+	// Repositories whose server died before its hello (broken repo hgrc or extension): their jobs bypass the
+	// pool, so each command fails with hg's own error for that repository instead of poisoning the shared
+	// queue. A repository fixed outside the app stays here until a settings change or restart.
+	QSet<QString> _failedRoots;
 };
