@@ -1309,10 +1309,13 @@ void CommitWindow::abortOperation()
 		return QString{};
 	}();
 
-	// Ending a bisect loses nothing: it only checks the pre-bisect branch out again
+	// Ending a bisect loses nothing, but only git returns to the pre-bisect branch: hg's reset leaves the
+	// working directory where the bisect left it
 	const bool bisect = op == RepoOp::Bisect;
 	const QString text = bisect
-		? tr("The bisect session ends, and the branch that was checked out before it started is checked out again.")
+		? (_repo->kind() == VcsKind::Git
+			? tr("The bisect session ends, and the branch that was checked out before it started is checked out again.")
+			: tr("The bisect session ends. The working directory stays on the revision the bisect left it at."))
 		: tr("The repository goes back to where it was before the operation started, and every conflict "
 			 "resolution goes with it.\n\nA change that was already uncommitted when the operation began may "
 			 "not survive either.");

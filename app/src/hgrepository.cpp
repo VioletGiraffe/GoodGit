@@ -354,9 +354,12 @@ RepoState HgRepository::stateFromRun(const RefreshRun& run) const
 	for (const auto& subrepo : _subrepoSources)
 		state.submodules << subrepo.first;
 
-	// Rebase, graft and histedit leave state of their own that this does not read
+	// Rebase, graft and histedit leave state of their own that this does not read.
+	// A merge started mid-bisect owns the commit, so it wins, as in git.
 	if (run.workingDir.parents.size() > 1)
 		state.op = RepoOp::Merge;
+	else if (QFileInfo::exists(QDir{ path() }.filePath(QStringLiteral(".hg/bisect.state"))))
+		state.op = RepoOp::Bisect;
 	return state;
 }
 
@@ -407,8 +410,14 @@ std::vector<FileEntry> HgRepository::filesFromRun(const RefreshRun& run) const
 
 RepoOp HgRepository::probeOperation() const
 {
-	// The mergestate is the only marker hg leaves; the base contract covers what it can and cannot show
-	return QFileInfo::exists(QDir{ path() }.filePath(QStringLiteral(".hg/merge"))) ? RepoOp::Merge : RepoOp::None;
+	// Mergestate and bisect state are the markers hg leaves that this reads; the base contract covers what
+	// they can and cannot show
+	const QDir stateDir{ path() };
+	if (QFileInfo::exists(stateDir.filePath(QStringLiteral(".hg/merge"))))
+		return RepoOp::Merge;
+	if (QFileInfo::exists(stateDir.filePath(QStringLiteral(".hg/bisect.state"))))
+		return RepoOp::Bisect;
+	return RepoOp::None;
 }
 
 bool HgRepository::isGitSubrepo(const QString& subrepoPath) const
@@ -518,9 +527,13 @@ void HgRepository::undoLastCommit(Vcs::Answer<void> onDone)
 
 void HgRepository::abortOperation(Vcs::Answer<void> onDone)
 {
-	// stateFromRun reads a merge and nothing else, so a merge is the only operation that reaches this
-	assert(state().op == RepoOp::Merge);
-	Hg::run(path(), { QStringLiteral("merge"), QStringLiteral("--abort") }, this, Vcs::reporting(std::move(onDone)));
+	// stateFromRun reads a merge and a bisect and nothing else, so only those reach this.
+	// bisect --reset only clears the session state: unlike git's, it does not move the working directory.
+	assert(state().op == RepoOp::Merge || state().op == RepoOp::Bisect);
+	QStringList args = state().op == RepoOp::Bisect
+		? QStringList{ QStringLiteral("bisect"), QStringLiteral("--reset") }
+		: QStringList{ QStringLiteral("merge"), QStringLiteral("--abort") };
+	Hg::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));
 }
 
 void HgRepository::planPush(Vcs::Answer<std::vector<PushStep>> onDone)
@@ -607,11 +620,15 @@ void HgRepository::submoduleDiscardPlan(const QString& repoRelativePath, const Q
 	}
 
 	// A mergestate outlives its command until the resolve is committed or aborted (see startRefresh), so its
-	// presence answers for every command that can conflict
-	if (QFileInfo::exists(QDir{ workDir }.filePath(QStringLiteral(".hg/merge"))))
+	// presence answers for every command that can conflict. Bisect is refused like the git path refuses it.
+	const QString refusal = QFileInfo::exists(QDir{ workDir }.filePath(QStringLiteral(".hg/merge")))
+		? QObject::tr("An unfinished merge, graft or rebase is in progress there. Finish or abort it first.")
+		: QFileInfo::exists(QDir{ workDir }.filePath(QStringLiteral(".hg/bisect.state")))
+			? QObject::tr("A bisect is in progress there. Finish or reset it first.") : QString{};
+	if (!refusal.isEmpty())
 	{
-		QTimer::singleShot(0, context, [onDone = std::move(onDone)] {
-			onDone({ .refusal = QObject::tr("An unfinished merge, graft or rebase is in progress there. Finish or abort it first.") });
+		QTimer::singleShot(0, context, [refusal, onDone = std::move(onDone)] {
+			onDone({ .refusal = refusal });
 		});
 		return;
 	}

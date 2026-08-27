@@ -39,9 +39,10 @@ Deliberate consequences:
 - The way out is Abort, which hands the operation back to the command that started it (`git <op> --abort`,
   `hg merge --abort`) and loses every resolution with it. Git alone can abort all four operations: hg reads
   only a merge as one.
-- A bisect in progress is an operation of its own kind: it owns HEAD and Abort maps to `git bisect reset`,
-  but it does not constrain what a commit takes. Committing is refused during one: a new commit would fall
-  outside the search range.
+- A bisect in progress is an operation of its own kind: it owns the checkout, but does not constrain what
+  a commit takes. Committing is refused during one: a new commit would fall outside the search range.
+  Abort maps to the session's own ender (`git bisect reset`, `hg bisect --reset`); only git's returns to
+  the pre-bisect branch, hg's leaves the working directory where the bisect left it.
 
 ## Undoing the last commit
 
