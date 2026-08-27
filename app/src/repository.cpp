@@ -1,6 +1,7 @@
 #include "repository.h"
 
 DISABLE_COMPILER_WARNINGS
+#include <QDir>
 #include <QFileInfo>
 RESTORE_COMPILER_WARNINGS
 
@@ -58,9 +59,15 @@ Repository::Repository(QString rootPath, QObject* parent) :
 {
 }
 
+QString repositoryDisplayName(const QString& root)
+{
+	const QString name = QFileInfo{ root }.fileName();
+	return name.isEmpty() ? QDir::toNativeSeparators(root) : name; // a drive root has no directory name
+}
+
 QString Repository::name() const
 {
-	return QFileInfo{ _rootPath }.fileName();
+	return repositoryDisplayName(_rootPath);
 }
 
 void Repository::refresh()

@@ -240,7 +240,7 @@ void RecentRepositoriesPanel::rebuild()
 	for (const RecentRepository& repository : RecentRepositories::list())
 	{
 		auto* item = new QTreeWidgetItem{ this };
-		item->setText(0, QFileInfo{ repository.root }.fileName());
+		item->setText(0, repositoryDisplayName(repository.root));
 		item->setData(0, RootRole, repository.root);
 		item->setData(0, PathRole, QDir::toNativeSeparators(repository.root));
 		setBadge(item, repository.kind);

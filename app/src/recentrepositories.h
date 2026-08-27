@@ -36,8 +36,9 @@ void recordOpen(const RepositoryLocation& location);
 // how many were added and kept.
 size_t recordFound(const std::vector<FoundRepository>& found);
 
-// Replaces the recorded submodules with the ones the repository's state names. Does nothing for a repository
-// the list does not hold, a submodule's own submodules included.
+// Replaces the recorded submodules with the ones the repository's state names, and drops any top-level
+// entry those submodules shadow. Does nothing for a repository the list does not hold (a submodule's own
+// submodules included) or whose state was never read.
 void setSubmodules(const Repository& repository);
 
 void forget(const QString& root);

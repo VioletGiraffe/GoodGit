@@ -27,6 +27,10 @@ struct RepositoryLocation
 // Used by every place that matches repositories (open windows, the recent list), so they agree.
 [[nodiscard]] bool sameRepositoryPath(const QString& left, const QString& right);
 
+// The name a repository at `root` is shown under: the directory name, or the root spelling for a drive
+// root, which has none. For places that hold only the path; Repository::name() answers for an instance.
+[[nodiscard]] QString repositoryDisplayName(const QString& root);
+
 // One command of a push. Usually just the repository's own, but a superproject commit referencing an
 // unpublished submodule commit is unfetchable, so such submodules are pushed first.
 struct PushStep

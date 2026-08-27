@@ -6,6 +6,7 @@
 
 DISABLE_COMPILER_WARNINGS
 #include <QDateTime>
+#include <QFileInfo>
 #include <QSet>
 RESTORE_COMPILER_WARNINGS
 
@@ -44,6 +45,14 @@ void sortByLastUsed(std::vector<RecentRepository>& repositories)
 {
 	return std::ranges::any_of(repository.submodules,
 		[&](const Submodule& submodule) { return sameRepositoryPath(submoduleRoot(repository, submodule), root); });
+}
+
+// Honored only while the claiming repository is still on disk: a deleted parent must not hide its
+// ex-submodules from the list forever. A live parent's stale claim stands until the parent is reopened and
+// setSubmodules() re-reads it: only the parent knows its current submodules.
+[[nodiscard]] bool claimsSubmoduleAt(const RecentRepository& repository, const QString& root)
+{
+	return holdsSubmoduleAt(repository, root) && QFileInfo::exists(repository.root);
 }
 
 void save(const std::vector<RecentRepository>& repositories)
@@ -123,7 +132,7 @@ void recordOpen(const RepositoryLocation& location)
 	};
 
 	const auto parent = std::ranges::find_if(repositories,
-		[&](const RecentRepository& repository) { return holdsSubmoduleAt(repository, location.root); });
+		[&](const RecentRepository& repository) { return claimsSubmoduleAt(repository, location.root); });
 	if (parent != repositories.end())
 	{
 		parent->lastUsedMSecs = now;
@@ -160,7 +169,7 @@ size_t recordFound(const std::vector<FoundRepository>& found)
 	{
 		const QString& root = candidate.location.root;
 		const bool listed = std::ranges::any_of(repositories, [&](const RecentRepository& repository) {
-			return sameRepositoryPath(repository.root, root) || holdsSubmoduleAt(repository, root);
+			return sameRepositoryPath(repository.root, root) || claimsSubmoduleAt(repository, root);
 		});
 		if (listed)
 			continue;
@@ -188,6 +197,9 @@ size_t recordFound(const std::vector<FoundRepository>& found)
 
 void setSubmodules(const Repository& repository)
 {
+	if (!repository.state().known())
+		return; // a failed first refresh would replace the stored list with the empty default
+
 	std::vector<RecentRepository> repositories = list();
 	const auto entry = std::ranges::find_if(repositories,
 		[&](const RecentRepository& listed) { return sameRepositoryPath(listed.root, repository.path()); });
@@ -199,10 +211,20 @@ void setSubmodules(const Repository& repository)
 	for (const QString& path : repository.state().submodules)
 		submodules.push_back({ path, repository.submoduleLocation(path).kind });
 
-	if (submodules == entry->submodules)
-		return; // nothing to write or announce
+	const bool submodulesChanged = submodules != entry->submodules;
+	if (submodulesChanged)
+		entry->submodules = std::move(submodules);
 
-	entry->submodules = std::move(submodules);
+	// A top-level entry a submodule shadows: the repository was scanned or opened standalone before this
+	// parent claimed it. Checked on every call, so an old duplicate also heals.
+	const RecentRepository parent = *entry; // erase_if relocates entries, so the iterator does not survive it
+	const size_t sizeBefore = repositories.size();
+	std::erase_if(repositories, [&](const RecentRepository& listed) {
+		return !sameRepositoryPath(listed.root, parent.root) && holdsSubmoduleAt(parent, listed.root);
+	});
+
+	if (!submodulesChanged && repositories.size() == sizeBefore)
+		return; // nothing to write or announce
 	save(repositories);
 }
 
