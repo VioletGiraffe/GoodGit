@@ -36,6 +36,7 @@ public:
 	// cannot push a submodule whose branch name differs from the superproject's.
 	void planPush(Vcs::Answer<std::vector<PushStep>> onDone) override;
 	Vcs::Job* runPushStep(const PushStep& step, bool setUpstream, Vcs::Callback onDone) override;
+	[[nodiscard]] std::optional<QString> missingUpstreamName(const PushStep& step, const ProcessResult& failure) const override;
 	[[nodiscard]] QString pushCommandLabel(const PushStep& step, bool setUpstream) const override;
 
 	void fetch(Vcs::Answer<void> onDone) override;

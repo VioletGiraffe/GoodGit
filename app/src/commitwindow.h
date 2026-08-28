@@ -98,9 +98,9 @@ private:
 	// failure ends the push.
 	void startPush();
 	void runPushStep(size_t index, bool setUpstream);
-	// Offers to set an upstream for the step's branch and retries if accepted. Returns whether the push
+	// Offers to set `upstream` for the step's branch and retries if accepted. Returns whether the push
 	// goes on.
-	bool offerUpstreamThenRetry(size_t index);
+	bool offerUpstreamThenRetry(size_t index, const QString& upstream);
 	void peekIncoming();
 	void showIncomingCommits(const std::vector<CommitRecord>& commits, bool capped);
 	void closePushLogEntry(const ProcessResult& result);

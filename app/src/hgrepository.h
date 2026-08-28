@@ -25,9 +25,10 @@ public:
 	void abortOperation(Vcs::Answer<void> onDone) override;
 
 	// `hg push -r .` recurses into subrepositories itself, so the plan is this repository alone.
-	// `setUpstream` never arrives true: the window offers it only after a git-specific failure message.
+	// `setUpstream` never arrives true: missingUpstreamName never names one here.
 	void planPush(Vcs::Answer<std::vector<PushStep>> onDone) override;
 	Vcs::Job* runPushStep(const PushStep& step, bool setUpstream, Vcs::Callback onDone) override;
+	[[nodiscard]] std::optional<QString> missingUpstreamName(const PushStep& step, const ProcessResult& failure) const override;
 	[[nodiscard]] QString pushCommandLabel(const PushStep& step, bool setUpstream) const override;
 
 	void fetch(Vcs::Answer<void> onDone) override;

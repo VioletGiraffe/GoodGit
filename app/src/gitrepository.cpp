@@ -754,6 +754,15 @@ Vcs::Job* GitRepository::runPushStep(const PushStep& step, bool setUpstream, Vcs
 	return Git::run(step.workDir, std::move(args), this, std::move(onDone));
 }
 
+std::optional<QString> GitRepository::missingUpstreamName(const PushStep& step, const ProcessResult& failure) const
+{
+	// git's own wording: a localized git is not matched, and the failure is reported like any other
+	if (!QString::fromUtf8(failure.err).contains(QLatin1String("has no upstream branch")))
+		return {};
+
+	return QStringLiteral("origin/") + step.branch; // the remote runPushStep sets
+}
+
 QString GitRepository::pushCommandLabel(const PushStep& step, bool setUpstream) const
 {
 	const QString command = setUpstream ? QStringLiteral("push --set-upstream origin HEAD") : QStringLiteral("push");

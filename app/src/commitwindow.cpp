@@ -1073,13 +1073,16 @@ void CommitWindow::runPushStep(size_t index, bool setUpstream)
 			return;
 		}
 
-		const bool upstreamOffered = !setUpstream && QString::fromUtf8(result.err).contains(QLatin1String("no upstream"));
-		if (upstreamOffered && offerUpstreamThenRetry(index))
+		std::optional<QString> missingUpstream;
+		if (!setUpstream) // the retry already carried one
+			missingUpstream = _repo->missingUpstreamName(_pushSteps[index], result);
+
+		if (missingUpstream && offerUpstreamThenRetry(index, *missingUpstream))
 			return;
 
 		_pushInFlight = false;
 		updateControlStates();
-		if (!upstreamOffered) // a declined offer already named this failure
+		if (!missingUpstream) // a declined offer already named this failure
 			showError(tr("Push failed"), result.errorText());
 	};
 
@@ -1088,10 +1091,9 @@ void CommitWindow::runPushStep(size_t index, bool setUpstream)
 	job->streamTo([this](const QByteArray& chunk) { _pushLogView->appendOutput(chunk); });
 }
 
-bool CommitWindow::offerUpstreamThenRetry(size_t index)
+bool CommitWindow::offerUpstreamThenRetry(size_t index, const QString& upstream)
 {
 	const PushStep& step = _pushSteps[index];
-	const QString upstream = QStringLiteral("origin/") + step.branch;
 	const QString text = step.subject.isEmpty()
 		? tr("The branch '%1' has no upstream configured. Push it to '%2' and set the upstream?").arg(step.branch, upstream)
 		: tr("Submodule '%1' is on branch '%2', which has no upstream configured. Push it to '%3' and set the upstream?")

@@ -9,6 +9,7 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <map>
+#include <optional>
 #include <vector>
 
 // `text` with a backslash before every character in `metacharacters`
@@ -125,6 +126,9 @@ public:
 	// Reported as a process rather than an answer: the push log shows the exit code when there was no output.
 	// `setUpstream` retries a step that reported having no upstream.
 	virtual Vcs::Job* runPushStep(const PushStep& step, bool setUpstream, Vcs::Callback onDone) = 0;
+	// The upstream a retry with `setUpstream` would configure, when a missing upstream is why the step failed.
+	// Nothing for any other failure, and nothing from a backend with no upstream notion.
+	[[nodiscard]] virtual std::optional<QString> missingUpstreamName(const PushStep& step, const ProcessResult& failure) const = 0;
 	// The command line the push log shows. Not the literal argument list: the invocation invariants and
 	// progress flags are noise there.
 	[[nodiscard]] virtual QString pushCommandLabel(const PushStep& step, bool setUpstream) const = 0;

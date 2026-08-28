@@ -557,6 +557,11 @@ Vcs::Job* HgRepository::runPushStep(const PushStep& step, bool /*setUpstream*/, 
 		tolerantOfEmptyResult(std::move(onDone)), {}, Hg::Transport::Process);
 }
 
+std::optional<QString> HgRepository::missingUpstreamName(const PushStep& /*step*/, const ProcessResult& /*failure*/) const
+{
+	return {}; // a push path is repository-wide, with no per-branch upstream to configure
+}
+
 QString HgRepository::pushCommandLabel(const PushStep& /*step*/, bool /*setUpstream*/) const
 {
 	return QStringLiteral("hg push -r .");

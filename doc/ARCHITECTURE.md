@@ -141,8 +141,9 @@ vocabulary is git's: it names every concept both systems have, and Mercurial's o
 git has none - `CommitRecord`'s revision number, the `.hgsub` parsers. A backend supplies three things:
 every pure virtual (the actions, the read-only queries, and `startRefresh()`, which runs whatever queries
 its kind needs and calls `completeRefresh()` once); its own knowledge of itself (the ignore file and where a
-pattern belongs in it, the label the push log shows, where a submodule row's repository is and of what kind,
-how the external diff tool is launched); and a line in `repositoryfactory`.
+pattern belongs in it, the label the push log shows, which push failure means a missing upstream, where a
+submodule row's repository is and of what kind, how the external diff tool is launched); and a line in
+`repositoryfactory`.
 
 The refresh policy is the base class's, not the backend's: re-entry is coalesced, and a run is applied
 whole or not at all.
@@ -374,8 +375,9 @@ operation leaves HEAD on its branch, and a commit made during one attaches exact
 
 A failed command surfaces its own stderr verbatim (qtutils `MessageBox::notice`, scrollable details): hook
 output is what makes a rejected commit diagnosable. A command that never launched, died mid-run, or ran out
-of time says which. Push failures special-case "no upstream" (offering `--set-upstream origin HEAD`);
-non-fast-forward is reported plainly, with no offer to pull or force.
+of time says which. A push step that failed for want of an upstream is offered a retry that sets one; the
+backend decides which failure that is and names the upstream. Non-fast-forward is reported plainly, with no
+offer to pull or force.
 
 Delete goes to the OS trash and never falls back to permanent deletion. The external diff tool is launched
 detached, bypassing the job queue: it blocks the VCS process until the tool closes, and a queue slot held
