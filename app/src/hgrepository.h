@@ -24,6 +24,7 @@ public:
 
 	void undoLastCommit(Vcs::Answer<void> onDone) override;
 	void abortOperation(Vcs::Answer<void> onDone) override;
+	void continueOperation(Vcs::Answer<void> onDone) override;
 
 	// `hg push -r .` recurses into subrepositories itself, so the plan is this repository alone.
 	// `setUpstream` never arrives true: missingUpstreamName never names one here.

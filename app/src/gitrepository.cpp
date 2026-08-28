@@ -105,6 +105,7 @@ struct GitOperation
 {
 	RepoOp op = RepoOp::None;
 	OperationHint hint;
+	QStringList continueArgs; // empty where committing is what finishes it
 	QStringList abortArgs;
 };
 
@@ -124,9 +125,11 @@ GitOperation sequencerOperation(const QDir& gitDir)
 		return {};
 
 	const QString command = verb == "revert" ? QStringLiteral("revert") : QStringLiteral("cherry-pick");
+	// --no-edit: the messages are the picked commits' own, and continuing is not an occasion to rewrite them
 	return { .op = RepoOp::Unmodelled,
 		.hint = { .name = command, .continueCommand = QStringLiteral("git %1 --continue").arg(command),
 			.abortRewinds = false },
+		.continueArgs = { command, QStringLiteral("--continue"), QStringLiteral("--no-edit") },
 		.abortArgs = { command, QStringLiteral("--quit") } };
 }
 
@@ -152,10 +155,12 @@ GitOperation operationInGitDir(const QString& gitDirPath)
 	if (gitDir.exists(QStringLiteral("rebase-apply/applying")))
 		return { .op = RepoOp::Unmodelled,
 			.hint = { .name = QStringLiteral("am"), .continueCommand = QStringLiteral("git am --continue") },
+			.continueArgs = { QStringLiteral("am"), QStringLiteral("--continue") },
 			.abortArgs = { QStringLiteral("am"), QStringLiteral("--abort") } };
 	if (gitDir.exists(QStringLiteral("rebase-merge")) || gitDir.exists(QStringLiteral("rebase-apply")))
 		return { .op = RepoOp::Rebase,
 			.hint = { .name = QStringLiteral("rebase"), .continueCommand = QStringLiteral("git rebase --continue") },
+			.continueArgs = { QStringLiteral("rebase"), QStringLiteral("--continue") },
 			.abortArgs = { QStringLiteral("rebase"), QStringLiteral("--abort") } };
 	if (gitDir.exists(QStringLiteral("BISECT_LOG")))
 		return { .op = RepoOp::Bisect, .hint = { .name = QStringLiteral("bisect") },
@@ -806,6 +811,15 @@ void GitRepository::abortOperation(Vcs::Answer<void> onDone)
 	// Read at action time rather than carried in the state: the git directory is the current answer for which
 	// operation is running, and each is abandoned through the command that started it.
 	QStringList args = operationInGitDir(_gitDir).abortArgs;
+	assert(!args.isEmpty());
+
+	Git::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));
+}
+
+void GitRepository::continueOperation(Vcs::Answer<void> onDone)
+{
+	// `rebase --continue` has no --no-edit and opens the user's editor on the message, waiting for it to close
+	QStringList args = operationInGitDir(_gitDir).continueArgs;
 	assert(!args.isEmpty());
 
 	Git::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));

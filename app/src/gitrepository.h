@@ -29,6 +29,7 @@ public:
 
 	void undoLastCommit(Vcs::Answer<void> onDone) override;
 	void abortOperation(Vcs::Answer<void> onDone) override;
+	void continueOperation(Vcs::Answer<void> onDone) override;
 
 	// Every step passes --progress: into a pipe git prints nothing until it finishes.
 	// Every step states its recursion explicitly: submodule.recurse varies by machine.

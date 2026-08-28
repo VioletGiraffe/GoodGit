@@ -256,7 +256,8 @@ void CommitWindow::buildUi()
 	repositoryMenu->addSeparator();
 	repositoryMenu->addAction(tr("&Refresh"), _repo.get(), &Repository::refresh)->setShortcut(QKeySequence::Refresh);
 	_uncommitAction = repositoryMenu->addAction(tr("&Undo Last Commit"), this, &CommitWindow::undoLastCommit);
-	// One item for every operation: the dialog names the one running, which no menu label has room to do
+	// Not one item per operation kind: the op strip names the one running, which no menu label has room to do
+	_continueAction = repositoryMenu->addAction(tr("&Continue Operation"), this, &CommitWindow::continueOperation);
 	_abortAction = repositoryMenu->addAction(tr("&Abort Operation..."), this, &CommitWindow::abortOperation);
 	QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
 	helpMenu->addAction(tr("&About"), this, [this] {
@@ -702,8 +703,8 @@ void CommitWindow::updateStrips()
 		opText = tr("Bisect in progress: committing is disabled until it ends, since a new commit would fall "
 					"outside the search range.");
 	else if (state.opBlocksCommit())
-		opText = tr("%1 in progress: committing is disabled, since GoodGit cannot continue it. Run %2 to finish it, "
-					"or abort it here.").arg(capitalized(state.opHint.name), state.opHint.continueCommand);
+		opText = tr("%1 in progress: committing is disabled, since it is finished by continuing it. Use Continue in "
+					"the Repository menu, or run %2.").arg(capitalized(state.opHint.name), state.opHint.continueCommand);
 	else if (state.op != RepoOp::None)
 		opText = tr("%1 in progress: all changes must be committed together.").arg(capitalized(state.opHint.name));
 	// A row reads Conflicted only while an operation is in progress, so this always extends the line above
@@ -765,6 +766,10 @@ void CommitWindow::updateControlStates()
 	// since its success invalidates the pre-push AlreadyPushed answer
 	_uncommitAction->setEnabled(canActOnList() && !_pushInFlight);
 	_abortAction->setEnabled(state.operationInProgress() && canActOnList() && !_pushInFlight);
+	// A continue command is named exactly where continueOperation() can run it, and every such command refuses
+	// while a conflict is still unresolved
+	_continueAction->setEnabled(!state.opHint.continueCommand.isEmpty() && _filesModel.unresolvedConflictPaths().isEmpty()
+		&& canActOnList() && !_pushInFlight);
 }
 
 QString CommitWindow::subjectOrPlaceholder(const QString& subject)
@@ -1308,6 +1313,17 @@ void CommitWindow::showHistoryWindow()
 	_historyWindow->show();
 	_historyWindow->raise();
 	_historyWindow->activateWindow();
+}
+
+void CommitWindow::continueOperation()
+{
+	if (writeInFlight())
+		return;
+
+	// No confirmation: continuing is what the operation is waiting for, and it destroys nothing.
+	// The command may open the user's editor, so the mutation can stay in flight for as long as that is up.
+	beginMutation();
+	_repo->continueOperation(mutationDone(tr("Continue failed"), /*changesHistory=*/true));
 }
 
 void CommitWindow::abortOperation()

@@ -109,6 +109,7 @@ private:
 
 	void showHistoryWindow();
 	void undoLastCommit();
+	void continueOperation();
 	void abortOperation();
 	void showPreferencesDialog();
 
@@ -162,6 +163,7 @@ private:
 	QPushButton* _peekButton = nullptr;
 	QPushButton* _historyButton = nullptr;
 	QAction* _uncommitAction = nullptr;
+	QAction* _continueAction = nullptr;
 	QAction* _abortAction = nullptr;
 	QLabel* _readFailureStrip = nullptr;
 	QLabel* _opStrip = nullptr;

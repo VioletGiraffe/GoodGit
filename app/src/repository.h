@@ -101,9 +101,9 @@ public:
 	[[nodiscard]] uint64_t refreshGeneration() const { return _refreshGeneration; }
 
 	// The operation the on-disk markers show right now, read fresh rather than from the cached state.
-	// Not comparable to RepoState::op: a backend's markers may over- or under-report (hg's mergestate
-	// outlives a resolved conflict and misses a conflict-free merge). Compare two probes with each other:
-	// a difference means an operation started or ended outside the app, unseen by any refresh.
+	// Not comparable to RepoState::op: a backend may read less from the markers alone than a refresh reads
+	// through its tool (hg's dirstate-v2 hides the parents an uncommitted merge shows in). Compare two probes
+	// with each other: a difference means an operation started or ended outside the app, unseen by any refresh.
 	[[nodiscard]] virtual RepoOp probeOperation() const = 0;
 
 	// The commit the working tree is on, read from the on-disk refs rather than from the cached state: this
@@ -132,6 +132,13 @@ public:
 	// resolution is lost with it, and a change already uncommitted when the operation began may not survive.
 	// Only called while an operation is in progress; which one it is, the backend reads off its own state.
 	virtual void abortOperation(Vcs::Answer<void> onDone) = 0;
+
+	// Carries the operation in progress to its next stop, or to its end. Every conflict must be marked resolved
+	// first, as the commands this runs require.
+	// Only called while RepoState::opHint names a continue command; which operation it is, the backend reads off
+	// its own state, as abortOperation() does.
+	// The command may open the user's editor and wait on it, so the answer can be a long time coming.
+	virtual void continueOperation(Vcs::Answer<void> onDone) = 0;
 
 	// The commands the push needs, in the order they must run; this repository's own is last. Nothing has
 	// run yet, so a submodule that cannot be pushed is a refusal here rather than a failure halfway through.

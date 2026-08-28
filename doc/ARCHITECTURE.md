@@ -45,10 +45,12 @@ Deliberate consequences:
   a commit takes. Committing is refused during one: a new commit would fall outside the search range.
   Abort maps to the session's own ender (`git bisect reset`, `hg bisect --reset`); only git's returns to
   the pre-bisect branch, hg's leaves the working directory where the bisect left it.
-- Committing is refused during any operation this app cannot continue: a rebase, git's `am`, and every hg
-  operation but a merge. Each is finished by continuing it, for which there is no command here, so a commit
-  made during one would strand it. Abort is what the window offers; the op strip names the command that
-  continues it.
+- Committing is refused during any operation that is finished by continuing it rather than by committing: a
+  rebase, git's `am`, and every hg operation but a merge. A commit made during one would strand it. Continue
+  and Abort are what the window offers, and the op strip names the command Continue runs.
+- Continue runs that command unchanged, so it may open the user's editor and wait for it to close: `git
+  rebase --continue` does, on the message of the commit it completes. The editor is deliberately not
+  overridden - the window stays in its mutation-in-flight state until the editor closes.
 - An operation is classified by how it must be finished, not by what its system calls it, so `RepoOp` stays
   git's vocabulary and everything the app cannot carry through is one value. The strip shows the operation's
   own name instead, which the backend supplies alongside it: an hg graft is not a cherry-pick to whoever

@@ -193,6 +193,7 @@ struct HgOperation
 {
 	RepoOp op = RepoOp::None;
 	OperationHint hint;
+	QStringList continueArgs; // empty where committing is what finishes it
 	QStringList abortArgs;
 };
 
@@ -208,11 +209,14 @@ HgOperation operationInHgDir(const QString& repoPath)
 	const auto leaves = [&repo](QLatin1String marker) {
 		return QFileInfo::exists(repo.filePath(QStringLiteral(".hg/") + marker));
 	};
-	const auto continued = [](QLatin1String name, QStringList abortArgs, bool abortRewinds = true) {
+	// `prefix` enables the extension the command lives in, empty for one that ships enabled.
+	// `ender` differs because not every extension offers --abort.
+	const auto continued = [](QLatin1String name, const QStringList& prefix, QLatin1String ender, bool abortRewinds = true) {
 		return HgOperation{ .op = RepoOp::Unmodelled,
 			.hint = { .name = name, .continueCommand = QStringLiteral("hg %1 --continue").arg(name),
 				.abortRewinds = abortRewinds },
-			.abortArgs = std::move(abortArgs) };
+			.continueArgs = prefix + QStringList{ name, QStringLiteral("--continue") },
+			.abortArgs = prefix + QStringList{ name, ender } };
 	};
 	const auto enabling = [](QLatin1String extension) {
 		return QStringList{ QStringLiteral("--config"), QStringLiteral("extensions.%1=").arg(extension) };
@@ -222,21 +226,17 @@ HgOperation operationInHgDir(const QString& repoPath)
 		return { .op = RepoOp::Merge, .hint = { .name = QStringLiteral("merge") },
 			.abortArgs = { QStringLiteral("merge"), QStringLiteral("--abort") } };
 	if (leaves(QLatin1String("graftstate")))
-		return continued(QLatin1String("graft"), { QStringLiteral("graft"), QStringLiteral("--abort") });
+		return continued(QLatin1String("graft"), {}, QLatin1String("--abort"));
 	if (leaves(QLatin1String("rebasestate")))
-		return continued(QLatin1String("rebase"),
-			enabling(QLatin1String("rebase")) << QStringLiteral("rebase") << QStringLiteral("--abort"));
+		return continued(QLatin1String("rebase"), enabling(QLatin1String("rebase")), QLatin1String("--abort"));
 	if (leaves(QLatin1String("histedit-state")))
-		return continued(QLatin1String("histedit"),
-			enabling(QLatin1String("histedit")) << QStringLiteral("histedit") << QStringLiteral("--abort"));
+		return continued(QLatin1String("histedit"), enabling(QLatin1String("histedit")), QLatin1String("--abort"));
 	if (leaves(QLatin1String("shelvedstate")))
-		return continued(QLatin1String("unshelve"),
-			enabling(QLatin1String("shelve")) << QStringLiteral("unshelve") << QStringLiteral("--abort"));
+		return continued(QLatin1String("unshelve"), enabling(QLatin1String("shelve")), QLatin1String("--abort"));
 	// transplant has no --abort: --stop keeps the changesets it already transplanted
 	if (leaves(QLatin1String("transplant/journal")))
-		return continued(QLatin1String("transplant"),
-			enabling(QLatin1String("transplant")) << QStringLiteral("transplant") << QStringLiteral("--stop"),
-			/*abortRewinds=*/false);
+		return continued(QLatin1String("transplant"), enabling(QLatin1String("transplant")),
+			QLatin1String("--stop"), /*abortRewinds=*/false);
 	if (leaves(QLatin1String("bisect.state")))
 		return { .op = RepoOp::Bisect, .hint = { .name = QStringLiteral("bisect") },
 			.abortArgs = { QStringLiteral("bisect"), QStringLiteral("--reset") } };
@@ -620,6 +620,15 @@ void HgRepository::abortOperation(Vcs::Answer<void> onDone)
 	QStringList args = operationInHgDir(path()).abortArgs;
 	if (args.isEmpty() && state().op == RepoOp::Merge)
 		args = { QStringLiteral("merge"), QStringLiteral("--abort") }; // the dirstate-v2 merge only the run saw
+	assert(!args.isEmpty());
+
+	Hg::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));
+}
+
+void HgRepository::continueOperation(Vcs::Answer<void> onDone)
+{
+	// A histedit stopped on a `mess` action opens the user's editor here and waits for it to close
+	QStringList args = operationInHgDir(path()).continueArgs;
 	assert(!args.isEmpty());
 
 	Hg::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));

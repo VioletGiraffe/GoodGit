@@ -85,7 +85,9 @@ enum class RepoOp : uint8_t { None, Merge, CherryPick, Revert, Rebase, Bisect, U
 struct OperationHint
 {
 	QString name;            // the operation's own command name: "graft" under hg, "am" under git
-	QString continueCommand; // what finishes it, empty where committing does or where nothing continues it
+	// The command that finishes it, empty where committing does. Set exactly where continueOperation() can run
+	// it, so the window offers Continue on this.
+	QString continueCommand;
 	// False where ending the operation keeps the commits it already made: git's sequencer past its first
 	// commit is ended with --quit, which does not rewind.
 	bool abortRewinds = true;
