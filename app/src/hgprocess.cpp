@@ -11,7 +11,9 @@ Vcs::Tool hgTool()
 	auto environment = QProcessEnvironment::systemEnvironment();
 	// No localisation, user aliases or defaults rewriting the command
 	environment.insert(QStringLiteral("HGPLAIN"), QStringLiteral("1"));
-	return { Hg::executablePath(), QStringLiteral("hg"), std::move(environment) };
+	// hg writes and reads the local 8-bit encoding, unlike git; every decode of its output goes through
+	// TextEncoding::Local, and every byte handed to it through Hg::localBytes
+	return { Hg::executablePath(), QStringLiteral("hg"), std::move(environment), TextEncoding::Local };
 }
 
 } // namespace

@@ -31,6 +31,9 @@ struct RepositoryLocation
 // Case-insensitive: a root's spelling depends on the path it was resolved from, and no platform this runs on
 // hosts two repositories differing only in case.
 // Used by every place that matches repositories (open windows, the recent list), so they agree.
+// Compares spellings, not filesystem identity, so one repository reached through a subst drive or a junction
+// matches as two. QFileInfo::canonicalFilePath() does not fix that - Qt 6.9.3 resolves neither - and a real
+// identity needs BY_HANDLE_FILE_INFORMATION (volume serial + file index).
 [[nodiscard]] bool sameRepositoryPath(const QString& left, const QString& right);
 
 // The name a repository at `root` is shown under: the directory name, or the root spelling for a drive

@@ -905,7 +905,7 @@ Vcs::Query HgRepository::submodulePointerLog(const QString& repoRelativePath, co
 	// only(., X): what the working directory's parent has and X does not
 	return Vcs::Query{ Hg::run(workDir, { QStringLiteral("log"), QStringLiteral("-r"),
 		QStringLiteral("only(., %1)").arg(recorded->second), QStringLiteral("-T"), QStringLiteral("{node|short} {desc|firstline}\n") },
-		context, Vcs::answering(std::move(onDone), Vcs::outputAsText)) };
+		context, Vcs::answering(std::move(onDone), Hg::textFromOutput)) };
 }
 
 RepositoryLocation HgRepository::submoduleLocation(const QString& repoRelativePath) const

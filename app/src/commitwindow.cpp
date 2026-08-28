@@ -1084,6 +1084,7 @@ void CommitWindow::runPushStep(size_t index, bool setUpstream)
 	};
 
 	Vcs::Job* job = _repo->runPushStep(step, setUpstream, onDone);
+	_pushLogView->setEncoding(converterEncoding(job->textEncoding()));
 	job->streamTo([this](const QByteArray& chunk) { _pushLogView->appendOutput(chunk); });
 }
 

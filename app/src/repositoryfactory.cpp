@@ -93,7 +93,7 @@ Claim claimedByMercurial(const QString& startPath)
 {
 	ProcessResult result = Hg::runSync(startPath, { QStringLiteral("root") });
 	// hg prints a native path, and everything downstream is forward-slashed
-	QString root = result.ok ? QDir::fromNativeSeparators(QString::fromUtf8(result.out.trimmed())) : QString{};
+	QString root = result.ok ? QDir::fromNativeSeparators(Hg::textFromOutput(result.out.trimmed())) : QString{};
 	return { std::move(root), std::move(result) };
 }
 

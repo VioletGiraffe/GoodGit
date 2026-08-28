@@ -99,7 +99,9 @@ QStringList nodeList(const QJsonValue& value)
 	return nodes;
 }
 
-// Splits at the first separator; empty for blank and comment lines
+// Splits at the first separator; empty for blank and comment lines.
+// Reads repository files rather than command output, so Hg::textFromOutput does not apply; UTF-8 is the
+// assumption, no encoding being declared for them.
 std::pair<QString, QString> splitAt(const QByteArray& line, QChar separator)
 {
 	const QString text = QString::fromUtf8(line).trimmed();
@@ -115,6 +117,11 @@ std::pair<QString, QString> splitAt(const QByteArray& line, QChar separator)
 } // namespace
 
 namespace Hg {
+
+QString textFromOutput(const QByteArray& bytes)
+{
+	return QString::fromLocal8Bit(bytes);
+}
 
 WorkingDirectory parseWorkingDirectory(const QByteArray& logOutput)
 {
@@ -201,7 +208,8 @@ std::map<QString, LineCounts> parseDiffCounts(const QByteArray& diffOutput)
 	// The path of `--- a/<path>` or `+++ b/<path>`; empty for the /dev/null side of an add or a removal
 	const auto headerPath = [](const QByteArray& line) {
 		const QByteArray name = line.mid(4);
-		return name.startsWith("a/") || name.startsWith("b/") ? QString::fromUtf8(name.mid(2)) : QString{};
+		// The counts are keyed by this path and read by the path the JSON status gave, so both must decode alike
+		return name.startsWith("a/") || name.startsWith("b/") ? textFromOutput(name.mid(2)) : QString{};
 	};
 
 	for (const QByteArray& line : diffOutput.split('\n'))

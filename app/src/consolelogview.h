@@ -25,6 +25,8 @@ public:
 	// Opens a labelled entry, separated from the previous one by a blank line
 	void beginEntry(const QString& label);
 	void appendOutput(const QByteArray& chunk);
+	// What the chunks are; the tool that produces them decides. Call before the first chunk of an entry.
+	void setEncoding(QStringConverter::Encoding encoding);
 	// A closing line the process did not produce: its verdict, or a launch failure
 	void appendNote(const QString& text, NoteKind kind);
 

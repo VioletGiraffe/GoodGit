@@ -41,14 +41,14 @@ QString ProcessResult::errorText() const
 		return QStringList{ what, where, advice }.join(QLatin1Char('\n'));
 	}
 
-	const QString stderrText = collapseCarriageReturns(QString::fromUtf8(err)).trimmed();
+	const QString stderrText = collapseCarriageReturns(decodedText(err, textEncoding)).trimmed();
 	if (outcome == ProcessOutcome::Exited)
 	{
 		if (!stderrText.isEmpty())
 			return stderrText;
 
 		// Some refusals go to stdout with stderr left empty, e.g. git's "nothing to commit"
-		const QString stdoutText = collapseCarriageReturns(QString::fromUtf8(out)).trimmed();
+		const QString stdoutText = collapseCarriageReturns(decodedText(out, textEncoding)).trimmed();
 		if (!stdoutText.isEmpty())
 			return stdoutText;
 
@@ -218,6 +218,7 @@ ProcessResult runSync(const Tool& tool, const QString& workDir, QStringList args
 
 	ProcessResult result;
 	result.toolName = tool.displayName;
+	result.textEncoding = tool.textEncoding;
 	result.executable = tool.executable;
 	result.workDir = workDir;
 	if (!process.waitForFinished(timeoutMs))
@@ -289,6 +290,7 @@ std::shared_ptr<QTemporaryFile> openMessageFile(const QByteArray& message, QObje
 void Job::finish(ProcessResult result)
 {
 	result.toolName = _tool.displayName;
+	result.textEncoding = _tool.textEncoding;
 	result.executable = _tool.executable;
 	result.workDir = _workDir;
 

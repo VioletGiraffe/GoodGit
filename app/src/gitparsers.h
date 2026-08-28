@@ -89,6 +89,8 @@ struct GitlinkEntry
 
 // The --format parseCommitLog expects. Fields are separated by US (0x1f); the message goes last since it may
 // contain anything, newlines included (records are NUL-separated, so that is no problem).
+// The message must stay last: git permits US inside an ident name, and parseCommitLog's tail rejoin then
+// absorbs the surplus fields of such a row instead of losing the record.
 inline constexpr char CommitLogFormat[] = "%H%x1f%P%x1f%an%x1f%aI%x1f%D%x1f%B";
 
 // Input: `log -z --format=<CommitLogFormat>` output - one NUL-terminated record per commit, newest first

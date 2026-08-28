@@ -8,6 +8,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QPointer>
 #include <QProcessEnvironment>
 #include <QString>
+#include <QStringConverter>
 #include <QStringList>
 #include <QTimer>
 RESTORE_COMPILER_WARNINGS
@@ -28,6 +29,21 @@ enum class ProcessOutcome : uint8_t
 	TimedOut,     // runSync gave up waiting and stopped it
 };
 
+// How a tool's byte output becomes text. Git writes UTF-8 on every platform; hg writes the local 8-bit
+// encoding - the ANSI codepage on Windows - which is also what it reads back (see Hg::localBytes).
+enum class TextEncoding : uint8_t { Utf8, Local };
+
+[[nodiscard]] inline QString decodedText(const QByteArray& bytes, TextEncoding encoding)
+{
+	return encoding == TextEncoding::Local ? QString::fromLocal8Bit(bytes) : QString::fromUtf8(bytes);
+}
+
+// For output decoded in chunks, where the decoder must carry state across a split multi-byte sequence
+[[nodiscard]] inline QStringConverter::Encoding converterEncoding(TextEncoding encoding)
+{
+	return encoding == TextEncoding::Local ? QStringConverter::System : QStringConverter::Utf8;
+}
+
 struct ProcessResult
 {
 	int exitCode = -1; // meaningful only when `outcome` is Exited
@@ -40,6 +56,7 @@ struct ProcessResult
 	// Names the program in errorText(). Every result a process produced carries it; a synthesised one
 	// carries its own stderr instead, which errorText() then returns.
 	QString toolName;
+	TextEncoding textEncoding = TextEncoding::Utf8; // what `out` and `err` are; copied from the tool that ran
 	QString executable; // what was launched: a bare name looked up on PATH, or a configured path
 	QString workDir;    // named in a launch failure, which may be about the directory as much as the executable
 	QString launchError; // the OS's reason, with LaunchFailed (where there is no stderr)
@@ -61,6 +78,7 @@ struct Tool
 	QString executable;  // a bare name is looked up on PATH
 	QString displayName; // what a failure calls it, whatever `executable` is
 	QProcessEnvironment environment;
+	TextEncoding textEncoding = TextEncoding::Utf8; // what this program writes to stdout and stderr
 };
 
 using Callback = std::function<void(const ProcessResult&)>;
@@ -71,6 +89,9 @@ class Job : public QObject
 {
 public:
 	virtual void cancel() = 0;
+
+	// What this job's output bytes are, for a caller that decodes a stream itself
+	[[nodiscard]] TextEncoding textEncoding() const { return _tool.textEncoding; }
 
 	// Delivers output to `sink` as it arrives, both channels in arrival order; the result still carries all of it.
 	// Attach before returning to the event loop: output only arrives from there, so nothing is missed.

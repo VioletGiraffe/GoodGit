@@ -89,7 +89,9 @@ FileViewerWindow::FileViewerWindow(Repository& repo, const QString& sha, const Q
 	}
 
 	repo.fileAtRevision(sha, repoRelativePath, this, [this](std::expected<QByteArray, QString> content) {
-		// The bytes are read whole before this runs: the cap bounds what is decoded and indexed, not what is buffered
+		// The bytes are read whole before this runs: the cap bounds what is decoded and indexed, not what is
+		// buffered. Probing the size first would not bound it either: the read applies checkout filters, so an
+		// LFS pointer's stored size is not the size of what arrives.
 		if (!content)
 			showMessage(content.error());
 		else if (content->size() > CSettings{}.value(Settings::MaxViewedFileBytesKey, Settings::MaxViewedFileBytesDefault).toLongLong())

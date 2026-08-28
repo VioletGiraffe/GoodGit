@@ -110,11 +110,13 @@ Screen` opens it at any time, and any open through `openRepositoryWindow()` clos
 last window quits.
 
 One repository has one window: a second request raises the existing one. The open windows are the
-registry; nothing else tracks them. The recent list is stored, and so are the submodules under each entry,
-harvested from `RepoState::submodules` on refresh (every submodule the repository declares, not only the
-changed ones in the file list). The panel therefore expands an entry without running anything, shows nothing
-under one never opened, and is as stale as the rest of the entry. Opening a submodule records its parent: the
-list names workspaces, and a submodule is part of one rather than one of its own.
+registry; nothing else tracks them. Requests are matched by path spelling (`sameRepositoryPath`), so one
+repository reached both directly and through a subst drive or a junction still opens twice. The recent list
+is stored, and so are the submodules under each entry, harvested from `RepoState::submodules` on refresh
+(every submodule the repository declares, not only the changed ones in the file list). The panel therefore
+expands an entry without running anything, shows nothing under one never opened, and is as stale as the rest
+of the entry. Opening a submodule records its parent: the list names workspaces, and a submodule is part of
+one rather than one of its own.
 
 Every entry carries when it was last used: the moment it was opened, or, for one a folder scan found, the
 timestamp of the file everyday work rewrites - git's index, Mercurial's dirstate, since a repository
@@ -186,6 +188,26 @@ byte. The word-pool diff ignores such changes regardless, since a wholesale conv
 
 An untracked file is not a modification of anything, so no backend is asked to diff one: the window reads
 the file and shows it with highlighting off.
+
+## Text encoding
+
+Two encodings meet in this app, and mixing them up is silent rather than loud - the wrong one yields
+mojibake, or a path that no longer matches the one it was read from.
+
+- **Tool output is the tool's encoding.** Git writes UTF-8 on every platform. Mercurial writes the local
+  8-bit encoding - the ANSI codepage on Windows - and reads the same back. `Vcs::Tool::textEncoding` states
+  which, and travels into every `ProcessResult`, so `errorText()` decodes a failure without knowing whose it
+  is. Non-JSON hg output is decoded by `Hg::textFromOutput`, the inverse of `Hg::localBytes`; a streamed log
+  builds its decoder from the job's encoding, since a chunk may split a character.
+- **hg's `-T json` is exempt**: hg escapes it to ASCII. A path byte the local encoding cannot decode arrives
+  as a lone surrogate U+DC80..DCFF (hg's utf8b scheme), which `Hg::localBytes` turns back into that byte, so
+  such a path round-trips through a pathspec unharmed.
+- **File content is not tool output.** `decodedAsText` reads a byte order mark, falls back to UTF-8, and
+  calls bytes with an early NUL binary. This holds whichever VCS produced them: the encoding is the file's
+  business.
+- A diff is the one stream carrying both - hg's own header lines and the file's content bytes - and is
+  decoded as UTF-8 throughout, content being the bulk of it. A non-ASCII path in an hg diff header can
+  therefore still display wrong.
 
 ## Refresh
 

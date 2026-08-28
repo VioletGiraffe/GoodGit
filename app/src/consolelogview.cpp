@@ -34,6 +34,11 @@ void ConsoleLogView::beginEntry(const QString& label)
 	appendBlock(QStringLiteral("> ") + label, {});
 }
 
+void ConsoleLogView::setEncoding(QStringConverter::Encoding encoding)
+{
+	_decoder = QStringDecoder{ encoding };
+}
+
 void ConsoleLogView::appendOutput(const QByteArray& chunk)
 {
 	if (chunk.isEmpty())

@@ -55,6 +55,8 @@ void sortByLastUsed(std::vector<RecentRepository>& repositories)
 	return holdsSubmoduleAt(repository, root) && QFileInfo::exists(repository.root);
 }
 
+// Not atomic: the remove and the writes are separate operations, and no caller re-reads, so a second
+// instance can observe a torn list mid-save and store it back
 void save(const std::vector<RecentRepository>& repositories)
 {
 	CSettings settings;

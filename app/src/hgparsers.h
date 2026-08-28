@@ -17,6 +17,11 @@ RESTORE_COMPILER_WARNINGS
 // Never use `-q` or `-v`: the field set varies with verbosity.
 namespace Hg {
 
+// The text hg's non-JSON output bytes mean: hg writes the local 8-bit encoding, the ANSI codepage on
+// Windows. The inverse of Hg::localBytes, which encodes every byte handed back to hg.
+// JSON output needs none of this: hg escapes it to ASCII, undecodable path bytes included (see jsonRecords).
+[[nodiscard]] QString textFromOutput(const QByteArray& bytes);
+
 // An unborn repository's parent, and the parent of a root changeset
 inline constexpr char NullNode[] = "0000000000000000000000000000000000000000";
 
