@@ -384,7 +384,7 @@ void DiffTextView::changeEvent(QEvent* event)
 {
 	QPlainTextEdit::changeEvent(event);
 
-	// Both columns are as wide as the font makes them, and nothing else recomputes that
+	// The column widths depend only on the font, so only a font change can invalidate them
 	if (event->type() == QEvent::FontChange || event->type() == QEvent::ApplicationFontChange)
 	{
 		updateNumberWidths();

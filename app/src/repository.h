@@ -21,7 +21,7 @@ RESTORE_COMPILER_WARNINGS
 // Caps RepoState::unpushedSubjects, which feed the ahead-count tooltip; state.ahead carries the true count
 inline constexpr int MaxUnpushedLogEntries = 30;
 
-// What a repository window is opened on
+// The repository a window is opened on
 struct RepositoryLocation
 {
 	VcsKind kind;
@@ -49,15 +49,17 @@ struct PushStep
 	QString branch;  // what this step pushes, for the offer to set an upstream. Empty where the backend has no such notion
 };
 
-// What discarding everything uncommitted inside one submodule would do, or why it cannot be done
+// The effect of discarding everything uncommitted inside one submodule, or why it cannot be done
 struct SubmoduleDiscardPlan
 {
-	QString refusal;        // non-empty: nothing is discarded. A sentence about the submodule, which the caller's message names
+	// non-empty: nothing is discarded. A sentence about the submodule, left unnamed here - the caller's
+	// message names it
+	QString refusal;
 	QStringList restored;   // paths that go back to the submodule's last commit
 	QStringList keptOnDisk; // paths that commit does not have: taken out of version control, left on disk
 };
 
-// What one repository's uncommitted changes amount to for a discard of all of them. A path its last commit
+// One repository's uncommitted changes, classified for a discard of all of them. A path its last commit
 // does not have is left on disk rather than deleted: nothing here destroys content that was never committed.
 // `nestedSubmoduleChanged`: one of the changes is a nested submodule's - a moved pointer, or uncommitted
 // changes inside it - which the discard would check out over.
@@ -148,8 +150,8 @@ public:
 	//   a submodule with changes inside - checked out to the recorded commit, silently overwriting them
 	virtual void discardChanges(const QStringList& pathspec, Vcs::Answer<void> onDone) = 0;
 
-	// Discarding everything uncommitted inside the submodule at a repo-relative path, which is what a row
-	// whose content blocks its pointer needs. The pointer itself is not touched.
+	// Discarding everything uncommitted inside the submodule at a repo-relative path. A row whose content
+	// blocks its pointer needs this; the pointer itself is not touched.
 	// Read-only queries inside the submodule; the answer dies with `context`. A refusal is in the plan.
 	virtual void submoduleDiscardPlan(const QString& repoRelativePath, const QObject* context,
 		std::function<void(SubmoduleDiscardPlan)> onDone) const = 0;
@@ -180,8 +182,10 @@ public:
 	struct LogQuery
 	{
 		int maxCommits = 0;
-		QString path;          // empty: the whole repo. Otherwise the walk follows this one path across renames
-		QString contentSearch; // empty: no content search. Always a literal string, never a pattern
+		// empty: the whole repo. Otherwise the walk follows this one path across renames
+		QString path;
+		// empty: no content search. Always a literal string, never a pattern
+		QString contentSearch;
 		// empty: the walk starts at HEAD. Otherwise it covers this commit's ancestry, which need not overlap the checkout's
 		QString startRevision;
 		bool ignoreCase = true;
@@ -195,11 +199,11 @@ public:
 	// The narrower half of a content search: commits where the number of occurrences changed.
 	// A subset of commitLog's result, except inside binary files, which the listing cannot see.
 	virtual Vcs::Query commitsAddingOrRemovingText(const LogQuery& query, const QObject* context, Vcs::Answer<QSet<QString>> onDone) = 0;
-	// What the upstream has and HEAD does not, newest first. A backend may read the remote directly or use
+	// The commits the upstream has and HEAD does not, newest first. A backend may read the remote directly or use
 	// what fetch() brought in; Peek does both in that order.
 	virtual Vcs::Query incomingCommits(int maxCommits, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone) = 0;
-	// The files one commit touched. Empty for a merge, which has no diff of its own - detect merges from the
-	// parent count, not from an empty result.
+	// The files one commit touched. A merge yields nothing here, so detect merges from the parent count
+	// rather than from an empty result.
 	virtual Vcs::Query commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone) = 0;
 	// Line counts for those files, keyed by path.
 	// A separate query: it may answer before or after commitFiles(), and the list is built from whichever arrives first.
@@ -217,7 +221,7 @@ public:
 	// For a moved submodule pointer at a repo-relative path: the commits being pulled in, one line each
 	virtual Vcs::Query submodulePointerLog(const QString& repoRelativePath, const QObject* context, Vcs::Answer<QString> onDone) = 0;
 
-	// Where the submodule at a repo-relative path has its own repository, for opening a window on it. The
+	// The location of the submodule's own repository, for opening a window on it. The
 	// parent names the kind: a nested repository need not be of the same kind.
 	[[nodiscard]] virtual RepositoryLocation submoduleLocation(const QString& repoRelativePath) const = 0;
 

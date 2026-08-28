@@ -100,7 +100,7 @@ WelcomeWindow::WelcomeWindow()
 	recentLayout->setContentsMargins(0, 0, 0, 0);
 	recentLayout->setSpacing(0);
 	recentLayout->addWidget(recentLabel);
-	recentLayout->addWidget(new RecentRepositoriesPanel{ QString{} }, 1); // no repository of its own to mark
+	recentLayout->addWidget(new RecentRepositoriesPanel{ QString{} }, 1); // no current repository to mark
 
 	auto* layout = new QVBoxLayout(this);
 	layout->setContentsMargins(0, 0, 0, 0);

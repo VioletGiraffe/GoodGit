@@ -13,7 +13,7 @@ RESTORE_COMPILER_WARNINGS
 // Shared with the history window's file list, so a row looks the same in both
 [[nodiscard]] QString changeTypeText(ChangeType type);
 [[nodiscard]] QColor changeTypeColor(ChangeType type);
-// Where a change type sorts when the list is ordered by status: lower first
+// A change type's place when the list is ordered by status: lower first
 [[nodiscard]] int changeTypeRank(ChangeType type);
 // A submodule whose content blocks its pointer sorts ahead of every change type: it stops the commit
 inline constexpr int BlockedSubmoduleRank = -1;

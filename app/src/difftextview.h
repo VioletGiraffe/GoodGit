@@ -18,14 +18,14 @@ class QPaintEvent;
 //   file    - a file's own contents: one gutter column, no diff decoration
 //   message - prose, such as a placeholder or an error: no gutter, no decoration
 //
-// What it takes from its environment, for judging a reuse elsewhere:
+// Requires from its environment, for judging a reuse elsewhere:
 //   - The diff colors come from the application's activeTheme() and are reapplied when CThemeController
 //     announces a change. The text color of an undecorated line is the widget's own, so a stylesheet sets it.
 //   - The font, the tab stop and any cap on the size of the text belong to the caller.
 //   - Nothing is parsed beyond the unified format `unifieddiff` reads.
 //   - A merged line's text is in neither file, so what is copied out of one is neither version.
 //
-// What the implementation rests on:
+// The implementation rests on:
 //   - The bands are block backgrounds, which QPlainTextEdit paints to the full viewport width, so a
 //     wrapped line stays banded to its last row.
 //   - The strike through removed text is painted over the glyphs, not the font's own: a QTextCharFormat
@@ -40,7 +40,7 @@ public:
 	void showFileText(const QString& text);
 	void showMessage(const QString& text);
 
-	// Where the view sits among the hunks of the diff it shows. No hunks for anything but a diff, nor for a
+	// The view's place among the hunks of the diff it shows. No hunks for anything but a diff, nor for a
 	// diff holding none - a binary file's, or one that is headers alone.
 	struct HunkPosition
 	{

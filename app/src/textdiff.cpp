@@ -33,7 +33,7 @@ public:
 	[[nodiscard]] const TextRange& range(int index) const { return _ranges[size_t(index)]; }
 	[[nodiscard]] QStringView token(int index) const { return _text.sliced(_ranges[size_t(index)].start, _ranges[size_t(index)].length); }
 
-	// What sharing this token says about the two lines being one edit. Whitespace says nothing: two
+	// A shared token's weight as evidence that the two lines are one edit. Whitespace weighs nothing: two
 	// sentences share their spacing, and counting it makes any two prose lines look alike.
 	[[nodiscard]] int weight(int index) const
 	{

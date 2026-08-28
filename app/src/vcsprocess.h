@@ -83,14 +83,14 @@ struct Tool
 
 using Callback = std::function<void(const ProcessResult&)>;
 
-// One queued asynchronous invocation, whatever transports it: a process of its own (Vcs::run) or a command
+// One queued asynchronous invocation, whatever transports it: a dedicated process (Vcs::run) or a command
 // on a running hg command server (hgcommandserver). cancel() guarantees the callback will not fire.
 class Job : public QObject
 {
 public:
 	virtual void cancel() = 0;
 
-	// What this job's output bytes are, for a caller that decodes a stream itself
+	// The encoding of this job's output bytes, for a caller that decodes a stream itself
 	[[nodiscard]] TextEncoding textEncoding() const { return _tool.textEncoding; }
 
 	// Delivers output to `sink` as it arrives, both channels in arrival order; the result still carries all of it.

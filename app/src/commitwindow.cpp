@@ -616,7 +616,7 @@ void CommitWindow::applyDefaultWindowSize()
 	const int preferred = std::min(leftPane->sizeHint().width(), MaxInitialLeftPaneWidth);
 	const int available = _splitter->width() - _splitter->handleWidth();
 	const QRect screenArea = screen()->availableGeometry();
-	// What has to fit the screen is the frame, while resize() takes the client width; both grow by the same amount
+	// The frame has to fit the screen, but resize() takes the client width; both grow by the same amount
 	const QRect frame = frameGeometry();
 	// The window follows the two panes in both directions: width the left pane does not take is not the diff's to keep
 	const int delta = std::min(preferred + FirstRunDiffPaneWidth - available, std::max(0, screenArea.width() - frame.width()));

@@ -31,7 +31,7 @@ Claim claimedByGit(const QString& startPath)
 	return { std::move(root), std::move(result) };
 }
 
-// What git itself looks for in a repository directory, so an empty or half-deleted .git is not one
+// The markers git itself looks for, so an empty or half-deleted .git is not a repository directory
 bool isGitDirectory(const QString& path)
 {
 	return QFileInfo::exists(path + QStringLiteral("/HEAD"))

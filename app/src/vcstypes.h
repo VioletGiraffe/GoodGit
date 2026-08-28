@@ -153,14 +153,14 @@ struct RepoState
 	}
 };
 
-// What a status command reports a worktree holds beyond the commit it is on
+// A worktree's content beyond the commit it is on, as a status command reports it
 struct WorktreeDirtiness
 {
 	bool dirtyTracked = false; // any entry that is not purely untracked
 	bool untracked = false;
 };
 
-// What a submodule's own worktree holds, as far as the parent could determine
+// A submodule's own worktree content, as far as the parent could determine
 enum class SubmoduleContent : uint8_t
 {
 	Clean,        // also the never-initialized case: an empty directory has nothing inside to lose

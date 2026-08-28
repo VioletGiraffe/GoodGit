@@ -42,7 +42,7 @@ QByteArray withLoneSurrogatesEscaped(const QByteArray& json)
 }
 
 // `incoming` and `outgoing` print "comparing with ..." before their JSON, and no JSON at all when they found
-// nothing. The array starts on a line of its own, which distinguishes it from a bracket in a remote path.
+// nothing. The array begins on a fresh line, unlike a bracket inside a remote path.
 QJsonArray jsonRecords(const QByteArray& output)
 {
 	qsizetype start = 0;

@@ -46,7 +46,7 @@ constexpr int MaxFilePathLabelWidth = 420; // beyond this the path elides
 constexpr int PickaxeEditWidth = 320;
 constexpr qsizetype MaxShownPickaxeTerm = 24;
 
-// Where one listed change's content can be read from. An empty sha means that revision does not hold the file.
+// The revisions holding one listed change's content. An empty sha means that revision does not hold the file.
 struct FileRevisionTargets
 {
 	QString thisSha;

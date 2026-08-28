@@ -88,7 +88,8 @@ private:
 	[[nodiscard]] QString diffBase() const;
 
 private:
-	QString _gitDir; // absolute; resolved on first refresh. In a submodule .git is a file pointing here.
+	// In a submodule .git is a file pointing here
+	QString _gitDir; // absolute, resolved on first refresh
 	QString _emptyTreeSha; // resolved on first refresh; empty only if that query failed
 
 	std::shared_ptr<RefreshRun> _run; // shared with the async callbacks; reset invalidates stragglers

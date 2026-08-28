@@ -78,7 +78,7 @@ private:
 	// True while a command that writes the repository or the remote is running
 	[[nodiscard]] bool writeInFlight() const;
 
-	// What a write was decided against, captured before any dialog that precedes it
+	// The state a write was decided against, captured before any dialog that precedes it
 	struct StateStamp
 	{
 		uint64_t refreshGeneration = 0;
@@ -135,8 +135,8 @@ private:
 	void toggleCheckOnSelection();
 	void deleteSelection();
 	void discardSelection();
-	// Where discardSelection() sends a lone submodule row: what is uncommitted inside it, as opposed to its
-	// pointer, is what there is to discard. Builds the plan asynchronously, confirms, then writes.
+	// discardSelection() sends a lone submodule row here: the discard takes what is uncommitted inside it,
+	// not its pointer. Builds the plan asynchronously, confirms, then writes.
 	void discardSubmoduleContent(const FileEntry& submodule);
 	// The write half: only called with a confirmed plan that carries no refusal
 	void startSubmoduleContentDiscard(const QString& path, const SubmoduleDiscardPlan& plan);

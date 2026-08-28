@@ -59,7 +59,7 @@ QColor changeTypeColor(ChangeType type)
 
 int changeTypeRank(ChangeType type)
 {
-	// What blocks or needs attention first, the ordinary edits next, what is not tracked last
+	// Conflicts first, the ordinary edits next, the untracked last
 	switch (type)
 	{
 	case ChangeType::Conflicted:  return 0;

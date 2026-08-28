@@ -56,7 +56,7 @@ private:
 	void showCommitContextMenu(const QPoint& pos);
 	void showFileContextMenu(const QPoint& pos);
 	void openFileHistory(const QString& filePath);
-	// One file's content as of one commit, in a window of its own
+	// One file's content as of one commit, in a separate window
 	void openFileViewer(const QString& sha, const QString& repoRelativePath);
 	// A submodule row opens its own repository's history at the commit the pointer names; a file row opens
 	// the viewer, on the parent commit where Shift is held

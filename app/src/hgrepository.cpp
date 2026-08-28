@@ -262,7 +262,7 @@ void HgRepository::startRefresh()
 	launchSubrepoQueries(round, run);
 }
 
-// What each subrepo is on and holds, asked of the subrepo itself
+// Each subrepo's own parent changeset and dirtiness, asked of the subrepo itself
 void HgRepository::launchSubrepoQueries(QueryRound& round, const std::shared_ptr<RefreshRun>& run)
 {
 	for (const auto& subrepo : _subrepoNodes)
@@ -536,7 +536,7 @@ void HgRepository::undoLastCommit(Vcs::Answer<void> onDone)
 
 void HgRepository::abortOperation(Vcs::Answer<void> onDone)
 {
-	// stateFromRun reads a merge and a bisect and nothing else, so only those reach this.
+	// stateFromRun sets only Merge and Bisect, so only those reach this.
 	// bisect --reset only clears the session state: unlike git's, it does not move the working directory.
 	assert(state().op == RepoOp::Merge || state().op == RepoOp::Bisect);
 	QStringList args = state().op == RepoOp::Bisect
@@ -552,7 +552,7 @@ void HgRepository::planPush(Vcs::Answer<std::vector<PushStep>> onDone)
 
 Vcs::Job* HgRepository::runPushStep(const PushStep& step, bool /*setUpstream*/, Vcs::Callback onDone)
 {
-	// A process of its own: the push log streams its output, and cancelling mid-transfer must kill it
+	// A separate process: the push log streams its output, and cancelling mid-transfer must kill it
 	return Hg::run(step.workDir, { QStringLiteral("push"), QStringLiteral("-r"), QStringLiteral(".") }, this,
 		tolerantOfEmptyResult(std::move(onDone)), {}, Hg::Transport::Process);
 }
@@ -866,7 +866,7 @@ Vcs::Query HgRepository::unpushedCommits(const QObject* context, Vcs::Answer<QSe
 	Vcs::Query query;
 	query.attach(Hg::run(path(), configuredPathsArgs(), context,
 		[query, workDir = path(), context, onDone = std::move(onDone)](const ProcessResult& result) mutable {
-			// Where nothing is configured to push to, every changeset is draft and the whole history would
+			// With nothing configured to push to, every changeset is draft and the whole history would
 			// ring. The header count is suppressed on the same condition (stateFromRun).
 			if (pushPathName(Hg::parsePathNames(result.out)).isEmpty())
 			{
