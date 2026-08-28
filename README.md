@@ -6,6 +6,7 @@
 
 
 Design and component overview: [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md).
+Behavior of the underlying tools: [doc/git.md](doc/git.md), [doc/hg.md](doc/hg.md).
 
 ## Requirements
 
