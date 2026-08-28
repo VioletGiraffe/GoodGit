@@ -19,6 +19,7 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
+#include <array>
 #include <assert.h>
 #include <functional>
 #include <utility>
@@ -167,6 +168,79 @@ QByteArray pointerMoveText(const Hg::SubrepoPointerChange& change)
 	if (!change.newNode.isEmpty())
 		text += "+" + change.newNode.toUtf8() + " " + change.path.toUtf8() + "\n";
 	return text;
+}
+
+// hg's null node, which the second parent holds unless a merge is uncommitted
+constexpr QLatin1String NullNode{ "0000000000000000000000000000000000000000" };
+
+// The two parent nodes dirstate-v1 opens with, 20 bytes each, hex here. Both empty where the file cannot be
+// read, and where it is dirstate-v2, whose docket this does not parse.
+std::array<QString, 2> dirstateParents(const QString& repoPath)
+{
+	QFile dirstate{ QDir{ repoPath }.filePath(QStringLiteral(".hg/dirstate")) };
+	if (!dirstate.open(QIODevice::ReadOnly))
+		return {};
+
+	const QByteArray parents = dirstate.read(40);
+	if (parents.size() != 40 || parents.startsWith("dirstate-v2"))
+		return {};
+
+	return { QString::fromLatin1(parents.left(20).toHex()), QString::fromLatin1(parents.sliced(20).toHex()) };
+}
+
+// One unfinished operation as the .hg directory records it, with the arguments that end it.
+struct HgOperation
+{
+	RepoOp op = RepoOp::None;
+	OperationHint hint;
+	QStringList abortArgs;
+};
+
+// Every hg operation but a merge is finished by continuing it, which this app does not do, so each is
+// Unmodelled and its hint names the command.
+// The mergestate is not tested: graft, rebase and unshelve all leave one when they conflict, so it names no
+// operation. An uncommitted merge is the dirstate's second parent instead.
+// Bisect last: an operation started mid-bisect owns the commit until it ends, as in git.
+// Each operation's extension is enabled per command, as undoLastCommit enables uncommit.
+HgOperation operationInHgDir(const QString& repoPath)
+{
+	const QDir repo{ repoPath };
+	const auto leaves = [&repo](QLatin1String marker) {
+		return QFileInfo::exists(repo.filePath(QStringLiteral(".hg/") + marker));
+	};
+	const auto continued = [](QLatin1String name, QStringList abortArgs, bool abortRewinds = true) {
+		return HgOperation{ .op = RepoOp::Unmodelled,
+			.hint = { .name = name, .continueCommand = QStringLiteral("hg %1 --continue").arg(name),
+				.abortRewinds = abortRewinds },
+			.abortArgs = std::move(abortArgs) };
+	};
+	const auto enabling = [](QLatin1String extension) {
+		return QStringList{ QStringLiteral("--config"), QStringLiteral("extensions.%1=").arg(extension) };
+	};
+
+	if (const QString secondParent = dirstateParents(repoPath)[1]; !secondParent.isEmpty() && secondParent != NullNode)
+		return { .op = RepoOp::Merge, .hint = { .name = QStringLiteral("merge") },
+			.abortArgs = { QStringLiteral("merge"), QStringLiteral("--abort") } };
+	if (leaves(QLatin1String("graftstate")))
+		return continued(QLatin1String("graft"), { QStringLiteral("graft"), QStringLiteral("--abort") });
+	if (leaves(QLatin1String("rebasestate")))
+		return continued(QLatin1String("rebase"),
+			enabling(QLatin1String("rebase")) << QStringLiteral("rebase") << QStringLiteral("--abort"));
+	if (leaves(QLatin1String("histedit-state")))
+		return continued(QLatin1String("histedit"),
+			enabling(QLatin1String("histedit")) << QStringLiteral("histedit") << QStringLiteral("--abort"));
+	if (leaves(QLatin1String("shelvedstate")))
+		return continued(QLatin1String("unshelve"),
+			enabling(QLatin1String("shelve")) << QStringLiteral("unshelve") << QStringLiteral("--abort"));
+	// transplant has no --abort: --stop keeps the changesets it already transplanted
+	if (leaves(QLatin1String("transplant/journal")))
+		return continued(QLatin1String("transplant"),
+			enabling(QLatin1String("transplant")) << QStringLiteral("transplant") << QStringLiteral("--stop"),
+			/*abortRewinds=*/false);
+	if (leaves(QLatin1String("bisect.state")))
+		return { .op = RepoOp::Bisect, .hint = { .name = QStringLiteral("bisect") },
+			.abortArgs = { QStringLiteral("bisect"), QStringLiteral("--reset") } };
+	return {};
 }
 
 } // namespace
@@ -351,12 +425,15 @@ RepoState HgRepository::stateFromRun(const RefreshRun& run) const
 	for (const auto& subrepo : _subrepoSources)
 		state.submodules << subrepo.first;
 
-	// Rebase, graft and histedit leave state of their own that this does not read.
-	// A merge started mid-bisect owns the commit, so it wins, as in git.
-	if (run.workingDir.parents.size() > 1)
+	const HgOperation operation = operationInHgDir(path());
+	state.op = operation.op;
+	state.opHint = operation.hint;
+	// A dirstate-v2 repository hides its parents from operationInHgDir; the run read them through hg
+	if (state.op == RepoOp::None && run.workingDir.parents.size() > 1)
+	{
 		state.op = RepoOp::Merge;
-	else if (QFileInfo::exists(QDir{ path() }.filePath(QStringLiteral(".hg/bisect.state"))))
-		state.op = RepoOp::Bisect;
+		state.opHint = { .name = QStringLiteral("merge") };
+	}
 	return state;
 }
 
@@ -407,30 +484,15 @@ std::vector<FileEntry> HgRepository::filesFromRun(const RefreshRun& run) const
 
 RepoOp HgRepository::probeOperation() const
 {
-	// Mergestate and bisect state are the markers hg leaves that this reads; the base contract covers what
-	// they can and cannot show
-	const QDir stateDir{ path() };
-	if (QFileInfo::exists(stateDir.filePath(QStringLiteral(".hg/merge"))))
-		return RepoOp::Merge;
-	if (QFileInfo::exists(stateDir.filePath(QStringLiteral(".hg/bisect.state"))))
-		return RepoOp::Bisect;
-	return RepoOp::None;
+	// An uncommitted merge on a dirstate-v2 repository probes as no operation, its parents being unreadable
+	// here; the base contract covers what a probe can and cannot show.
+	return operationInHgDir(path()).op;
 }
 
 QString HgRepository::probeHeadSha() const
 {
-	// dirstate-v1 opens with the two parent nodes, 20 bytes each.
-	// An empty repository's null parent is twenty zero bytes; that is a value the stamp can use, not a read failure.
-	// dirstate-v2 puts the parents behind a docket this does not parse, so such a repository probes as unknown.
-	QFile dirstate{ QDir{ path() }.filePath(QStringLiteral(".hg/dirstate")) };
-	if (!dirstate.open(QIODevice::ReadOnly))
-		return {};
-
-	const QByteArray parent = dirstate.read(20);
-	if (parent.size() != 20 || parent.startsWith("dirstate-v2"))
-		return {};
-
-	return QString::fromLatin1(parent.toHex());
+	// An empty repository's null parent is a value the stamp can use, not a read failure
+	return dirstateParents(path())[0];
 }
 
 bool HgRepository::isGitSubrepo(const QString& subrepoPath) const
@@ -552,12 +614,14 @@ void HgRepository::undoLastCommit(Vcs::Answer<void> onDone)
 
 void HgRepository::abortOperation(Vcs::Answer<void> onDone)
 {
-	// stateFromRun sets only Merge and Bisect, so only those reach this.
+	// Read at action time rather than carried in the state: the .hg directory is the current answer for which
+	// operation is running.
 	// bisect --reset only clears the session state: unlike git's, it does not move the working directory.
-	assert(state().op == RepoOp::Merge || state().op == RepoOp::Bisect);
-	QStringList args = state().op == RepoOp::Bisect
-		? QStringList{ QStringLiteral("bisect"), QStringLiteral("--reset") }
-		: QStringList{ QStringLiteral("merge"), QStringLiteral("--abort") };
+	QStringList args = operationInHgDir(path()).abortArgs;
+	if (args.isEmpty() && state().op == RepoOp::Merge)
+		args = { QStringLiteral("merge"), QStringLiteral("--abort") }; // the dirstate-v2 merge only the run saw
+	assert(!args.isEmpty());
+
 	Hg::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));
 }
 

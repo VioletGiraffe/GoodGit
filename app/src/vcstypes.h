@@ -75,7 +75,21 @@ struct CommitRecord
 	[[nodiscard]] QString subject() const { return message.section(QLatin1Char('\n'), 0, 0); }
 };
 
-enum class RepoOp : uint8_t { None, Merge, CherryPick, Revert, Rebase, Bisect };
+// The operation that owns HEAD, classified by how it must be finished and not by what its system calls it.
+// Git's merge, cherry-pick and revert are finished by committing, so each has a value here.
+// Unmodelled: an operation this app cannot carry through, under either system - git's am, hg's graft.
+enum class RepoOp : uint8_t { None, Merge, CherryPick, Revert, Rebase, Bisect, Unmodelled };
+
+// One unfinished operation as its own system names it, for the op strip to show. Display only: nothing above
+// the boundary parses it.
+struct OperationHint
+{
+	QString name;            // the operation's own command name: "graft" under hg, "am" under git
+	QString continueCommand; // what finishes it, empty where committing does or where nothing continues it
+	// False where ending the operation keeps the commits it already made: git's sequencer past its first
+	// commit is ended with --quit, which does not rewind.
+	bool abortRewinds = true;
+};
 
 // Why the last commit cannot be undone. Decided here rather than in a backend: git and Mercurial refuse on
 // the same grounds.
@@ -106,6 +120,7 @@ struct RepoState
 	bool detached = false;
 	bool unborn = false;
 	RepoOp op = RepoOp::None;
+	OperationHint opHint; // meaningful only while `op` is set
 
 	// Filled only when detached: branch tips that equal HEAD, for the reattachment logic
 	QStringList localBranchesAtHead;
@@ -128,9 +143,10 @@ struct RepoState
 	// Bisect does not constrain the commit; committing during one is refused by the window instead.
 	[[nodiscard]] bool mergeCommitRequired() const { return op != RepoOp::None && op != RepoOp::Bisect; }
 	// Whether a commit may be made at all, as against what one would take (above). The op strip gives the
-	// reason: a bisect commit falls outside the search range, a rebase is finished by continuing it instead.
-	// Both detach HEAD and neither reattaches, so the detached strip stays silent for them.
-	[[nodiscard]] bool opBlocksCommit() const { return op == RepoOp::Bisect || op == RepoOp::Rebase; }
+	// reason: a bisect commit falls outside the search range, and a rebase or an Unmodelled operation is
+	// finished by continuing it, which this app does not do.
+	// Bisect and rebase detach HEAD and neither reattaches, so the detached strip stays silent for them.
+	[[nodiscard]] bool opBlocksCommit() const { return op == RepoOp::Bisect || op == RepoOp::Rebase || op == RepoOp::Unmodelled; }
 
 	[[nodiscard]] UndoRefusal lastCommitUndoRefusal() const
 	{

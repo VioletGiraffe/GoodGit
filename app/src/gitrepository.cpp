@@ -100,22 +100,67 @@ QStringList branchAndUnmergedStatusArgs()
 		QStringLiteral("--untracked-files=no"), QStringLiteral("--ignore-submodules=all"), QStringLiteral("-z") };
 }
 
-// The operation an unfinished merge, cherry-pick, revert, rebase or bisect leaves marked in the git directory.
-// The conflict-resolution ops come first: one started mid-bisect owns the commit until it ends.
-RepoOp operationInGitDir(const QString& gitDirPath)
+// One unfinished operation as the git directory records it, with the arguments that end it.
+struct GitOperation
+{
+	RepoOp op = RepoOp::None;
+	OperationHint hint;
+	QStringList abortArgs;
+};
+
+// The steps a `cherry-pick A..B` or `revert A..B` has left, which outlive the CHERRY_PICK_HEAD or
+// REVERT_HEAD of the one that stopped: committing that one clears the marker and leaves these.
+// Ended with --quit, not --abort: past the first commit git refuses to rewind and only warns, so ending it
+// drops the remaining steps and keeps what is already committed.
+GitOperation sequencerOperation(const QDir& gitDir)
+{
+	QFile todo{ gitDir.filePath(QStringLiteral("sequencer/todo")) };
+	if (!todo.open(QIODevice::ReadOnly))
+		return {};
+
+	// "<verb> <sha> <subject>" per step; every step of one run carries the same verb
+	const QByteArray verb = todo.readLine().trimmed().split(' ').value(0);
+	if (verb != "pick" && verb != "revert")
+		return {};
+
+	const QString command = verb == "revert" ? QStringLiteral("revert") : QStringLiteral("cherry-pick");
+	return { .op = RepoOp::Unmodelled,
+		.hint = { .name = command, .continueCommand = QStringLiteral("git %1 --continue").arg(command),
+			.abortRewinds = false },
+		.abortArgs = { command, QStringLiteral("--quit") } };
+}
+
+// The operation an unfinished merge, cherry-pick, revert, rebase, am or bisect leaves marked in the git
+// directory. The conflict-resolution ops come first: one started mid-bisect owns the commit until it ends.
+// A live CHERRY_PICK_HEAD or REVERT_HEAD is finished by committing, so it names no continue command; the
+// sequencer outliving that marker is not, and says what to run.
+GitOperation operationInGitDir(const QString& gitDirPath)
 {
 	const QDir gitDir{ gitDirPath };
 	if (gitDir.exists(QStringLiteral("MERGE_HEAD")))
-		return RepoOp::Merge;
+		return { .op = RepoOp::Merge, .hint = { .name = QStringLiteral("merge") },
+			.abortArgs = { QStringLiteral("merge"), QStringLiteral("--abort") } };
 	if (gitDir.exists(QStringLiteral("CHERRY_PICK_HEAD")))
-		return RepoOp::CherryPick;
+		return { .op = RepoOp::CherryPick, .hint = { .name = QStringLiteral("cherry-pick") },
+			.abortArgs = { QStringLiteral("cherry-pick"), QStringLiteral("--abort") } };
 	if (gitDir.exists(QStringLiteral("REVERT_HEAD")))
-		return RepoOp::Revert;
+		return { .op = RepoOp::Revert, .hint = { .name = QStringLiteral("revert") },
+			.abortArgs = { QStringLiteral("revert"), QStringLiteral("--abort") } };
+	if (const GitOperation sequenced = sequencerOperation(gitDir); sequenced.op != RepoOp::None)
+		return sequenced;
+	// rebase-apply is also where `git am` keeps its state; the file inside says which wrote it.
+	if (gitDir.exists(QStringLiteral("rebase-apply/applying")))
+		return { .op = RepoOp::Unmodelled,
+			.hint = { .name = QStringLiteral("am"), .continueCommand = QStringLiteral("git am --continue") },
+			.abortArgs = { QStringLiteral("am"), QStringLiteral("--abort") } };
 	if (gitDir.exists(QStringLiteral("rebase-merge")) || gitDir.exists(QStringLiteral("rebase-apply")))
-		return RepoOp::Rebase;
+		return { .op = RepoOp::Rebase,
+			.hint = { .name = QStringLiteral("rebase"), .continueCommand = QStringLiteral("git rebase --continue") },
+			.abortArgs = { QStringLiteral("rebase"), QStringLiteral("--abort") } };
 	if (gitDir.exists(QStringLiteral("BISECT_LOG")))
-		return RepoOp::Bisect;
-	return RepoOp::None;
+		return { .op = RepoOp::Bisect, .hint = { .name = QStringLiteral("bisect") },
+			.abortArgs = { QStringLiteral("bisect"), QStringLiteral("reset") } };
+	return {};
 }
 
 // The sha HEAD names, resolved through the ref files: HEAD holds either a sha (detached) or the name of the
@@ -550,14 +595,18 @@ RepoState GitRepository::stateFromRun(const RefreshRun& run) const
 	state.submodules = run.submodules; // ls-files lists the index, which is ordered by path
 
 	if (!_gitDir.isEmpty())
-		state.op = operationInGitDir(_gitDir);
+	{
+		const GitOperation operation = operationInGitDir(_gitDir);
+		state.op = operation.op;
+		state.opHint = operation.hint;
+	}
 	return state;
 }
 
 RepoOp GitRepository::probeOperation() const
 {
 	// The markers are complete for git; the cached value stands in only until the first refresh resolves the git dir
-	return _gitDir.isEmpty() ? state().op : operationInGitDir(_gitDir);
+	return _gitDir.isEmpty() ? state().op : operationInGitDir(_gitDir).op;
 }
 
 QString GitRepository::probeHeadSha() const
@@ -754,19 +803,9 @@ void GitRepository::undoLastCommit(Vcs::Answer<void> onDone)
 
 void GitRepository::abortOperation(Vcs::Answer<void> onDone)
 {
-	// Each operation is abandoned through the command that started it; bisect's own ender is `reset`
-	QStringList args = [op = state().op]() -> QStringList {
-		switch (op)
-		{
-		case RepoOp::Merge:      return { QStringLiteral("merge"), QStringLiteral("--abort") };
-		case RepoOp::CherryPick: return { QStringLiteral("cherry-pick"), QStringLiteral("--abort") };
-		case RepoOp::Revert:     return { QStringLiteral("revert"), QStringLiteral("--abort") };
-		case RepoOp::Rebase:     return { QStringLiteral("rebase"), QStringLiteral("--abort") };
-		case RepoOp::Bisect:     return { QStringLiteral("bisect"), QStringLiteral("reset") };
-		case RepoOp::None:       break;
-		}
-		return {};
-	}();
+	// Read at action time rather than carried in the state: the git directory is the current answer for which
+	// operation is running, and each is abandoned through the command that started it.
+	QStringList args = operationInGitDir(_gitDir).abortArgs;
 	assert(!args.isEmpty());
 
 	Git::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));
@@ -1050,8 +1089,8 @@ void uncommittedDiscardPlan(const QString& workDir, const QObject* context, std:
 
 			if (!run->gitDir.ok)
 				return onDone({ .refusal = QObject::tr("Its git directory could not be found: %1").arg(run->gitDir.errorText()) });
-			if (operationInGitDir(Git::pathFromOutput(run->gitDir.out.trimmed())) != RepoOp::None)
-				return onDone({ .refusal = QObject::tr("A merge, rebase, cherry-pick, revert or bisect is in progress there. Finish or abort it first.") });
+			if (operationInGitDir(Git::pathFromOutput(run->gitDir.out.trimmed())).op != RepoOp::None)
+				return onDone({ .refusal = QObject::tr("An operation is in progress there. Finish or abort it first.") });
 			if (!run->status.ok)
 				return onDone({ .refusal = QObject::tr("Its status could not be read: %1").arg(run->status.errorText()) });
 			if (!Git::parseUnmergedPaths(run->status.out).isEmpty())

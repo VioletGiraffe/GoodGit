@@ -38,15 +38,21 @@ Deliberate consequences:
   add`, `hg resolve -m`). Committing is refused while any row still reads Conflicted, since the commit
   would take that row's working tree copy, markers and all.
 - The way out is Abort, which hands the operation back to the command that started it (`git <op> --abort`,
-  `hg merge --abort`) and loses every resolution with it. Git alone can abort all four operations: hg reads
-  only a merge as one.
+  `hg <op> --abort`) and loses every resolution with it. Two enders keep what they have already committed
+  instead of rewinding - git's sequencer past its first commit, hg's transplant - and the confirmation says
+  so rather than promising the repository back.
 - A bisect in progress is an operation of its own kind: it owns the checkout, but does not constrain what
   a commit takes. Committing is refused during one: a new commit would fall outside the search range.
   Abort maps to the session's own ender (`git bisect reset`, `hg bisect --reset`); only git's returns to
   the pre-bisect branch, hg's leaves the working directory where the bisect left it.
-- Committing is refused during a rebase as well: a rebase is finished by continuing it, and there is no
-  command for that here, so a commit made mid-rebase would strand the operation. Abort is what the window
-  offers; continuing is done from a command line.
+- Committing is refused during any operation this app cannot continue: a rebase, git's `am`, and every hg
+  operation but a merge. Each is finished by continuing it, for which there is no command here, so a commit
+  made during one would strand it. Abort is what the window offers; the op strip names the command that
+  continues it.
+- An operation is classified by how it must be finished, not by what its system calls it, so `RepoOp` stays
+  git's vocabulary and everything the app cannot carry through is one value. The strip shows the operation's
+  own name instead, which the backend supplies alongside it: an hg graft is not a cherry-pick to whoever
+  started it.
 
 ## Undoing the last commit
 
@@ -145,8 +151,8 @@ git has none - `CommitRecord`'s revision number, the `.hgsub` parsers. A backend
 every pure virtual (the actions, the read-only queries, and `startRefresh()`, which runs whatever queries
 its kind needs and calls `completeRefresh()` once); its own knowledge of itself (the ignore file and where a
 pattern belongs in it, the label the push log shows, which push failure means a missing upstream, where a
-submodule row's repository is and of what kind, how the external diff tool is launched); and a line in
-`repositoryfactory`.
+submodule row's repository is and of what kind, how the external diff tool is launched, which operation its
+state directory records and how that one is named, continued and ended); and a line in `repositoryfactory`.
 
 The refresh policy is the base class's, not the backend's: re-entry is coalesced, and a run is applied
 whole or not at all.

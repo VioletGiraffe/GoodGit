@@ -73,6 +73,12 @@ constexpr int MaxIncomingCommits = 200; // a peek, not a history window
 constexpr int IncomingPopupWidth = 560;
 constexpr int IncomingPopupHeight = 320;
 
+// The op strip opens with the operation's name, which a backend holds in its command's spelling
+QString capitalized(const QString& text)
+{
+	return text.isEmpty() ? text : QString{ text.front().toUpper() } + text.sliced(1);
+}
+
 // Untracked files have nothing to restore to. A submodule with changes inside would be checked out over.
 // Row shape only: an operation in progress blocks discarding every row, and each caller must gate on it.
 bool discardable(const FileEntry& entry)
@@ -690,18 +696,16 @@ void CommitWindow::updateStrips()
 	_readFailureStrip->setText(readFailureText);
 	_readFailureStrip->setVisible(!readFailureText.isEmpty());
 
+	// The operation is named as its own system names it: an hg graft is not a cherry-pick to whoever started it
 	QString opText;
-	switch (state.op)
-	{
-	case RepoOp::Merge:      opText = tr("Merge in progress: all changes must be committed together."); break;
-	case RepoOp::CherryPick: opText = tr("Cherry-pick in progress: all changes must be committed together."); break;
-	case RepoOp::Revert:     opText = tr("Revert in progress: all changes must be committed together."); break;
-	case RepoOp::Rebase:     opText = tr("Rebase in progress: committing is disabled, since GoodGit cannot continue "
-									     "a rebase. Finish it from a command line, or abort it here."); break;
-	case RepoOp::Bisect:     opText = tr("Bisect in progress: committing is disabled until it ends, since a new commit "
-									     "would fall outside the search range."); break;
-	case RepoOp::None:       break;
-	}
+	if (state.op == RepoOp::Bisect)
+		opText = tr("Bisect in progress: committing is disabled until it ends, since a new commit would fall "
+					"outside the search range.");
+	else if (state.opBlocksCommit())
+		opText = tr("%1 in progress: committing is disabled, since GoodGit cannot continue it. Run %2 to finish it, "
+					"or abort it here.").arg(capitalized(state.opHint.name), state.opHint.continueCommand);
+	else if (state.op != RepoOp::None)
+		opText = tr("%1 in progress: all changes must be committed together.").arg(capitalized(state.opHint.name));
 	// A row reads Conflicted only while an operation is in progress, so this always extends the line above
 	if (const qsizetype unresolved = _filesModel.unresolvedConflictPaths().size(); unresolved > 0)
 		opText += tr(" %1 file(s) are still conflicted and must be marked resolved first.").arg(unresolved);
@@ -1312,31 +1316,26 @@ void CommitWindow::abortOperation()
 		return;
 
 	const RepoOp op = _repo->state().op;
+	const OperationHint hint = _repo->state().opHint; // copied: a refresh may land in the dialog's event loop
 	assert(op != RepoOp::None); // the action is disabled without one
 
-	const QString title = [op] {
-		switch (op)
-		{
-		case RepoOp::Merge:      return tr("Abort the merge?");
-		case RepoOp::CherryPick: return tr("Abort the cherry-pick?");
-		case RepoOp::Revert:     return tr("Abort the revert?");
-		case RepoOp::Rebase:     return tr("Abort the rebase?");
-		case RepoOp::Bisect:     return tr("End the bisect?");
-		case RepoOp::None:       break;
-		}
-		return QString{};
-	}();
+	const bool bisect = op == RepoOp::Bisect;
+	const QString title = bisect ? tr("End the bisect?") : tr("Abort the %1?").arg(hint.name);
 
 	// Ending a bisect loses nothing, but only git returns to the pre-bisect branch: hg's reset leaves the
 	// working directory where the bisect left it
-	const bool bisect = op == RepoOp::Bisect;
-	const QString text = bisect
-		? (_repo->kind() == VcsKind::Git
+	QString text;
+	if (bisect)
+		text = _repo->kind() == VcsKind::Git
 			? tr("The bisect session ends, and the branch that was checked out before it started is checked out again.")
-			: tr("The bisect session ends. The working directory stays on the revision the bisect left it at."))
-		: tr("The repository goes back to where it was before the operation started, and every conflict "
-			 "resolution goes with it.\n\nA change that was already uncommitted when the operation began may "
-			 "not survive either.");
+			: tr("The bisect session ends. The working directory stays on the revision the bisect left it at.");
+	else if (!hint.abortRewinds)
+		text = tr("The steps it has not reached yet are dropped. What it has already committed stays where it is, "
+				  "and ending it here does not undo that.");
+	else
+		text = tr("The repository goes back to where it was before the operation started, and every conflict "
+				  "resolution goes with it.\n\nA change that was already uncommitted when the operation began may "
+				  "not survive either.");
 
 	const StateStamp stamp = stateStamp();
 	const auto answer = MessageBox::question(this, title, text, { bisect ? tr("End bisect") : tr("Abort") });
