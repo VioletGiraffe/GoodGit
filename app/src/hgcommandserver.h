@@ -49,6 +49,8 @@ private:
 // One `hg serve --cmdserver pipe` process: the interpreter, the config and the bound repository load once,
 // then each request runs one command over the pipe.
 // Framing: 1 channel byte + u32 BE length. 'o'/'e' carry output, 'r' the exit code, 'I'/'L' request input.
+// A frame that cannot be one is treated as a desynced stream: the server is killed and the command fails,
+// since a length that is really file content would otherwise be waited on forever.
 // Input requests are always answered empty: ui.interactive=False means nothing should ask, and an
 // unanswered request would deadlock the pipe.
 class HgCommandServer final : public QObject

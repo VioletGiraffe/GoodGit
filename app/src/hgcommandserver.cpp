@@ -17,6 +17,14 @@ RESTORE_COMPILER_WARNINGS
 namespace {
 
 constexpr int CancelGraceMs = 2000;
+// No hg command sends a frame this large; a length read out of a desynced stream almost always exceeds it
+constexpr quint32 MaxFrameBytes = 1u << 30;
+
+// The protocol's channels are single letters; anything else means the stream is off its frame boundary
+bool isProtocolChannel(char channel)
+{
+	return (channel >= 'a' && channel <= 'z') || (channel >= 'A' && channel <= 'Z');
+}
 
 void appendBigEndianU32(QByteArray& buffer, quint32 value)
 {
@@ -155,6 +163,18 @@ void HgCommandServer::consumeChunks()
 			return;
 		const char channel = _buffer.at(0);
 		const quint32 length = qFromBigEndian<quint32>(_buffer.constData() + 1);
+
+		// The last point a desync is catchable: past it a garbage length is waited on forever, on a server that
+		// stays alive and so never reports anything. A first byte that is not a letter fails the channel test;
+		// text whose first byte is a letter reads as a length above the cap.
+		if (!isProtocolChannel(channel) || length > MaxFrameBytes)
+		{
+			// Carried into the command's failure, which has no other diagnosis
+			_ownStderr += "The command server's output framing desynced, so the command was stopped. An extension "
+				"or hook writing to stdout is the usual cause.\n";
+			killServer();
+			return;
+		}
 
 		// An input request's length is how much input is wanted; no payload follows. Always answered empty,
 		// see the class comment.
