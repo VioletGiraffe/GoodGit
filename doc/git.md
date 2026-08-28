@@ -81,11 +81,16 @@ Each leaves a marker in the git directory:
 | merge | `MERGE_HEAD` | `merge --abort` |
 | cherry-pick | `CHERRY_PICK_HEAD` | `cherry-pick --abort` |
 | revert | `REVERT_HEAD` | `revert --abort` |
-| rebase | `rebase-merge` or `rebase-apply` | `rebase --abort` |
+| rebase | `rebase-merge`, or `rebase-apply` without `applying` | `rebase --abort` |
+| am | `rebase-apply/applying` | `am --abort` |
 | bisect | `BISECT_LOG` | `bisect reset` |
 
 An operation started mid-bisect owns the commit until it ends, so the conflict-resolution markers must be
 tested before `BISECT_LOG`.
+
+**`git am` and `git rebase` share `.git/rebase-apply`.** The file inside says which wrote it: `applying` for
+am, `rebasing` for rebase. Testing only for the directory reports an interrupted am as a rebase, and
+`git rebase --abort` then fails with `fatal: It looks like 'git am' is in progress. Cannot rebase.`
 
 **A multi-commit `cherry-pick A..B` or `revert A..B` keeps state the markers above do not cover.**
 `.git/sequencer/` holds `todo`, `head` and `abort-safety`. After a plain `git commit` resolves a stopped
@@ -95,9 +100,13 @@ reports "Cherry-pick currently in progress", and `cherry-pick --continue` still 
 
 ## Continuing an operation
 
-- **`git rebase --continue` requires an editor and has no `--no-edit`.** With no usable editor it fails with
-  "There was a problem with the editor". `GIT_EDITOR=true` completes it, keeping the stopped commit's
-  message unchanged.
+- **`git rebase --continue` requires an editor and has no `--no-edit`.** It resolves one in git's usual
+  order - `GIT_EDITOR`, then `core.editor`, then `VISUAL` and `EDITOR` - so an unpinned call inherits
+  whatever the machine configures. A GUI editor with a wait flag is the common developer setting, and that
+  **blocks until a window is closed** rather than failing. An editor that exits non-zero fails instead, with
+  "There was a problem with the editor". `GIT_EDITOR=true` completes the command, keeping the stopped
+  commit's message unchanged.
+- `git var GIT_EDITOR` reports which editor git would resolve, without running it.
 - `git cherry-pick --continue --no-edit` needs no editor.
 - `git merge --continue` rejects `--no-edit` outright ("--continue expects no arguments"). A merge is
   finished by committing.
@@ -132,9 +141,16 @@ reports "Cherry-pick currently in progress", and `cherry-pick --continue` still 
   contains it.
 - Children must be pushed before their parent: the parent's tree references commits living in its children.
 
-## Assumptions that are false
+## Probing git locally
 
-Recorded because each was believed, acted on, or nearly acted on:
+A shell profile or an agent harness may already export the variable under test. `GIT_EDITOR=true` makes
+every editor-dependent command look as though it needs no editor, and `GIT_ALLOW_PROTOCOL` restricts which
+transports a remote may use. Clear them per command - `env -u GIT_EDITOR git ...` - before concluding
+anything about either.
+
+## Corrections
+
+Each of these was assumed to be otherwise, and acted on or nearly acted on:
 
 - **`git rev-parse --show-toplevel` does not echo the traversed spelling.** Reached through a junction or a
   `subst` drive, it returns the real path, so a root git resolved is already canonical.

@@ -88,11 +88,11 @@ hg's own registry of these is `addunfinished()` in `mercurial/state.py` and in e
 |---|---|---|---|---|
 | merge | *none* - two working-dir parents | yes | `hg commit` | `merge --abort` |
 | bisect | `.hg/bisect.state` | yes (report-only) | - | `bisect --reset` |
-| graft | `.hg/graftstate` | no | `graft --continue` | `graft --stop` |
+| graft | `.hg/graftstate` | no | `graft --continue` | `graft --abort`, or `--stop` to keep what it grafted |
 | rebase | `.hg/rebasestate` | no | `rebase --continue` | `rebase --stop` |
 | histedit | `.hg/histedit-state` | yes | `histedit --continue` | `histedit --abort` |
 | unshelve | `.hg/shelvedstate` | no | `unshelve --continue` | `unshelve --abort` |
-| transplant | `.hg/transplant/journal` | no | `transplant --continue` | `transplant --stop` |
+| transplant | `.hg/transplant/journal` | no | `transplant --continue` | `transplant --stop` (no `--abort`) |
 | interrupted update | `.hg/updatestate` | no | `hg update` | - |
 
 **`.hg/merge` is a conflict marker, not an operation marker.** Merge, graft, rebase, unshelve and update
@@ -182,7 +182,9 @@ touching the user's configuration. Which tool `extdiff` starts is the user's `[e
 A configured GUI merge tool that fails or is cancelled leaves the conflicted file unmodified, and every
 dirty-working-copy behavior then reads backwards. Pass `--tool internal:merge` for real conflict markers.
 
-## Assumptions that are false
+## Corrections
+
+Each of these was assumed to be otherwise:
 
 - **`hg uncommit` is not blocked by an operation in progress.** See above.
 - **`hg continue` does not work for every operation that declares it.** See above.
