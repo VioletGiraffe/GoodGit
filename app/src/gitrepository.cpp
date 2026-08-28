@@ -131,6 +131,17 @@ QStringList trackedChangeCountsArgs(const QString& base)
 	return trackedDiffArgs(base, QStringLiteral("--numstat"), eolDisplayFlags());
 }
 
+// Shared by the run against HEAD and the empty-tree run that replaces it on an unborn HEAD: both parse into
+// one plan, so the flags must match.
+// --raw rather than --name-status for the modes: a gitlink among the changes is a nested submodule.
+// No --ignore-submodules, unlike the row listing: the restore destroys dirt inside a nested submodule as
+// surely as it does a moved pointer, so both must show up here.
+QStringList discardPlanDiffArgs(const QString& base)
+{
+	return { QStringLiteral("diff"), QStringLiteral("--raw"), QStringLiteral("--no-abbrev"),
+		QStringLiteral("-M"), QStringLiteral("-z"), base };
+}
+
 // Shared by the name listing and the line counts of one commit's files, for the same reason as trackedDiffArgs
 QStringList commitFilesArgs(const QString& sha, const QString& outputFormat, const QStringList& extraFlags)
 {
@@ -987,11 +998,12 @@ void uncommittedDiscardPlan(const QString& workDir, const QObject* context, std:
 		ProcessResult gitDir;
 		ProcessResult status;
 		ProcessResult changes;
+		ProcessResult emptyTree;
 	};
 	auto run = std::make_shared<PlanQueries>();
 
 	QueryRound round{ readOnlyQueries(context),
-		[run, context = QPointer<const QObject>{ context }, onDone = std::move(onDone)] {
+		[run, workDir, context = QPointer<const QObject>{ context }, onDone = std::move(onDone)] {
 			if (!context)
 				return; // the queries died with it, unanswered
 
@@ -1003,12 +1015,27 @@ void uncommittedDiscardPlan(const QString& workDir, const QObject* context, std:
 				return onDone({ .refusal = QObject::tr("Its status could not be read: %1").arg(run->status.errorText()) });
 			if (!Git::parseUnmergedPaths(run->status.out).isEmpty())
 				return onDone({ .refusal = QObject::tr("There are unresolved conflicts there. Resolve or abort them first.") });
-			if (!run->changes.ok)
-				return onDone({ .refusal = QObject::tr("Its changes could not be listed: %1").arg(run->changes.errorText()) });
 
-			const std::vector<CommitFileChange> entries = Git::parseRawZ(run->changes.out);
-			const bool nestedSubmoduleChanged = std::ranges::any_of(entries, [](const CommitFileChange& entry) { return entry.isSubmodule; });
-			onDone(discardPlanFor(entries, nestedSubmoduleChanged));
+			const auto planFrom = [onDone](const ProcessResult& changes) {
+				if (!changes.ok)
+					return onDone({ .refusal = QObject::tr("Its changes could not be listed: %1").arg(changes.errorText()) });
+
+				const std::vector<CommitFileChange> entries = Git::parseRawZ(changes.out);
+				const bool nestedSubmoduleChanged = std::ranges::any_of(entries, [](const CommitFileChange& entry) { return entry.isSubmodule; });
+				onDone(discardPlanFor(entries, nestedSubmoduleChanged));
+			};
+
+			// Unborn HEAD: the run against it was bound to fail, and the empty tree answers in its place.
+			// Every change is an addition against it, so such a discard is the reset alone.
+			// Without the sha there is no stand-in, and the original failure is reported instead.
+			const QString emptyTree = QString::fromUtf8(run->emptyTree.out.trimmed());
+			const bool substituteEmptyTree = !run->changes.ok && !emptyTree.isEmpty()
+				&& Git::parseBranchHeader(run->status.out).oid == QLatin1String("(initial)");
+
+			if (substituteEmptyTree)
+				Git::run(workDir, discardPlanDiffArgs(emptyTree), context, planFrom, {}, /*readOnlyQuery=*/true);
+			else
+				planFrom(run->changes);
 		} };
 
 	round.launch(workDir, { QStringLiteral("rev-parse"), QStringLiteral("--absolute-git-dir") },
@@ -1017,12 +1044,12 @@ void uncommittedDiscardPlan(const QString& workDir, const QObject* context, std:
 	// restoring one to HEAD would resolve it
 	round.launch(workDir, branchAndUnmergedStatusArgs(),
 		[run](const ProcessResult& r) { run->status = r; });
-	// --raw rather than --name-status for the modes: a gitlink among the changes is a nested submodule.
-	// No --ignore-submodules, unlike the row listing: the restore destroys dirt inside a nested submodule as
-	// surely as it does a moved pointer, so both must show up here.
-	round.launch(workDir, { QStringLiteral("diff"), QStringLiteral("--raw"),
-			QStringLiteral("--no-abbrev"), QStringLiteral("-M"), QStringLiteral("-z"), QStringLiteral("HEAD") },
+	round.launch(workDir, discardPlanDiffArgs(QStringLiteral("HEAD")),
 		[run](const ProcessResult& r) { run->changes = r; });
+	// Stands in for HEAD where there is none (see startRefresh). Resolved every time: the status answers in
+	// this same round, too late to decide whether to launch this.
+	round.launch(workDir, { QStringLiteral("hash-object"), QStringLiteral("-t"), QStringLiteral("tree"), QStringLiteral("--stdin") },
+		[run](const ProcessResult& r) { run->emptyTree = r; });
 }
 
 void discardAllUncommitted(const QString& workDir, const SubmoduleDiscardPlan& plan, const QObject* context, Vcs::Answer<void> onDone)
