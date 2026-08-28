@@ -209,7 +209,8 @@ mojibake, or a path that no longer matches the one it was read from.
   and a path survives the trip back to git through argv, a `--pathspec-file-nul` list, an `update-index`
   record or an ignore pattern. Only paths: a commit message, an author and a ref stay UTF-8, git's own
   convention for them. Mercurial needs no platform fork - its paths ride the same local encoding as the rest
-  of its output.
+  of its output, `.hgsub` and `.hgsubstate` included: hg reads those files in that encoding too, and their
+  paths are matched against the ones a status answers with.
 - **File content is not tool output.** `decodedAsText` reads a byte order mark, falls back to UTF-8, and
   calls bytes with an early NUL binary. This holds whichever VCS produced them: the encoding is the file's
   business.

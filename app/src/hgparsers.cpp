@@ -100,11 +100,11 @@ QStringList nodeList(const QJsonValue& value)
 }
 
 // Splits at the first separator; empty for blank and comment lines.
-// Reads repository files rather than command output, so Hg::textFromOutput does not apply; UTF-8 is the
-// assumption, no encoding being declared for them.
+// .hgsub and .hgsubstate hold paths hg itself reads in its own encoding, so they decode like its output:
+// these paths are matched against the ones a status answers with.
 std::pair<QString, QString> splitAt(const QByteArray& line, QChar separator)
 {
-	const QString text = QString::fromUtf8(line).trimmed();
+	const QString text = Hg::textFromOutput(line).trimmed();
 	if (text.isEmpty() || text.startsWith(QLatin1Char('#')))
 		return {};
 

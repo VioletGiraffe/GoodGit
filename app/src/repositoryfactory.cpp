@@ -27,7 +27,7 @@ struct Claim
 Claim claimedByGit(const QString& startPath)
 {
 	ProcessResult result = Git::runSync(startPath, { QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel") });
-	QString root = result.ok ? QString::fromUtf8(result.out.trimmed()) : QString{};
+	QString root = result.ok ? Git::pathFromOutput(result.out.trimmed()) : QString{};
 	return { std::move(root), std::move(result) };
 }
 
@@ -54,7 +54,7 @@ QString gitLinkTarget(const QFileInfo& dotGit)
 	if (!line.startsWith(prefix))
 		return {};
 
-	const QString target = QString::fromUtf8(line.mid(prefix.size()).trimmed());
+	const QString target = Git::pathFromOutput(line.mid(prefix.size()).trimmed());
 	const QFileInfo directory{ QDir{ dotGit.absolutePath() }, target };
 	return directory.isDir() ? directory.absoluteFilePath() : QString{};
 }

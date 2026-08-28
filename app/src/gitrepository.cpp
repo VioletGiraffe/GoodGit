@@ -340,7 +340,7 @@ void GitRepository::startRefresh()
 		round.launch(path(), { QStringLiteral("rev-parse"), QStringLiteral("--absolute-git-dir") },
 			[this, run](const ProcessResult& r) {
 				if (r.ok)
-					_gitDir = QString::fromUtf8(r.out.trimmed());
+					_gitDir = Git::pathFromOutput(r.out.trimmed());
 				else
 					run->noteFailure(r); // without it a merge in progress is indistinguishable from none
 			});
@@ -988,7 +988,7 @@ void uncommittedDiscardPlan(const QString& workDir, const QObject* context, std:
 
 			if (!run->gitDir.ok)
 				return onDone({ .refusal = QObject::tr("Its git directory could not be found: %1").arg(run->gitDir.errorText()) });
-			if (operationInGitDir(QString::fromUtf8(run->gitDir.out.trimmed())) != RepoOp::None)
+			if (operationInGitDir(Git::pathFromOutput(run->gitDir.out.trimmed())) != RepoOp::None)
 				return onDone({ .refusal = QObject::tr("A merge, rebase, cherry-pick, revert or bisect is in progress there. Finish or abort it first.") });
 			if (!run->status.ok)
 				return onDone({ .refusal = QObject::tr("Its status could not be read: %1").arg(run->status.errorText()) });
