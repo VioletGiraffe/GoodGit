@@ -1225,11 +1225,11 @@ void CommitWindow::showDiffForCurrentRow()
 	_diffPane->showMessage(entry.path, tag, tr("Loading..."));
 	_diffQuery = _repo->diffFile(entry, this, [this, entry, tag](std::expected<QByteArray, QString> diff) {
 		if (!diff)
-			_diffPane->showMessage(entry.path, {}, diff.error());
+			_diffPane->showMessage(entry.path, tag, diff.error());
 		else if (diff->size() > CSettings{}.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong())
-			_diffPane->showMessage(entry.path, {}, tr("The diff is too large to display (%1 MB).").arg(double(diff->size()) / (1024 * 1024), 0, 'f', 1));
+			_diffPane->showMessage(entry.path, tag, tr("The diff is too large to display (%1 MB).").arg(double(diff->size()) / (1024 * 1024), 0, 'f', 1));
 		else if (diff->isEmpty())
-			_diffPane->showMessage(entry.path, {}, tr("No content changes (only the mode or the line endings differ, or the file matches HEAD)."));
+			_diffPane->showMessage(entry.path, tag, tr("No content changes (only the mode or the line endings differ, or the file matches HEAD)."));
 		else
 			_diffPane->showDiff(entry.path, tag, QString::fromUtf8(*diff));
 	});
