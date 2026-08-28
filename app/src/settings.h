@@ -61,9 +61,11 @@ inline constexpr const char* NewRowCheckPolicyNone = "none";
 inline constexpr const char* DiffTabWidthKey = "DiffTabWidth";
 inline constexpr int DiffTabWidthDefault = 4;
 
-// A QSettings array, most recent first, whose elements carry the keys below. Kinds are stored as text for
-// the same reason as the check policy.
-inline constexpr const char* RecentRepositoriesKey = "RecentRepositories";
+// One JSON array, most recent first, whose objects carry the field names below.
+// Stored as a single value: two instances share this store, and a QSettings array is written entry by
+// entry, so a concurrent reader can observe one half written.
+// Kinds are stored as text for the same reason as the check policy.
+inline constexpr const char* RecentRepositoriesKey = "RecentRepositoryList";
 inline constexpr const char* RecentRepositoryRootKey = "root";
 inline constexpr const char* RecentRepositoryKindKey = "kind";
 inline constexpr const char* RecentRepositoryLastUsedKey = "lastUsed";

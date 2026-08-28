@@ -7,6 +7,9 @@
 DISABLE_COMPILER_WARNINGS
 #include <QDateTime>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSet>
 RESTORE_COMPILER_WARNINGS
 
@@ -55,33 +58,30 @@ void sortByLastUsed(std::vector<RecentRepository>& repositories)
 	return holdsSubmoduleAt(repository, root) && QFileInfo::exists(repository.root);
 }
 
-// Not atomic: the remove and the writes are separate operations, and no caller re-reads, so a second
-// instance can observe a torn list mid-save and store it back
+// One setValue: a reader in another instance sees the previous list or this one, never a mix of the two.
+// Simultaneous writers still lose one update, and the cost of that is an entry's position in the order.
 void save(const std::vector<RecentRepository>& repositories)
 {
-	CSettings settings;
-	// beginWriteArray only records the new size, leaving a longer previous array's tail behind
-	settings.remove(QLatin1String(Settings::RecentRepositoriesKey));
-
-	settings.beginWriteArray(QLatin1String(Settings::RecentRepositoriesKey), int(repositories.size()));
-	for (size_t i = 0; i < repositories.size(); ++i)
+	QJsonArray stored;
+	for (const RecentRepository& repository : repositories)
 	{
-		const RecentRepository& repository = repositories[i];
-		settings.setArrayIndex(int(i));
-		settings.setValue(QLatin1String(Settings::RecentRepositoryRootKey), repository.root);
-		settings.setValue(QLatin1String(Settings::RecentRepositoryKindKey), kindText(repository.kind));
-		settings.setValue(QLatin1String(Settings::RecentRepositoryLastUsedKey), qint64(repository.lastUsedMSecs));
-
-		QStringList paths, kinds;
+		QJsonArray paths, kinds;
 		for (const Submodule& submodule : repository.submodules)
 		{
-			paths << submodule.path;
-			kinds << kindText(submodule.kind);
+			paths.append(submodule.path);
+			kinds.append(kindText(submodule.kind));
 		}
-		settings.setValue(QLatin1String(Settings::RecentRepositorySubmodulePathsKey), paths);
-		settings.setValue(QLatin1String(Settings::RecentRepositorySubmoduleKindsKey), kinds);
+
+		stored.append(QJsonObject{
+			{ QLatin1String(Settings::RecentRepositoryRootKey), repository.root },
+			{ QLatin1String(Settings::RecentRepositoryKindKey), kindText(repository.kind) },
+			{ QLatin1String(Settings::RecentRepositoryLastUsedKey), qint64(repository.lastUsedMSecs) },
+			{ QLatin1String(Settings::RecentRepositorySubmodulePathsKey), paths },
+			{ QLatin1String(Settings::RecentRepositorySubmoduleKindsKey), kinds } });
 	}
-	settings.endArray();
+
+	CSettings{}.setValue(QLatin1String(Settings::RecentRepositoriesKey),
+		QString::fromUtf8(QJsonDocument{ stored }.toJson(QJsonDocument::Compact)));
 
 	RecentRepositories::Notifier::instance().notifyChanged();
 }
@@ -92,34 +92,32 @@ namespace RecentRepositories {
 
 std::vector<RecentRepository> list()
 {
-	CSettings settings;
-	const int count = settings.beginReadArray(QLatin1String(Settings::RecentRepositoriesKey));
+	const QString text = CSettings{}.value(QLatin1String(Settings::RecentRepositoriesKey)).toString();
+	const QJsonArray stored = QJsonDocument::fromJson(text.toUtf8()).array();
 
 	std::vector<RecentRepository> repositories;
-	repositories.reserve(size_t(count));
-	for (int i = 0; i < count; ++i)
+	repositories.reserve(size_t(stored.size()));
+	for (const QJsonValue& value : stored)
 	{
-		settings.setArrayIndex(i);
+		const QJsonObject entry = value.toObject();
 		RecentRepository repository;
-		repository.root = settings.value(QLatin1String(Settings::RecentRepositoryRootKey)).toString();
+		repository.root = entry.value(QLatin1String(Settings::RecentRepositoryRootKey)).toString();
 		if (repository.root.isEmpty())
 			continue;
 
-		repository.kind = kindFromText(settings.value(QLatin1String(Settings::RecentRepositoryKindKey)).toString());
-		// Absent before the field existed, and 0 is exactly what such an entry should sort by
-		repository.lastUsedMSecs = settings.value(QLatin1String(Settings::RecentRepositoryLastUsedKey)).toLongLong();
+		repository.kind = kindFromText(entry.value(QLatin1String(Settings::RecentRepositoryKindKey)).toString());
+		repository.lastUsedMSecs = entry.value(QLatin1String(Settings::RecentRepositoryLastUsedKey)).toInteger();
 
-		const QStringList paths = settings.value(QLatin1String(Settings::RecentRepositorySubmodulePathsKey)).toStringList();
-		const QStringList kinds = settings.value(QLatin1String(Settings::RecentRepositorySubmoduleKindsKey)).toStringList();
+		const QJsonArray paths = entry.value(QLatin1String(Settings::RecentRepositorySubmodulePathsKey)).toArray();
+		const QJsonArray kinds = entry.value(QLatin1String(Settings::RecentRepositorySubmoduleKindsKey)).toArray();
 		for (qsizetype submodule = 0; submodule < paths.size(); ++submodule)
 		{
-			// A missing kind defaults to the parent's
-			const VcsKind kind = submodule < kinds.size() ? kindFromText(kinds[submodule]) : repository.kind;
-			repository.submodules.push_back({ paths[submodule], kind });
+			// The two lists are written together, so a shorter kinds list means a damaged value
+			const VcsKind kind = submodule < kinds.size() ? kindFromText(kinds[submodule].toString()) : repository.kind;
+			repository.submodules.push_back({ paths[submodule].toString(), kind });
 		}
 		repositories.push_back(std::move(repository));
 	}
-	settings.endArray();
 
 	return repositories;
 }
