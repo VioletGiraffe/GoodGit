@@ -443,7 +443,8 @@ QueryRound::Launcher HgRepository::refreshQueries()
 
 std::shared_ptr<QTemporaryFile> HgRepository::openPathspecFile(const QStringList& paths, const Vcs::Callback& onFailure)
 {
-	// Not Vcs::nulJoined: hg reads the listfile as local-encoding bytes, not UTF-8
+	// Not Git::nulJoinedPaths: hg reads the listfile as local-encoding bytes on every platform, git's
+	// pathspec bytes are UTF-8 on Windows
 	QByteArray joined;
 	for (const QString& path : paths)
 	{

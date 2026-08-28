@@ -14,6 +14,18 @@ RESTORE_COMPILER_WARNINGS
 // Parsers for the git outputs the app consumes. UI- and process-free so they can be tested directly.
 namespace Git {
 
+// The text of a path git printed, and the bytes git reads for one.
+// Git stores path bytes verbatim, so on Unix a path is the filesystem's bytes. Qt encodes file names with
+// the local 8-bit codec, so decoding them the same way keeps a path from git and one from QDir meaning the
+// same file, and lets a path survive the trip back to git through argv or a pathspec. Git for Windows
+// stores UTF-8 whatever the codepage.
+// Paths only: a commit message, an author and a ref are UTF-8 by git's own convention, whatever the locale.
+[[nodiscard]] QString pathFromOutput(const QByteArray& bytes);
+[[nodiscard]] QByteArray pathBytes(const QString& path);
+
+// The pathspec bytes for `--pathspec-from-file=- --pathspec-file-nul`, which every mutation passes on stdin
+[[nodiscard]] QByteArray nulJoinedPaths(const QStringList& paths);
+
 struct BranchHeader
 {
 	QString oid;      // full sha, or "(initial)" for an unborn HEAD

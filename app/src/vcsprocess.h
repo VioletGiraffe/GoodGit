@@ -212,9 +212,6 @@ Job* answerLater(const QObject* context, Callable onDone, Value answer)
 	return new QueuedAnswer{ context, std::move(onDone), std::move(answer) };
 }
 
-// NUL-separated path list, for passing paths that may contain any text separator on stdin
-[[nodiscard]] QByteArray nulJoined(const QStringList& paths);
-
 // A temp file holding `contents`, for a command that takes input by file name (a commit message, a long pathspec).
 // Null if the file could not be created; `onFailure` is then already queued, and fires from the event loop like
 // every run() callback. `description` names the file in that failure.

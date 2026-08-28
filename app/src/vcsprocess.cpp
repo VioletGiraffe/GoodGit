@@ -249,17 +249,6 @@ ProcessResult runSync(const Tool& tool, const QString& workDir, QStringList args
 	return result;
 }
 
-QByteArray nulJoined(const QStringList& paths)
-{
-	QByteArray data;
-	for (const QString& path : paths)
-	{
-		data += path.toUtf8();
-		data += '\0';
-	}
-	return data;
-}
-
 std::shared_ptr<QTemporaryFile> openTempFile(const QByteArray& contents, const QString& description,
 	QObject* context, const Callback& onFailure)
 {

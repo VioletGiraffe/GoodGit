@@ -33,7 +33,7 @@ void rollBackAddThenReport(const QString& workDir, const QObject* context, const
 
 	Git::run(workDir, { QStringLiteral("reset"), QStringLiteral("-q"), QStringLiteral("--pathspec-from-file=-"),
 		QStringLiteral("--pathspec-file-nul") }, context,
-		[onDone, commitResult](const ProcessResult&) { onDone(commitResult); }, Vcs::nulJoined(untrackedPaths));
+		[onDone, commitResult](const ProcessResult&) { onDone(commitResult); }, Git::nulJoinedPaths(untrackedPaths));
 }
 
 // The index manipulation a commit of `pathspec` needs: `git commit` takes the whole index.
@@ -68,7 +68,7 @@ CommitIndexPlan plannedIndexChange(const std::vector<Git::StagedEntry>& staged, 
 
 		plan.resetPaths << entry.path;
 		if (entry.treeMode != entry.indexMode && entry.treeMode != "000000" && entry.indexMode != "000000")
-			plan.savedModes += entry.indexMode + ' ' + entry.indexSha + '\t' + entry.path.toUtf8() + '\0';
+			plan.savedModes += entry.indexMode + ' ' + entry.indexSha + '\t' + Git::pathBytes(entry.path) + '\0';
 	}
 
 	plan.addPaths.removeIf([&stagedDeletions](const QString& path) { return stagedDeletions.contains(path); });
@@ -628,7 +628,7 @@ void GitRepository::commit(const QString& message, const QStringList& pathspec, 
 						runCommit();
 					else
 						restoreThenReport(result);
-				}, Vcs::nulJoined(addPaths));
+				}, Git::nulJoinedPaths(addPaths));
 		};
 
 		if (plan.resetPaths.isEmpty())
@@ -643,7 +643,7 @@ void GitRepository::commit(const QString& message, const QStringList& pathspec, 
 					addThenCommit();
 				else
 					restoreThenReport(result);
-			}, Vcs::nulJoined(plan.resetPaths));
+			}, Git::nulJoinedPaths(plan.resetPaths));
 	};
 
 	Git::run(path(), { QStringLiteral("diff"), QStringLiteral("--cached"), QStringLiteral("--raw"), QStringLiteral("--no-abbrev"),
@@ -680,7 +680,7 @@ void GitRepository::commitMergeState(const QString& message, const QStringList& 
 					runCommit();
 				else
 					report(result);
-			}, Vcs::nulJoined(untrackedPaths));
+			}, Git::nulJoinedPaths(untrackedPaths));
 	};
 
 	Git::run(path(), { QStringLiteral("add"), QStringLiteral("-u") }, this,
@@ -769,7 +769,7 @@ void GitRepository::fetch(Vcs::Answer<void> onDone)
 void GitRepository::addToIndex(const QStringList& paths, Vcs::Answer<void> onDone)
 {
 	Git::run(path(), { QStringLiteral("add"), QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") },
-		this, Vcs::reporting(std::move(onDone)), Vcs::nulJoined(paths));
+		this, Vcs::reporting(std::move(onDone)), Git::nulJoinedPaths(paths));
 }
 
 // Staging a path drops its unmerged entries, which is the whole of git's record of a resolution
@@ -781,13 +781,13 @@ void GitRepository::markResolved(const QStringList& paths, Vcs::Answer<void> onD
 void GitRepository::unAdd(const QStringList& paths, Vcs::Answer<void> onDone)
 {
 	Git::run(path(), { QStringLiteral("reset"), QStringLiteral("-q"), QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") },
-		this, Vcs::reporting(std::move(onDone)), Vcs::nulJoined(paths));
+		this, Vcs::reporting(std::move(onDone)), Git::nulJoinedPaths(paths));
 }
 
 void GitRepository::discardChanges(const QStringList& pathspec, Vcs::Answer<void> onDone)
 {
 	Git::run(path(), { QStringLiteral("restore"), QStringLiteral("--source=HEAD"), QStringLiteral("--staged"), QStringLiteral("--worktree"),
-		QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") }, this, Vcs::reporting(std::move(onDone)), Vcs::nulJoined(pathspec));
+		QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") }, this, Vcs::reporting(std::move(onDone)), Git::nulJoinedPaths(pathspec));
 }
 
 void GitRepository::submoduleDiscardPlan(const QString& repoRelativePath, const QObject* context,
@@ -956,7 +956,8 @@ QByteArray GitRepository::ignoreFileWithPatternAdded(QByteArray content, const I
 	const QByteArray eol = content.contains("\r\n") ? QByteArrayLiteral("\r\n") : QByteArrayLiteral("\n");
 	if (!content.isEmpty() && !content.endsWith('\n'))
 		content += eol;
-	return content + pattern.text.toUtf8() + eol;
+	// A pattern is matched against path bytes, so it is written as one
+	return content + Git::pathBytes(pattern.text) + eol;
 }
 
 void GitRepository::launchExternalDiffTool(const QString& repoRelativePath) const
@@ -1034,8 +1035,8 @@ void discardAllUncommitted(const QString& workDir, const SubmoduleDiscardPlan& p
 			}
 			Git::run(workDir, { QStringLiteral("restore"), QStringLiteral("--source=HEAD"), QStringLiteral("--staged"),
 					QStringLiteral("--worktree"), QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") },
-				context, report, Vcs::nulJoined(restored));
-		}, Vcs::nulJoined(plan.restored + plan.keptOnDisk));
+				context, report, Git::nulJoinedPaths(restored));
+		}, Git::nulJoinedPaths(plan.restored + plan.keptOnDisk));
 }
 
 } // namespace Git

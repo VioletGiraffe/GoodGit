@@ -6,6 +6,35 @@ RESTORE_COMPILER_WARNINGS
 
 namespace Git {
 
+QString pathFromOutput(const QByteArray& bytes)
+{
+#ifdef Q_OS_WIN
+	return QString::fromUtf8(bytes);
+#else
+	return QString::fromLocal8Bit(bytes);
+#endif
+}
+
+QByteArray pathBytes(const QString& path)
+{
+#ifdef Q_OS_WIN
+	return path.toUtf8();
+#else
+	return path.toLocal8Bit();
+#endif
+}
+
+QByteArray nulJoinedPaths(const QStringList& paths)
+{
+	QByteArray data;
+	for (const QString& path : paths)
+	{
+		data += pathBytes(path);
+		data += '\0';
+	}
+	return data;
+}
+
 namespace {
 
 // Iterates the records of porcelain-v2 -z output. A rename record ('2') is followed by its origin path as
@@ -78,7 +107,7 @@ QStringList parseUnmergedPaths(const QByteArray& statusOutput)
 			pathStart = space < 0 ? -1 : space + 1;
 		}
 		if (pathStart > 0)
-			paths.push_back(QString::fromUtf8(record.mid(pathStart)));
+			paths.push_back(pathFromOutput(record.mid(pathStart)));
 	});
 	return paths;
 }
@@ -109,11 +138,11 @@ qsizetype readPathTokens(const QList<QByteArray>& tokens, qsizetype i, CommitFil
 	{
 		if (i + 1 >= tokens.size())
 			return -1;
-		entry.oldPath = QString::fromUtf8(tokens[i]);
-		entry.path = QString::fromUtf8(tokens[i + 1]);
+		entry.oldPath = pathFromOutput(tokens[i]);
+		entry.path = pathFromOutput(tokens[i + 1]);
 		return i + 2;
 	}
-	entry.path = QString::fromUtf8(tokens[i]);
+	entry.path = pathFromOutput(tokens[i]);
 	return i + 1;
 }
 
@@ -185,7 +214,7 @@ std::vector<StagedEntry> parseStagedRawZ(const QByteArray& diffOutput)
 		if (fields.size() < 5)
 			break;
 
-		entries.push_back({ .path = QString::fromUtf8(tokens[i + 1]), .treeMode = fields[0],
+		entries.push_back({ .path = pathFromOutput(tokens[i + 1]), .treeMode = fields[0],
 			.indexMode = fields[1], .indexSha = fields[3] });
 	}
 	return entries;
@@ -205,12 +234,12 @@ std::map<QString, LineCounts> parseNumstatZ(const QByteArray& diffOutput)
 		if (secondTab < 0)
 			continue;
 
-		QString path = QString::fromUtf8(record.mid(secondTab + 1));
+		QString path = pathFromOutput(record.mid(secondTab + 1));
 		if (path.isEmpty())
 		{
 			if (i + 2 >= tokens.size())
 				break;
-			path = QString::fromUtf8(tokens[i + 2]); // the new name, which the file list knows the row by
+			path = pathFromOutput(tokens[i + 2]); // the new name, which the file list knows the row by
 			i += 2;
 		}
 
@@ -229,7 +258,7 @@ QStringList parseZList(const QByteArray& output)
 	for (const QByteArray& token : output.split('\0'))
 	{
 		if (!token.isEmpty())
-			paths.push_back(QString::fromUtf8(token));
+			paths.push_back(pathFromOutput(token));
 	}
 	return paths;
 }
@@ -261,7 +290,7 @@ QStringList parseGitlinkPaths(const QByteArray& lsFilesOutput)
 			continue;
 		const qsizetype tab = record.indexOf('\t');
 		if (tab > 0)
-			paths.push_back(QString::fromUtf8(record.mid(tab + 1)));
+			paths.push_back(pathFromOutput(record.mid(tab + 1)));
 	}
 	return paths;
 }
@@ -283,7 +312,7 @@ std::vector<GitlinkEntry> parseGitlinkEntries(const QByteArray& lsTreeOutput)
 		if (fields.size() < 3)
 			continue;
 
-		entries.push_back({ .path = QString::fromUtf8(record.mid(tab + 1)), .sha = QString::fromUtf8(fields[2]) });
+		entries.push_back({ .path = pathFromOutput(record.mid(tab + 1)), .sha = QString::fromUtf8(fields[2]) });
 	}
 	return entries;
 }
