@@ -30,7 +30,8 @@ RCC_DIR     = ../build/$${OUTPUT_DIR}/$${TARGET}
 INCLUDEPATH += \
 	../qtutils \
 	../cpputils \
-	../cpp-template-utils
+	../cpp-template-utils \
+	../thin_io/src
 
 ###################################################
 #                 SOURCES
@@ -118,10 +119,10 @@ macx:ICON = res/goodgit-mac.icns   # built from res/goodgit-mac.svg (Apple icon 
 #                 LIBS
 ###################################################
 
-LIBS += -L$${DESTDIR} -lqtutils -lcpputils
+LIBS += -L$${DESTDIR} -lqtutils -lcpputils -lthin_io
 
 mac*|linux*|freebsd*{
-	PRE_TARGETDEPS += $${DESTDIR}/libqtutils.a $${DESTDIR}/libcpputils.a
+	PRE_TARGETDEPS += $${DESTDIR}/libqtutils.a $${DESTDIR}/libcpputils.a $${DESTDIR}/libthin_io.a
 
 	QMAKE_CXXFLAGS_WARN_ON += -Wno-missing-field-initializers
 }

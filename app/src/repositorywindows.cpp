@@ -125,7 +125,7 @@ CommitWindow* repositoryWindow(const QString& root)
 	for (QWidget* widget : QApplication::topLevelWidgets())
 	{
 		auto* window = qobject_cast<CommitWindow*>(widget);
-		if (window && sameRepositoryPath(window->repositoryPath(), root))
+		if (window && sameDirectoryOnDisk(window->repositoryPath(), root))
 			return window;
 	}
 	return nullptr;
@@ -181,7 +181,7 @@ CommitWindow* openSubmoduleRepositoryWindow(const QString& root, QWidget* dialog
 		MessageBox::notice(dialogParent, QApplication::applicationName(), noRepositoryMessage(root, location.error()), {}, QMessageBox::Critical);
 		return nullptr;
 	}
-	if (!sameRepositoryPath(location->root, root))
+	if (!sameDirectoryOnDisk(location->root, root))
 	{
 		MessageBox::notice(dialogParent, QApplication::applicationName(),
 			QObject::tr("'%1' is not a repository of its own. If it is a submodule, it has not been initialized yet.")

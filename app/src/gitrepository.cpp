@@ -8,6 +8,7 @@
 
 DISABLE_COMPILER_WARNINGS
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QPointer>
 #include <QProcess>
@@ -115,6 +116,41 @@ RepoOp operationInGitDir(const QString& gitDirPath)
 	if (gitDir.exists(QStringLiteral("BISECT_LOG")))
 		return RepoOp::Bisect;
 	return RepoOp::None;
+}
+
+// The sha HEAD names, resolved through the ref files: HEAD holds either a sha (detached) or the name of the
+// ref that does, and that ref is a loose file or a line of packed-refs.
+// Empty on an unborn branch, and empty for a linked worktree whose ref is packed: packed-refs lives in the
+// common directory, not in the worktree's own git dir.
+QString headShaInGitDir(const QString& gitDirPath)
+{
+	const QDir gitDir{ gitDirPath };
+	QFile head{ gitDir.filePath(QStringLiteral("HEAD")) };
+	if (!head.open(QIODevice::ReadOnly))
+		return {};
+
+	const QByteArray headText = head.readAll().trimmed();
+	if (!headText.startsWith("ref: "))
+		return QString::fromLatin1(headText);
+
+	const QByteArray ref = headText.sliced(5); // a ref name is UTF-8 by git's convention, whatever the locale
+	QFile loose{ gitDir.filePath(QString::fromUtf8(ref)) };
+	if (loose.open(QIODevice::ReadOnly))
+		return QString::fromLatin1(loose.readAll().trimmed());
+
+	QFile packed{ gitDir.filePath(QStringLiteral("packed-refs")) };
+	if (!packed.open(QIODevice::ReadOnly))
+		return {};
+
+	const QByteArray namedRef = ' ' + ref;
+	while (!packed.atEnd())
+	{
+		// "<sha> <ref>"; a peeled tag's "^<sha>" line names no ref and so cannot match
+		const QByteArray line = packed.readLine().trimmed();
+		if (line.endsWith(namedRef))
+			return QString::fromLatin1(line.left(line.indexOf(' ')));
+	}
+	return {};
 }
 
 // Whether a line-endings-only change shows as a change is a display setting.
@@ -522,6 +558,11 @@ RepoOp GitRepository::probeOperation() const
 {
 	// The markers are complete for git; the cached value stands in only until the first refresh resolves the git dir
 	return _gitDir.isEmpty() ? state().op : operationInGitDir(_gitDir);
+}
+
+QString GitRepository::probeHeadSha() const
+{
+	return _gitDir.isEmpty() ? QString{} : headShaInGitDir(_gitDir);
 }
 
 std::vector<FileEntry> GitRepository::filesFromRun(const RefreshRun& run) const

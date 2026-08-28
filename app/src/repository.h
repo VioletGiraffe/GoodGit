@@ -31,11 +31,18 @@ struct RepositoryLocation
 
 // Case-insensitive: a root's spelling depends on the path it was resolved from, and no platform this runs on
 // hosts two repositories differing only in case.
-// Used by every place that matches repositories (open windows, the recent list), so they agree.
 // Compares spellings, not filesystem identity, so one repository reached through a subst drive or a junction
-// matches as two. QFileInfo::canonicalFilePath() does not fix that - Qt 6.9.3 resolves neither - and a real
-// identity needs BY_HANDLE_FILE_INFORMATION (volume serial + file index).
+// matches as two. The scans match on this; a decision an alias would break uses sameDirectoryOnDisk().
 [[nodiscard]] bool sameRepositoryPath(const QString& left, const QString& right);
+
+// Whether two paths name one directory, resolving the aliases a spelling comparison cannot: a subst drive, a
+// junction, a second mount of one volume. QFileInfo::canonicalFilePath() resolves none of them in Qt 6.9.3.
+// Falls back to sameRepositoryPath() where a path is gone or its filesystem exposes no identity, so a recent
+// entry for an unplugged drive still matches the spelling it was stored under.
+// Opens a handle per path: for the few decisions an alias would break, never inside a scan over the list.
+// A root the tool resolved is already canonical - rev-parse --show-toplevel follows a junction - so the
+// aliases reaching here come from paths the app composed: a submodule's root, a scan hit.
+[[nodiscard]] bool sameDirectoryOnDisk(const QString& left, const QString& right);
 
 // The name a repository at `root` is shown under: the directory name, or the root spelling for a drive
 // root, which has none. For places that hold only the path; Repository::name() answers for an instance.
@@ -98,6 +105,13 @@ public:
 	// outlives a resolved conflict and misses a conflict-free merge). Compare two probes with each other:
 	// a difference means an operation started or ended outside the app, unseen by any refresh.
 	[[nodiscard]] virtual RepoOp probeOperation() const = 0;
+
+	// The commit the working tree is on, read from the on-disk refs rather than from the cached state: this
+	// runs at decision time, where a subprocess cannot be waited on.
+	// Empty where the refs cannot be read; two empty probes compare equal and so detect nothing.
+	// Compare two probes with each other, as with probeOperation(): a difference means a commit, checkout or
+	// reset landed outside the app, from another instance or from a shell.
+	[[nodiscard]] virtual QString probeHeadSha() const = 0;
 
 	// Commits the pathspec (which must include both sides of every rename). untrackedPaths (a subset of the
 	// pathspec) is added to tracking first, and un-added if the commit fails.

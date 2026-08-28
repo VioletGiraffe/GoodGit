@@ -144,7 +144,7 @@ void recordOpen(const RepositoryLocation& location)
 	}
 
 	const auto existing = std::ranges::find_if(repositories,
-		[&](const RecentRepository& repository) { return sameRepositoryPath(repository.root, location.root); });
+		[&](const RecentRepository& repository) { return sameDirectoryOnDisk(repository.root, location.root); });
 	if (existing != repositories.end())
 	{
 		existing->kind = location.kind;

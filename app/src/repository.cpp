@@ -1,11 +1,36 @@
 #include "repository.h"
 
+#include "fs.hpp" // thin_io
+
 DISABLE_COMPILER_WARNINGS
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 RESTORE_COMPILER_WARNINGS
 
+#include <optional>
 #include <utility>
+
+namespace {
+
+// The filesystem's own identity for one directory, absent where the path is gone or its filesystem exposes
+// none. thin_io opens the handle with FILE_FLAG_BACKUP_SEMANTICS, so a directory answers as a file does.
+// link_behavior::follow: a junction must answer as the directory it points at, not as the reparse point.
+std::optional<thin_io::entry_identity> directoryIdentity(const QString& path)
+{
+#ifdef Q_OS_WIN
+	const std::wstring native = path.toStdWString();
+	const auto metadata = thin_io::get_entry_metadata(native.c_str(), thin_io::link_behavior::follow);
+#else
+	const QByteArray native = QFile::encodeName(path);
+	const auto metadata = thin_io::get_entry_metadata(native.constData(), thin_io::link_behavior::follow);
+#endif
+	if (!metadata)
+		return {};
+	return metadata->identity;
+}
+
+} // namespace
 
 QString backslashEscaped(const QString& text, QStringView metacharacters)
 {
@@ -28,6 +53,15 @@ QString escapedForRegex(const QString& literal)
 bool sameRepositoryPath(const QString& left, const QString& right)
 {
 	return left.compare(right, Qt::CaseInsensitive) == 0;
+}
+
+bool sameDirectoryOnDisk(const QString& left, const QString& right)
+{
+	if (sameRepositoryPath(left, right))
+		return true; // identical spellings need no handle opened
+
+	const std::optional<thin_io::entry_identity> leftIdentity = directoryIdentity(left);
+	return leftIdentity && leftIdentity == directoryIdentity(right);
 }
 
 SubmoduleDiscardPlan discardPlanFor(const std::vector<CommitFileChange>& changes, bool nestedSubmoduleChanged)

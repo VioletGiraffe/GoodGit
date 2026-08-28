@@ -83,10 +83,12 @@ private:
 	{
 		uint64_t refreshGeneration = 0;
 		RepoOp probedOp = RepoOp::None;
+		QString probedHeadSha;
 	};
 	[[nodiscard]] StateStamp stateStamp() const;
 	// True when the repository no longer matches `stamp`: a refresh landed in a dialog's event loop, or an
-	// operation started or ended outside the app. Tells the user and queues a refresh before returning true.
+	// operation, commit or checkout landed outside the app - from a second instance, or from a shell.
+	// Tells the user and queues a refresh before returning true.
 	[[nodiscard]] bool stateMovedSince(const StateStamp& stamp);
 
 	void startCommit(bool pushAfterwards);

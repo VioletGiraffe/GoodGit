@@ -842,12 +842,13 @@ Vcs::Answer<void> CommitWindow::mutationDone(const QString& errorTitle, bool cha
 
 CommitWindow::StateStamp CommitWindow::stateStamp() const
 {
-	return { _repo->refreshGeneration(), _repo->probeOperation() };
+	return { _repo->refreshGeneration(), _repo->probeOperation(), _repo->probeHeadSha() };
 }
 
 bool CommitWindow::stateMovedSince(const StateStamp& stamp)
 {
-	if (_repo->refreshGeneration() == stamp.refreshGeneration && _repo->probeOperation() == stamp.probedOp)
+	if (_repo->refreshGeneration() == stamp.refreshGeneration && _repo->probeOperation() == stamp.probedOp
+		&& _repo->probeHeadSha() == stamp.probedHeadSha)
 		return false;
 
 	MessageBox::notice(this, tr("Repository changed"),

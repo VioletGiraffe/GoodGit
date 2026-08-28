@@ -110,8 +110,10 @@ Screen` opens it at any time, and any open through `openRepositoryWindow()` clos
 last window quits.
 
 One repository has one window: a second request raises the existing one. The open windows are the
-registry; nothing else tracks them. Requests are matched by path spelling (`sameRepositoryPath`), so one
-repository reached both directly and through a subst drive or a junction still opens twice. The recent list
+registry; nothing else tracks them. Requests are matched by filesystem identity (`sameDirectoryOnDisk`, on
+thin_io), so one repository reached both directly and through a subst drive or a junction finds its window
+either way. Only the decisions an alias would break pay for that: the recent list's scans match on spelling,
+where a wrong answer costs a duplicate row and not a second window. The recent list
 is stored, and so are the submodules under each entry, harvested from `RepoState::submodules` on refresh
 (every submodule the repository declares, not only the changed ones in the file list). The panel therefore
 expands an entry without running anything, shows nothing under one never opened, and is as stale as the rest
@@ -230,11 +232,11 @@ there is no file watcher. The list may be stale by design: **the checked rows ar
 verbatim**, and a stale list produces ordinary VCS errors through the normal failure path, not silent
 re-scans. Check state survives a refresh by path; the state a newly listed row starts with is a setting.
 
-A confirmation dialog spins a nested event loop that a refresh can complete inside, and an operation can
-start or end outside the app with no refresh seeing it. Every write decided before a dialog therefore
-captures a `StateStamp` (`CommitWindow`) - the refresh generation plus a fresh probe of the on-disk
-operation markers - and re-checks it before writing; a mismatch refuses the action and asks the user to
-retry against the new state.
+A confirmation dialog spins a nested event loop that a refresh can complete inside, and an operation or a
+commit can land outside the app - from a second instance, or from a shell - with no refresh seeing it. Every
+write decided before a dialog therefore captures a `StateStamp` (`CommitWindow`) - the refresh generation
+plus fresh probes of the on-disk operation markers and of the commit HEAD names - and re-checks it before
+writing; a mismatch refuses the action and asks the user to retry against the new state.
 
 `GitRepository` refreshes in two rounds of parallel queries, the second depending on the first's answers.
 `HgRepository` uses a single round, since every hg invocation has a fixed cost: one `hg status` answers
@@ -385,8 +387,10 @@ for minutes would starve refreshes.
 
 ## Build
 
-qmake subdirs: `app` plus the first-party submodules `cpputils`, `cpp-template-utils`, `qtutils` (static
-libs). Compiler configuration lives in `global.pri`, included by the app, the launcher and qtutils.
+qmake subdirs: `app` plus the first-party submodules `cpputils`, `cpp-template-utils`, `qtutils` and
+`thin_io` (static libs). `thin_io` supplies one thing: the filesystem entry identity behind
+`sameDirectoryOnDisk`, which Qt does not expose. Compiler configuration lives in `global.pri`, included by
+the app, the launcher and qtutils.
 
 On Windows the `launcher` subproject builds a second `gg.exe` that starts the real one from the directory
 above it. Only the launcher's directory goes on PATH, so the Qt DLLs sitting beside the application are not

@@ -417,6 +417,22 @@ RepoOp HgRepository::probeOperation() const
 	return RepoOp::None;
 }
 
+QString HgRepository::probeHeadSha() const
+{
+	// dirstate-v1 opens with the two parent nodes, 20 bytes each.
+	// An empty repository's null parent is twenty zero bytes; that is a value the stamp can use, not a read failure.
+	// dirstate-v2 puts the parents behind a docket this does not parse, so such a repository probes as unknown.
+	QFile dirstate{ QDir{ path() }.filePath(QStringLiteral(".hg/dirstate")) };
+	if (!dirstate.open(QIODevice::ReadOnly))
+		return {};
+
+	const QByteArray parent = dirstate.read(20);
+	if (parent.size() != 20 || parent.startsWith("dirstate-v2"))
+		return {};
+
+	return QString::fromLatin1(parent.toHex());
+}
+
 bool HgRepository::isGitSubrepo(const QString& subrepoPath) const
 {
 	const auto source = _subrepoSources.find(subrepoPath);
