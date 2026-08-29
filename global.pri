@@ -14,10 +14,23 @@ mac* | linux* | freebsd {
 
 mac*{
 	QMAKE_MACOSX_DEPLOYMENT_TARGET = 13.3
+	QMAKE_CXXFLAGS += -include arm_acle.h
+
+	Release {
+		QMAKE_CXXFLAGS += -flto=thin
+		QMAKE_CFLAGS   += -flto=thin
+		QMAKE_LFLAGS   += -flto=thin
+	}
 }
 
 linux*{
 	exists(/usr/bin/ccache)|exists(/usr/lib/ccache):CONFIG += ccache
+
+	Release {
+		QMAKE_CXXFLAGS += -flto=auto -ffat-lto-objects
+		QMAKE_CFLAGS   += -flto=auto -ffat-lto-objects
+		QMAKE_LFLAGS   += -flto=auto
+	}
 }
 
 win*{
@@ -32,21 +45,4 @@ win*{
 
 	Release:QMAKE_CXXFLAGS += /GL /Zi
 	Release:QMAKE_LFLAGS += /DEBUG:FULL /OPT:REF /OPT:ICF /TIME /LTCG:INCREMENTAL
-}
-
-mac{
-	QMAKE_MACOSX_DEPLOYMENT_TARGET = 13.3
-	QMAKE_CXXFLAGS += -include arm_acle.h
-}
-
-linux*:Release {
-	QMAKE_CXXFLAGS += -flto=auto -ffat-lto-objects
-	QMAKE_CFLAGS   += -flto=auto -ffat-lto-objects
-	QMAKE_LFLAGS   += -flto=auto
-}
-
-mac*:Release {
-	QMAKE_CXXFLAGS += -flto=thin
-	QMAKE_CFLAGS   += -flto=thin
-	QMAKE_LFLAGS   += -flto=thin
 }
