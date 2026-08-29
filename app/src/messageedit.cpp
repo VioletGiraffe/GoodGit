@@ -53,7 +53,8 @@ MessageEdit::MessageEdit(QWidget* parent) :
 	_completer->setWidget(this);
 	_completer->setCompletionMode(QCompleter::PopupCompletion);
 	_completer->setCaseSensitivity(Qt::CaseInsensitive);
-	_completer->setModelSorting(QCompleter::CaseInsensitivelySortedModel);
+	// Unsorted: putExactCaseMatchesFirst reorders the model per prefix, so no sort order holds across prefixes
+	_completer->setModelSorting(QCompleter::UnsortedModel);
 	connect(_completer, qOverload<const QString&>(&QCompleter::activated), this, &MessageEdit::insertCompletion);
 
 	// Installed after QCompleter's own popup filter, so ours runs first: Tab accepts, Enter stays a newline
@@ -70,13 +71,26 @@ QSize MessageEdit::sizeHint() const
 
 void MessageEdit::setCompletionWords(QStringList words)
 {
-	// The completer is told the model is pre-sorted, so it can binary-search prefixes
+	// Sorted once, so that each block putExactCaseMatchesFirst produces is alphabetical
 	std::sort(words.begin(), words.end(),
 		[](const QString& l, const QString& r) { return l.compare(r, Qt::CaseInsensitive) < 0; });
-	_completerModel->setStringList(words);
+	_completionWords = std::move(words);
+	_completerModel->setStringList(_completionWords);
 
 	// A refresh can replace the pool while the popup is up, and QCompleter only hides it from complete()
 	_completer->popup()->hide();
+}
+
+// QCompleter offers matches in model order, so the ranking is the model's to impose: the words whose case
+// the prefix already matches lead, the ones matching it only case-insensitively follow.
+// Always partitions the pristine order: re-partitioning what a previous prefix left would interleave the
+// two blocks that one made.
+void MessageEdit::putExactCaseMatchesFirst(const QString& prefix)
+{
+	QStringList ordered = _completionWords;
+	std::stable_partition(ordered.begin(), ordered.end(),
+		[&prefix](const QString& word) { return word.startsWith(prefix, Qt::CaseSensitive); });
+	_completerModel->setStringList(ordered);
 }
 
 void MessageEdit::keyPressEvent(QKeyEvent* event)
@@ -156,6 +170,7 @@ QString MessageEdit::completionPrefix() const
 
 void MessageEdit::showCompletions(const QString& prefix)
 {
+	putExactCaseMatchesFirst(prefix);
 	_completer->setCompletionPrefix(prefix); // even if unchanged: the pool may have changed
 
 	const bool nothingToOffer = _completer->completionCount() == 0

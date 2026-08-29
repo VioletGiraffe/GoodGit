@@ -30,12 +30,15 @@ private:
 	// The completion token before the cursor: path and identifier characters, not Qt's word boundaries
 	[[nodiscard]] QTextCursor completionPrefixSelection() const;
 	[[nodiscard]] QString completionPrefix() const;
+	void putExactCaseMatchesFirst(const QString& prefix);
 	void showCompletions(const QString& prefix);
 	void acceptCurrentCompletion();
 	void insertCompletion(const QString& completion);
 
 	QCompleter* _completer = nullptr;
 	QStringListModel* _completerModel = nullptr;
+	// The pool, sorted case-insensitively. Each prefix reorders a copy into the model; this order stays pristine
+	QStringList _completionWords;
 	// Cached: the setting is a registry read, and paintEvent runs per keystroke and cursor blink
 	int _guideColumn = 0;
 };
