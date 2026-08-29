@@ -3,6 +3,7 @@
 DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QFileInfo>
+#include <QLocale>
 #include <QProcess>
 #include <QTemporaryFile>
 RESTORE_COMPILER_WARNINGS
@@ -55,6 +56,10 @@ QString ProcessResult::errorText() const
 		return QStringLiteral("%1 exited with code %2").arg(toolName).arg(exitCode);
 	}
 
+	if (outcome == ProcessOutcome::OutputTooLarge)
+		return QObject::tr("Too large to display: over the %1 limit.")
+			.arg(QLocale{}.formattedDataSize(outputLimit, 0, QLocale::DataSizeTraditionalFormat));
+
 	const QString note = outcome == ProcessOutcome::Crashed
 		? QStringLiteral("%1 terminated abnormally.").arg(toolName)
 		: QStringLiteral("%1 did not finish within the time allowed and was stopped.").arg(toolName);
@@ -76,6 +81,14 @@ public:
 	void cancel() override;
 
 private:
+	// Killing stops the tool producing an answer nobody will hold; the finished signal still arrives, and
+	// finish() names the limit as the reason over the kill
+	void stopProducingOutput() override
+	{
+		if (_process && _process->state() != QProcess::NotRunning)
+			_process->kill();
+	}
+
 	void start();
 	void finishProcess(ProcessResult result); // releases the queue slot, then delivers
 
@@ -152,12 +165,35 @@ void Job::streamTo(std::function<void(const QByteArray&)> sink)
 	_sink = std::move(sink);
 }
 
-void Job::collect(const QByteArray& chunk, QByteArray& buffer)
+void Job::limitOutput(qint64 maxBytes)
+{
+	_outputLimit = maxBytes;
+}
+
+void Job::collectOutput(const QByteArray& chunk)
+{
+	if (_outputTooLarge || chunk.isEmpty())
+		return;
+
+	if (_outputLimit > 0 && _out.size() + chunk.size() > _outputLimit)
+	{
+		_outputTooLarge = true;
+		_out.clear(); // no reader is left for it, and holding it is what the limit exists to prevent
+		stopProducingOutput();
+		return;
+	}
+
+	_out += chunk;
+	if (_sink && !_cancelled && (!_hasContext || _context))
+		_sink(chunk);
+}
+
+void Job::collectError(const QByteArray& chunk)
 {
 	if (chunk.isEmpty())
 		return;
 
-	buffer += chunk;
+	_err += chunk;
 	if (_sink && !_cancelled && (!_hasContext || _context))
 		_sink(chunk);
 }
@@ -168,12 +204,12 @@ void ProcessJob::start()
 	_process->setWorkingDirectory(_workDir);
 	_process->setProcessEnvironment(_tool.environment);
 
-	QObject::connect(_process, &QProcess::readyReadStandardOutput, this, [this] { collect(_process->readAllStandardOutput(), _out); });
-	QObject::connect(_process, &QProcess::readyReadStandardError, this, [this] { collect(_process->readAllStandardError(), _err); });
+	QObject::connect(_process, &QProcess::readyReadStandardOutput, this, [this] { collectOutput(_process->readAllStandardOutput()); });
+	QObject::connect(_process, &QProcess::readyReadStandardError, this, [this] { collectError(_process->readAllStandardError()); });
 
 	QObject::connect(_process, &QProcess::finished, this, [this](int exitCode, QProcess::ExitStatus status) {
-		collect(_process->readAllStandardOutput(), _out); // whatever arrived after the last readyRead
-		collect(_process->readAllStandardError(), _err);
+		collectOutput(_process->readAllStandardOutput()); // whatever arrived after the last readyRead
+		collectError(_process->readAllStandardError());
 
 		ProcessResult result;
 		result.out = std::move(_out);
@@ -278,6 +314,13 @@ std::shared_ptr<QTemporaryFile> openMessageFile(const QByteArray& message, QObje
 
 void Job::finish(ProcessResult result)
 {
+	if (_outputTooLarge) // whatever the transport made of a killed or drained command, the limit is the reason
+	{
+		result.outcome = ProcessOutcome::OutputTooLarge;
+		result.outputLimit = _outputLimit;
+		result.ok = false;
+	}
+
 	result.toolName = _tool.displayName;
 	result.textEncoding = _tool.textEncoding;
 	result.executable = _tool.executable;

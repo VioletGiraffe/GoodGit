@@ -23,10 +23,11 @@ class QTemporaryFile;
 // Only Exited leaves an exit code to read
 enum class ProcessOutcome : uint8_t
 {
-	Exited,       // ran to completion, with any exit code; also used for results the app synthesises itself
-	LaunchFailed, // the OS refused to start it: nothing by that name on PATH, or a missing working directory
-	Crashed,      // started, then died without exiting - killed from outside, or a genuine crash
-	TimedOut,     // runSync gave up waiting and stopped it
+	Exited,         // ran to completion, with any exit code; also used for results the app synthesises itself
+	LaunchFailed,   // the OS refused to start it: nothing by that name on PATH, or a missing working directory
+	Crashed,        // started, then died without exiting - killed from outside, or a genuine crash
+	TimedOut,       // runSync gave up waiting and stopped it
+	OutputTooLarge, // the output passed the caller's limit; the rest was discarded, and `out` is empty
 };
 
 // How a tool's byte output becomes text. Git writes UTF-8 on every platform; hg writes the local 8-bit
@@ -60,6 +61,7 @@ struct ProcessResult
 	QString executable; // what was launched: a bare name looked up on PATH, or a configured path
 	QString workDir;    // named in a launch failure, which may be about the directory as much as the executable
 	QString launchError; // the OS's reason, with LaunchFailed (where there is no stderr)
+	qint64 outputLimit = 0; // what was asked for, with OutputTooLarge; errorText() names it
 
 	// stderr, or stdout where the tool reported its refusal there and left stderr empty. A process that did
 	// not exit normally says so first.
@@ -98,11 +100,22 @@ public:
 	// Like the callback, the sink stops being called once `context` dies.
 	void streamTo(std::function<void(const QByteArray&)> sink);
 
+	// Refuses the answer past `maxBytes` of output rather than buffering it: a caller that would not use an
+	// oversize answer must not hold one first. The result is then OutputTooLarge with empty `out`.
+	// Attach before returning to the event loop, as with streamTo(). stderr is never limited: a failure needs
+	// its diagnosis. Applies to the process now answering, so a query that runs several sets it per process.
+	void limitOutput(qint64 maxBytes);
+
 protected:
 	Job(Tool tool, QString workDir, QStringList args, QByteArray stdinData, const QObject* context, Callback callback);
 
-	// Buffers a chunk of one output channel, forwarding it to the sink while the job is still wanted
-	void collect(const QByteArray& chunk, QByteArray& buffer);
+	// Buffers a chunk of stdout, forwarding it to the sink while the job is still wanted. Past the limit the
+	// buffer is dropped and the job fails: see limitOutput().
+	void collectOutput(const QByteArray& chunk);
+	// The same for stderr, which no limit applies to
+	void collectError(const QByteArray& chunk);
+	// Called once the output limit is passed, for a transport that can stop the work it no longer wants
+	virtual void stopProducingOutput() {}
 	// Delivers the result (skipped after cancel() or the context's death) and self-deletes. The transport
 	// must be done with the job by then.
 	void finish(ProcessResult result);
@@ -118,6 +131,8 @@ protected:
 	QPointer<const QObject> _context;
 	bool _hasContext = false;
 	bool _cancelled = false;
+	qint64 _outputLimit = 0; // 0: unlimited
+	bool _outputTooLarge = false;
 };
 
 // The result, or why it cannot be had. Taken by value: the answer belongs to whoever asked, to move into

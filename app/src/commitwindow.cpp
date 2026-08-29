@@ -1236,11 +1236,10 @@ void CommitWindow::showDiffForCurrentRow()
 
 	const QString tag = tr("HEAD %1 working tree").arg(QChar(0x2192));
 	_diffPane->showMessage(entry.path, tag, tr("Loading..."));
-	_diffQuery = _repo->diffFile(entry, this, [this, entry, tag](std::expected<QByteArray, QString> diff) {
+	const qint64 maxBytes = CSettings{}.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong();
+	_diffQuery = _repo->diffFile(entry, maxBytes, this, [this, entry, tag](std::expected<QByteArray, QString> diff) {
 		if (!diff)
-			_diffPane->showMessage(entry.path, tag, diff.error());
-		else if (diff->size() > CSettings{}.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong())
-			_diffPane->showMessage(entry.path, tag, tr("The diff is too large to display (%1 MB).").arg(double(diff->size()) / (1024 * 1024), 0, 'f', 1));
+			_diffPane->showMessage(entry.path, tag, diff.error()); // an oversize diff fails here, never held whole
 		else if (diff->isEmpty())
 			_diffPane->showMessage(entry.path, tag, tr("No content changes (only the mode or the line endings differ, or the file matches HEAD)."));
 		else

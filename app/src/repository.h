@@ -194,12 +194,13 @@ public:
 	// Read-only queries. Each parses its output before answering. The query dies with `context`, so pass
 	// the object that will display the answer - not the Repository, which outlives any one view of it.
 
-	// Diffs; the bytes are the caller's to size up and decode. Cancel the returned query when the
-	// selection moves on.
+	// Diffs; the bytes are the caller's to decode. Cancel the returned query when the selection moves on.
+	// `maxBytes` is what the caller will accept: past it the query fails instead of buffering the rest, so a
+	// caller that would refuse an oversize answer never holds one. Its own message is the failure's.
 
 	// One tracked change against the last commit. Untracked files are not asked of the backend: the window
 	// reads and shows the file itself.
-	virtual Vcs::Query diffFile(const FileEntry& entry, const QObject* context, Vcs::Answer<QByteArray> onDone) = 0;
+	virtual Vcs::Query diffFile(const FileEntry& entry, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) = 0;
 	// Every change in one diff, with no context lines; feeds the message completion word pool
 	virtual Vcs::Query diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone) = 0;
 
@@ -234,11 +235,11 @@ public:
 	// A separate query: it may answer before or after commitFiles(), and the list is built from whichever arrives first.
 	// A file the backend cannot count is absent rather than zero; a backend that cannot count at all answers empty.
 	virtual Vcs::Query commitFileCounts(const QString& sha, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone) = 0;
-	virtual Vcs::Query commitFileDiff(const QString& sha, const CommitFileChange& file, const QObject* context, Vcs::Answer<QByteArray> onDone) = 0;
+	virtual Vcs::Query commitFileDiff(const QString& sha, const CommitFileChange& file, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) = 0;
 	// One file's whole content as of one commit, converted the way a checkout would write it: a caller that
 	// compares it against the working tree sees the differences in content alone.
 	// Fails where the commit does not have the path, so the caller decides which revision has it.
-	virtual Vcs::Query fileAtRevision(const QString& sha, const QString& repoRelativePath, const QObject* context, Vcs::Answer<QByteArray> onDone) = 0;
+	virtual Vcs::Query fileAtRevision(const QString& sha, const QString& repoRelativePath, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) = 0;
 	// Commits the upstream does not have. A backend names as many as it can cheaply (git: only those on HEAD's
 	// line), so an unlisted commit is not necessarily pushed.
 	// Fails without an upstream to compare against (none configured, or detached HEAD); not an error to report.

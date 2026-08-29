@@ -59,9 +59,13 @@ Vcs::Callback tolerantOfEmptyResult(Vcs::Callback callback)
 	};
 }
 
-Vcs::Query runQuery(const QString& workDir, QStringList args, const QObject* context, Vcs::Callback callback)
+// `maxOutputBytes` of 0 leaves the answer unbounded; see Job::limitOutput
+Vcs::Query runQuery(const QString& workDir, QStringList args, const QObject* context, Vcs::Callback callback,
+	qint64 maxOutputBytes = 0)
 {
-	return Vcs::Query{ Hg::run(workDir, std::move(args), context, std::move(callback)) };
+	Vcs::Job* job = Hg::run(workDir, std::move(args), context, std::move(callback));
+	job->limitOutput(maxOutputBytes);
+	return Vcs::Query{ job };
 }
 
 // The configured [paths], whose names pushPathName reads
@@ -777,7 +781,7 @@ void HgRepository::localBranchExists(const QString& name, const QObject* context
 		});
 }
 
-Vcs::Query HgRepository::diffFile(const FileEntry& entry, const QObject* context, Vcs::Answer<QByteArray> onDone)
+Vcs::Query HgRepository::diffFile(const FileEntry& entry, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
 	// No need to name a rename's source: hg records copies rather than inferring them, so --git prints the
 	// old path on its own
@@ -789,7 +793,7 @@ Vcs::Query HgRepository::diffFile(const FileEntry& entry, const QObject* context
 		args << QStringLiteral("-r") << QStringLiteral(".") << QStringLiteral("-r") << QStringLiteral("null");
 	}
 	args << QStringLiteral("--") << entry.path;
-	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}), maxBytes);
 }
 
 Vcs::Query HgRepository::diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone)
@@ -925,7 +929,7 @@ Vcs::Query HgRepository::commitFileCounts(const QString& sha, const QObject* con
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Hg::parseDiffCounts));
 }
 
-Vcs::Query HgRepository::commitFileDiff(const QString& sha, const CommitFileChange& file, const QObject* context, Vcs::Answer<QByteArray> onDone)
+Vcs::Query HgRepository::commitFileDiff(const QString& sha, const CommitFileChange& file, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
 	// A subrepo row's diff is its pointer move, read from .hgsubstate's diff
 	if (file.isSubmodule)
@@ -938,19 +942,19 @@ Vcs::Query HgRepository::commitFileDiff(const QString& sha, const CommitFileChan
 			}
 			return QByteArray{};
 		};
-		return runQuery(path(), substateDiffArgs(sha), context, Vcs::answering(std::move(onDone), pointerMove));
+		return runQuery(path(), substateDiffArgs(sha), context, Vcs::answering(std::move(onDone), pointerMove), maxBytes);
 	}
 
 	QStringList args = diffArgs();
 	args << QStringLiteral("-c") << sha << QStringLiteral("--") << file.path;
-	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}), maxBytes);
 }
 
-Vcs::Query HgRepository::fileAtRevision(const QString& sha, const QString& repoRelativePath, const QObject* context, Vcs::Answer<QByteArray> onDone)
+Vcs::Query HgRepository::fileAtRevision(const QString& sha, const QString& repoRelativePath, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
 	// --decode applies the [decode] filters: the bytes arrive as a working tree would hold them
 	return runQuery(path(), { QStringLiteral("cat"), QStringLiteral("--decode"), QStringLiteral("-r"), sha,
-		QStringLiteral("--"), repoRelativePath }, context, Vcs::answering(std::move(onDone), std::identity{}));
+		QStringLiteral("--"), repoRelativePath }, context, Vcs::answering(std::move(onDone), std::identity{}), maxBytes);
 }
 
 Vcs::Query HgRepository::unpushedCommits(const QObject* context, Vcs::Answer<QSet<QString>> onDone)

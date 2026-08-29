@@ -281,9 +281,13 @@ QSet<QString> shaSet(const QByteArray& output)
 	return QSet<QString>{ shas.begin(), shas.end() };
 }
 
-Vcs::Query runQuery(const QString& workDir, QStringList args, const QObject* context, Vcs::Callback callback)
+// `maxOutputBytes` of 0 leaves the answer unbounded; see Job::limitOutput
+Vcs::Query runQuery(const QString& workDir, QStringList args, const QObject* context, Vcs::Callback callback,
+	qint64 maxOutputBytes = 0)
 {
-	return Vcs::Query{ Git::run(workDir, std::move(args), context, std::move(callback), {}, /*readOnlyQuery=*/true) };
+	Vcs::Job* job = Git::run(workDir, std::move(args), context, std::move(callback), {}, /*readOnlyQuery=*/true);
+	job->limitOutput(maxOutputBytes);
+	return Vcs::Query{ job };
 }
 
 // A submodule the push plan visits. Filled as the scan answers and read only once every query has, so the
@@ -938,13 +942,13 @@ QString GitRepository::diffBase() const
 	return state().unborn ? _emptyTreeSha : QStringLiteral("HEAD");
 }
 
-Vcs::Query GitRepository::diffFile(const FileEntry& entry, const QObject* context, Vcs::Answer<QByteArray> onDone)
+Vcs::Query GitRepository::diffFile(const FileEntry& entry, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
 	QStringList args = QStringList{ QStringLiteral("diff") } + eolDisplayFlags();
 	args << QStringLiteral("-M") << diffBase() << QStringLiteral("--") << entry.path;
 	if (!entry.oldPath.isEmpty())
 		args.push_back(entry.oldPath);
-	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}), maxBytes);
 }
 
 Vcs::Query GitRepository::diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone)
@@ -996,21 +1000,21 @@ Vcs::Query GitRepository::commitFileCounts(const QString& sha, const QObject* co
 		context, Vcs::answering(std::move(onDone), Git::parseNumstatZ));
 }
 
-Vcs::Query GitRepository::commitFileDiff(const QString& sha, const CommitFileChange& file, const QObject* context, Vcs::Answer<QByteArray> onDone)
+Vcs::Query GitRepository::commitFileDiff(const QString& sha, const CommitFileChange& file, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
 	QStringList args = QStringList{ QStringLiteral("show"), QStringLiteral("-M") } + eolDisplayFlags();
 	args << QStringLiteral("--format=") << sha << QStringLiteral("--") << file.path;
 	if (!file.oldPath.isEmpty())
 		args.push_back(file.oldPath); // both sides, or the pathspec filters the rename out before -M can pair it
-	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}), maxBytes);
 }
 
-Vcs::Query GitRepository::fileAtRevision(const QString& sha, const QString& repoRelativePath, const QObject* context, Vcs::Answer<QByteArray> onDone)
+Vcs::Query GitRepository::fileAtRevision(const QString& sha, const QString& repoRelativePath, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
 	// --filters runs the checkout conversion: the bytes arrive as a working tree would hold them, LFS content
 	// and line endings included
 	return runQuery(path(), { QStringLiteral("cat-file"), QStringLiteral("--filters"), sha + QLatin1Char(':') + repoRelativePath },
-		context, Vcs::answering(std::move(onDone), std::identity{}));
+		context, Vcs::answering(std::move(onDone), std::identity{}), maxBytes);
 }
 
 Vcs::Query GitRepository::unpushedCommits(const QObject* context, Vcs::Answer<QSet<QString>> onDone)

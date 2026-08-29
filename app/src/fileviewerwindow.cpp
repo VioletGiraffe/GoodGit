@@ -88,14 +88,12 @@ FileViewerWindow::FileViewerWindow(Repository& repo, const QString& sha, const Q
 		move(anchor->pos() + QPoint{ offset, offset });
 	}
 
-	repo.fileAtRevision(sha, repoRelativePath, this, [this](std::expected<QByteArray, QString> content) {
-		// The bytes are read whole before this runs: the cap bounds what is decoded and indexed, not what is
-		// buffered. Probing the size first would not bound it either: the read applies checkout filters, so an
-		// LFS pointer's stored size is not the size of what arrives.
+	// The limit travels into the read: probing the size first would not bound it, the read applying checkout
+	// filters, so an LFS pointer's stored size is not the size of what arrives.
+	const qint64 maxBytes = CSettings{}.value(Settings::MaxViewedFileBytesKey, Settings::MaxViewedFileBytesDefault).toLongLong();
+	repo.fileAtRevision(sha, repoRelativePath, maxBytes, this, [this](std::expected<QByteArray, QString> content) {
 		if (!content)
-			showMessage(content.error());
-		else if (content->size() > CSettings{}.value(Settings::MaxViewedFileBytesKey, Settings::MaxViewedFileBytesDefault).toLongLong())
-			showMessage(tr("The file is too large to display (%1 MB).").arg(double(content->size()) / (1024 * 1024), 0, 'f', 1));
+			showMessage(content.error()); // an oversize file fails here, never held whole
 		else if (content->isEmpty())
 			showMessage(tr("The file is empty."));
 		else

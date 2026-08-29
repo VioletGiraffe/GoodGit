@@ -74,7 +74,7 @@ jobs:
       run: |
         clang --version
         $QT_ROOT_DIR/bin/qmake -r CONFIG+=release
-        make -j
+        make -j4
         ./scripts/create_dmg.sh $QT_ROOT_DIR
 
     - name: Archive DMG
@@ -94,7 +94,7 @@ jobs:
         g++ --version
 
         $QT_ROOT_DIR/bin/qmake -r CONFIG+=release
-        make -j
+        make -j4
 
     # - name: Test run
     #   if: startsWith(matrix.os, 'macos')

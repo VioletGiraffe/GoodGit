@@ -31,8 +31,8 @@ private:
 	friend class ::HgServerPool;
 
 	// The protocol events, called by the server running this
-	void deliverOutput(const QByteArray& chunk) { collect(chunk, _out); }
-	void deliverError(const QByteArray& chunk) { collect(chunk, _err); }
+	void deliverOutput(const QByteArray& chunk) { collectOutput(chunk); }
+	void deliverError(const QByteArray& chunk) { collectError(chunk); }
 	void completed(int exitCode);
 	// The server died under the command, or never came up; its own stderr or the OS's launch error is the
 	// only diagnosis there is
