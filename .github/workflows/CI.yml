@@ -30,8 +30,10 @@ jobs:
       uses: jurplel/install-qt-action@v4
       with:
         version: 6.10.*
-        cache: 'true'
         target: desktop
+        archives: 'qtbase icu qtsvg'
+        modules: 'qtimageformats'
+        cache: 'true'
 
     - name: Windows - set up MSVC environment
       if: startsWith(matrix.os, 'windows')
