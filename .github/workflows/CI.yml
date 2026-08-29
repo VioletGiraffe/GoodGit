@@ -30,7 +30,7 @@ jobs:
       uses: jurplel/install-qt-action@v4
       with:
         version: 6.10.*
-        cache: 'false'
+        cache: 'true'
         target: desktop
 
     - name: Windows - set up MSVC environment
@@ -39,7 +39,7 @@ jobs:
       with:
         arch: x64
 
-    - name: Windows
+    - name: Windows - build
       if: startsWith(matrix.os, 'windows')
       shell: cmd
       run: |
@@ -47,6 +47,10 @@ jobs:
         %QT_ROOT_DIR%\bin\qmake.exe -tp vc -r
         msbuild /t:Build /p:Configuration=Release || exit /b 1
 
+    - name: Windows - create installer
+      if: startsWith(matrix.os, 'windows')
+      shell: cmd
+      run: |
         @echo on
         set STAGING_DIR=dist
         RMDIR /S /Q %STAGING_DIR%
@@ -68,14 +72,18 @@ jobs:
         name: GoodGit.exe
         path: GoodGit.exe
 
-    - name: Mac
+    - name: Mac - build
       if: startsWith(matrix.os, 'macos')
       working-directory: ${{env.GITHUB_WORKSPACE}}
       run: |
         clang --version
         $QT_ROOT_DIR/bin/qmake -r CONFIG+=release
         make -j4
-        ./scripts/create_dmg.sh $QT_ROOT_DIR
+
+    - name: Mac - create DMG
+      if: startsWith(matrix.os, 'macos')
+      working-directory: ${{env.GITHUB_WORKSPACE}}
+      run: ./scripts/create_dmg.sh $QT_ROOT_DIR
 
     - name: Archive DMG
       if: success() && startsWith(matrix.os, 'macos')
