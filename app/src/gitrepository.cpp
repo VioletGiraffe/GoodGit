@@ -956,10 +956,11 @@ Vcs::Query GitRepository::diffFile(const FileEntry& entry, qint64 maxBytes, cons
 
 Vcs::Query GitRepository::diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
+	// --function-context: the pool wants the names around a change, not only the changed lines
 	// --ignore-cr-at-eol regardless of the display setting: a line-ending conversion would flood the word
 	// pool with every line of the file
-	QStringList args = { QStringLiteral("diff"), QStringLiteral("--ignore-cr-at-eol"), QStringLiteral("-U0"),
-		QStringLiteral("--ignore-submodules"), diffBase() };
+	QStringList args = { QStringLiteral("diff"), QStringLiteral("--ignore-cr-at-eol"),
+		QStringLiteral("--function-context"), QStringLiteral("--ignore-submodules"), diffBase() };
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
 }
 

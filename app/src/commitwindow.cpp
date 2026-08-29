@@ -139,8 +139,23 @@ bool looksLikeHexSha(const QString& token)
 	return true;
 }
 
-// Every changed file's path and basename, plus identifier-shaped words from the changed lines.
-// Length < 4 and a small stoplist weed out prose function words.
+// Letters, not characters: "x1234567" and "a_2_bc" are not words.
+// Four, because the completer needs three typed characters before it offers anything.
+bool hasAtLeastFourLetters(const QString& token)
+{
+	int letters = 0;
+	for (const QChar c : token)
+	{
+		if (c.isLetter() && ++letters == 4)
+			return true;
+	}
+	return false;
+}
+
+// Every changed file's path and basename, plus identifier-shaped words from the diff.
+// Context lines count as much as changed ones: the backends ask for the enclosing function, whose names
+// describe the change.
+// Fewer than 4 letters and a small stoplist weed out prose function words.
 // Hex-sha-shaped tokens are dropped: submodule pointer diffs would pollute the pool.
 QStringList completionWordsFor(const std::vector<FileEntry>& files, QByteArray diff)
 {
@@ -174,7 +189,9 @@ QStringList completionWordsFor(const std::vector<FileEntry>& files, QByteArray d
 	{
 		if (words.size() >= MaxWords)
 			break;
-		if (rawLine.size() < 2 || (rawLine[0] != '+' && rawLine[0] != '-')
+		// A hunk header's tail is the enclosing function's name; the numbers before it cannot start a word.
+		// Every --git metadata line starts with a letter, so the prefix test alone keeps them out.
+		if (rawLine.size() < 2 || (rawLine[0] != ' ' && rawLine[0] != '+' && rawLine[0] != '-' && rawLine[0] != '@')
 			|| rawLine.startsWith("+++") || rawLine.startsWith("---"))
 			continue;
 
@@ -182,7 +199,7 @@ QStringList completionWordsFor(const std::vector<FileEntry>& files, QByteArray d
 		for (auto it = wordRe.globalMatch(line); it.hasNext(); )
 		{
 			const QString token = it.next().captured();
-			if (!stopWords.contains(token.toLower()) && !looksLikeHexSha(token))
+			if (hasAtLeastFourLetters(token) && !stopWords.contains(token.toLower()) && !looksLikeHexSha(token))
 				words.insert(token);
 		}
 	}

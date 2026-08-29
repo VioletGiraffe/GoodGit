@@ -798,10 +798,12 @@ Vcs::Query HgRepository::diffFile(const FileEntry& entry, qint64 maxBytes, const
 
 Vcs::Query HgRepository::diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
+	// hg has no --function-context: -p puts the enclosing function's name in the hunk header, and the wide
+	// fixed context stands in for its body
 	// -Z regardless of the display setting: a line-ending conversion would flood the word pool with every
 	// line of the file
 	QStringList args = { QStringLiteral("diff"), QStringLiteral("--git"), QStringLiteral("-Z"),
-		QStringLiteral("-U"), QStringLiteral("0") };
+		QStringLiteral("-p"), QStringLiteral("-U"), QStringLiteral("15") };
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
 }
 
