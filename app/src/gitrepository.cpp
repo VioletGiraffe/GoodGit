@@ -261,11 +261,14 @@ void appendPickaxe(QStringList& args, const Repository::LogQuery& query, bool co
 		args << QStringLiteral("-i");
 }
 
-// When empty, git defaults to HEAD
-void appendStartRevision(QStringList& args, const Repository::LogQuery& query)
+// A pathless listing walks every ref, so commits above the checkout and on other branches are listed.
+// Not --all, which also walks refs/stash and refs/notes. HEAD by name: a detached checkout is on no branch.
+// A file history takes git's default of HEAD alone: --follow tracks one path and rewrites it at each rename it
+// crosses, so a second tip in the walk carries that path onto a line of history that never held it.
+void appendRevisionScope(QStringList& args, const Repository::LogQuery& query)
 {
-	if (!query.startRevision.isEmpty())
-		args << query.startRevision;
+	if (query.path.isEmpty())
+		args << QStringLiteral("--branches") << QStringLiteral("--tags") << QStringLiteral("--remotes") << QStringLiteral("HEAD");
 }
 
 // Must come last: the pathspec closes the argument list
@@ -964,7 +967,7 @@ Vcs::Query GitRepository::commitLog(const LogQuery& query, const QObject* contex
 {
 	QStringList args = commitLogArgs(query.maxCommits);
 	appendPickaxe(args, query, /*countChangesOnly=*/false);
-	appendStartRevision(args, query);
+	appendRevisionScope(args, query);
 	appendPathLimit(args, query);
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Git::parseCommitLog));
 }
@@ -974,7 +977,7 @@ Vcs::Query GitRepository::commitsAddingOrRemovingText(const LogQuery& query, con
 	QStringList args = { QStringLiteral("log"), QStringLiteral("--max-count=%1").arg(query.maxCommits),
 		QStringLiteral("--format=%H") };
 	appendPickaxe(args, query, /*countChangesOnly=*/true);
-	appendStartRevision(args, query);
+	appendRevisionScope(args, query);
 	appendPathLimit(args, query);
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), shaSet));
 }
@@ -1019,8 +1022,28 @@ Vcs::Query GitRepository::fileAtRevision(const QString& sha, const QString& repo
 
 Vcs::Query GitRepository::unpushedCommits(const QObject* context, Vcs::Answer<QSet<QString>> onDone)
 {
-	return runQuery(path(), { QStringLiteral("rev-list"), QStringLiteral("@{upstream}..HEAD") },
-		context, Vcs::answering(std::move(onDone), shaSet));
+	// The listing walks every ref, so the marks must too: @{upstream}..HEAD leaves every other branch's
+	// unpushed commits looking pushed, and resolves to nothing at all on a detached HEAD.
+	// With no remote-tracking ref every commit is unpushed and the whole list would ring, so nothing is marked.
+	Vcs::Query query;
+	query.attach(Git::run(path(), { QStringLiteral("for-each-ref"), QStringLiteral("--count=1"),
+		QStringLiteral("--format=%(refname)"), QStringLiteral("refs/remotes") }, context,
+		[query, workDir = path(), context, onDone = std::move(onDone)](const ProcessResult& result) mutable {
+			if (!result.ok)
+			{
+				onDone(std::unexpected(result.errorText()));
+				return;
+			}
+			if (result.out.trimmed().isEmpty())
+			{
+				onDone(std::unexpected(QStringLiteral("No remote-tracking branch to compare against.")));
+				return;
+			}
+			query.attach(Git::run(workDir, { QStringLiteral("rev-list"), QStringLiteral("--branches"),
+				QStringLiteral("HEAD"), QStringLiteral("--not"), QStringLiteral("--remotes") }, context,
+				Vcs::answering(std::move(onDone), shaSet), {}, /*readOnlyQuery=*/true));
+		}, {}, /*readOnlyQuery=*/true));
+	return query;
 }
 
 Vcs::Query GitRepository::submodulePointerLog(const QString& repoRelativePath, const QObject* context, Vcs::Answer<QString> onDone)

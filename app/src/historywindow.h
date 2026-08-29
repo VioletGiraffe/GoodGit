@@ -32,8 +32,8 @@ public:
 	HistoryWindow(const RepositoryLocation& location, const QString& filePath, QWidget* parent);
 
 	// Selects the commit and scrolls it into view once the listing is in.
-	// A commit the walk did not cover (the checkout has moved on, or it is older than the limit) re-runs the
-	// walk from that commit, which is then the newest row.
+	// A commit the listing does not hold (reachable from no ref, or older than the limit) is named in the
+	// count label instead, the newest row being selected as usual.
 	void revealCommit(const QString& sha);
 
 	// Re-runs the log query from scratch
@@ -91,6 +91,9 @@ private:
 	// The commit the next finished listing should land on; cleared once it has, so a later reload or Load
 	// more selects the newest row as usual
 	QString _revealSha;
+	// The reveal the finished listing could not satisfy, for the count label to name. Dropped as soon as the
+	// listing it was decided against changes: a reload, or a deeper walk
+	QString _missedRevealSha;
 
 	QSplitter* _splitter = nullptr;       // log above, the commit's detail below
 	QSplitter* _detailSplitter = nullptr; // file list beside the diff

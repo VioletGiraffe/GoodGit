@@ -197,6 +197,7 @@ void HistoryWindow::buildUi()
 		// Disabled until the walk answers: a repeat click would cancel it and double the limit again
 		_loadMoreButton->setEnabled(false);
 		_query.maxCommits *= 2;
+		_missedRevealSha.clear(); // the deeper walk may hold it
 		// The pickaxe result is capped like the listing, so it deepens with it
 		if (!_query.contentSearch.isEmpty())
 			startPickaxeQuery();
@@ -285,6 +286,7 @@ void HistoryWindow::reload()
 	refreshUnpushedMarks();
 	_logLoaded = false;
 	_fullLoadPending = false;
+	_missedRevealSha.clear();
 	_countLabel->setText(tr("Loading..."));
 
 	// The diagram needs every commit between the ones it draws; a path limit or a content search leaves gaps
@@ -307,9 +309,6 @@ void HistoryWindow::reload()
 		if (!result)
 		{
 			_logCapped = false;
-			// The next walk must not stay rooted at a revision this one could not resolve: F5 would
-			// re-run the same failing query forever
-			_query.startRevision.clear();
 			_revealSha.clear();
 			_logModel.setCommits({}); // the reset clears the panes below through currentChanged
 			_countLabel->clear();
@@ -365,6 +364,7 @@ void HistoryWindow::loadRemainingCommits()
 void HistoryWindow::revealCommit(const QString& sha)
 {
 	_revealSha = sha;
+	_missedRevealSha.clear();
 	if (_logLoaded)
 		selectLoadedCommit(); // otherwise the listing's completion does it
 }
@@ -383,14 +383,11 @@ void HistoryWindow::selectLoadedCommit()
 		}
 		if (_fullLoadPending)
 			return; // the full depth may list it; decided when it lands
-		if (_query.startRevision != _revealSha)
-		{
-			// Not on the line of history the walk covered, so walk from the commit itself
-			_query.startRevision = _revealSha;
-			reload();
-			return;
-		}
-		_revealSha.clear(); // walked from it and still not listed
+
+		// Reachable from no ref, or older than the limit
+		_missedRevealSha = _revealSha;
+		_revealSha.clear();
+		updateCountLabel();
 	}
 
 	if (_logModel.rowCount() > 0)
@@ -474,6 +471,9 @@ void HistoryWindow::updateCountLabel()
 		if (const int unlisted = _logModel.addingOrRemovingNotListedCount(); unlisted > 0)
 			text = tr("%1 (+%2 in binary files, not listed)").arg(text).arg(unlisted);
 	}
+
+	if (!_missedRevealSha.isEmpty())
+		text = tr("%1. Commit %2 is not among them").arg(text, shortSha(_missedRevealSha));
 	_countLabel->setText(text);
 }
 

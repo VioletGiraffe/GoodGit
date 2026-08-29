@@ -82,20 +82,20 @@ QString pushPathName(const QStringList& pathNames)
 		: pathNames.contains(QLatin1String("default")) ? QStringLiteral("default") : QString{};
 }
 
-// The base of every commit-listing query; the caller appends the walk.
-// -f: the ancestors of `.` (or of the -r revision) only; a plain `hg log` lists every changeset, unrelated heads included.
-// With a path, -f also follows that file across renames.
+// The shape of a commit listing; the caller appends the walk
 QStringList commitLogArgs(int maxCommits)
 {
-	return { QStringLiteral("log"), QStringLiteral("-f"), QStringLiteral("-l"), QString::number(maxCommits),
+	return { QStringLiteral("log"), QStringLiteral("-l"), QString::number(maxCommits),
 		QStringLiteral("-T"), QStringLiteral("json") };
 }
 
-// Must precede the pattern and the pathspec, which are positional
-void appendStartRevision(QStringList& args, const Repository::LogQuery& query)
+// -f is the rename tracing a file history needs, inseparable from the restriction to the ancestors of `.`
+// (doc/ARCHITECTURE.md). Without it the walk lists every changeset, unrelated heads included.
+// Must precede the pattern and the pathspec, which are positional.
+void appendRevisionScope(QStringList& args, const Repository::LogQuery& query)
 {
-	if (!query.startRevision.isEmpty())
-		args << QStringLiteral("-r") << query.startRevision;
+	if (!query.path.isEmpty())
+		args << QStringLiteral("-f");
 }
 
 // Must come last: the pathspec closes the argument list
@@ -105,15 +105,15 @@ void appendPathLimit(QStringList& args, const Repository::LogQuery& query)
 		args << QStringLiteral("--") << query.path;
 }
 
-// `hg grep` has no fixed-string mode, so the term has to be escaped. -f confines it to the line of history
-// the listing walks; without it every head is searched.
+// `hg grep` has no fixed-string mode, so the term has to be escaped. It carries the listing's own scope: the
+// searched revisions are the ones the result is shown among.
 QStringList grepArgs(const Repository::LogQuery& query)
 {
-	QStringList args = { QStringLiteral("grep"), QStringLiteral("--diff"), QStringLiteral("-f"),
+	QStringList args = { QStringLiteral("grep"), QStringLiteral("--diff"),
 		QStringLiteral("-T"), QStringLiteral("json") };
 	if (query.ignoreCase)
 		args << QStringLiteral("-i");
-	appendStartRevision(args, query);
+	appendRevisionScope(args, query);
 	args << escapedForRegex(query.contentSearch);
 	if (!query.path.isEmpty())
 		args << QStringLiteral("--") << query.path;
@@ -810,7 +810,7 @@ Vcs::Query HgRepository::commitLog(const LogQuery& query, const QObject* context
 	if (query.contentSearch.isEmpty())
 	{
 		QStringList args = commitLogArgs(query.maxCommits);
-		appendStartRevision(args, query);
+		appendRevisionScope(args, query);
 		appendPathLimit(args, query);
 		return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Hg::parseCommitLog));
 	}

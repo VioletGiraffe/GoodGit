@@ -272,14 +272,21 @@ commit on a parallel branch, and `--skip` re-walks the skipped commits anyway, w
 costs. The alternative would be streaming one `log` process, which `vcsprocess` has no incremental-read path
 for.
 
+The repo-wide walk covers **every ref** - git's `--branches --tags --remotes HEAD` (not `--all`, which adds
+`refs/stash` and `refs/notes`), Mercurial's plain `log` - so commits above the checkout, on other branches,
+and fetched but unmerged are listed. A **file history is the exception, rooted at the checkout**: the rename
+tracing both systems spell `--follow`/`-f` rewrites the one path it tracks at each rename it crosses, for
+the whole walk, so a second tip in it would carry that path onto a line of history that never held it. The
+content search takes the scope of the listing it filters.
+
 The lane diagram (`commitgraph`) is computed from the parent links alone, so one implementation serves both
 backends. It needs a **topologically ordered** listing, every commit above all its parents: git's walk
-carries `--topo-order`, and Mercurial's revision-descending order already is one. Both walks cover HEAD's
-ancestry only, so a merged branch appears as a parallel line and no unrelated head does. The diagram is not
+carries `--topo-order`, and Mercurial's revision-descending order already is one. An unrelated head opens a
+lane and a color of its own, having no child in the listing to inherit either from. The diagram is not
 drawn for a file history or a content search, since neither listing holds the commits between the ones it
-would join. A text search over the loaded records is the middle case: the rows are still one ancestry, so
-each node keeps its lane and consecutive shown rows on the same first-parent chain are joined, dashed where
-hidden commits lie between them.
+would join. A text search over the loaded records is the middle case: a chain is still one line of history,
+so each node keeps its lane and consecutive shown rows on the same chain are joined, dashed where hidden
+commits lie between them.
 
 Text search runs in memory over the loaded records (sha, revision, author, refs, date, message) and hides
 non-matching rows, which is why a miss is reported against the loaded count rather than as "not found": the
@@ -295,9 +302,11 @@ expression** (`--fixed-strings` does not apply to it), so the literal term is es
 which reports a record per matching line, and the log is then re-run over exactly those changesets.
 
 Unpushed commits are marked in the accent color and drawn as a ring rather than a disc, from a `rev-list
-@{upstream}..HEAD` run beside the log query. Reachability has to be asked: list position does not imply it,
-and on a diverged branch the upstream ref is not in the list at all. The query failing means there is no
-upstream to compare against and marks nothing. Mercurial answers from `draft()`, locally and for free.
+--branches HEAD --not --remotes` run beside the log query - the listing's own refs, minus what a remote
+already has. Reachability has to be asked: list position does not imply it, and on a diverged branch the
+upstream ref is not in the list at all. With no remote-tracking ref every commit is unpushed and the whole
+list would ring, so that case marks nothing instead. Mercurial answers from `draft()`, locally and for free,
+and suppresses the same case on the configured push paths.
 
 Selecting a commit shows its message and queries its files and their line counts, a job each, so the rows
 may appear before their counts; selecting a file queries that file's diff. All are cancelled when the
@@ -336,10 +345,9 @@ History shows submodule rows too. Git's file listing reads them from the modes (
 `--name-status`). Mercurial's names only `.hgsubstate`, so that row is replaced with one row per submodule
 from that file's own diff, which also serves as such a row's diff. Such a row carries the commit its pointer
 names, and activating it opens the submodule's history there: a selection within the ordinary walk, so the
-surrounding history stays visible. A commit the walk did not cover (the submodule's checkout moved on, or
-it is older than the limit) is reached by re-running the walk from that commit (`LogQuery::startRevision`),
-where it is the newest row. Selection is tried first because a walk started at the commit cannot show what
-came after it.
+surrounding history stays visible. The all-ref walk holds the recorded commit wherever the submodule's own
+checkout stands; one reachable from no ref, or older than the limit, is named in the count label and the
+newest row is selected.
 
 ## Push
 

@@ -208,16 +208,15 @@ public:
 	struct LogQuery
 	{
 		int maxCommits = 0;
-		// empty: the whole repo. Otherwise the walk follows this one path across renames
+		// empty: every ref's history. Otherwise the checkout's ancestry alone, following this one path across
+		// renames: rename tracing needs a single starting tip (doc/ARCHITECTURE.md)
 		QString path;
 		// empty: no content search. Always a literal string, never a pattern
 		QString contentSearch;
-		// empty: the walk starts at HEAD. Otherwise it covers this commit's ancestry, which need not overlap the checkout's
-		QString startRevision;
 		bool ignoreCase = true;
 	};
 
-	// At most maxCommits reachable from the start revision, newest first.
+	// At most maxCommits, newest first.
 	// No commit is listed before any of its children: the lane diagram depends on that ordering.
 	// Widening the window means re-running with a larger cap: the walk has no resumable cursor (doc/ARCHITECTURE.md).
 	// With a content search: every commit that changed a line containing the text.
