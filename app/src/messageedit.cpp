@@ -12,6 +12,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QPainter>
 #include <QScrollBar>
 #include <QStringListModel>
+#include <QTextBlock>
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
