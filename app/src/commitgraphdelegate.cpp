@@ -9,12 +9,17 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
+#include <cmath>
 
 namespace {
 
 constexpr qreal NodeRadius = 5.0; // logical pixels
-// The current commit's outer ring. Snug: the node already fills most of the narrowest lane
-constexpr qreal CurrentRingRadius = NodeRadius + 1.5;
+// The current commit's ring, drawn outside the node. The widest thing the column holds, so it is what
+// laneInset() and the height hint are sized against
+constexpr qreal CurrentRingRadius = NodeRadius + 2.5;
+
+// Clear space at each edge of the column
+constexpr qreal GraphMargin = 4.0;
 
 // The column is hinted at least this many lanes wide, so the deeper listing a cold open appends rarely
 // widens it mid-view
@@ -25,6 +30,26 @@ constexpr int MinHintedLanes = 6;
 int laneWidth(const QStyleOptionViewItem& option)
 {
 	return std::max(14, option.fontMetrics.height() * 3 / 4);
+}
+
+// Every line and ring is drawn with this pen width
+qreal lineThickness(int width)
+{
+	return std::max(1.0, width / 8.0);
+}
+
+// The widest a node is drawn, ring included
+qreal nodeReach(int width)
+{
+	return CurrentRingRadius + lineThickness(width) / 2;
+}
+
+// Where the first lane's centre sits, and the room the last one needs past it. A node is drawn at the middle
+// of its lane and reaches past that half width, so the lanes start far enough in to keep the margin clear of
+// the column's edge.
+qreal laneInset(int width)
+{
+	return std::max(width / 2.0, nodeReach(width) + GraphMargin);
 }
 
 const QColor& chainColor(int chain)
@@ -57,7 +82,7 @@ void CommitGraphDelegate::paint(QPainter* painter, const QStyleOptionViewItem& o
 
 	const GraphRow row = qvariant_cast<GraphRow>(index.data(CommitLogModel::GraphRole));
 	const int width = laneWidth(option);
-	const auto x = [&](int lane) { return qreal(option.rect.left() + width / 2 + lane * width); };
+	const auto x = [&, inset = laneInset(width)](int lane) { return option.rect.left() + inset + lane * width; };
 	const qreal top = option.rect.top();
 	const qreal bottom = option.rect.bottom() + 1; // the next row's top edge, so a lane draws as one unbroken line
 	const qreal middle = option.rect.center().y();
@@ -67,7 +92,7 @@ void CommitGraphDelegate::paint(QPainter* painter, const QStyleOptionViewItem& o
 	painter->save();
 	painter->setRenderHint(QPainter::Antialiasing, true);
 
-	const qreal thickness = std::max(1.0, width / 8.0);
+	const qreal thickness = lineThickness(width);
 	for (const GraphSegment& segment : row.segments)
 	{
 		QPen pen{ segment.ahead ? faded(chainColor(segment.chain)) : chainColor(segment.chain), thickness };
@@ -108,5 +133,9 @@ QSize CommitGraphDelegate::sizeHint(const QStyleOptionViewItem& option, const QM
 {
 	const QSize base = QStyledItemDelegate::sizeHint(option, index);
 	const int lanes = std::max(MinHintedLanes, index.data(CommitLogModel::GraphLaneCountRole).toInt());
-	return { laneWidth(option) * lanes, base.height() };
+	const int width = laneWidth(option);
+	// The lanes between the two insets, which are what the outermost nodes need. The height matters only in a
+	// theme whose rows are shorter than a node is tall.
+	return { int(std::ceil(2 * laneInset(width) + (lanes - 1) * width)),
+		std::max(base.height(), int(std::ceil(2 * nodeReach(width)))) };
 }
