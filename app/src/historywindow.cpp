@@ -259,6 +259,15 @@ void HistoryWindow::closeEvent(QCloseEvent* event)
 	QMainWindow::closeEvent(event);
 }
 
+void HistoryWindow::refreshCurrentCommitMark()
+{
+	_currentCommitQuery.cancel();
+	_currentCommitQuery = _repo->currentCommit(this, [this](std::expected<QString, QString> sha) {
+		// A failure is the ordinary "unborn repository": nothing is checked out to mark
+		_logModel.setCurrentSha(std::move(sha).value_or(QString{}));
+	});
+}
+
 void HistoryWindow::refreshUnpushedMarks()
 {
 	_unpushedQuery.cancel();
@@ -284,6 +293,7 @@ void HistoryWindow::reload()
 	_pickaxeQuery.cancel();
 
 	refreshUnpushedMarks();
+	refreshCurrentCommitMark();
 	_logLoaded = false;
 	_fullLoadPending = false;
 	_missedRevealSha.clear();

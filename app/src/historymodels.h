@@ -39,6 +39,9 @@ public:
 	// From a separate query, so it may arrive before or after the commits. Repaints rather than resets, so
 	// a selection made while it was in flight survives.
 	void setUnpushedShas(QSet<QString> shas);
+	// The checked-out commit, from a query of its own like the unpushed set. Rebuilds the diagram: which
+	// lines run above the checkout is part of it
+	void setCurrentSha(QString sha);
 	// The narrower half of a content search, applied like the unpushed set
 	void setAddingOrRemovingShas(QSet<QString> shas);
 
@@ -60,6 +63,7 @@ public:
 
 private:
 	void rebuildVisible();
+	void rebuildSearchGraph(); // over the current _graph and _visible; empty while no search is active
 	[[nodiscard]] int commitIndexAt(int row) const { return _visible[size_t(row)]; }
 	[[nodiscard]] const QString& displayedDateAt(size_t commitIndex) const;
 	[[nodiscard]] const GraphRow& graphRowAt(int row) const;
@@ -74,6 +78,7 @@ private:
 	CommitGraph _graph;        // over _commits
 	CommitGraph _searchGraph;  // over _visible, built only while a search is active
 	QString _searchText;
+	QString _currentSha;
 	QSet<QString> _unpushedShas;
 	QSet<QString> _addingOrRemovingShas;
 };

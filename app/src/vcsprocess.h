@@ -194,6 +194,12 @@ template <typename T, typename Parse>
 	return QString::fromUtf8(output);
 }
 
+// The same for a one-value answer, without the trailing newline a command may or may not print after it
+[[nodiscard]] inline QString outputAsTrimmedText(const QByteArray& output)
+{
+	return QString::fromUtf8(output.trimmed());
+}
+
 // An answer decided without running a command, still delivered from the event loop: like a run()
 // callback, it never arrives before the asking call has returned. Skipped if `context` dies first.
 // The returned job makes it cancellable, for a caller handing out a Query; everyone else ignores it.

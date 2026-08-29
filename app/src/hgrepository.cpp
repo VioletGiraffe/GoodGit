@@ -856,6 +856,12 @@ Vcs::Query HgRepository::commitsAddingOrRemovingText(const LogQuery& query, cons
 		tolerantOfEmptyResult(Vcs::answering(std::move(onDone), changedOccurrences)));
 }
 
+Vcs::Query HgRepository::currentCommit(const QObject* context, Vcs::Answer<QString> onDone)
+{
+	return runQuery(path(), { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("."),
+		QStringLiteral("-T"), QStringLiteral("{node}") }, context, Vcs::answering(std::move(onDone), Vcs::outputAsTrimmedText));
+}
+
 Vcs::Query HgRepository::incomingCommits(int maxCommits, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone)
 {
 	// The result is also the only source of the behind count, so it is kept for the next refresh

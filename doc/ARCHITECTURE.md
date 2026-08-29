@@ -288,6 +288,15 @@ would join. A text search over the loaded records is the middle case: a chain is
 so each node keeps its lane and consecutive shown rows on the same chain are joined, dashed where hidden
 commits lie between them.
 
+The **checked-out commit** carries a second ring outside its node, and its subject is bold and half a point
+larger. Every line **above** it is drawn faded and those commits' subjects italic: history the checkout does
+not hold yet. Which commits those are is decided by walking child links down to it, never by list position,
+so an unrelated head above it stays solid. They keep their lane and color rather than moving into one of
+their own: the checkout and the branch tip above it are one first-parent chain, and a lane of their own
+would draw a branch point at a commit that has one child. The type carries both marks where the diagram is
+hidden, as it is for a file history and a content search. The current commit's sha comes from a query of its
+own, the window owning a `Repository` it never refreshes.
+
 Text search runs in memory over the loaded records (sha, revision, author, refs, date, message) and hides
 non-matching rows, which is why a miss is reported against the loaded count rather than as "not found": the
 commit may be older than the limit.

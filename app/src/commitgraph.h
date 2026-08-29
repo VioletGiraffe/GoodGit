@@ -22,12 +22,15 @@ struct GraphSegment
 	int toLane = -1;     // where it leaves at the bottom edge
 	int chain = 0;       // the line of history it belongs to, which decides its color
 	bool elided = false; // the two ends are not adjacent commits
+	bool ahead = false;  // the edge is above the current commit, so the checkout does not hold it yet
 };
 
 struct GraphRow
 {
 	int lane = 0;  // where the node sits
 	int chain = 0; // the line of history the node is on
+	bool current = false; // the commit the working tree is on
+	bool ahead = false;   // a descendant of that commit
 	std::vector<GraphSegment> segments;
 };
 
@@ -39,7 +42,9 @@ struct CommitGraph
 
 // A chain is one first-parent path, so two commits sharing one are ancestor and descendant, and a chain
 // holds a single lane for its whole length. filteredCommitGraph() relies on both.
-[[nodiscard]] CommitGraph buildCommitGraph(const std::vector<CommitRecord>& commits);
+// `currentSha` is the checked-out commit, marking its row and every line of history above it. Empty, or a
+// sha the listing does not hold, leaves every such flag unset.
+[[nodiscard]] CommitGraph buildCommitGraph(const std::vector<CommitRecord>& commits, const QString& currentSha);
 
 // The same diagram over a subset of the commits (a search hiding the rest).
 // Each node keeps its lane. Two rows on one chain are joined, marked elided where commits between them are hidden.

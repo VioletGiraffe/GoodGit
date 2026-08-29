@@ -224,6 +224,8 @@ public:
 	// The narrower half of a content search: commits where the number of occurrences changed.
 	// A subset of commitLog's result, except inside binary files, which the listing cannot see.
 	virtual Vcs::Query commitsAddingOrRemovingText(const LogQuery& query, const QObject* context, Vcs::Answer<QSet<QString>> onDone) = 0;
+	// The commit the working tree is on: git's HEAD, Mercurial's `.`. Fails on an unborn repository.
+	virtual Vcs::Query currentCommit(const QObject* context, Vcs::Answer<QString> onDone) = 0;
 	// The commits the upstream has and HEAD does not, newest first. A backend may read the remote directly or use
 	// what fetch() brought in; Peek does both in that order.
 	virtual Vcs::Query incomingCommits(int maxCommits, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone) = 0;

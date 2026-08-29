@@ -48,6 +48,9 @@ protected:
 private:
 	void buildUi();
 
+	// Re-reads which commit the working tree is on, for the diagram's current-commit ring and the history
+	// drawn above it
+	void refreshCurrentCommitMark();
 	void applySearch();
 	void updateCountLabel();
 	void showPickaxePopup();
@@ -114,6 +117,7 @@ private:
 	Vcs::Query _logQuery;
 	Vcs::Query _pickaxeQuery;
 	Vcs::Query _unpushedQuery;
+	Vcs::Query _currentCommitQuery;
 	Vcs::Query _filesQuery;
 	Vcs::Query _fileCountsQuery;
 	Vcs::Query _diffQuery;

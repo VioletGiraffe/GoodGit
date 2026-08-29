@@ -982,6 +982,12 @@ Vcs::Query GitRepository::commitsAddingOrRemovingText(const LogQuery& query, con
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), shaSet));
 }
 
+Vcs::Query GitRepository::currentCommit(const QObject* context, Vcs::Answer<QString> onDone)
+{
+	return runQuery(path(), { QStringLiteral("rev-parse"), QStringLiteral("HEAD") },
+		context, Vcs::answering(std::move(onDone), Vcs::outputAsTrimmedText));
+}
+
 Vcs::Query GitRepository::incomingCommits(int maxCommits, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone)
 {
 	QStringList args = commitLogArgs(maxCommits);

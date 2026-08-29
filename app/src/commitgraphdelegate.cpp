@@ -4,6 +4,7 @@
 #include "theme.h"
 
 DISABLE_COMPILER_WARNINGS
+#include <QLineF>
 #include <QPainter>
 RESTORE_COMPILER_WARNINGS
 
@@ -12,6 +13,8 @@ RESTORE_COMPILER_WARNINGS
 namespace {
 
 constexpr qreal NodeRadius = 5.0; // logical pixels
+// The current commit's outer ring. Snug: the node already fills most of the narrowest lane
+constexpr qreal CurrentRingRadius = NodeRadius + 1.5;
 
 // The column is hinted at least this many lanes wide, so the deeper listing a cold open appends rarely
 // widens it mid-view
@@ -28,6 +31,22 @@ const QColor& chainColor(int chain)
 {
 	const auto& colors = activeTheme().graphLanes;
 	return colors[size_t(chain % int(colors.size()))];
+}
+
+// Lines and nodes above the current commit are faded: the checkout does not hold that history yet
+QColor faded(QColor color)
+{
+	color.setAlphaF(0.4f);
+	return color;
+}
+
+// Where a line ending at the node meets the node's edge. A faded node is translucent, so a line may not run
+// under it.
+QPointF nodeEdgeToward(QPointF node, QPointF other)
+{
+	QLineF toOther{ node, other };
+	toOther.setLength(NodeRadius);
+	return toOther.p2();
 }
 
 } // namespace
@@ -51,23 +70,37 @@ void CommitGraphDelegate::paint(QPainter* painter, const QStyleOptionViewItem& o
 	const qreal thickness = std::max(1.0, width / 8.0);
 	for (const GraphSegment& segment : row.segments)
 	{
-		QPen pen{ chainColor(segment.chain), thickness };
+		QPen pen{ segment.ahead ? faded(chainColor(segment.chain)) : chainColor(segment.chain), thickness };
 		if (segment.elided)
 			pen.setStyle(Qt::DashLine);
 		painter->setPen(pen);
-		painter->drawLine(endpoint(segment.fromLane, top), endpoint(segment.toLane, bottom));
+
+		QPointF from = endpoint(segment.fromLane, top);
+		QPointF to = endpoint(segment.toLane, bottom);
+		if (segment.fromLane < 0)
+			from = nodeEdgeToward(from, to);
+		else if (segment.toLane < 0)
+			to = nodeEdgeToward(to, from);
+		painter->drawLine(from, to);
 	}
 
-	// An unpushed commit is a dotted ring rather than a disc. The lines run behind the node, so the ring is
-	// filled with the row's background to hide them. Round caps, or the dots draw as squares against the curve.
+	// An unpushed commit is a dotted ring rather than a disc, the row's own background showing inside it.
+	// Round caps, or the dots draw as squares against the curve.
 	const bool unpushed = index.data(CommitLogModel::UnpushedRole).toBool();
-	const QColor nodeFill = unpushed
-		? (option.state.testFlag(QStyle::State_Selected) ? activeTheme().palette.selectionBg : activeTheme().palette.surface)
-		: chainColor(row.chain);
-	const QPen ringPen{ chainColor(row.chain), thickness, Qt::DotLine, Qt::RoundCap };
+	const QColor nodeColor = row.ahead ? faded(chainColor(row.chain)) : chainColor(row.chain);
+	const QPen ringPen{ nodeColor, thickness, Qt::DotLine, Qt::RoundCap };
 	painter->setPen(unpushed ? ringPen : QPen{ Qt::NoPen });
-	painter->setBrush(nodeFill);
+	painter->setBrush(unpushed ? QBrush{ Qt::NoBrush } : QBrush{ nodeColor });
 	painter->drawEllipse(QPointF{ x(row.lane), middle }, NodeRadius, NodeRadius);
+
+	// The current commit takes a second ring outside the node: the fill and the inner ring are spoken for
+	if (row.current)
+	{
+		const CBasePalette& palette = activeTheme().palette;
+		painter->setPen(QPen{ option.state.testFlag(QStyle::State_Selected) ? palette.selectionFg : palette.text, thickness });
+		painter->setBrush(Qt::NoBrush);
+		painter->drawEllipse(QPointF{ x(row.lane), middle }, CurrentRingRadius, CurrentRingRadius);
+	}
 	painter->restore();
 }
 

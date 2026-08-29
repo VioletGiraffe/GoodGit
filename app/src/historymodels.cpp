@@ -115,7 +115,7 @@ void CommitLogModel::setCommits(std::vector<CommitRecord> commits)
 	_loadedAt = QDateTime::currentDateTime();
 	_displayedDates.assign(_commits.size(), QString{});
 
-	_graph = buildCommitGraph(_commits);
+	_graph = buildCommitGraph(_commits, _currentSha);
 	rebuildVisible();
 	endResetModel();
 }
@@ -164,7 +164,7 @@ bool CommitLogModel::extendCommits(std::vector<CommitRecord> commits)
 
 	_displayedDates.resize(commits.size()); // the new rows format lazily, against the same _loadedAt
 	_commits = std::move(commits); // the prefix is the same commits, at worst with fresher refs
-	_graph = buildCommitGraph(_commits);
+	_graph = buildCommitGraph(_commits, _currentSha);
 	rebuildVisible();
 
 	if (appendedVisible > 0)
@@ -185,6 +185,18 @@ void CommitLogModel::setSearchText(const QString& text)
 	_searchText = text;
 	rebuildVisible();
 	endResetModel();
+}
+
+void CommitLogModel::setCurrentSha(QString sha)
+{
+	if (_currentSha == sha)
+		return;
+
+	_currentSha = std::move(sha);
+	_graph = buildCommitGraph(_commits, _currentSha);
+	rebuildSearchGraph(); // the shown rows are the same ones, over a diagram that changed under them
+	if (!_visible.empty())
+		emit dataChanged(index(0, 0), index(int(_visible.size()) - 1, ColumnCount - 1));
 }
 
 void CommitLogModel::setUnpushedShas(QSet<QString> shas)
@@ -233,6 +245,11 @@ int CommitLogModel::addingOrRemovingNotListedCount() const
 	return int(_addingOrRemovingShas.size()) - listed;
 }
 
+void CommitLogModel::rebuildSearchGraph()
+{
+	_searchGraph = _searchText.isEmpty() ? CommitGraph{} : filteredCommitGraph(_graph, _visible);
+}
+
 void CommitLogModel::rebuildVisible()
 {
 	_visible.clear();
@@ -242,7 +259,7 @@ void CommitLogModel::rebuildVisible()
 		if (_searchText.isEmpty() || matchesSearch(_commits[size_t(i)], _searchText))
 			_visible.push_back(i);
 	}
-	_searchGraph = _searchText.isEmpty() ? CommitGraph{} : filteredCommitGraph(_graph, _visible);
+	rebuildSearchGraph();
 }
 
 const QString& CommitLogModel::displayedDateAt(size_t commitIndex) const
@@ -299,10 +316,19 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 	{
 		if (index.column() == SubjectColumn)
 		{
-			if (!addsOrRemoves)
+			const bool current = commit.sha == _currentSha;
+			const bool ahead = graphRowAt(index.row()).ahead;
+			if (!current && !ahead && !addsOrRemoves)
 				return {};
 			QFont font = QApplication::font();
-			font.setWeight(QFont::DemiBold);
+			if (current)
+				font.setWeight(QFont::Bold);
+			else if (addsOrRemoves)
+				font.setWeight(QFont::DemiBold);
+			font.setItalic(ahead);
+			// Half a point: the view keeps one row height for all rows, and a whole one clips in a tight theme
+			if (current && font.pointSizeF() > 0)
+				font.setPointSizeF(font.pointSizeF() + 0.5);
 			return font;
 		}
 		if (index.column() != CommitColumn)
