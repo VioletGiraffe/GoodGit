@@ -32,6 +32,7 @@ private:
 	QCheckBox* _completionAutoPopup = nullptr;
 	QSpinBox* _completionMinPrefix = nullptr;
 	QComboBox* _newRowCheckPolicy = nullptr;
+	QCheckBox* _checkForUpdates = nullptr;
 };
 
 class ThemeFontSettingsPage final : public CSettingsPage

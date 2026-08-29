@@ -13,6 +13,7 @@ include(../global.pri)
 
 QT = core gui widgets svg   # the qsvg imageformats plugin renders the QSS glyphs; windeployqt only ships it when Qt Svg is linked
 QT += core-private   # src/theme.cpp includes qtutils theme/cthemeiconhandler.h (private QAbstractFileEngineHandler)
+QT += network   # the autoupdater library queries the GitHub releases API
 
 Release:OUTPUT_DIR=release/
 Debug:OUTPUT_DIR=debug/
@@ -31,6 +32,7 @@ INCLUDEPATH += \
 	../qtutils \
 	../cpputils \
 	../cpp-template-utils \
+	../github-releases-autoupdater/src \
 	../thin_io/src
 
 ###################################################
@@ -71,6 +73,7 @@ HEADERS += \
 	src/textdiff.h \
 	src/theme.h \
 	src/unifieddiff.h \
+	src/updatecheck.h \
 	src/vcsprocess.h \
 	src/vcstypes.h \
 	src/welcomewindow.h
@@ -107,6 +110,7 @@ SOURCES += \
 	src/textdiff.cpp \
 	src/theme.cpp \
 	src/unifieddiff.cpp \
+	src/updatecheck.cpp \
 	src/vcsprocess.cpp \
 	src/welcomewindow.cpp
 
@@ -119,10 +123,10 @@ macx:ICON = res/goodgit-mac.icns   # built from res/goodgit-mac.svg (Apple icon 
 #                 LIBS
 ###################################################
 
-LIBS += -L$${DESTDIR} -lqtutils -lcpputils -lthin_io
+LIBS += -L$${DESTDIR} -lautoupdater -lqtutils -lcpputils -lthin_io
 
 mac*|linux*|freebsd*{
-	PRE_TARGETDEPS += $${DESTDIR}/libqtutils.a $${DESTDIR}/libcpputils.a $${DESTDIR}/libthin_io.a
+	PRE_TARGETDEPS += $${DESTDIR}/libautoupdater.a $${DESTDIR}/libqtutils.a $${DESTDIR}/libcpputils.a $${DESTDIR}/libthin_io.a
 
 	QMAKE_CXXFLAGS_WARN_ON += -Wno-missing-field-initializers
 }

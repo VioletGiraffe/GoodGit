@@ -61,6 +61,11 @@ inline constexpr const char* NewRowCheckPolicyNone = "none";
 inline constexpr const char* DiffTabWidthKey = "DiffTabWidth";
 inline constexpr int DiffTabWidthDefault = 4;
 
+inline constexpr const char* CheckForUpdatesAutomaticallyKey = "CheckForUpdatesAutomatically";
+inline constexpr bool CheckForUpdatesAutomaticallyDefault = true;
+// Written on every check, manual or automatic, so a manual check postpones the next automatic one.
+inline constexpr const char* LastUpdateCheckTimestampKey = "LastUpdateCheckTimestamp";
+
 // One JSON array, most recent first, whose objects carry the field names below.
 // Stored as a single value: two instances share this store, and a QSettings array is written entry by
 // entry, so a concurrent reader can observe one half written.

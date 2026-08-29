@@ -60,7 +60,8 @@ jobs:
         copy /y bin\release\gg.exe "%STAGING_DIR%\" >nul
         mkdir %STAGING_DIR%\launcher
         copy /y bin\release\launcher\gg.exe "%STAGING_DIR%\launcher\" >nul
-        %QT_ROOT_DIR%\bin\windeployqt.exe --dir %STAGING_DIR% --force --release --compiler-runtime --no-translations --no-system-d3d-compiler --no-system-dxc-compiler --no-opengl-sw --skip-plugin-types networkinformation --skip-plugin-types tls %STAGING_DIR%\gg.exe
+        REM The tls plugins stay: the update check talks to the GitHub API over HTTPS and fails without a backend
+        %QT_ROOT_DIR%\bin\windeployqt.exe --dir %STAGING_DIR% --force --release --compiler-runtime --no-translations --no-system-d3d-compiler --no-system-dxc-compiler --no-opengl-sw --skip-plugin-types networkinformation %STAGING_DIR%\gg.exe
 
         del %STAGING_DIR%\dxil.dll >nul
         del %STAGING_DIR%\dxcompiler.dll >nul

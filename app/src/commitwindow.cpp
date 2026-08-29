@@ -16,6 +16,7 @@
 #include "settings.h"
 #include "settingspages.h"
 #include "theme.h"
+#include "updatecheck.h"
 
 #include "aboutdialog/caboutdialog.h"
 #include "dialogs/messagebox.h"
@@ -260,6 +261,8 @@ void CommitWindow::buildUi()
 	_continueAction = repositoryMenu->addAction(tr("&Continue Operation"), this, &CommitWindow::continueOperation);
 	_abortAction = repositoryMenu->addAction(tr("&Abort Operation..."), this, &CommitWindow::abortOperation);
 	QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
+	helpMenu->addAction(tr("Check for &Updates..."), this, [this] { checkForUpdatesInteractively(this); });
+	helpMenu->addSeparator();
 	helpMenu->addAction(tr("&About"), this, [this] {
 		CAboutDialog aboutDialog{ QStringLiteral(GG_VERSION), this };
 		aboutDialog.exec();

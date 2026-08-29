@@ -114,6 +114,12 @@ MainSettingsPage::MainSettingsPage(QWidget* parent) :
 	_newRowCheckPolicy->setToolTip(tr("Files already listed keep their check state across a refresh; this is "
 		"the initial state of files that appear in the list for the first time."));
 	layout->addRow(tr("Newly listed files start checked:"), _newRowCheckPolicy);
+
+	_checkForUpdates = new QCheckBox{ tr("Check for updates on startup") };
+	_checkForUpdates->setChecked(settings.value(Settings::CheckForUpdatesAutomaticallyKey, Settings::CheckForUpdatesAutomaticallyDefault).toBool());
+	_checkForUpdates->setToolTip(tr("At most one check a day, and nothing is shown unless a newer release exists. "
+		"Help > Check for Updates always checks."));
+	layout->addRow(_checkForUpdates);
 }
 
 void MainSettingsPage::acceptSettings()
@@ -129,6 +135,7 @@ void MainSettingsPage::acceptSettings()
 	settings.setValue(Settings::CompletionAutoPopupKey, _completionAutoPopup->isChecked());
 	settings.setValue(Settings::CompletionMinPrefixLengthKey, _completionMinPrefix->value());
 	settings.setValue(Settings::NewRowCheckPolicyKey, QLatin1String(NewRowCheckPolicyByIndex[_newRowCheckPolicy->currentIndex()]));
+	settings.setValue(Settings::CheckForUpdatesAutomaticallyKey, _checkForUpdates->isChecked());
 }
 
 ThemeFontSettingsPage::ThemeFontSettingsPage(QWidget* parent) :

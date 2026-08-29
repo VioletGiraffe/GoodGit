@@ -10,3 +10,6 @@
 [submodule "thin_io"]
 	path = thin_io
 	url = https://github.com/VioletGiraffe/thin_io
+[submodule "github-releases-autoupdater"]
+	path = github-releases-autoupdater
+	url = https://github.com/VioletGiraffe/github-releases-autoupdater

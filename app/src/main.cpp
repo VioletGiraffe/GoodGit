@@ -2,6 +2,7 @@
 #include "repositoryfactory.h"
 #include "repositorywindows.h"
 #include "theme.h"
+#include "updatecheck.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QApplication>
@@ -16,6 +17,7 @@ int main(int argc, char* argv[])
 	QApplication::setApplicationName(QStringLiteral("GoodGit"));
 	QApplication::setWindowIcon(QIcon{ QStringLiteral(":/goodgit.svg") });
 	applyTheme(app);
+	checkForUpdatesIfDue();   // not in a window constructor: one window per repository would mean one check per window
 
 	// Not argv, which on Windows arrives in the local codepage and mangles anything outside it
 	const QStringList arguments = QApplication::arguments();
