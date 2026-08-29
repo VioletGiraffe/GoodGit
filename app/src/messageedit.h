@@ -27,7 +27,9 @@ protected:
 	bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
-	[[nodiscard]] QString wordUnderCursor() const;
+	// The completion token before the cursor: path and identifier characters, not Qt's word boundaries
+	[[nodiscard]] QTextCursor completionPrefixSelection() const;
+	[[nodiscard]] QString completionPrefix() const;
 	void showCompletions(const QString& prefix);
 	void acceptCurrentCompletion();
 	void insertCompletion(const QString& completion);

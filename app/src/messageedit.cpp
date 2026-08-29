@@ -25,6 +25,13 @@ int subjectGuideColumn()
 	return CSettings{}.value(Settings::SubjectGuideColumnKey, Settings::SubjectGuideColumnDefault).toInt();
 }
 
+// Not Qt's word boundaries: those break on '-' and '/', and a repo-relative path contains both
+bool isCompletionTokenChar(QChar c)
+{
+	return c.isLetterOrNumber() || c == QLatin1Char('_') || c == QLatin1Char('-') || c == QLatin1Char('.')
+		|| c == QLatin1Char('/');
+}
+
 }
 
 MessageEdit::MessageEdit(QWidget* parent) :
@@ -75,7 +82,7 @@ void MessageEdit::keyPressEvent(QKeyEvent* event)
 {
 	if (event->key() == Qt::Key_Space && event->modifiers().testFlag(Qt::ControlModifier))
 	{
-		showCompletions(wordUnderCursor()); // manual trigger: no minimum prefix length
+		showCompletions(completionPrefix()); // manual trigger: no minimum prefix length
 		return;
 	}
 
@@ -85,7 +92,7 @@ void MessageEdit::keyPressEvent(QKeyEvent* event)
 		return; // pure navigation
 
 	// With auto-popup off, a popup summoned by Ctrl+Space still follows further typing
-	const QString prefix = wordUnderCursor();
+	const QString prefix = completionPrefix();
 	const CSettings settings;
 	const bool follow = settings.value(Settings::CompletionAutoPopupKey, Settings::CompletionAutoPopupDefault).toBool()
 		? prefix.length() >= settings.value(Settings::CompletionMinPrefixLengthKey, Settings::CompletionMinPrefixLengthDefault).toInt()
@@ -124,11 +131,26 @@ bool MessageEdit::eventFilter(QObject* watched, QEvent* event)
 	return QPlainTextEdit::eventFilter(watched, event);
 }
 
-QString MessageEdit::wordUnderCursor() const
+// Ends at the cursor: text to its right is not typed yet
+QTextCursor MessageEdit::completionPrefixSelection() const
 {
 	QTextCursor cursor = textCursor();
-	cursor.select(QTextCursor::WordUnderCursor);
-	return cursor.selectedText();
+	const QString text = cursor.block().text();
+	const int blockPosition = cursor.block().position();
+	const int end = cursor.positionInBlock();
+
+	int start = end;
+	while (start > 0 && isCompletionTokenChar(text.at(start - 1)))
+		--start;
+
+	cursor.setPosition(blockPosition + start);
+	cursor.setPosition(blockPosition + end, QTextCursor::KeepAnchor);
+	return cursor;
+}
+
+QString MessageEdit::completionPrefix() const
+{
+	return completionPrefixSelection().selectedText();
 }
 
 void MessageEdit::showCompletions(const QString& prefix)
@@ -158,8 +180,7 @@ void MessageEdit::acceptCurrentCompletion()
 
 void MessageEdit::insertCompletion(const QString& completion)
 {
-	QTextCursor cursor = textCursor();
-	cursor.select(QTextCursor::WordUnderCursor);
+	QTextCursor cursor = completionPrefixSelection();
 	cursor.insertText(completion);
 	setTextCursor(cursor);
 }
