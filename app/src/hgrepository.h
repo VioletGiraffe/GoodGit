@@ -106,7 +106,7 @@ private:
 	std::map<QString, QString> _subrepoSources;
 
 	// From the last incoming query. Mercurial keeps no local ref to read this from, so it is as current as
-	// the last Peek - as git's is as current as the last fetch.
+	// the last incoming check - as git's is as current as the last fetch.
 	int _behind = 0;
 
 	std::shared_ptr<RefreshRun> _run; // shared with the async callbacks; reset invalidates stragglers

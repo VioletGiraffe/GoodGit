@@ -70,7 +70,7 @@ constexpr int FirstRunDiffPaneWidth = 440; // what the diff keeps while the left
 // The left pane's preferred width follows the repository and branch names, which are unbounded
 constexpr int MaxInitialLeftPaneWidth = 1000;
 constexpr int MaxListedPathsInDialog = 20;
-constexpr int MaxIncomingCommits = 200; // a peek, not a history window
+constexpr int MaxIncomingCommits = 200; // a glance, not a history window
 constexpr int IncomingPopupWidth = 560;
 constexpr int IncomingPopupHeight = 320;
 
@@ -273,6 +273,10 @@ void CommitWindow::buildUi()
 	repositoryMenu->addAction(tr("&Scan Folder for Repositories..."), this, [this] { scanFolderForRepositories(this); });
 	repositoryMenu->addSeparator();
 	repositoryMenu->addAction(tr("&Refresh"), _repo.get(), &Repository::refresh)->setShortcut(QKeySequence::Refresh);
+	_checkIncomingAction = repositoryMenu->addAction(tr("Check for &Incoming Changes"), this, &CommitWindow::checkForIncomingChanges);
+	_checkIncomingAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_I));
+	_checkIncomingAction->setToolTip(tr("Fetch and list the commits on the upstream that this branch does not have yet"));
+	repositoryMenu->setToolTipsVisible(true); // the item's name doesn't say that it goes to the network
 	_uncommitAction = repositoryMenu->addAction(tr("&Undo Last Commit"), this, &CommitWindow::undoLastCommit);
 	// Not one item per operation kind: the op strip names the one running, which no menu label has room to do
 	_continueAction = repositoryMenu->addAction(tr("&Continue Operation"), this, &CommitWindow::continueOperation);
@@ -310,8 +314,6 @@ void CommitWindow::buildUi()
 	_aheadLabel = new QLabel;
 	_aheadLabel->setObjectName(QStringLiteral("aheadLabel"));
 	_pushButton = new QPushButton(tr("Push"));
-	_peekButton = new QPushButton(tr("Peek"));
-	_peekButton->setToolTip(tr("Fetch and list the commits on the upstream that this branch does not have yet"));
 	_historyButton = new QPushButton(tr("History"));
 	_historyButton->setToolTip(QStringLiteral("Ctrl+H"));
 	repoBarLayout->addWidget(_repoNameLabel);
@@ -319,7 +321,6 @@ void CommitWindow::buildUi()
 	repoBarLayout->addWidget(_aheadLabel);
 	repoBarLayout->addStretch();
 	repoBarLayout->addWidget(_pushButton);
-	repoBarLayout->addWidget(_peekButton);
 	repoBarLayout->addWidget(_historyButton);
 	leftLayout->addWidget(repoBar);
 
@@ -442,7 +443,6 @@ void CommitWindow::buildUi()
 	acceptRepositoryFolderDrops(this);
 
 	connect(_pushButton, &QPushButton::clicked, this, &CommitWindow::startPush);
-	connect(_peekButton, &QPushButton::clicked, this, &CommitWindow::peekIncoming);
 	connect(_historyButton, &QPushButton::clicked, this, &CommitWindow::showHistoryWindow);
 	connect(hidePushLogButton, &QPushButton::clicked, _pushLogPane, &QWidget::hide);
 	connect(_commitButton, &QPushButton::clicked, this, [this] { startCommit(false); });
@@ -781,8 +781,8 @@ void CommitWindow::updateControlStates()
 		: tr("Commit %1 file(s)").arg(checkedCount));
 
 	_pushButton->setEnabled(!writeInFlight());
-	// A gone upstream leaves Peek's HEAD..@{upstream} nothing to resolve against
-	_peekButton->setEnabled(!state.upstream.isEmpty() && !state.upstreamGone && !_peekInFlight);
+	// A gone upstream leaves the incoming check's HEAD..@{upstream} nothing to resolve against
+	_checkIncomingAction->setEnabled(!state.upstream.isEmpty() && !state.upstreamGone && !_incomingCheckInFlight);
 	// undoLastCommit() reports every refusal, so only a write in flight disables this; a push counts as one,
 	// since its success invalidates the pre-push AlreadyPushed answer
 	_uncommitAction->setEnabled(canActOnList() && !_pushInFlight);
@@ -1137,24 +1137,24 @@ bool CommitWindow::offerUpstreamThenRetry(size_t index, const QString& upstream)
 	return true;
 }
 
-void CommitWindow::peekIncoming()
+void CommitWindow::checkForIncomingChanges()
 {
-	_peekInFlight = true;
+	_incomingCheckInFlight = true;
 	updateControlStates();
 
 	_repo->fetch([this](std::expected<void, QString> fetchResult) {
 		if (!fetchResult)
 		{
-			_peekInFlight = false;
+			_incomingCheckInFlight = false;
 			updateControlStates();
 			showError(tr("Fetch failed"), fetchResult.error());
 			return;
 		}
 
-		// _peekInFlight is held to the answer: a second peek would otherwise race this one and re-show a
-		// dismissed popup
+		// _incomingCheckInFlight is held to the answer: a second check would otherwise race this one and
+		// re-show a dismissed popup
 		_repo->incomingCommits(MaxIncomingCommits, this, [this](std::expected<std::vector<CommitRecord>, QString> commits) {
-			_peekInFlight = false;
+			_incomingCheckInFlight = false;
 			updateControlStates();
 			// After the answer: hg's behind count comes from it, and the fetch moved git's remote-tracking
 			// refs - the header counts are stale until this refresh either way
@@ -1207,7 +1207,8 @@ void CommitWindow::showIncomingCommits(const std::vector<CommitRecord>& commits,
 	else
 		_incomingPopup->resize(IncomingPopupWidth, IncomingPopupHeight);
 
-	WidgetUtils::placeUnder(_incomingPopup, _peekButton);
+	// The anchor states the behind count this popup lists
+	WidgetUtils::placeUnder(_incomingPopup, _aheadLabel);
 	_incomingPopup->show();
 }
 

@@ -103,7 +103,7 @@ private:
 	// Offers to set `upstream` for the step's branch and retries if accepted. Returns whether the push
 	// goes on.
 	bool offerUpstreamThenRetry(size_t index, const QString& upstream);
-	void peekIncoming();
+	void checkForIncomingChanges();
 	void showIncomingCommits(const std::vector<CommitRecord>& commits, bool capped);
 	void closePushLogEntry(const ProcessResult& result);
 
@@ -160,8 +160,8 @@ private:
 	CLabelElided* _branchLabel = nullptr;
 	QLabel* _aheadLabel = nullptr;
 	QPushButton* _pushButton = nullptr;
-	QPushButton* _peekButton = nullptr;
 	QPushButton* _historyButton = nullptr;
+	QAction* _checkIncomingAction = nullptr;
 	QAction* _uncommitAction = nullptr;
 	QAction* _continueAction = nullptr;
 	QAction* _abortAction = nullptr;
@@ -179,7 +179,7 @@ private:
 	QWidget* _pushLogPane = nullptr; // hidden until the first push of the session
 	ConsoleLogView* _pushLogView = nullptr;
 
-	QFrame* _incomingPopup = nullptr; // built on the first peek; Qt::Popup, so it closes on a click outside
+	QFrame* _incomingPopup = nullptr; // built on the first check; Qt::Popup, so it closes on a click outside
 	QLabel* _incomingHeaderLabel = nullptr;
 	QPlainTextEdit* _incomingView = nullptr;
 
@@ -191,7 +191,7 @@ private:
 	// Held for a whole writing flow, dialogs and the asynchronous reattach included, not just while a process
 	// runs: two flows would meet at index.lock, and the second would commit a pathspec the first already took
 	bool _mutationInFlight = false;
-	bool _peekInFlight = false; // a fetch is slow, and a refresh landing meanwhile must not re-enable the button
+	bool _incomingCheckInFlight = false; // a fetch is slow, and a refresh landing meanwhile must not re-enable the action
 	// A submodule discard plan is being built; disables the menu's discard action, or a second plan's dialog
 	// could stack over the first's
 	bool _discardPlanInFlight = false;

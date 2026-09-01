@@ -154,7 +154,7 @@ public:
 	// progress flags are noise there.
 	[[nodiscard]] virtual QString pushCommandLabel(const PushStep& step, bool setUpstream) const = 0;
 
-	// Updates whatever local state the behind count is read from; Peek runs this before refreshing.
+	// Updates whatever local state the behind count is read from; the incoming check runs this before refreshing.
 	// A backend without such state succeeds immediately; its count comes from incomingCommits().
 	// This, push and incomingCommits() are the only operations that touch the network.
 	virtual void fetch(Vcs::Answer<void> onDone) = 0;
@@ -227,7 +227,7 @@ public:
 	// The commit the working tree is on: git's HEAD, Mercurial's `.`. Fails on an unborn repository.
 	virtual Vcs::Query currentCommit(const QObject* context, Vcs::Answer<QString> onDone) = 0;
 	// The commits the upstream has and HEAD does not, newest first. A backend may read the remote directly or use
-	// what fetch() brought in; Peek does both in that order.
+	// what fetch() brought in; the incoming check does both in that order.
 	virtual Vcs::Query incomingCommits(int maxCommits, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone) = 0;
 	// The files one commit touched. A merge yields nothing here, so detect merges from the parent count
 	// rather than from an empty result.
