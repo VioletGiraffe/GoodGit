@@ -306,6 +306,7 @@ void CommitWindow::buildUi()
 	_branchLabel = new CLabelElided; // ElideMiddle, the default: both ends of a branch path carry meaning
 	_branchLabel->setObjectName(QStringLiteral("branchChip"));
 	_branchLabel->setFont(monospaceFont());
+	_branchLabel->setMinimumTextSample(QStringLiteral("main")); // a branch name this short never elides
 	_aheadLabel = new QLabel;
 	_aheadLabel->setObjectName(QStringLiteral("aheadLabel"));
 	_pushButton = new QPushButton(tr("Push"));
