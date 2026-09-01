@@ -49,14 +49,18 @@ jobs:
         %QT_ROOT_DIR%\bin\qmake.exe -tp vc -r
         msbuild /t:Build /p:Configuration=Release || exit /b 1
 
-    - name: Windows - metrics
+    - name: Windows - install cloc
       if: startsWith(matrix.os, 'windows')
       shell: pwsh
       run: |
         winget install --id AlDanial.Cloc --exact --silent --accept-package-agreements --accept-source-agreements
-        # GITHUB_PATH only takes effect in later steps; cloc runs in this one.
-        $env:PATH += ";$env:LOCALAPPDATA\Microsoft\WinGet\Links"
+        # GITHUB_PATH applies to later steps only - the metrics step is where cloc runs.
+        "$env:LOCALAPPDATA\Microsoft\WinGet\Links" >> $env:GITHUB_PATH
 
+    - name: Windows - Metrics
+      if: startsWith(matrix.os, 'windows')
+      shell: pwsh
+      run: |
         $clocOpts = '--include-lang=C,C++,C/C++ Header', '--strip-str-comments', '--json', '--quiet'
         $skipDirs = 'tests,bin,build,.git,3rdparty'
 
