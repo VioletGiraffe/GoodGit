@@ -49,6 +49,48 @@ jobs:
         %QT_ROOT_DIR%\bin\qmake.exe -tp vc -r
         msbuild /t:Build /p:Configuration=Release || exit /b 1
 
+    - name: Windows - metrics
+      if: startsWith(matrix.os, 'windows')
+      shell: pwsh
+      run: |
+        winget install --id AlDanial.Cloc --exact --silent --accept-package-agreements --accept-source-agreements
+        # GITHUB_PATH only takes effect in later steps; cloc runs in this one.
+        $env:PATH += ";$env:LOCALAPPDATA\Microsoft\WinGet\Links"
+
+        $clocOpts = '--include-lang=C,C++,C/C++ Header', '--strip-str-comments', '--json', '--quiet'
+        $skipDirs = 'tests,bin,build,.git,3rdparty'
+
+        $app = cloc @clocOpts "--exclude-dir=$skipDirs" --by-file ./app/ ./launcher/ | ConvertFrom-Json
+        "GoodGit C/C++ code: $($app.SUM.code) LOC"
+
+        # Per-file counts (everything except the 'header' and 'SUM' meta entries)
+        $app.PSObject.Properties |
+          Where-Object { $_.Name -notin 'header','SUM' } |
+          Sort-Object { $_.Value.code } -Descending |
+          ForEach-Object { "{0,6}  {1}" -f $_.Value.code, $_.Name }
+
+        $libs = (cloc @clocOpts "--exclude-dir=$skipDirs,app,launcher" . | ConvertFrom-Json).SUM.code
+        "Libs C/C++ code: $libs LOC"
+
+        # Per-PE-section on-disk sizes from the "size of raw data" field of each SECTION HEADER.
+        # dumpbin is on PATH via the earlier MSVC dev-cmd step.
+        function Get-PeSectionSizes([string] $path) {
+          $name = $null
+          $sections = @()
+          foreach ($line in (dumpbin /headers $path)) {
+            if     ($line -match '^\s+(\S+) name$')                                 { $name = $Matches[1] }
+            elseif ($line -match '^\s+([0-9A-Fa-f]+) size of raw data$' -and $name) {
+              $sections += [pscustomobject]@{ Name = $name; KB = [math]::Round([Convert]::ToInt64($Matches[1], 16) / 1KB, 2) }
+              $name = $null
+            }
+          }
+          $sections | Sort-Object KB -Descending
+        }
+
+        $exe = Get-Item 'bin\release\gg.exe'
+        "{0:N2} KB  {1}" -f ($exe.Length / 1KB), $exe.Name
+        Get-PeSectionSizes $exe.FullName | Format-Table Name, KB -AutoSize
+
     - name: Windows - create installer
       if: startsWith(matrix.os, 'windows')
       shell: cmd
