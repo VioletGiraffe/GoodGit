@@ -757,14 +757,15 @@ void CommitWindow::updateControlStates()
 	_pushButton->setEnabled(!writeInFlight());
 	// A gone upstream leaves the incoming check's HEAD..@{upstream} nothing to resolve against
 	_checkIncomingAction->setEnabled(!state.upstream.isEmpty() && !state.upstreamGone && !_incomingCheckInFlight);
-	// undoLastCommit() reports every refusal, so only a write in flight disables this; a push counts as one,
-	// since its success invalidates the pre-push AlreadyPushed answer
-	_uncommitAction->setEnabled(canActOnList() && !_pushInFlight);
-	_abortAction->setEnabled(state.operationInProgress() && canActOnList() && !_pushInFlight);
+	// The history-changing actions wait for a push too: it is publishing the history they would rewrite
+	const bool canChangeHistory = canActOnList() && !_pushInFlight;
+	// undoLastCommit() reports every refusal, so nothing else disables this
+	_uncommitAction->setEnabled(canChangeHistory);
+	_abortAction->setEnabled(state.operationInProgress() && canChangeHistory);
 	// A continue command is named exactly where continueOperation() can run it, and every such command refuses
 	// while a conflict is still unresolved
 	_continueAction->setEnabled(!state.opHint.continueCommand.isEmpty() && _filesModel.unresolvedConflictPaths().isEmpty()
-		&& canActOnList() && !_pushInFlight);
+		&& canChangeHistory);
 }
 
 QString CommitWindow::subjectOrPlaceholder(const QString& subject)
