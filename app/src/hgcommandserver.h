@@ -66,8 +66,10 @@ public:
 	[[nodiscard]] Hg::ServerJob* currentJob() const { return _currentJob; }
 	[[nodiscard]] const QByteArray& ownStderr() const { return _ownStderr; }
 
-	// The server must be idle. A command for another repository carries -R and --cwd, paying a repo open
-	// there but no interpreter start.
+	// The server must be idle.
+	// hg reuses the bound repository only for a command carrying neither -R nor --cwd, so one for another
+	// repository builds and closes a repository object of its own: it pays that, and reads the changelog and
+	// dirstate cold, but no interpreter start. Only the bound repository keeps its caches between commands.
 	void execute(Hg::ServerJob* job);
 
 	// Shutdown, in this order: stop taking part in the pool and let the command in flight run to its end,
