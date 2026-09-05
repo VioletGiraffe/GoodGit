@@ -154,7 +154,7 @@ WelcomeWindow::WelcomeWindow()
 		});
 
 	connect(openButton, &QPushButton::clicked, this, [this] { browseForRepository(this); });
-	connect(scanButton, &QPushButton::clicked, this, [this] { scanFolderForRepositories(this); });
+	connect(scanButton, &QPushButton::clicked, this, [this] { scanFolderForRepositories(this, ScanReport::ExceptAdditions); });
 	acceptRepositoryFolderDrops(this);
 
 	// The recent list's filter is the only thing here to find anything in

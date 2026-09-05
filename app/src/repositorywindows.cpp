@@ -231,7 +231,7 @@ CommitWindow* browseForRepository(QWidget* dialogParent)
 	return directory.isEmpty() ? nullptr : openRepositoryWindowAt(directory, dialogParent);
 }
 
-void scanFolderForRepositories(QWidget* dialogParent)
+void scanFolderForRepositories(QWidget* dialogParent, ScanReport report)
 {
 	const QString folder = QFileDialog::getExistingDirectory(dialogParent,
 		QObject::tr("Scan Folder for Repositories"), browseStartDirectory());
@@ -241,12 +241,14 @@ void scanFolderForRepositories(QWidget* dialogParent)
 	// One query per git repository is in flight from here; the window stays usable, and the cursor is what
 	// says a scan is running
 	QApplication::setOverrideCursor(Qt::BusyCursor);
-	findRepositoriesInFolder(folder, dialogParent, [parent = QPointer<QWidget>{ dialogParent }, folder](std::vector<FoundRepository> found) {
+	findRepositoriesInFolder(folder, dialogParent, [parent = QPointer<QWidget>{ dialogParent }, folder, report](std::vector<FoundRepository> found) {
 		QApplication::restoreOverrideCursor();
 		if (!parent)
 			return; // the window the scan was started from is gone, and the answers with it
 
 		const int added = int(RecentRepositories::recordFound(found));
+		if (added > 0 && report == ScanReport::ExceptAdditions)
+			return; // the caller's own list is where they showed up
 
 		const QString nativePath = QDir::toNativeSeparators(folder);
 		QString message;
@@ -262,6 +264,16 @@ void scanFolderForRepositories(QWidget* dialogParent)
 
 		MessageBox::notice(parent, QApplication::applicationName(), message, {}, QMessageBox::Information);
 	});
+}
+
+void clearRecentRepositories(QWidget* dialogParent)
+{
+	if (MessageBox::question(dialogParent, QObject::tr("Clear the recent list?"),
+		QObject::tr("Every repository is removed from the list. Nothing on disk is touched."),
+		{ QObject::tr("Clear the list") }) != 0)
+		return;
+
+	RecentRepositories::forgetAll();
 }
 
 void showWelcomeWindow()

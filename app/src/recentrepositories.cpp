@@ -239,4 +239,9 @@ void forget(const QString& root)
 	save(repositories);
 }
 
+void forgetAll()
+{
+	save({});
+}
+
 } // namespace RecentRepositories

@@ -255,6 +255,7 @@ void CommitWindow::buildMenuBar()
 	QMenu* repositoryMenu = menuBar()->addMenu(tr("&Repository"));
 	repositoryMenu->addAction(openRepositoryAction); // the same action as in File, where Ctrl+O is looked for
 	repositoryMenu->addAction(tr("&Scan Folder for Repositories..."), this, [this] { scanFolderForRepositories(this); });
+	repositoryMenu->addAction(tr("C&lear Recent Repositories..."), this, [this] { clearRecentRepositories(this); });
 	repositoryMenu->addSeparator();
 	repositoryMenu->addAction(tr("&Refresh"), _repo.get(), &Repository::refresh)->setShortcut(QKeySequence::Refresh);
 	_checkIncomingAction = repositoryMenu->addAction(tr("Check for &Incoming Changes"), this, &CommitWindow::checkForIncomingChanges);

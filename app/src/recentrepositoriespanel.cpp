@@ -475,27 +475,33 @@ void RecentRepositoriesPanel::openRepository(const QString& root, const QString&
 
 void RecentRepositoriesPanel::showContextMenu(const QPoint& pos)
 {
-	const QTreeWidgetItem* item = itemAt(pos);
-	if (!item)
-		return;
-
-	// By value: opening a repository rebuilds this tree, and the items are gone by the time the action returns
-	const QString root = rootOf(item);
-	const QString parentRoot = rootOf(item->parent());
+	if (topLevelItemCount() == 0)
+		return; // an empty list has nothing to act on
 
 	QMenu menu{ this };
-	menu.addAction(tr("&Open"), this, [this, root, parentRoot] { openRepository(root, parentRoot); });
-	menu.addAction(openInFileManagerActionText(), this, [root] { openInFileManager(root); });
-	if (parentRoot.isEmpty()) // a submodule has no rows under it, and only its parent is listed
+	if (const QTreeWidgetItem* item = itemAt(pos))
 	{
-		if (item->childCount() > 0)
+		// By value: opening a repository rebuilds this tree, and the items are gone by the time the action returns
+		const QString root = rootOf(item);
+		const QString parentRoot = rootOf(item->parent());
+
+		menu.addAction(tr("&Open"), this, [this, root, parentRoot] { openRepository(root, parentRoot); });
+		menu.addAction(openInFileManagerActionText(), this, [root] { openInFileManager(root); });
+		if (parentRoot.isEmpty()) // a submodule has no rows under it, and only its parent is listed
 		{
-			const bool expanded = item->isExpanded();
-			menu.addAction(expanded ? tr("&Hide submodules") : tr("&Show submodules"), this,
-				[this, root, expanded] { setRepositoryExpanded(root, !expanded); });
+			if (item->childCount() > 0)
+			{
+				const bool expanded = item->isExpanded();
+				menu.addAction(expanded ? tr("&Hide submodules") : tr("&Show submodules"), this,
+					[this, root, expanded] { setRepositoryExpanded(root, !expanded); });
+			}
+			menu.addAction(tr("&Remove from list"), this, [root] { RecentRepositories::forget(root); });
 		}
-		menu.addAction(tr("&Remove from list"), this, [root] { RecentRepositories::forget(root); });
+		menu.addSeparator();
 	}
+
+	// Also in the Repository menu, which the welcome window does not have
+	menu.addAction(tr("&Clear the list..."), this, [this] { clearRecentRepositories(this); });
 	menu.exec(viewport()->mapToGlobal(pos));
 }
 

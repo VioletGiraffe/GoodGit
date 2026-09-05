@@ -34,10 +34,17 @@ CommitWindow* openRecentRepository(const QString& root, QWidget* dialogParent);
 // Asks for a directory and opens the repository containing it. Null when cancelled, as when nothing claimed it.
 CommitWindow* browseForRepository(QWidget* dialogParent);
 
+// What a finished scan reports. A scan that added nothing says why either way; ExceptAdditions is for a
+// caller that shows the recent list itself, where the new rows are the report.
+enum class ScanReport { Everything, ExceptAdditions };
+
 // Asks for a folder and adds the repositories one level inside it to the recent list, opening none, each
-// placed by when it was last worked in and carrying the submodules it declares. Reports what the scan found.
+// placed by when it was last worked in and carrying the submodules it declares.
 // Returns once the queries are away: see findRepositoriesInFolder() for what they cost.
-void scanFolderForRepositories(QWidget* dialogParent);
+void scanFolderForRepositories(QWidget* dialogParent, ScanReport report = ScanReport::Everything);
+
+// Asks first, and drops every entry. The repositories themselves are untouched.
+void clearRecentRepositories(QWidget* dialogParent);
 
 // The welcome window, raised if one is already up. It deletes itself when closed, and any open through
 // openRepositoryWindow() closes it.

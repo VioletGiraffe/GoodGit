@@ -42,6 +42,7 @@ size_t recordFound(const std::vector<FoundRepository>& found);
 void setSubmodules(const Repository& repository);
 
 void forget(const QString& root);
+void forgetAll();
 
 // Announces every write, so the panels in every window rebuild
 class Notifier final : public QObject
