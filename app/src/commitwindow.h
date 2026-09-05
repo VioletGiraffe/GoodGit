@@ -130,7 +130,7 @@ private:
 	void showFileContents(const FileEntry& entry);
 	// The file in its default application; failure is reported - a row can outlive its file
 	void openEntryExternally(const FileEntry& entry);
-	void onRowActivated(const QModelIndex& index);
+	void onRowActivated(const QModelIndex& sourceIndex);
 	void openSubmoduleWindow(const FileEntry& entry);
 	void showContextMenu(const QPoint& pos);
 	void showParentCommitContextMenu(const QPoint& pos);

@@ -927,12 +927,16 @@ void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 	const StateStamp stamp = stateStamp();
 	const RepoState& state = _repo->state();
 
-	const auto checkoutAndGo = [this, onDone](const QString& branch) {
-		_repo->checkoutBranch(branch, [this, onDone](std::expected<void, QString> result) {
+	// The completion for either write below: `errorTitle` on failure, then onDone either way
+	const auto reportFailureThenDone = [this, onDone](const QString& errorTitle) {
+		return [this, onDone, errorTitle](std::expected<void, QString> result) {
 			if (!result)
-				showError(tr("Failed to check out the branch"), result.error());
+				showError(errorTitle, result.error());
 			onDone(result.has_value());
-		});
+		};
+	};
+	const auto checkoutAndGo = [this, reportFailureThenDone](const QString& branch) {
+		_repo->checkoutBranch(branch, reportFailureThenDone(tr("Failed to check out the branch")));
 	};
 
 	if (state.localBranchesAtHead.size() == 1)
@@ -970,7 +974,7 @@ void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 		}
 
 		const QString localName = remoteBranch.mid(remoteBranch.indexOf(QLatin1Char('/')) + 1);
-		_repo->localBranchExists(localName, this, [this, stamp, localName, remoteBranch, onDone](bool exists) {
+		_repo->localBranchExists(localName, this, [this, stamp, localName, remoteBranch, onDone, reportFailureThenDone](bool exists) {
 			if (exists)
 			{
 				// Checking it out would move the working tree
@@ -985,11 +989,7 @@ void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 				onDone(false);
 				return;
 			}
-			_repo->createTrackingBranch(localName, remoteBranch, [this, onDone](std::expected<void, QString> result) {
-				if (!result)
-					showError(tr("Failed to create the branch"), result.error());
-				onDone(result.has_value());
-			});
+			_repo->createTrackingBranch(localName, remoteBranch, reportFailureThenDone(tr("Failed to create the branch")));
 		});
 		return;
 	}
@@ -1593,7 +1593,7 @@ void CommitWindow::deleteSelection()
 			return;
 	}
 
-	const auto trashAll = [this](const QStringList& paths) {
+	const auto trashAllThenRefresh = [this](const QStringList& paths) {
 		for (const QString& path : paths)
 		{
 			if (QFile::moveToTrash(QDir(_repo->path()).filePath(path)))
@@ -1602,29 +1602,28 @@ void CommitWindow::deleteSelection()
 			MessageBox::notice(this, tr("Delete failed"),
 				tr("Could not move '%1' to the Recycle Bin (the file may be locked, or the volume has no Recycle Bin).\n"
 				   "The remaining files were not deleted.").arg(path), {});
-			return;
+			break;
 		}
+		_repo->refresh();
 	};
 
 	if (!addedPaths.isEmpty())
 	{
 		// Un-add first, or the index would point at a file that no longer exists
 		beginMutation();
-		_repo->unAdd(addedPaths, [this, paths = untrackedPaths + trackedPaths + addedPaths, trashAll](std::expected<void, QString> result) {
+		_repo->unAdd(addedPaths, [this, paths = untrackedPaths + trackedPaths + addedPaths, trashAllThenRefresh](std::expected<void, QString> result) {
 			endMutation();
 			if (!result)
 			{
 				showError(tr("Failed to un-add before deleting"), result.error());
 				return;
 			}
-			trashAll(paths);
-			_repo->refresh();
+			trashAllThenRefresh(paths);
 		});
 		return;
 	}
 
-	trashAll(untrackedPaths + trackedPaths);
-	_repo->refresh();
+	trashAllThenRefresh(untrackedPaths + trackedPaths);
 }
 
 void CommitWindow::discardSelection()
