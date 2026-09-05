@@ -181,6 +181,48 @@ void CommitWindow::refreshRepository()
 
 void CommitWindow::buildUi()
 {
+	buildMenuBar();
+	QWidget* leftPane = buildLeftPane();
+
+	auto* rightPane = new QWidget;
+	auto* rightLayout = new QVBoxLayout(rightPane);
+	rightLayout->setContentsMargins(0, 0, 0, 0);
+	rightLayout->setSpacing(0);
+	_diffPane = new DiffPane;
+	rightLayout->addWidget(_diffPane, 1);
+	_pushLogPane = buildPushLogPane();
+	rightLayout->addWidget(_pushLogPane);
+	_pushLogPane->hide();
+
+	_splitter = new QSplitter(Qt::Horizontal);
+	_splitter->setChildrenCollapsible(false);
+	_splitter->setHandleWidth(1);
+	_splitter->addWidget(leftPane);
+	_splitter->addWidget(rightPane);
+	_splitter->setStretchFactor(0, 0);
+	_splitter->setStretchFactor(1, 1);
+	if (const QByteArray state = QSettings{}.value(Settings::CommitWindowSplitterKey).toByteArray(); !state.isEmpty())
+		_splitter->restoreState(state);
+	else
+		_initialWidthPending = true;
+	setCentralWidget(_splitter);
+	resize(SplitterWidth + RecentRepositoriesDockWidth, 740); // the dock is beside the two panes, not carved out of them
+	acceptRepositoryFolderDrops(this);
+
+	connect(&_filesModel, &ChangedFilesModel::checksChanged, this, &CommitWindow::updateControlStates);
+	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] {
+		_branchLabel->setFont(monospaceFont());
+		if (_incomingView)
+			_incomingView->setFont(monospaceFont());
+	});
+	installShortcuts();
+
+	updateControlStates();
+	_messageEdit->setFocus();
+}
+
+void CommitWindow::buildMenuBar()
+{
 	QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
 	QAction* openRepositoryAction = fileMenu->addAction(tr("&Open Repository..."), this, [this] { browseForRepository(this); });
 	openRepositoryAction->setShortcut(QKeySequence::Open);
@@ -216,12 +258,51 @@ void CommitWindow::buildUi()
 		CAboutDialog aboutDialog{ QStringLiteral(GG_VERSION), this };
 		aboutDialog.exec();
 	});
+}
 
+QWidget* CommitWindow::buildLeftPane()
+{
 	auto* leftPane = new QWidget;
 	auto* leftLayout = new QVBoxLayout(leftPane);
 	leftLayout->setContentsMargins(0, 0, 0, 0);
 	leftLayout->setSpacing(0);
+	leftLayout->addWidget(buildRepoBar());
 
+	// Colored by the stylesheet through the object names
+	const auto makeStrip = [](const char* objectName) {
+		auto* strip = new QLabel;
+		strip->setObjectName(QLatin1String(objectName));
+		strip->setWordWrap(true);
+		strip->setMargin(6);
+		strip->setVisible(false);
+		return strip;
+	};
+	// First: the other strips describe a state this one says could not be read
+	_readFailureStrip = makeStrip("errorStrip");
+	_opStrip = makeStrip("errorStrip");
+	_detachedStrip = makeStrip("warningStrip");
+	leftLayout->addWidget(_readFailureStrip);
+	leftLayout->addWidget(_opStrip);
+	leftLayout->addWidget(_detachedStrip);
+
+	leftLayout->addWidget(buildCounterBar());
+
+	_filesView = new FileListView;
+	_filesView->setModel(&_filesModel);
+	_filesView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+	_filesView->installEventFilter(this);
+	leftLayout->addWidget(_filesView, 1);
+	connect(_filesView, &FileListView::rowActivated, this, &CommitWindow::onRowActivated);
+	connect(_filesView, &QWidget::customContextMenuRequested, this, &CommitWindow::showContextMenu);
+	connect(_filesView->selectionModel(), &QItemSelectionModel::currentChanged, this, &CommitWindow::showDiffForCurrentRow);
+
+	leftLayout->addWidget(buildMessageHeader());
+	leftLayout->addWidget(buildMessageArea());
+	return leftPane;
+}
+
+QWidget* CommitWindow::buildRepoBar()
+{
 	// Repo header row: name, branch, ahead count, then the secondary actions
 	auto* repoBar = new QFrame;
 	repoBar->setObjectName(QStringLiteral("repoBar"));
@@ -250,25 +331,14 @@ void CommitWindow::buildUi()
 	repoBarLayout->addStretch();
 	repoBarLayout->addWidget(_pushButton);
 	repoBarLayout->addWidget(_historyButton);
-	leftLayout->addWidget(repoBar);
 
-	// Colored by the stylesheet through the object names
-	const auto makeStrip = [](const char* objectName) {
-		auto* strip = new QLabel;
-		strip->setObjectName(QLatin1String(objectName));
-		strip->setWordWrap(true);
-		strip->setMargin(6);
-		strip->setVisible(false);
-		return strip;
-	};
-	// First: the other strips describe a state this one says could not be read
-	_readFailureStrip = makeStrip("errorStrip");
-	_opStrip = makeStrip("errorStrip");
-	_detachedStrip = makeStrip("warningStrip");
-	leftLayout->addWidget(_readFailureStrip);
-	leftLayout->addWidget(_opStrip);
-	leftLayout->addWidget(_detachedStrip);
+	connect(_pushButton, &QPushButton::clicked, this, &CommitWindow::startPush);
+	connect(_historyButton, &QPushButton::clicked, this, &CommitWindow::showHistoryWindow);
+	return repoBar;
+}
 
+QWidget* CommitWindow::buildCounterBar()
+{
 	auto* counterBar = new QFrame;
 	counterBar->setObjectName(QStringLiteral("counterBar"));
 	auto* counterLayout = new QHBoxLayout(counterBar);
@@ -283,14 +353,16 @@ void CommitWindow::buildUi()
 	_lineTotalsLabel->setToolTip(tr("Lines added and removed in the checked files. "
 		"Untracked and binary files have no line counts and are not included."));
 	counterLayout->addWidget(_lineTotalsLabel);
-	leftLayout->addWidget(counterBar);
 
-	_filesView = new FileListView;
-	_filesView->setModel(&_filesModel);
-	_filesView->setSelectionMode(QAbstractItemView::ExtendedSelection);
-	_filesView->installEventFilter(this);
-	leftLayout->addWidget(_filesView, 1);
+	connect(_checkAllBox, &QCheckBox::clicked, this, [this] {
+		_filesModel.setAllChecked(_filesModel.checkedCount() < _filesModel.checkableCount());
+	});
+	connect(modifiedOnlyButton, &QPushButton::clicked, &_filesModel, &ChangedFilesModel::checkAllExceptUntracked);
+	return counterBar;
+}
 
+QWidget* CommitWindow::buildMessageHeader()
+{
 	auto* messageHeader = new QWidget;
 	messageHeader->setObjectName(QStringLiteral("messageHeader"));
 	auto* messageHeaderLayout = new QHBoxLayout(messageHeader);
@@ -303,8 +375,13 @@ void CommitWindow::buildUi()
 	_parentCommitLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 	_parentCommitLabel->setContextMenuPolicy(Qt::CustomContextMenu);
 	messageHeaderLayout->addWidget(_parentCommitLabel, 1);
-	leftLayout->addWidget(messageHeader);
 
+	connect(_parentCommitLabel, &QWidget::customContextMenuRequested, this, &CommitWindow::showParentCommitContextMenu);
+	return messageHeader;
+}
+
+QWidget* CommitWindow::buildMessageArea()
+{
 	auto* messageArea = new QWidget;
 	auto* messageLayout = new QVBoxLayout(messageArea);
 	messageLayout->setContentsMargins(8, 0, 8, 8);
@@ -325,18 +402,17 @@ void CommitWindow::buildUi()
 	_commitPushButton->setToolTip(QStringLiteral("Ctrl+Shift+Enter"));
 	messageLayout->addWidget(_commitButton);
 	messageLayout->addWidget(_commitPushButton);
-	leftLayout->addWidget(messageArea);
 
-	auto* rightPane = new QWidget;
-	auto* rightLayout = new QVBoxLayout(rightPane);
-	rightLayout->setContentsMargins(0, 0, 0, 0);
-	rightLayout->setSpacing(0);
+	connect(_messageEdit, &QPlainTextEdit::textChanged, this, &CommitWindow::updateControlStates);
+	connect(_commitButton, &QPushButton::clicked, this, [this] { startCommit(false); });
+	connect(_commitPushButton, &QPushButton::clicked, this, [this] { startCommit(true); });
+	return messageArea;
+}
 
-	_diffPane = new DiffPane;
-	rightLayout->addWidget(_diffPane, 1);
-
-	_pushLogPane = new QWidget;
-	auto* pushLogLayout = new QVBoxLayout(_pushLogPane);
+QWidget* CommitWindow::buildPushLogPane()
+{
+	auto* pane = new QWidget;
+	auto* pushLogLayout = new QVBoxLayout(pane);
 	pushLogLayout->setContentsMargins(0, 0, 0, 0);
 	pushLogLayout->setSpacing(0);
 	auto* pushLogHeader = new QFrame;
@@ -352,60 +428,13 @@ void CommitWindow::buildUi()
 	_pushLogView->setMinimumHeight(70);
 	_pushLogView->setMaximumHeight(170);
 	pushLogLayout->addWidget(_pushLogView);
-	rightLayout->addWidget(_pushLogPane);
-	_pushLogPane->hide();
 
-	_splitter = new QSplitter(Qt::Horizontal);
-	_splitter->setChildrenCollapsible(false);
-	_splitter->setHandleWidth(1);
-	_splitter->addWidget(leftPane);
-	_splitter->addWidget(rightPane);
-	_splitter->setStretchFactor(0, 0);
-	_splitter->setStretchFactor(1, 1);
-	if (const QByteArray state = QSettings{}.value(Settings::CommitWindowSplitterKey).toByteArray(); !state.isEmpty())
-		_splitter->restoreState(state);
-	else
-		_initialWidthPending = true;
-	setCentralWidget(_splitter);
-	resize(SplitterWidth + RecentRepositoriesDockWidth, 740); // the dock is beside the two panes, not carved out of them
-	acceptRepositoryFolderDrops(this);
+	connect(hidePushLogButton, &QPushButton::clicked, pane, &QWidget::hide);
+	return pane;
+}
 
-	connect(_pushButton, &QPushButton::clicked, this, &CommitWindow::startPush);
-	connect(_historyButton, &QPushButton::clicked, this, &CommitWindow::showHistoryWindow);
-	connect(hidePushLogButton, &QPushButton::clicked, _pushLogPane, &QWidget::hide);
-	connect(_commitButton, &QPushButton::clicked, this, [this] { startCommit(false); });
-	connect(_commitPushButton, &QPushButton::clicked, this, [this] { startCommit(true); });
-	connect(_messageEdit, &QPlainTextEdit::textChanged, this, &CommitWindow::updateControlStates);
-	connect(&_filesModel, &ChangedFilesModel::checksChanged, this, &CommitWindow::updateControlStates);
-	connect(_checkAllBox, &QCheckBox::clicked, this, [this] {
-		_filesModel.setAllChecked(_filesModel.checkedCount() < _filesModel.checkableCount());
-	});
-	connect(modifiedOnlyButton, &QPushButton::clicked, &_filesModel, &ChangedFilesModel::checkAllExceptUntracked);
-	connect(_filesView, &FileListView::rowActivated, this, &CommitWindow::onRowActivated);
-	connect(_filesView, &QWidget::customContextMenuRequested, this, &CommitWindow::showContextMenu);
-	connect(_filesView->selectionModel(), &QItemSelectionModel::currentChanged, this, &CommitWindow::showDiffForCurrentRow);
-	connect(_parentCommitLabel, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
-		// Copied before exec() spins an event loop, in which a finishing refresh could replace the state
-		const RepoState& state = _repo->state();
-		const QString sha = state.headSha;
-		const QString subject = state.headSubject;
-		if (sha.isEmpty())
-			return;
-
-		QMenu menu{ this };
-		QAction* copyTitleAction = menu.addAction(tr("Copy commit title"), this, [subject] { QApplication::clipboard()->setText(subject); });
-		copyTitleAction->setEnabled(!subject.isEmpty());
-		menu.addAction(tr("Copy long hash"), this, [sha] { QApplication::clipboard()->setText(sha); });
-		menu.addAction(tr("Copy short hash"), this, [sha] { QApplication::clipboard()->setText(shortSha(sha)); });
-		menu.exec(_parentCommitLabel->mapToGlobal(pos));
-	});
-
-	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] {
-		_branchLabel->setFont(monospaceFont());
-		if (_incomingView)
-			_incomingView->setFont(monospaceFont());
-	});
-
+void CommitWindow::installShortcuts()
+{
 	new QShortcut(QKeySequence(Qt::Key_Escape), this, [this] { close(); });
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_H), this, [this] { showHistoryWindow(); });
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_P), this, [this] {
@@ -424,9 +453,23 @@ void CommitWindow::buildUi()
 	};
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Return), this, commitPushShortcut);
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Enter), this, commitPushShortcut);
+}
 
-	updateControlStates();
-	_messageEdit->setFocus();
+void CommitWindow::showParentCommitContextMenu(const QPoint& pos)
+{
+	// Copied before exec() spins an event loop, in which a finishing refresh could replace the state
+	const RepoState& state = _repo->state();
+	const QString sha = state.headSha;
+	const QString subject = state.headSubject;
+	if (sha.isEmpty())
+		return;
+
+	QMenu menu{ this };
+	QAction* copyTitleAction = menu.addAction(tr("Copy commit title"), this, [subject] { QApplication::clipboard()->setText(subject); });
+	copyTitleAction->setEnabled(!subject.isEmpty());
+	menu.addAction(tr("Copy long hash"), this, [sha] { QApplication::clipboard()->setText(sha); });
+	menu.addAction(tr("Copy short hash"), this, [sha] { QApplication::clipboard()->setText(shortSha(sha)); });
+	menu.exec(_parentCommitLabel->mapToGlobal(pos));
 }
 
 QAction* CommitWindow::buildRecentRepositoriesDock()

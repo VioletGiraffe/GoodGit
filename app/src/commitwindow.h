@@ -50,8 +50,17 @@ protected:
 
 private:
 	void buildUi();
+	void buildMenuBar();
+	// Each returns the widget it built, its child widgets connected
+	[[nodiscard]] QWidget* buildLeftPane();
+	[[nodiscard]] QWidget* buildRepoBar();
+	[[nodiscard]] QWidget* buildCounterBar();
+	[[nodiscard]] QWidget* buildMessageHeader();
+	[[nodiscard]] QWidget* buildMessageArea();
+	[[nodiscard]] QWidget* buildPushLogPane();
 	// Returns the action that shows and hides the dock
 	[[nodiscard]] QAction* buildRecentRepositoriesDock();
+	void installShortcuts();
 
 	void onRefreshed();
 	// The left pane's preferred width, capped, taken by widening the window rather than out of the diff pane.
@@ -124,6 +133,7 @@ private:
 	void onRowActivated(const QModelIndex& index);
 	void openSubmoduleWindow(const FileEntry& entry);
 	void showContextMenu(const QPoint& pos);
+	void showParentCommitContextMenu(const QPoint& pos);
 
 	// A refresh resets the model, so the selection is carried across it by path
 	struct SelectionByPath
