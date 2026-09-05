@@ -26,9 +26,14 @@ public:
 	// The filter field for this panel: the same placeholder, tooltip and wiring at every site that shows a panel
 	[[nodiscard]] QLineEdit* createFilterField();
 
+	// Puts the keyboard cursor on the first row a filter left visible and takes the focus: Enter then opens it
+	void focusFirstRow();
+
 protected:
 	// Row heights depend on the width the paths wrap into
 	void resizeEvent(QResizeEvent* event) override;
+	// Watches the field createFilterField() made: Escape clears it, Up, Down and Enter move the keyboard to the list
+	bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
 	void rebuild();
@@ -40,6 +45,11 @@ private:
 	// opening a repository rebuilds this tree, so no row survives it.
 	void openRepository(const QString& root, const QString& parentRoot);
 	void showContextMenu(const QPoint& pos);
+	void focusRow(QTreeWidgetItem* item); // a null item does nothing: a filter can leave no row to move to
+	// In the order the rows are drawn in, so a filter's hidden rows and a collapsed repository's submodules are skipped
+	[[nodiscard]] QTreeWidgetItem* firstVisibleRow();
+	[[nodiscard]] QTreeWidgetItem* lastVisibleRow();
+	[[nodiscard]] QTreeWidgetItem* itemForRoot(const QString& root); // null where the list no longer holds `root`
 	[[nodiscard]] static QString rootOf(const QTreeWidgetItem* item); // empty for no item
 
 private:

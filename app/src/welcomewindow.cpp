@@ -17,6 +17,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QShortcut>
 #include <QVBoxLayout>
 RESTORE_COMPILER_WARNINGS
 
@@ -132,21 +133,38 @@ WelcomeWindow::WelcomeWindow()
 
 	const bool anyRecent = !RecentRepositories::list().empty();
 	recentSection->setVisible(anyRecent);
+
+	// The keyboard cursor starts on the first row: Enter then opens the most recently used repository
+	if (anyRecent)
+		panel->focusFirstRow(); // with no list, the first button keeps the focus
+
 	// The list can fill while this window stands: a folder scan adds to it. It can also empty: a row's context menu drops it
 	connect(&RecentRepositories::Notifier::instance(), &RecentRepositories::Notifier::changed, this,
-		[this, recentSection, filterEdit] {
+		[this, recentSection, filterEdit, panel] {
 			const bool showList = !RecentRepositories::list().empty();
-			// The window sized for the introduction alone leaves the list no height to appear in
-			if (showList && recentSection->isHidden() && height() < WithRecentListHeight)
-				WidgetUtils::centerWidgetOnScreen(this, QSize{ width(), WithRecentListHeight });
+			const bool appearing = showList && recentSection->isHidden();
 			if (!showList)
 				filterEdit->clear(); // hidden with the section, it must not still be filtering when the list comes back
+			// The window sized for the introduction alone leaves the list no height to appear in
+			if (appearing && height() < WithRecentListHeight)
+				WidgetUtils::centerWidgetOnScreen(this, QSize{ width(), WithRecentListHeight });
 			recentSection->setVisible(showList);
+			if (appearing)
+				panel->focusFirstRow();
 		});
 
 	connect(openButton, &QPushButton::clicked, this, [this] { browseForRepository(this); });
 	connect(scanButton, &QPushButton::clicked, this, [this] { scanFolderForRepositories(this); });
 	acceptRepositoryFolderDrops(this);
+
+	// The recent list's filter is the only thing here to find anything in
+	new QShortcut(QKeySequence::Find, this, [filterEdit] {
+		if (!filterEdit->isVisible())
+			return; // no list, no filter
+
+		filterEdit->setFocus();
+		filterEdit->selectAll(); // a second Find replaces what the first one typed
+	});
 
 	resize(WindowWidth, anyRecent ? WithRecentListHeight : IntroOnlyHeight);
 	WidgetUtils::centerWidgetOnScreen(this);

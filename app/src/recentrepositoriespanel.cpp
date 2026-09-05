@@ -9,6 +9,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QFileInfo>
 #include <QHeaderView>
+#include <QKeyEvent>
 #include <QLineEdit>
 #include <QMenu>
 #include <QPainter>
@@ -233,9 +234,56 @@ void RecentRepositoriesPanel::resizeEvent(QResizeEvent* event)
 		scheduleDelayedItemsLayout(); // the cached row heights were computed against the old width
 }
 
+bool RecentRepositoriesPanel::eventFilter(QObject* watched, QEvent* event)
+{
+	const QEvent::Type type = event->type();
+	if (type != QEvent::KeyPress && type != QEvent::ShortcutOverride)
+		return QTreeWidget::eventFilter(watched, event);
+
+	auto* field = static_cast<QLineEdit*>(watched); // createFilterField() installs this filter on nothing else
+	const int key = static_cast<QKeyEvent*>(event)->key();
+	const bool cancellingSearch = key == Qt::Key_Escape && !field->text().isEmpty();
+
+	// QLineEdit does not claim Escape, so a window shortcut gets it first: in a repository window that closes the window.
+	// Accepting the override sends it to the field as a key press instead.
+	if (type == QEvent::ShortcutOverride)
+	{
+		if (!cancellingSearch)
+			return QTreeWidget::eventFilter(watched, event);
+
+		event->accept();
+		return true;
+	}
+
+	// The field is where a search starts and the list is where it ends, so these keys move on to it
+	switch (key)
+	{
+	case Qt::Key_Down:
+	case Qt::Key_Return:
+	case Qt::Key_Enter: // the numpad one
+		focusRow(firstVisibleRow());
+		return true;
+	case Qt::Key_Up:
+		focusRow(lastVisibleRow());
+		return true;
+	case Qt::Key_Escape:
+		if (!cancellingSearch)
+			break; // nothing to cancel: Escape stays the window's, and closes a repository window
+
+		field->clear();
+		focusRow(currentItem() ? currentItem() : firstVisibleRow()); // the cursor kept its row through the unfiltering
+		return true;
+	default:
+		break;
+	}
+
+	return QTreeWidget::eventFilter(watched, event);
+}
+
 void RecentRepositoriesPanel::rebuild()
 {
 	rememberExpansion(); // clear() is about to destroy the rows holding it
+	const QString currentRowRoot = rootOf(currentItem()); // and the row the keyboard cursor is on with them
 	clear();
 
 	for (const RecentRepository& repository : RecentRepositories::list())
@@ -266,6 +314,10 @@ void RecentRepositoriesPanel::rebuild()
 	}
 
 	applyFilter(); // also sets each row's expansion
+
+	// After applyFilter(): a row it hid is not one the cursor may sit on
+	if (QTreeWidgetItem* item = itemForRoot(currentRowRoot); item && !item->isHidden())
+		setCurrentItem(item);
 }
 
 void RecentRepositoriesPanel::setFilter(const QString& text)
@@ -286,8 +338,65 @@ QLineEdit* RecentRepositoriesPanel::createFilterField()
 	field->setPlaceholderText(tr("Search repositories..."));
 	field->setToolTip(tr("Show only the repositories whose path contains this text"));
 	field->setClearButtonEnabled(true);
+	field->installEventFilter(this);
 	connect(field, &QLineEdit::textChanged, this, &RecentRepositoriesPanel::setFilter);
 	return field;
+}
+
+void RecentRepositoriesPanel::focusFirstRow()
+{
+	focusRow(firstVisibleRow());
+}
+
+void RecentRepositoriesPanel::focusRow(QTreeWidgetItem* item)
+{
+	if (!item)
+		return;
+
+	setCurrentItem(item); // the cursor, not a selection: the view is NoSelection
+	setFocus();
+}
+
+QTreeWidgetItem* RecentRepositoriesPanel::firstVisibleRow()
+{
+	for (int i = 0; i < topLevelItemCount(); ++i)
+	{
+		// A hidden repository hides its submodules too, so the first row shown is always a repository
+		if (!topLevelItem(i)->isHidden())
+			return topLevelItem(i);
+	}
+	return nullptr;
+}
+
+QTreeWidgetItem* RecentRepositoriesPanel::lastVisibleRow()
+{
+	QTreeWidgetItem* last = firstVisibleRow();
+	if (!last)
+		return nullptr;
+
+	while (QTreeWidgetItem* below = itemBelow(last))
+		last = below;
+	return last;
+}
+
+QTreeWidgetItem* RecentRepositoriesPanel::itemForRoot(const QString& root)
+{
+	if (root.isEmpty())
+		return nullptr;
+
+	for (int i = 0; i < topLevelItemCount(); ++i)
+	{
+		QTreeWidgetItem* item = topLevelItem(i);
+		if (rootOf(item) == root)
+			return item;
+
+		for (int child = 0; child < item->childCount(); ++child)
+		{
+			if (rootOf(item->child(child)) == root)
+				return item->child(child);
+		}
+	}
+	return nullptr;
 }
 
 // Goes through _expandedRoots rather than the row: a rebuild while the menu is open destroys the row.
