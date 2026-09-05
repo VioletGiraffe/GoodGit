@@ -50,9 +50,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QMenuBar>
 #include <QPlainTextEdit>
 #include <QPushButton>
-#include <QRegularExpression>
 #include <QScreen>
-#include <QSet>
 #include <QShortcut>
 #include <QSplitter>
 #include <QTextCursor>
@@ -134,85 +132,6 @@ QString listedPaths(const QStringList& paths)
 	if (paths.size() > shown.size())
 		shown.push_back(QStringLiteral("... and %1 more").arg(paths.size() - shown.size()));
 	return shown.join(QLatin1Char('\n'));
-}
-
-bool looksLikeHexSha(const QString& token)
-{
-	if (token.length() < 7)
-		return false;
-	for (const QChar c : token)
-	{
-		if (!c.isDigit() && !(c >= QLatin1Char('a') && c <= QLatin1Char('f')) && !(c >= QLatin1Char('A') && c <= QLatin1Char('F')))
-			return false;
-	}
-	return true;
-}
-
-// Letters, not characters: "x1234567" and "a_2_bc" are not words.
-// Four, because the completer needs three typed characters before it offers anything.
-bool hasAtLeastFourLetters(const QString& token)
-{
-	int letters = 0;
-	for (const QChar c : token)
-	{
-		if (c.isLetter() && ++letters == 4)
-			return true;
-	}
-	return false;
-}
-
-// Every changed file's path and basename, plus identifier-shaped words from the diff.
-// Context lines count as much as changed ones: the backends ask for the enclosing function, whose names
-// describe the change.
-// Fewer than 4 letters and a small stoplist weed out prose function words.
-// Hex-sha-shaped tokens are dropped: submodule pointer diffs would pollute the pool.
-QStringList completionWordsFor(const std::vector<FileEntry>& files, QByteArray diff)
-{
-	constexpr qsizetype MaxDiffBytesForWords = 8 * 1024 * 1024;
-	constexpr qsizetype MaxWords = 20000;
-	static const QSet<QString> stopWords = {
-		QStringLiteral("with"), QStringLiteral("from"), QStringLiteral("this"), QStringLiteral("that"),
-		QStringLiteral("when"), QStringLiteral("then"), QStringLiteral("than"), QStringLiteral("they"),
-		QStringLiteral("them"), QStringLiteral("their"), QStringLiteral("there"), QStringLiteral("these"),
-		QStringLiteral("those"), QStringLiteral("have"), QStringLiteral("been"), QStringLiteral("being"),
-		QStringLiteral("will"), QStringLiteral("would"), QStringLiteral("should"), QStringLiteral("could"),
-		QStringLiteral("into"), QStringLiteral("onto"), QStringLiteral("only"), QStringLiteral("over"),
-		QStringLiteral("also"), QStringLiteral("each"), QStringLiteral("some"), QStringLiteral("such"),
-		QStringLiteral("must"), QStringLiteral("does"), QStringLiteral("done"), QStringLiteral("upon"),
-		QStringLiteral("very"), QStringLiteral("more"), QStringLiteral("most"), QStringLiteral("here"),
-		QStringLiteral("where"), QStringLiteral("which"), QStringLiteral("while"), QStringLiteral("after"),
-		QStringLiteral("before"), QStringLiteral("about"), QStringLiteral("because"),
-	};
-	static const QRegularExpression wordRe(QStringLiteral("[A-Za-z_][A-Za-z0-9_]{3,}"));
-
-	QSet<QString> words;
-	for (const FileEntry& file : files)
-	{
-		words.insert(file.path);
-		words.insert(file.path.mid(file.path.lastIndexOf(QLatin1Char('/')) + 1));
-	}
-
-	diff.truncate(MaxDiffBytesForWords);
-	// Wontfix: split copies the capped diff into lines on every refresh; a skip-when-unchanged check is not worth the complication
-	for (const QByteArray& rawLine : diff.split('\n'))
-	{
-		if (words.size() >= MaxWords)
-			break;
-		// A hunk header's tail is the enclosing function's name; the numbers before it cannot start a word.
-		// Every --git metadata line starts with a letter, so the prefix test alone keeps them out.
-		if (rawLine.size() < 2 || (rawLine[0] != ' ' && rawLine[0] != '+' && rawLine[0] != '-' && rawLine[0] != '@')
-			|| rawLine.startsWith("+++") || rawLine.startsWith("---"))
-			continue;
-
-		const QString line = QString::fromUtf8(rawLine);
-		for (auto it = wordRe.globalMatch(line); it.hasNext(); )
-		{
-			const QString token = it.next().captured();
-			if (hasAtLeastFourLetters(token) && !stopWords.contains(token.toLower()) && !looksLikeHexSha(token))
-				words.insert(token);
-		}
-	}
-	return QStringList{ words.begin(), words.end() };
 }
 
 // A repository's draft group. The path is hashed: it is not a usable settings key. sameRepositoryPath() is
@@ -640,7 +559,10 @@ void CommitWindow::onRefreshed()
 	// Cancelled, or refreshes in quick succession would leave the pool built by whichever finished last
 	_wordPoolQuery.cancel();
 	_wordPoolQuery = _repo->diffAllChanges(this, [this](std::expected<QByteArray, QString> diff) {
-		_messageEdit->setCompletionWords(completionWordsFor(_repo->files(), std::move(diff).value_or(QByteArray{})));
+		QStringList changedPaths;
+		for (const FileEntry& file : _repo->files())
+			changedPaths.push_back(file.path);
+		_messageEdit->setCompletionSources(changedPaths, std::move(diff).value_or(QByteArray{}));
 	});
 }
 
@@ -867,6 +789,12 @@ void CommitWindow::endMutation()
 	updateControlStates();
 }
 
+void CommitWindow::endPush()
+{
+	_pushInFlight = false;
+	updateControlStates();
+}
+
 Vcs::Answer<void> CommitWindow::mutationDone(const QString& errorTitle, bool changesHistory)
 {
 	return [this, errorTitle, changesHistory](std::expected<void, QString> result) {
@@ -1077,8 +1005,7 @@ void CommitWindow::startPush()
 	_repo->planPush([this](std::expected<std::vector<PushStep>, QString> steps) {
 		if (!steps)
 		{
-			_pushInFlight = false;
-			updateControlStates();
+			endPush();
 			showError(tr("Cannot push"), steps.error());
 			return;
 		}
@@ -1106,8 +1033,7 @@ void CommitWindow::runPushStep(size_t index, bool setUpstream)
 				runPushStep(index + 1, /*setUpstream=*/false);
 				return;
 			}
-			_pushInFlight = false;
-			updateControlStates();
+			endPush();
 			_repo->refresh();
 			emit pushed();
 			return;
@@ -1120,8 +1046,7 @@ void CommitWindow::runPushStep(size_t index, bool setUpstream)
 		if (missingUpstream && offerUpstreamThenRetry(index, *missingUpstream))
 			return;
 
-		_pushInFlight = false;
-		updateControlStates();
+		endPush();
 		if (!missingUpstream) // a declined offer already named this failure
 			showError(tr("Push failed"), result.errorText());
 	};
@@ -1268,8 +1193,7 @@ void CommitWindow::showDiffForCurrentRow()
 
 	const DiffPane::ItemInfo info{ entry.path, tr("HEAD %1 working tree").arg(QChar(0x2192)), workingTreeSizeLabel(absolutePath(entry)) };
 	_diffPane->showMessage(info, tr("Loading..."));
-	const qint64 maxBytes = CSettings{}.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong();
-	_diffQuery = _repo->diffFile(entry, maxBytes, this, [this, info](std::expected<QByteArray, QString> diff) {
+	_diffQuery = _repo->diffFile(entry, Settings::maxShownDiffBytes(), this, [this, info](std::expected<QByteArray, QString> diff) {
 		if (!diff)
 			_diffPane->showMessage(info, diff.error()); // an oversize diff fails here, never held whole
 		else if (diff->isEmpty())
@@ -1285,7 +1209,7 @@ void CommitWindow::showFileContents(const FileEntry& entry)
 	QFile file{ path };
 	const qint64 sizeBytes = file.size();
 	const DiffPane::ItemInfo info{ entry.path, tr("new file"), formattedFileSize(sizeBytes) };
-	if (sizeBytes > CSettings{}.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong())
+	if (sizeBytes > Settings::maxShownDiffBytes())
 	{
 		_diffPane->showMessage(info, tr("The file is too large to display (%1).").arg(formattedFileSize(sizeBytes)));
 		return;

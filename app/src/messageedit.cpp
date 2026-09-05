@@ -10,7 +10,9 @@ DISABLE_COMPILER_WARNINGS
 #include <QCompleter>
 #include <QKeyEvent>
 #include <QPainter>
+#include <QRegularExpression>
 #include <QScrollBar>
+#include <QSet>
 #include <QStringListModel>
 #include <QTextBlock>
 RESTORE_COMPILER_WARNINGS
@@ -31,6 +33,85 @@ bool isCompletionTokenChar(QChar c)
 {
 	return c.isLetterOrNumber() || c == QLatin1Char('_') || c == QLatin1Char('-') || c == QLatin1Char('.')
 		|| c == QLatin1Char('/');
+}
+
+bool looksLikeHexSha(const QString& token)
+{
+	if (token.length() < 7)
+		return false;
+	for (const QChar c : token)
+	{
+		if (!c.isDigit() && !(c >= QLatin1Char('a') && c <= QLatin1Char('f')) && !(c >= QLatin1Char('A') && c <= QLatin1Char('F')))
+			return false;
+	}
+	return true;
+}
+
+// Letters, not characters: "x1234567" and "a_2_bc" are not words.
+// Four: one more than the default minimum prefix the auto-popup waits for.
+bool hasAtLeastFourLetters(const QString& token)
+{
+	int letters = 0;
+	for (const QChar c : token)
+	{
+		if (c.isLetter() && ++letters == 4)
+			return true;
+	}
+	return false;
+}
+
+// Every changed path and its basename, plus identifier-shaped words from the diff.
+// Context lines count as much as changed ones: the backends ask for the enclosing function, whose names
+// describe the change.
+// Fewer than 4 letters and a small stoplist weed out prose function words.
+// Hex-sha-shaped tokens are dropped: submodule pointer diffs would pollute the pool.
+QStringList completionWordsFor(const QStringList& changedPaths, QByteArray diff)
+{
+	constexpr qsizetype MaxDiffBytesForWords = 8 * 1024 * 1024;
+	constexpr qsizetype MaxWords = 20000;
+	static const QSet<QString> stopWords = {
+		QStringLiteral("with"), QStringLiteral("from"), QStringLiteral("this"), QStringLiteral("that"),
+		QStringLiteral("when"), QStringLiteral("then"), QStringLiteral("than"), QStringLiteral("they"),
+		QStringLiteral("them"), QStringLiteral("their"), QStringLiteral("there"), QStringLiteral("these"),
+		QStringLiteral("those"), QStringLiteral("have"), QStringLiteral("been"), QStringLiteral("being"),
+		QStringLiteral("will"), QStringLiteral("would"), QStringLiteral("should"), QStringLiteral("could"),
+		QStringLiteral("into"), QStringLiteral("onto"), QStringLiteral("only"), QStringLiteral("over"),
+		QStringLiteral("also"), QStringLiteral("each"), QStringLiteral("some"), QStringLiteral("such"),
+		QStringLiteral("must"), QStringLiteral("does"), QStringLiteral("done"), QStringLiteral("upon"),
+		QStringLiteral("very"), QStringLiteral("more"), QStringLiteral("most"), QStringLiteral("here"),
+		QStringLiteral("where"), QStringLiteral("which"), QStringLiteral("while"), QStringLiteral("after"),
+		QStringLiteral("before"), QStringLiteral("about"), QStringLiteral("because"),
+	};
+	static const QRegularExpression wordRe(QStringLiteral("[A-Za-z_][A-Za-z0-9_]{3,}"));
+
+	QSet<QString> words;
+	for (const QString& path : changedPaths)
+	{
+		words.insert(path);
+		words.insert(path.mid(path.lastIndexOf(QLatin1Char('/')) + 1));
+	}
+
+	diff.truncate(MaxDiffBytesForWords);
+	// Wontfix: split copies the capped diff into lines on every refresh; a skip-when-unchanged check is not worth the complication
+	for (const QByteArray& rawLine : diff.split('\n'))
+	{
+		if (words.size() >= MaxWords)
+			break;
+		// A hunk header's tail is the enclosing function's name; the numbers before it cannot start a word.
+		// Every --git metadata line starts with a letter, so the prefix test alone keeps them out.
+		if (rawLine.size() < 2 || (rawLine[0] != ' ' && rawLine[0] != '+' && rawLine[0] != '-' && rawLine[0] != '@')
+			|| rawLine.startsWith("+++") || rawLine.startsWith("---"))
+			continue;
+
+		const QString line = QString::fromUtf8(rawLine);
+		for (auto it = wordRe.globalMatch(line); it.hasNext(); )
+		{
+			const QString token = it.next().captured();
+			if (hasAtLeastFourLetters(token) && !stopWords.contains(token.toLower()) && !looksLikeHexSha(token))
+				words.insert(token);
+		}
+	}
+	return QStringList{ words.begin(), words.end() };
 }
 
 }
@@ -69,8 +150,9 @@ QSize MessageEdit::sizeHint() const
 	return { qRound(textWidth) + 2 * frameWidth() + verticalScrollBar()->sizeHint().width(), QPlainTextEdit::sizeHint().height() };
 }
 
-void MessageEdit::setCompletionWords(QStringList words)
+void MessageEdit::setCompletionSources(const QStringList& changedPaths, QByteArray diff)
 {
+	QStringList words = completionWordsFor(changedPaths, std::move(diff));
 	// Sorted once, so that each block putExactCaseMatchesFirst produces is alphabetical
 	std::sort(words.begin(), words.end(),
 		[](const QString& l, const QString& r) { return l.compare(r, Qt::CaseInsensitive) < 0; });

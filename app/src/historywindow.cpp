@@ -685,8 +685,7 @@ void HistoryWindow::showDiffForCurrentFile()
 	_currentItem = { entry.path, shortSha(sha) };
 
 	_diffPane->showMessage(_currentItem, tr("Loading..."));
-	const qint64 maxBytes = CSettings{}.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong();
-	_diffQuery = _repo->commitFileDiff(sha, entry, maxBytes, this, [this](std::expected<QByteArray, QString> diff) {
+	_diffQuery = _repo->commitFileDiff(sha, entry, Settings::maxShownDiffBytes(), this, [this](std::expected<QByteArray, QString> diff) {
 		if (!diff)
 			_diffPane->showMessage(_currentItem, diff.error()); // an oversize diff fails here, never held whole
 		else if (diff->isEmpty())
