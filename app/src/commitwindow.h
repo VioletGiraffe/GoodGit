@@ -173,7 +173,6 @@ private:
 	CLabelElided* _branchLabel = nullptr;
 	QLabel* _aheadLabel = nullptr;
 	QPushButton* _pushButton = nullptr;
-	QPushButton* _historyButton = nullptr;
 	QAction* _checkIncomingAction = nullptr;
 	QAction* _uncommitAction = nullptr;
 	QAction* _continueAction = nullptr;

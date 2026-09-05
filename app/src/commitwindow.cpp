@@ -87,6 +87,12 @@ QString capitalized(const QString& text)
 	return text.isEmpty() ? text : QString{ text.front().toUpper() } + text.sliced(1);
 }
 
+void setStripTextOrHide(QLabel* strip, const QString& text)
+{
+	strip->setText(text);
+	strip->setVisible(!text.isEmpty());
+}
+
 // Untracked files have nothing to restore to. A submodule with changes inside would be checked out over.
 // Row shape only: an operation in progress blocks discarding every row, and each caller must gate on it.
 bool discardable(const FileEntry& entry)
@@ -102,6 +108,19 @@ bool discardable(const FileEntry& entry)
 bool contentDiscardable(const FileEntry& entry)
 {
 	return entry.isSubmodule && entry.content == SubmoduleContent::DirtyTracked;
+}
+
+// The rows `matches` accepts, by path: a mixed selection is a no-op for the rows it rejects
+template <typename Matches>
+QStringList pathsWhere(const std::vector<FileEntry>& entries, Matches matches)
+{
+	QStringList paths;
+	for (const FileEntry& entry : entries)
+	{
+		if (matches(entry))
+			paths.push_back(entry.path);
+	}
+	return paths;
 }
 
 // A separator survives only between two visible items, so a group hidden whole leaves no gap behind it
@@ -323,17 +342,17 @@ QWidget* CommitWindow::buildRepoBar()
 	_aheadLabel = new QLabel;
 	_aheadLabel->setObjectName(QStringLiteral("aheadLabel"));
 	_pushButton = new QPushButton(tr("Push"));
-	_historyButton = new QPushButton(tr("History"));
-	_historyButton->setToolTip(QStringLiteral("Ctrl+H"));
+	auto* historyButton = new QPushButton(tr("History"));
+	historyButton->setToolTip(QStringLiteral("Ctrl+H"));
 	repoBarLayout->addWidget(_repoNameLabel);
 	repoBarLayout->addWidget(_branchLabel);
 	repoBarLayout->addWidget(_aheadLabel);
 	repoBarLayout->addStretch();
 	repoBarLayout->addWidget(_pushButton);
-	repoBarLayout->addWidget(_historyButton);
+	repoBarLayout->addWidget(historyButton);
 
 	connect(_pushButton, &QPushButton::clicked, this, &CommitWindow::startPush);
-	connect(_historyButton, &QPushButton::clicked, this, &CommitWindow::showHistoryWindow);
+	connect(historyButton, &QPushButton::clicked, this, &CommitWindow::showHistoryWindow);
 	return repoBar;
 }
 
@@ -689,8 +708,7 @@ void CommitWindow::updateStrips()
 	const QString readFailureText = state.known() ? QString{}
 		: tr("Could not read this repository: %1\nThe list below is from the last successful refresh. "
 			 "Committing, discarding and deleting are disabled until a refresh (F5) succeeds.").arg(state.readFailure);
-	_readFailureStrip->setText(readFailureText);
-	_readFailureStrip->setVisible(!readFailureText.isEmpty());
+	setStripTextOrHide(_readFailureStrip, readFailureText);
 
 	// The operation is named as its own system names it: an hg graft is not a cherry-pick to whoever started it
 	QString opText;
@@ -705,8 +723,7 @@ void CommitWindow::updateStrips()
 	// A row reads Conflicted only while an operation is in progress, so this always extends the line above
 	if (const qsizetype unresolved = _filesModel.unresolvedConflictPaths().size(); unresolved > 0)
 		opText += tr(" %1 file(s) are still conflicted and must be marked resolved first.").arg(unresolved);
-	_opStrip->setText(opText);
-	_opStrip->setVisible(!opText.isEmpty());
+	setStripTextOrHide(_opStrip, opText);
 
 	QString detachedText;
 	// A bisect and a rebase detach HEAD as a matter of course; the op strip explains, and no commit will reattach
@@ -721,8 +738,7 @@ void CommitWindow::updateStrips()
 		else
 			detachedText = tr("Not on a branch, and no branch points at this commit. Committing is blocked - check out a branch first.");
 	}
-	_detachedStrip->setText(detachedText);
-	_detachedStrip->setVisible(!detachedText.isEmpty());
+	setStripTextOrHide(_detachedStrip, detachedText);
 }
 
 void CommitWindow::updateControlStates()
@@ -1754,11 +1770,8 @@ void CommitWindow::discardSubmoduleContent(const FileEntry& submodule)
 void CommitWindow::startSubmoduleContentDiscard(const QString& path, const SubmoduleDiscardPlan& plan)
 {
 	beginMutation();
-	_repo->discardSubmoduleContent(path, plan, [this, path](std::expected<void, QString> result) {
-		endMutation();
-		if (!result)
-			showError(tr("Discard failed"), result.error());
-		_repo->refresh();
+	_repo->discardSubmoduleContent(path, plan, [this, path, done = mutationDone(tr("Discard failed"))](std::expected<void, QString> result) {
+		done(std::move(result));
 		if (CommitWindow* window = repositoryWindow(_repo->submoduleLocation(path).root))
 			window->refreshRepository(); // its rows are stale: its working tree was changed from here
 	});
@@ -1813,12 +1826,8 @@ void CommitWindow::undoLastCommit()
 
 void CommitWindow::addSelectionToIndex()
 {
-	QStringList paths;
-	for (const FileEntry& entry : selectedEntries())
-	{
-		if (!entry.isSubmodule && entry.type == ChangeType::Untracked)
-			paths.push_back(entry.path); // tracked rows in a mixed selection are a no-op
-	}
+	const QStringList paths = pathsWhere(selectedEntries(),
+		[](const FileEntry& entry) { return !entry.isSubmodule && entry.type == ChangeType::Untracked; });
 	if (paths.isEmpty())
 		return;
 	beginMutation();
@@ -1827,12 +1836,8 @@ void CommitWindow::addSelectionToIndex()
 
 void CommitWindow::markResolvedSelection()
 {
-	QStringList paths;
-	for (const FileEntry& entry : selectedEntries())
-	{
-		if (entry.type == ChangeType::Conflicted)
-			paths.push_back(entry.path);
-	}
+	const QStringList paths = pathsWhere(selectedEntries(),
+		[](const FileEntry& entry) { return entry.type == ChangeType::Conflicted; });
 	if (paths.isEmpty())
 		return;
 	beginMutation();
@@ -1841,12 +1846,8 @@ void CommitWindow::markResolvedSelection()
 
 void CommitWindow::unAddSelection()
 {
-	QStringList paths;
-	for (const FileEntry& entry : selectedEntries())
-	{
-		if (!entry.isSubmodule && entry.type == ChangeType::Added)
-			paths.push_back(entry.path);
-	}
+	const QStringList paths = pathsWhere(selectedEntries(),
+		[](const FileEntry& entry) { return !entry.isSubmodule && entry.type == ChangeType::Added; });
 	if (paths.isEmpty())
 		return;
 	beginMutation();
