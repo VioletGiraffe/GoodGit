@@ -26,7 +26,7 @@ private:
 	QLineEdit* _hgExecutable = nullptr;
 	QLineEdit* _textEditorCommand = nullptr;
 	QSpinBox* _historyDepth = nullptr;
-	QSpinBox* _maxDiffMb = nullptr;
+	QSpinBox* _maxDiffMib = nullptr;
 	QCheckBox* _showEolOnlyChanges = nullptr;
 	QSpinBox* _subjectGuideColumn = nullptr;
 	QCheckBox* _completionAutoPopup = nullptr;

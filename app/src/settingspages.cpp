@@ -77,12 +77,12 @@ MainSettingsPage::MainSettingsPage(QWidget* parent) :
 	_historyDepth->setToolTip(tr("How many commits a history window loads at first. \"Load more\" doubles the count."));
 	layout->addRow(tr("History depth, commits:"), _historyDepth);
 
-	_maxDiffMb = new QSpinBox;
-	_maxDiffMb->setRange(1, 64);
-	_maxDiffMb->setSuffix(tr(" MiB"));
-	_maxDiffMb->setValue(int(settings.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong() / (1024 * 1024)));
-	_maxDiffMb->setToolTip(tr("Diffs and files larger than this are not displayed; only their size is shown."));
-	layout->addRow(tr("Largest diff to display:"), _maxDiffMb);
+	_maxDiffMib = new QSpinBox;
+	_maxDiffMib->setRange(1, 64);
+	_maxDiffMib->setSuffix(tr(" MiB"));
+	_maxDiffMib->setValue(int(settings.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong() / (1024 * 1024)));
+	_maxDiffMib->setToolTip(tr("Diffs and files larger than this are not displayed; only their size is shown."));
+	layout->addRow(tr("Largest diff to display:"), _maxDiffMib);
 
 	_showEolOnlyChanges = new QCheckBox{ tr("Show changes where only the line endings differ") };
 	_showEolOnlyChanges->setChecked(settings.value(Settings::ShowLineEndingOnlyChangesKey, Settings::ShowLineEndingOnlyChangesDefault).toBool());
@@ -129,7 +129,7 @@ void MainSettingsPage::acceptSettings()
 	settings.setValue(Settings::HgExecutableKey, _hgExecutable->text().trimmed());
 	settings.setValue(Settings::TextEditorCommandKey, _textEditorCommand->text().trimmed());
 	settings.setValue(Settings::HistoryMaxCommitsKey, _historyDepth->value());
-	settings.setValue(Settings::MaxShownDiffBytesKey, qlonglong{ _maxDiffMb->value() } * 1024 * 1024);
+	settings.setValue(Settings::MaxShownDiffBytesKey, qlonglong{ _maxDiffMib->value() } * 1024 * 1024);
 	settings.setValue(Settings::ShowLineEndingOnlyChangesKey, _showEolOnlyChanges->isChecked());
 	settings.setValue(Settings::SubjectGuideColumnKey, _subjectGuideColumn->value());
 	settings.setValue(Settings::CompletionAutoPopupKey, _completionAutoPopup->isChecked());
