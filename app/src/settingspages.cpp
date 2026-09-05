@@ -79,7 +79,7 @@ MainSettingsPage::MainSettingsPage(QWidget* parent) :
 
 	_maxDiffMb = new QSpinBox;
 	_maxDiffMb->setRange(1, 64);
-	_maxDiffMb->setSuffix(tr(" MB"));
+	_maxDiffMb->setSuffix(tr(" MiB"));
 	_maxDiffMb->setValue(int(settings.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong() / (1024 * 1024)));
 	_maxDiffMb->setToolTip(tr("Diffs and files larger than this are not displayed; only their size is shown."));
 	layout->addRow(tr("Largest diff to display:"), _maxDiffMb);

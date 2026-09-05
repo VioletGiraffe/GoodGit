@@ -1293,7 +1293,7 @@ void CommitWindow::showFileContents(const FileEntry& entry)
 	const DiffPane::ItemInfo info{ entry.path, tr("new file"), formattedFileSize(sizeBytes) };
 	if (sizeBytes > CSettings{}.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong())
 	{
-		_diffPane->showMessage(info, tr("The file is too large to display (%1 MB).").arg(double(sizeBytes) / (1024 * 1024), 0, 'f', 1));
+		_diffPane->showMessage(info, tr("The file is too large to display (%1).").arg(formattedFileSize(sizeBytes)));
 		return;
 	}
 	if (!file.open(QIODevice::ReadOnly))
@@ -1310,7 +1310,7 @@ void CommitWindow::showFileContents(const FileEntry& entry)
 	const std::optional<QString> text = decodedAsText(contents);
 	if (!text)
 	{
-		_diffPane->showMessage(info, tr("Binary file (%1 bytes).").arg(contents.size()));
+		_diffPane->showMessage(info, tr("Binary file (%1).").arg(formattedFileSize(sizeBytes)));
 		return;
 	}
 
