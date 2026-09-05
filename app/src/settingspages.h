@@ -32,6 +32,7 @@ private:
 	QCheckBox* _completionAutoPopup = nullptr;
 	QSpinBox* _completionMinPrefix = nullptr;
 	QComboBox* _newRowCheckPolicy = nullptr;
+	QComboBox* _startupAction = nullptr;
 	QCheckBox* _checkForUpdates = nullptr;
 };
 

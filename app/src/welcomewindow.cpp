@@ -5,18 +5,22 @@
 #include "recentrepositories.h"
 #include "recentrepositoriespanel.h"
 #include "repositorywindows.h"
+#include "settings.h"
 #include "version.h"
 
+#include "settingsui/csettingsdialog.h"
 #include "widgets/widgetutils.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QApplication>
+#include <QCheckBox>
 #include <QFont>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QSettings>
 #include <QShortcut>
 #include <QVBoxLayout>
 RESTORE_COMPILER_WARNINGS
@@ -63,13 +67,12 @@ WelcomeWindow::WelcomeWindow()
 	titleRow->addLayout(nameRow);
 	titleRow->addStretch();
 
-	auto* introLabel = new QLabel(tr("Each window shows one repository.\n\n"
-		"Drop a folder from inside a Git or Mercurial repository onto this window, or choose one below."));
+	auto* introLabel = new QLabel(tr("Drop a Git or Mercurial repository - or any folder inside a repository - onto this window, or choose a repository below."));
 	introLabel->setWordWrap(true);
 
 	auto* openButton = new QPushButton(tr("Open Repository..."));
 	auto* scanButton = new QPushButton(tr("Scan Folder for Repositories..."));
-	scanButton->setToolTip(tr("Add every repository directly inside a folder to the recent list, without opening them"));
+	scanButton->setToolTip(tr("Scans the folder and adds every repository to the recent list below (not recursive)"));
 
 	auto* buttonRow = new QHBoxLayout;
 	buttonRow->addWidget(openButton);
@@ -106,6 +109,22 @@ WelcomeWindow::WelcomeWindow()
 		});
 	}
 #endif
+
+	auto* skipOnStartup = new QCheckBox(tr("Open the last used repository on startup (skip this window; you can restore this in Preferences)"));
+	skipOnStartup->setChecked(Settings::startsWithLastRepository());
+	skipOnStartup->setToolTip(tr("This window still opens when there is no repository to reopen, and View > Show "
+		"Welcome Screen opens it at any time."));
+	introLayout->addWidget(skipOnStartup);
+
+	// Written as toggled: this window has no OK button to store it on
+	connect(skipOnStartup, &QCheckBox::toggled, this, [](bool skip) {
+		QSettings{}.setValue(Settings::StartupActionKey,
+			QLatin1String(skip ? Settings::StartupActionLastRepository : Settings::StartupActionWelcomeScreen));
+	});
+	// Preferences holds the same setting, and a repository window can have it open while this window stands
+	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [skipOnStartup] {
+		skipOnStartup->setChecked(Settings::startsWithLastRepository());
+	});
 
 	auto* panel = new RecentRepositoriesPanel{ QString{} }; // no current repository to mark
 	auto* filterEdit = panel->createFilterField();

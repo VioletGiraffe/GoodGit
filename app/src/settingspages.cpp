@@ -50,6 +50,9 @@ QWidget* executableRow(QWidget* parent, QLineEdit*& edit, const char* settingsKe
 constexpr const char* NewRowCheckPolicyByIndex[] = {
 	Settings::NewRowCheckPolicyTracked, Settings::NewRowCheckPolicyAll, Settings::NewRowCheckPolicyNone };
 
+// Index order of the "on startup" combo
+constexpr const char* StartupActionByIndex[] = { Settings::StartupActionWelcomeScreen, Settings::StartupActionLastRepository };
+
 } // namespace
 
 MainSettingsPage::MainSettingsPage(QWidget* parent) :
@@ -115,10 +118,15 @@ MainSettingsPage::MainSettingsPage(QWidget* parent) :
 		"the initial state of files that appear in the list for the first time."));
 	layout->addRow(tr("Newly listed files start checked:"), _newRowCheckPolicy);
 
+	_startupAction = new QComboBox;
+	_startupAction->addItems({ tr("Show the welcome screen"), tr("Open the last used repository") });
+	_startupAction->setCurrentIndex(Settings::startsWithLastRepository() ? 1 : 0);
+	_startupAction->setToolTip(tr("Has no effect if the app is started with a path or from inside a repository (always opens the specified repository)"));
+	layout->addRow(tr("On startup:"), _startupAction);
+
 	_checkForUpdates = new QCheckBox{ tr("Check for updates on startup") };
 	_checkForUpdates->setChecked(settings.value(Settings::CheckForUpdatesAutomaticallyKey, Settings::CheckForUpdatesAutomaticallyDefault).toBool());
-	_checkForUpdates->setToolTip(tr("At most one check a day, and nothing is shown unless a newer release exists. "
-		"Help > Check for Updates always checks."));
+	_checkForUpdates->setToolTip(tr("At most one check a day, and nothing is shown if no new release is found. Use Help > Check for Updates for a forced check."));
 	layout->addRow(_checkForUpdates);
 }
 
@@ -135,6 +143,7 @@ void MainSettingsPage::acceptSettings()
 	settings.setValue(Settings::CompletionAutoPopupKey, _completionAutoPopup->isChecked());
 	settings.setValue(Settings::CompletionMinPrefixLengthKey, _completionMinPrefix->value());
 	settings.setValue(Settings::NewRowCheckPolicyKey, QLatin1String(NewRowCheckPolicyByIndex[_newRowCheckPolicy->currentIndex()]));
+	settings.setValue(Settings::StartupActionKey, QLatin1String(StartupActionByIndex[_startupAction->currentIndex()]));
 	settings.setValue(Settings::CheckForUpdatesAutomaticallyKey, _checkForUpdates->isChecked());
 }
 

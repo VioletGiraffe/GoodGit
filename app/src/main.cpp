@@ -2,6 +2,7 @@
 #include "recentrepositories.h"
 #include "repositoryfactory.h"
 #include "repositorywindows.h"
+#include "settings.h"
 #include "theme.h"
 #include "updatecheck.h"
 
@@ -45,7 +46,8 @@ int main(int argc, char* argv[])
 		return openRepositoryWindow(*location) ? runApplication() : 1;
 
 	const std::vector<RecentRepository> recent = RecentRepositories::list();
-	if (recent.empty() || !openRecentRepository(recent.front().root, nullptr))
+	// The welcome screen also stands in where the repository to reopen is gone: a deleted folder, a drive not mounted yet
+	if (!Settings::startsWithLastRepository() || recent.empty() || !openRecentRepository(recent.front().root, nullptr))
 		showWelcomeWindow();
 
 	return runApplication();

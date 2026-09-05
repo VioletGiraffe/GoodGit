@@ -67,6 +67,17 @@ inline constexpr const char* NewRowCheckPolicyNone = "none";
 inline constexpr const char* DiffTabWidthKey = "DiffTabWidth";
 inline constexpr int DiffTabWidthDefault = 4;
 
+// What starting the app opens when no repository is named by an argument or by the current directory.
+// Stored as text for the same reason as the check policy; the welcome screen is what unknown text and no
+// stored value read as.
+inline constexpr const char* StartupActionKey = "StartupAction";
+inline constexpr const char* StartupActionWelcomeScreen = "welcome";
+inline constexpr const char* StartupActionLastRepository = "lastRepository";
+[[nodiscard]] inline bool startsWithLastRepository()
+{
+	return QSettings{}.value(StartupActionKey).toString() == QLatin1String(StartupActionLastRepository);
+}
+
 inline constexpr const char* CheckForUpdatesAutomaticallyKey = "CheckForUpdatesAutomatically";
 inline constexpr bool CheckForUpdatesAutomaticallyDefault = true;
 // Written on every check, manual or automatic, so a manual check postpones the next automatic one.
