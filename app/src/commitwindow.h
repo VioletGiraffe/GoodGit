@@ -34,7 +34,8 @@ public:
 	explicit CommitWindow(const RepositoryLocation& location);
 
 	[[nodiscard]] const QString& repositoryPath() const;
-	// Called by a submodule's window after committing there, which moves a pointer here
+	// Called by another window whose write changed this repository: a submodule's commit moves a pointer here, and
+	// a parent's discard inside the submodule changes its working tree
 	void refreshRepository();
 
 signals:
