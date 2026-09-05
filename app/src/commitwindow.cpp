@@ -201,23 +201,12 @@ void CommitWindow::refreshRepository()
 void CommitWindow::buildUi()
 {
 	buildMenuBar();
-	QWidget* leftPane = buildLeftPane();
-
-	auto* rightPane = new QWidget;
-	auto* rightLayout = new QVBoxLayout(rightPane);
-	rightLayout->setContentsMargins(0, 0, 0, 0);
-	rightLayout->setSpacing(0);
-	_diffPane = new DiffPane;
-	rightLayout->addWidget(_diffPane, 1);
-	_pushLogPane = buildPushLogPane();
-	rightLayout->addWidget(_pushLogPane);
-	_pushLogPane->hide();
 
 	_splitter = new QSplitter(Qt::Horizontal);
 	_splitter->setChildrenCollapsible(false);
 	_splitter->setHandleWidth(1);
-	_splitter->addWidget(leftPane);
-	_splitter->addWidget(rightPane);
+	_splitter->addWidget(buildLeftPane());
+	_splitter->addWidget(buildRightPane());
 	_splitter->setStretchFactor(0, 0);
 	_splitter->setStretchFactor(1, 1);
 	if (const QByteArray state = QSettings{}.value(Settings::CommitWindowSplitterKey).toByteArray(); !state.isEmpty())
@@ -428,6 +417,19 @@ QWidget* CommitWindow::buildMessageArea()
 	return messageArea;
 }
 
+QWidget* CommitWindow::buildRightPane()
+{
+	auto* rightPane = new QWidget;
+	auto* rightLayout = new QVBoxLayout(rightPane);
+	rightLayout->setContentsMargins(0, 0, 0, 0);
+	rightLayout->setSpacing(0);
+	_diffPane = new DiffPane;
+	rightLayout->addWidget(_diffPane, 1);
+	_pushLogPane = buildPushLogPane();
+	rightLayout->addWidget(_pushLogPane);
+	return rightPane;
+}
+
 QWidget* CommitWindow::buildPushLogPane()
 {
 	auto* pane = new QWidget;
@@ -449,6 +451,7 @@ QWidget* CommitWindow::buildPushLogPane()
 	pushLogLayout->addWidget(_pushLogView);
 
 	connect(hidePushLogButton, &QPushButton::clicked, pane, &QWidget::hide);
+	pane->hide();
 	return pane;
 }
 
@@ -1415,7 +1418,10 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 		anyConflicted |= entry.type == ChangeType::Conflicted;
 		anyDeletable |= entry.type != ChangeType::Deleted;
 	}
-	const bool singleFile = entries.size() == 1 && !entries.front().isSubmodule && entries.front().type != ChangeType::Deleted;
+	// The row the single-selection actions use: each of them is hidden unless `single`
+	const FileEntry& first = entries.front();
+	const bool single = entries.size() == 1;
+	const bool singleFile = single && !first.isSubmodule && first.type != ChangeType::Deleted;
 
 	// An action this selection can never reach is hidden; one only the repository's state blocks is disabled.
 	QMenu menu{ this };
@@ -1431,13 +1437,13 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	unAddAction->setVisible(anyAdded);
 	unAddAction->setEnabled(canAct);
 
-	const bool singleUntracked = entries.size() == 1 && !entries.front().isSubmodule && entries.front().type == ChangeType::Untracked;
+	const bool singleUntracked = single && !first.isSubmodule && first.type == ChangeType::Untracked;
 	QMenu* ignoreMenu = menu.addMenu(tr("Add to %1").arg(_repo->ignoreFileName()));
 	ignoreMenu->menuAction()->setVisible(singleUntracked);
 	ignoreMenu->setEnabled(canAct); // the pattern comes from the row, so it is as stale as the row
 	if (singleUntracked)
 	{
-		for (const IgnorePattern& pattern : _repo->ignorePatternsFor(entries.front().path))
+		for (const IgnorePattern& pattern : _repo->ignorePatternsFor(first.path))
 		{
 			// '&' doubled for display, or QMenu takes it as an accelerator marker
 			ignoreMenu->addAction(QString{ pattern.text }.replace(QLatin1Char('&'), QStringLiteral("&&")),
@@ -1447,34 +1453,33 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 
 	menu.addSeparator();
 
-	QAction* openAction = menu.addAction(tr("Open"), this, [this, entry = entries.front()] {
+	QAction* openAction = menu.addAction(tr("Open"), this, [this, entry = first] {
 		openEntryExternally(entry);
 	});
 	openAction->setVisible(singleFile);
 
-	QAction* editAction = menu.addAction(tr("Edit"), this, [this, entry = entries.front()] {
+	QAction* editAction = menu.addAction(tr("Edit"), this, [this, entry = first] {
 		openInTextEditor(absolutePath(entry), this);
 	});
 	editAction->setVisible(singleFile);
 
-	QAction* submoduleHistoryAction = menu.addAction(tr("View commit history"), this, [this, entry = entries.front()] {
+	QAction* submoduleHistoryAction = menu.addAction(tr("View commit history"), this, [this, entry = first] {
 		// Not deduplicated like this repo's own history window, matching openSubmoduleWindow
 		auto* window = new HistoryWindow(_repo->submoduleLocation(entry.path), this);
 		window->show();
 	});
-	submoduleHistoryAction->setVisible(entries.size() == 1 && entries.front().isSubmodule);
+	submoduleHistoryAction->setVisible(single && first.isSubmodule);
 
-	QAction* fileHistoryAction = menu.addAction(tr("View file history"), this, [this, entry = entries.front()] {
+	QAction* fileHistoryAction = menu.addAction(tr("View file history"), this, [this, entry = first] {
 		// Nothing is committed at a rename's new path yet
 		const QString& path = entry.oldPath.isEmpty() ? entry.path : entry.oldPath;
 		auto* window = new HistoryWindow(_repo->location(), path, this);
 		window->show();
 	});
 	// A submodule's history is its own repo's, offered above; an untracked or newly added file is in no commit
-	fileHistoryAction->setVisible(entries.size() == 1 && !entries.front().isSubmodule
-		&& entries.front().type != ChangeType::Untracked && entries.front().type != ChangeType::Added);
+	fileHistoryAction->setVisible(single && !first.isSubmodule && first.type != ChangeType::Untracked && first.type != ChangeType::Added);
 
-	QAction* showInFileManagerAction = menu.addAction(showInFileManagerActionText(), this, [this, entry = entries.front()] {
+	QAction* showInFileManagerAction = menu.addAction(showInFileManagerActionText(), this, [this, entry = first] {
 		showInFileManager(absolutePath(entry));
 	});
 
@@ -1505,7 +1510,7 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 
 	// A lone submodule row discards what is uncommitted inside it instead. One row only: the dialog lists the
 	// paths inside that one submodule.
-	const bool contentOfOneSubmodule = entries.size() == 1 && contentDiscardable(entries.front());
+	const bool contentOfOneSubmodule = single && contentDiscardable(first);
 	QAction* discardAction = menu.addAction(tr("Discard changes"), this, &CommitWindow::discardSelection);
 	discardAction->setVisible(anyDiscardable || contentOfOneSubmodule);
 	// Disabled, not hidden: the operation ends, and _opStrip says one is running

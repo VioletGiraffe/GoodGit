@@ -57,6 +57,7 @@ private:
 	[[nodiscard]] QWidget* buildCounterBar();
 	[[nodiscard]] QWidget* buildMessageHeader();
 	[[nodiscard]] QWidget* buildMessageArea();
+	[[nodiscard]] QWidget* buildRightPane();
 	[[nodiscard]] QWidget* buildPushLogPane();
 	// Returns the action that shows and hides the dock
 	[[nodiscard]] QAction* buildRecentRepositoriesDock();
