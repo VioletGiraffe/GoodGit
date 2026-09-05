@@ -26,6 +26,10 @@ Vcs::Job* run(const QString& workDir, QStringList args, const QObject* context, 
 // carries run() alone.
 ProcessResult runSync(const QString& workDir, QStringList args, int timeoutMs = 10000);
 
+// Ends the command servers run() spawned; each finishes the command in flight first. Called once, after the
+// event loop returns: nothing that could start a command is left by then.
+void shutdown();
+
 // The configured executable, or the default. For the one command started detached rather than through
 // run(), which alone applies the environment.
 [[nodiscard]] QString executablePath();

@@ -53,6 +53,11 @@ ProcessResult runSync(const QString& workDir, QStringList args, int timeoutMs)
 	return Vcs::runSync(hgTool(), workDir, std::move(args), timeoutMs);
 }
 
+void shutdown()
+{
+	HgServerPool::instance().shutdown();
+}
+
 QByteArray localBytes(const QString& text)
 {
 	QByteArray bytes;

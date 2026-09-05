@@ -17,6 +17,8 @@ RESTORE_COMPILER_WARNINGS
 namespace {
 
 constexpr int CancelGraceMs = 2000;
+// The whole pool's budget for exiting at shutdown, not each server's: long enough for a commit in flight to finish
+constexpr int ShutdownWaitMs = 5000;
 // No hg command sends a frame this large; a length read out of a desynced stream almost always exceeds it
 constexpr quint32 MaxFrameBytes = 1u << 30;
 
@@ -119,6 +121,18 @@ HgCommandServer::~HgCommandServer()
 		_process->kill();
 		_process->waitForFinished(Vcs::KillWaitMs);
 	}
+}
+
+void HgCommandServer::requestExit()
+{
+	// died() erases this server from the list shutdown() is walking, and delivers a result nobody is left to take
+	_dead = true;
+	_process->closeWriteChannel(); // the command server exits at stdin EOF, once the command in flight is done
+}
+
+void HgCommandServer::waitForExit(QDeadlineTimer deadline)
+{
+	_process->waitForFinished(int(deadline.remainingTime()));
 }
 
 void HgCommandServer::execute(Hg::ServerJob* job)
@@ -268,9 +282,27 @@ HgServerPool::HgServerPool()
 	});
 }
 
+void HgServerPool::shutdown()
+{
+	for (Hg::ServerJob* job : _queue)
+		delete job; // never started, and there is no event loop left for deleteLater
+	_queue.clear();
+
+	for (const auto& server : _servers)
+		server->requestExit();
+
+	const QDeadlineTimer deadline{ ShutdownWaitMs };
+	for (const auto& server : _servers)
+		server->waitForExit(deadline);
+
+	_servers.clear(); // the destructor kills whatever did not exit in time
+	_shutDown = true;
+}
+
 Vcs::Job* HgServerPool::run(const Vcs::Tool& tool, const QString& workDir, QStringList args, const QObject* context,
 	Vcs::Callback callback, QByteArray stdinData)
 {
+	assert(!_shutDown);
 	if (_unavailable || _failedRoots.contains(workDir) || !stdinData.isEmpty())
 		return Vcs::run(tool, workDir, std::move(args), context, std::move(callback), std::move(stdinData));
 

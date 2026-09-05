@@ -1,3 +1,4 @@
+#include "hgprocess.h"
 #include "recentrepositories.h"
 #include "repositoryfactory.h"
 #include "repositorywindows.h"
@@ -9,6 +10,18 @@ DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QIcon>
 RESTORE_COMPILER_WARNINGS
+
+namespace {
+
+// Ends the hg command servers, which outlive the last window: static destruction runs after QApplication is gone
+int runApplication()
+{
+	const int exitCode = QApplication::exec();
+	Hg::shutdown();
+	return exitCode;
+}
+
+} // namespace
 
 int main(int argc, char* argv[])
 {
@@ -24,16 +37,16 @@ int main(int argc, char* argv[])
 
 	// No fallback for an explicit path: used as a command line tool, the app fails like one
 	if (arguments.size() > 1)
-		return openRepositoryWindowAt(arguments[1], nullptr) ? QApplication::exec() : 1;
+		return openRepositoryWindowAt(arguments[1], nullptr) ? runApplication() : 1;
 
 	// The current directory is only the first guess: started from a shortcut it is wherever that pointed,
 	// and the last repository worked on is the better guess then
 	if (const std::expected<RepositoryLocation, std::vector<ProcessResult>> location = findRepository(QDir::currentPath()))
-		return openRepositoryWindow(*location) ? QApplication::exec() : 1;
+		return openRepositoryWindow(*location) ? runApplication() : 1;
 
 	const std::vector<RecentRepository> recent = RecentRepositories::list();
 	if (recent.empty() || !openRecentRepository(recent.front().root, nullptr))
 		showWelcomeWindow();
 
-	return QApplication::exec();
+	return runApplication();
 }

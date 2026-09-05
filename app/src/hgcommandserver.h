@@ -3,6 +3,7 @@
 #include "vcsprocess.h"
 
 DISABLE_COMPILER_WARNINGS
+#include <QDeadlineTimer>
 #include <QSet>
 RESTORE_COMPILER_WARNINGS
 
@@ -69,6 +70,11 @@ public:
 	// there but no interpreter start.
 	void execute(Hg::ServerJob* job);
 
+	// Shutdown, in this order: stop taking part in the pool and let the command in flight run to its end,
+	// then wait for the exit until `deadline`. Anything still running when the server is destroyed is killed.
+	void requestExit();
+	void waitForExit(QDeadlineTimer deadline);
+
 	// Fails the current command; the pool respawns on demand
 	void killServer();
 
@@ -105,6 +111,10 @@ public:
 	Vcs::Job* run(const Vcs::Tool& tool, const QString& workDir, QStringList args, const QObject* context,
 		Vcs::Callback callback, QByteArray stdinData);
 
+	// Ends every server, letting the command in flight on each finish; what overstays the shared budget is
+	// killed. Queued commands are dropped undelivered. Only called once the event loop has returned.
+	void shutdown();
+
 private:
 	friend class HgCommandServer;
 	friend class Hg::ServerJob;
@@ -128,4 +138,5 @@ private:
 	// pool, so each command fails with hg's own error for that repository instead of poisoning the shared
 	// queue. A repository fixed outside the app stays here until a settings change or restart.
 	QSet<QString> _failedRoots;
+	bool _shutDown = false; // for the assert in run(): a command started after shutdown() would spawn a server again
 };
