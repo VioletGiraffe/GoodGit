@@ -3,9 +3,11 @@
 #include "gitprocess.h"
 #include "recentrepositories.h"
 #include "repositoryfactory.h"
+#include "theme.h"
 #include "welcomewindow.h"
 
 #include "dialogs/messagebox.h"
+#include "widgets/chighlightoverlay.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QApplication>
@@ -79,12 +81,21 @@ void openDroppedFolders(const QStringList& folders, QWidget* dropTarget)
 class FolderDropFilter final : public QObject
 {
 public:
-	explicit FolderDropFilter(QWidget* target) : QObject{ target } {}
+	explicit FolderDropFilter(QWidget* target) :
+		QObject{ target },
+		_highlight{ new CHighlightOverlay{ target, activeTheme().metrics.controlRadius } }
+	{}
 
 protected:
 	bool eventFilter(QObject* watched, QEvent* event) override
 	{
 		const QEvent::Type type = event->type();
+		if (type == QEvent::DragLeave)
+		{
+			_highlight->hide();
+			return QObject::eventFilter(watched, event);
+		}
+
 		if (type != QEvent::DragEnter && type != QEvent::DragMove && type != QEvent::Drop)
 			return QObject::eventFilter(watched, event);
 
@@ -95,9 +106,18 @@ protected:
 
 		dragEvent->acceptProposedAction();
 		if (type == QEvent::Drop)
+		{
+			_highlight->hide(); // no drag leaves the target after a drop taken on it
 			openDroppedFolders(folders, static_cast<QWidget*>(watched));
+		}
+		else
+			_highlight->showOverParent();
+
 		return true;
 	}
+
+private:
+	CHighlightOverlay* const _highlight;
 };
 
 // The one up, or none

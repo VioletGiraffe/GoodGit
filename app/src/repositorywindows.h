@@ -43,6 +43,6 @@ void scanFolderForRepositories(QWidget* dialogParent);
 // openRepositoryWindow() closes it.
 void showWelcomeWindow();
 
-// Opens the repository containing any folder dropped on `target`; its window is the dialogs' parent. Repeat
-// for a child that accepts drops itself: a drag over it never reaches the window.
+// Opens the repository containing any folder dropped on `target`, framing it while the drag hovers; its window
+// is the dialogs' parent. Repeat for a child that accepts drops itself: a drag over it never reaches the window.
 void acceptRepositoryFolderDrops(QWidget* target);
