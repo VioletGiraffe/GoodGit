@@ -2,6 +2,7 @@
 #ifdef Q_OS_MACOS
 #include "commandlinetool_mac.h"
 #endif
+#include "appmenus.h"
 #include "recentrepositories.h"
 #include "recentrepositoriespanel.h"
 #include "repositorywindows.h"
@@ -19,6 +20,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenuBar>
 #include <QPushButton>
 #include <QSettings>
 #include <QShortcut>
@@ -28,7 +30,7 @@ RESTORE_COMPILER_WARNINGS
 namespace {
 
 constexpr int WindowWidth = 520;
-constexpr int IntroOnlyHeight = 300;
+constexpr int IntroOnlyHeight = 320;
 constexpr int WithRecentListHeight = 500;
 constexpr int AppIconSize = 56;
 constexpr int TitlePointSizeIncrease = 8;
@@ -144,9 +146,17 @@ WelcomeWindow::WelcomeWindow()
 	recentLayout->addWidget(recentHeader);
 	recentLayout->addWidget(panel, 1);
 
+	auto* menuBar = new QMenuBar;
+	menuBar->setObjectName(QStringLiteral("welcomeMenuBar")); // the stylesheet shrinks and dims this bar by name
+	QAction* openAction = addFileMenu(*menuBar, this);
+	addEditMenu(*menuBar, this);
+	addRepositoryMenu(*menuBar, this, openAction, ScanReport::ExceptAdditions); // the list below is where a scan's finds show up
+	addHelpMenu(*menuBar, this);
+
 	auto* layout = new QVBoxLayout(this);
 	layout->setContentsMargins(0, 0, 0, 0);
 	layout->setSpacing(0);
+	layout->setMenuBar(menuBar);
 	layout->addWidget(intro);
 	layout->addWidget(recentSection, 1);
 

@@ -5,6 +5,8 @@
 #include "theme/cthemeiconhandler.h"
 
 DISABLE_COMPILER_WARNINGS
+#include <QApplication>
+#include <QFontInfo>
 #include <QString>
 RESTORE_COMPILER_WARNINGS
 
@@ -83,6 +85,12 @@ QListView { background: @surface@; color: @text@; border: 1px solid @border@; ou
 QMenuBar { background: @windowBg@; color: @text@; border-bottom: 1px solid @border@; }
 QMenuBar::item { background: transparent; padding: 4px 10px; }
 QMenuBar::item:selected, QMenuBar::item:pressed { background: @selectionBg@; }
+/* The welcome window's own bar, quieter than a repository window's.
+   font-size belongs on the widget, not on ::item: the item rects are measured with the widget's font.
+   The popup menus keep the full size: a QMenu is a window, and font propagation stops at one. */
+QMenuBar#welcomeMenuBar { background: transparent; border-bottom: none; color: @textDim@; font-size: @menuBarFontPt@pt; }
+/* The rule above dims the highlighted text as well, so the open menu's title needs its contrast back */
+QMenuBar#welcomeMenuBar::item:selected, QMenuBar#welcomeMenuBar::item:pressed { color: @text@; }
 QMenu { background: @surface@; color: @text@; border: 1px solid @border@; padding: 4px 0; }
 QMenu::item { padding: 4px 24px 4px 12px; }
 QMenu::item:selected { background: @selectionBg@; }
@@ -132,6 +140,8 @@ QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
 		{ QStringLiteral("@checkboxRadius@"), QString::number(t.metrics.checkboxRadius) },
 		{ QStringLiteral("@scrollBarThickness@"), QString::number(t.metrics.scrollBarThickness) },
 		{ QStringLiteral("@scrollBarHandleRadius@"), QString::number(t.metrics.scrollBarHandleRadius) },
+		// QFontInfo resolves the size in points even where the UI font was set in pixels, which QSS cannot express
+		{ QStringLiteral("@menuBarFontPt@"), QString::number(QFontInfo{ QApplication::font() }.pointSize() - 1) },
 		// Monochrome SVGs tinted per theme and served by CThemeIconHandler, since QSS url() only takes a path
 		{ QStringLiteral("@checkIcon@"), themeIconUrl(QStringLiteral("check"), t.palette.accentFg) },
 		{ QStringLiteral("@dashIcon@"), themeIconUrl(QStringLiteral("dash"), t.palette.accentFg) },

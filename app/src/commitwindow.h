@@ -127,7 +127,6 @@ private:
 	void undoLastCommit();
 	void continueOperation();
 	void abortOperation();
-	void showPreferencesDialog();
 
 	void showDiffForCurrentRow();
 	// For an untracked file, which has no diff: the pane shows the file itself, unhighlighted

@@ -1,7 +1,5 @@
 #include "commitwindow.h"
-#ifdef Q_OS_MACOS
-#include "commandlinetool_mac.h"
-#endif
+#include "appmenus.h"
 #include "consolelogview.h"
 #include "diffpane.h"
 #include "externalapps.h"
@@ -14,12 +12,8 @@
 #include "repositoryfactory.h"
 #include "repositorywindows.h"
 #include "settings.h"
-#include "settingspages.h"
 #include "theme.h"
-#include "updatecheck.h"
-#include "version.h"
 
-#include "aboutdialog/caboutdialog.h"
 #include "dialogs/messagebox.h"
 #include "hash/wheathash.hpp"
 #include "settingsui/csettingsdialog.h"
@@ -237,25 +231,13 @@ void CommitWindow::buildUi()
 
 void CommitWindow::buildMenuBar()
 {
-	QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
-	QAction* openRepositoryAction = fileMenu->addAction(tr("&Open Repository..."), this, [this] { browseForRepository(this); });
-	openRepositoryAction->setShortcut(QKeySequence::Open);
-	fileMenu->addSeparator();
-#ifdef Q_OS_MACOS
-	fileMenu->addAction(tr("Install 'gg' Command Line Tool..."), this, [this] { installCommandLineToolAndReport(this); });
-	fileMenu->addSeparator();
-#endif
-	fileMenu->addAction(tr("E&xit"), [] { QApplication::closeAllWindows(); }); // not quit(): closeEvent saves the layout state
-	QMenu* editMenu = menuBar()->addMenu(tr("&Edit"));
-	editMenu->addAction(tr("&Preferences..."), this, &CommitWindow::showPreferencesDialog)
-		->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_P));
+	QAction* openRepositoryAction = addFileMenu(*menuBar(), this);
+	addEditMenu(*menuBar(), this);
 	QMenu* viewMenu = menuBar()->addMenu(tr("&View"));
 	viewMenu->addAction(buildRecentRepositoriesDock());
 	viewMenu->addAction(tr("Show &Welcome Screen"), &showWelcomeWindow);
-	QMenu* repositoryMenu = menuBar()->addMenu(tr("&Repository"));
-	repositoryMenu->addAction(openRepositoryAction); // the same action as in File, where Ctrl+O is looked for
-	repositoryMenu->addAction(tr("&Scan Folder for Repositories..."), this, [this] { scanFolderForRepositories(this); });
-	repositoryMenu->addAction(tr("C&lear Recent Repositories..."), this, [this] { clearRecentRepositories(this); });
+	// Everything: the dock that would show a scan's finds can be hidden
+	QMenu* repositoryMenu = addRepositoryMenu(*menuBar(), this, openRepositoryAction, ScanReport::Everything);
 	repositoryMenu->addSeparator();
 	repositoryMenu->addAction(tr("&Refresh"), _repo.get(), &Repository::refresh)->setShortcut(QKeySequence::Refresh);
 	_checkIncomingAction = repositoryMenu->addAction(tr("Check for &Incoming Changes"), this, &CommitWindow::checkForIncomingChanges);
@@ -266,13 +248,7 @@ void CommitWindow::buildMenuBar()
 	// Not one item per operation kind: the op strip names the one running, which no menu label has room to do
 	_continueAction = repositoryMenu->addAction(tr("&Continue Operation"), this, &CommitWindow::continueOperation);
 	_abortAction = repositoryMenu->addAction(tr("&Abort Operation..."), this, &CommitWindow::abortOperation);
-	QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
-	helpMenu->addAction(tr("Check for &Updates..."), this, [this] { checkForUpdatesInteractively(this); });
-	helpMenu->addSeparator();
-	helpMenu->addAction(tr("&About"), this, [this] {
-		CAboutDialog aboutDialog{ QStringLiteral(GG_VERSION), this };
-		aboutDialog.exec();
-	});
+	addHelpMenu(*menuBar(), this);
 }
 
 QWidget* CommitWindow::buildLeftPane()
@@ -1386,14 +1362,6 @@ void CommitWindow::abortOperation()
 
 	beginMutation();
 	_repo->abortOperation(mutationDone(tr("Abort failed"), /*changesHistory=*/true));
-}
-
-void CommitWindow::showPreferencesDialog()
-{
-	CSettingsDialog dialog{ this };
-	dialog.addSettingsPage(new MainSettingsPage{ &dialog }, tr("Main"))
-		.addSettingsPage(new ThemeFontSettingsPage{ &dialog }, tr("Theme & Font")); // a QListWidgetItem shows text verbatim, no mnemonic escaping
-	dialog.exec();
 }
 
 void CommitWindow::openSubmoduleWindow(const FileEntry& entry)
