@@ -45,7 +45,6 @@ DISABLE_COMPILER_WARNINGS
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
-#include <QLocale>
 #include <QMenu>
 #include <QMenuBar>
 #include <QPlainTextEdit>
@@ -75,12 +74,6 @@ constexpr int MaxListedPathsInDialog = 20;
 constexpr int MaxIncomingCommits = 200; // a glance, not a history window
 constexpr int IncomingPopupWidth = 560;
 constexpr int IncomingPopupHeight = 320;
-
-// One place for the unit format the diff header states every size in
-QString formattedFileSize(qint64 bytes)
-{
-	return QLocale{}.formattedDataSize(bytes, 1);
-}
 
 // Empty where the path is not a file on disk: a deleted entry, or a submodule's own directory
 QString workingTreeSizeLabel(const QString& absolutePath)

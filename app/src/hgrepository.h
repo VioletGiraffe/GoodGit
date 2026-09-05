@@ -60,6 +60,7 @@ public:
 	Vcs::Query commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone) override;
 	Vcs::Query commitFileCounts(const QString& sha, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone) override;
 	Vcs::Query commitFileDiff(const QString& sha, const CommitFileChange& file, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) override;
+	Vcs::Query commitFileSize(const QString& sha, const QString& repoRelativePath, const QObject* context, Vcs::Answer<qint64> onDone) override;
 	Vcs::Query fileAtRevision(const QString& sha, const QString& repoRelativePath, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) override;
 	Vcs::Query unpushedCommits(const QObject* context, Vcs::Answer<QSet<QString>> onDone) override;
 	Vcs::Query submodulePointerLog(const QString& repoRelativePath, const QObject* context, Vcs::Answer<QString> onDone) override;

@@ -12,10 +12,16 @@ DISABLE_COMPILER_WARNINGS
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLocale>
 #include <QPushButton>
 #include <QSizePolicy>
 #include <QVBoxLayout>
 RESTORE_COMPILER_WARNINGS
+
+QString formattedFileSize(qint64 bytes)
+{
+	return QLocale{}.formattedDataSize(bytes, 1);
+}
 
 DiffPane::DiffPane(QWidget* parent) :
 	QWidget(parent)

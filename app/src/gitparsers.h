@@ -8,6 +8,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QStringList>
 RESTORE_COMPILER_WARNINGS
 
+#include <expected>
 #include <map>
 #include <vector>
 
@@ -72,6 +73,10 @@ struct StagedEntry
 // Input: `diff --numstat -M -z` output. Keyed by path (the new one for a rename, as parseNameStatusZ names
 // its entries). A binary file, which git counts as `-`, is absent rather than zero.
 [[nodiscard]] std::map<QString, LineCounts> parseNumstatZ(const QByteArray& diffOutput);
+
+// Input: `cat-file -s <rev>:<path>` output - one decimal count of bytes.
+// Fails on anything else, so a size is never mistaken for zero.
+[[nodiscard]] std::expected<qint64, QString> parseObjectSize(const QByteArray& output);
 
 // Input: any NUL-separated path list (`ls-files -z` and friends)
 [[nodiscard]] QStringList parseZList(const QByteArray& output);

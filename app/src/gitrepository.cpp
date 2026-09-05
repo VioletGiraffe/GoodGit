@@ -1019,6 +1019,12 @@ Vcs::Query GitRepository::commitFileDiff(const QString& sha, const CommitFileCha
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}), maxBytes);
 }
 
+Vcs::Query GitRepository::commitFileSize(const QString& sha, const QString& repoRelativePath, const QObject* context, Vcs::Answer<qint64> onDone)
+{
+	return runQuery(path(), { QStringLiteral("cat-file"), QStringLiteral("-s"), sha + QLatin1Char(':') + repoRelativePath },
+		context, Vcs::answering(std::move(onDone), Git::parseObjectSize));
+}
+
 Vcs::Query GitRepository::fileAtRevision(const QString& sha, const QString& repoRelativePath, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
 	// --filters runs the checkout conversion: the bytes arrive as a working tree would hold them, LFS content

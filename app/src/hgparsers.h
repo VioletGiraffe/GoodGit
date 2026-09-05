@@ -8,12 +8,13 @@ DISABLE_COMPILER_WARNINGS
 #include <QStringList>
 RESTORE_COMPILER_WARNINGS
 
+#include <expected>
 #include <map>
 #include <vector>
 
 // Parsers for the hg outputs the app consumes. UI- and process-free so they can be tested directly.
-// Every command is run with `-T json`: paths arrive forward-slashed even on Windows, a rename's source is a
-// labelled field, and nothing needs unescaping.
+// Every command whose output carries paths or records is run with `-T json`: paths arrive forward-slashed even
+// on Windows, a rename's source is a labelled field, and nothing needs unescaping.
 // Never use `-q` or `-v`: the field set varies with verbosity.
 namespace Hg {
 
@@ -75,6 +76,10 @@ struct GrepMatch
 
 // Input: `.hgsubstate` - one "<node> <path>" line per subrepo. Keyed by path.
 [[nodiscard]] std::map<QString, QString> parseSubrepoState(const QByteArray& content);
+
+// Input: `files -r <rev> -T {size}` output - one decimal count of bytes.
+// Fails on anything else, so a size is never mistaken for zero.
+[[nodiscard]] std::expected<qint64, QString> parseFileSize(const QByteArray& output);
 
 // One subrepo pointer as one changeset moved it; an empty side means the subrepo was added or removed
 struct SubrepoPointerChange

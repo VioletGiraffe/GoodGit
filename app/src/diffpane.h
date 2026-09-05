@@ -12,6 +12,9 @@ class QPushButton;
 class CLabelElided;
 class DiffTextView;
 
+// The unit format every header states a size in
+[[nodiscard]] QString formattedFileSize(qint64 bytes);
+
 // A header naming what is shown and where it is from, over a read-only monospace view. The pane neither
 // reads nor caps the text; the caller does both.
 class DiffPane final : public QWidget
@@ -34,8 +37,10 @@ public:
 	// Prose rather than file content: a placeholder, a failure, a commit message. Neither numbered nor decorated.
 	void showMessage(const ItemInfo& item, const QString& text);
 
-private:
+	// Restates the header over the content already shown, for a field that arrives after it
 	void setHeader(const ItemInfo& item);
+
+private:
 	[[nodiscard]] QWidget* buildHunkNavigator();
 	// Follows the view's scrolling as well as its content: the hunk named is the one at the top of it
 	void updateHunkNavigator();

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "diffpane.h"
 #include "historymodels.h"
 #include "repository.h"
 
@@ -18,7 +19,6 @@ class QSplitter;
 class QTimer;
 class QTreeView;
 class CLabelElided;
-class DiffPane;
 class FileListView;
 
 // The commit history of one repository, read-only.
@@ -121,4 +121,9 @@ private:
 	Vcs::Query _filesQuery;
 	Vcs::Query _fileCountsQuery;
 	Vcs::Query _diffQuery;
+	Vcs::Query _sizeQuery;
+
+	// What the pane's header states about the file being shown. A member rather than a value each callback
+	// carries: the size arrives on its own query, and the diff must not restate a header without it.
+	DiffPane::ItemInfo _currentItem;
 };

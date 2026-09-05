@@ -673,6 +673,7 @@ void HistoryWindow::showFilesForCurrentCommit()
 void HistoryWindow::showDiffForCurrentFile()
 {
 	_diffQuery.cancel();
+	_sizeQuery.cancel(); // its callback writes the header, which the next selection owns from here on
 
 	const std::optional<CommitFileChange> currentFile = fileEntryAt(_filesView->currentSourceIndex());
 	const std::optional<CommitRecord> commit = currentCommit();
@@ -681,18 +682,30 @@ void HistoryWindow::showDiffForCurrentFile()
 
 	const CommitFileChange& entry = *currentFile;
 	const QString sha = commit->sha;
-	const DiffPane::ItemInfo info{ entry.path, shortSha(sha) };
+	_currentItem = { entry.path, shortSha(sha) };
 
-	_diffPane->showMessage(info, tr("Loading..."));
+	_diffPane->showMessage(_currentItem, tr("Loading..."));
 	const qint64 maxBytes = CSettings{}.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong();
-	_diffQuery = _repo->commitFileDiff(sha, entry, maxBytes, this, [this, info](std::expected<QByteArray, QString> diff) {
+	_diffQuery = _repo->commitFileDiff(sha, entry, maxBytes, this, [this](std::expected<QByteArray, QString> diff) {
 		if (!diff)
-			_diffPane->showMessage(info, diff.error()); // an oversize diff fails here, never held whole
+			_diffPane->showMessage(_currentItem, diff.error()); // an oversize diff fails here, never held whole
 		else if (diff->isEmpty())
-			_diffPane->showMessage(info, tr("No content changes (only the mode or the line endings differ, or a rename with identical content)."));
+			_diffPane->showMessage(_currentItem, tr("No content changes (only the mode or the line endings differ, or a rename with identical content)."));
 		else
-			_diffPane->showDiff(info, QString::fromUtf8(*diff));
+			_diffPane->showDiff(_currentItem, QString::fromUtf8(*diff));
 	});
+
+	// A deleted file and a submodule pointer have no blob to size, and the query would only fail on them
+	if (entry.type != ChangeType::Deleted && !entry.isSubmodule)
+	{
+		_sizeQuery = _repo->commitFileSize(sha, entry.path, this, [this](std::expected<qint64, QString> size) {
+			if (!size)
+				return; // the header simply states none
+
+			_currentItem.size = formattedFileSize(*size);
+			_diffPane->setHeader(_currentItem);
+		});
+	}
 }
 
 void HistoryWindow::showCommitMessage(const CommitRecord& commit)
