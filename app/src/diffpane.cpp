@@ -56,23 +56,23 @@ DiffPane::DiffPane(QWidget* parent) :
 	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, applyFontSettings);
 }
 
-void DiffPane::showDiff(const QString& pathLabel, const QString& tag, const QString& text)
+void DiffPane::showDiff(const ItemInfo& item, const QString& text)
 {
-	setHeader(pathLabel, tag);
+	setHeader(item);
 	_view->showDiff(text);
 	updateHunkNavigator();
 }
 
-void DiffPane::showFileText(const QString& pathLabel, const QString& tag, const QString& text)
+void DiffPane::showFileText(const ItemInfo& item, const QString& text)
 {
-	setHeader(pathLabel, tag);
+	setHeader(item);
 	_view->showFileText(text);
 	updateHunkNavigator();
 }
 
-void DiffPane::showMessage(const QString& pathLabel, const QString& tag, const QString& text)
+void DiffPane::showMessage(const ItemInfo& item, const QString& text)
 {
-	setHeader(pathLabel, tag);
+	setHeader(item);
 	_view->showMessage(text);
 	updateHunkNavigator();
 }
@@ -114,8 +114,10 @@ void DiffPane::updateHunkNavigator()
 	_nextHunkButton->setEnabled(position.hasNext);
 }
 
-void DiffPane::setHeader(const QString& pathLabel, const QString& tag)
+void DiffPane::setHeader(const ItemInfo& item)
 {
-	_pathLabel->setText(pathLabel);
-	_tagLabel->setText(tag);
+	// The size joins the path's text: a label of its own would hold a minimum width the header could not shrink below.
+	// Middle elision keeps the tail, so a narrow pane drops the path before the size.
+	_pathLabel->setText(item.size.isEmpty() ? item.path : QStringLiteral("%1 (%2)").arg(item.path).arg(item.size));
+	_tagLabel->setText(item.tag);
 }

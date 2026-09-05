@@ -17,24 +17,31 @@ class DiffTextView;
 class DiffPane final : public QWidget
 {
 public:
+	// What the header states about the item shown. Every field may be empty.
+	struct ItemInfo
+	{
+		QString path;
+		// The short label at the right of the header: which revisions the text is of, or how the two sides compare
+		QString tag;
+		QString size; // formatted for display; empty where the item has no size
+	};
+
 	explicit DiffPane(QWidget* parent = nullptr);
 
-	// `tag` is the short label at the right of the header: which revisions the text is of, or how the two
-	// sides compare. Either label may be empty.
-	void showDiff(const QString& pathLabel, const QString& tag, const QString& text);
+	void showDiff(const ItemInfo& item, const QString& text);
 	// A file's own contents, for a file no backend is asked to diff: numbered, undecorated
-	void showFileText(const QString& pathLabel, const QString& tag, const QString& text);
+	void showFileText(const ItemInfo& item, const QString& text);
 	// Prose rather than file content: a placeholder, a failure, a commit message. Neither numbered nor decorated.
-	void showMessage(const QString& pathLabel, const QString& tag, const QString& text);
+	void showMessage(const ItemInfo& item, const QString& text);
 
 private:
-	void setHeader(const QString& pathLabel, const QString& tag);
+	void setHeader(const ItemInfo& item);
 	[[nodiscard]] QWidget* buildHunkNavigator();
 	// Follows the view's scrolling as well as its content: the hunk named is the one at the top of it
 	void updateHunkNavigator();
 
 private:
-	CLabelElided* _pathLabel = nullptr;
+	CLabelElided* _pathLabel = nullptr; // shows the size too, appended to the path
 	QLabel* _tagLabel = nullptr;
 	QWidget* _hunkNavigator = nullptr; // hidden whole where the content holds no hunk
 	QLabel* _hunkLabel = nullptr;

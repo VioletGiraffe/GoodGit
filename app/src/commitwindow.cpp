@@ -38,12 +38,14 @@ DISABLE_COMPILER_WARNINGS
 #include <QDockWidget>
 #include <QEvent>
 #include <QFile>
+#include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QItemSelectionModel>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QLocale>
 #include <QMenu>
 #include <QMenuBar>
 #include <QPlainTextEdit>
@@ -73,6 +75,19 @@ constexpr int MaxListedPathsInDialog = 20;
 constexpr int MaxIncomingCommits = 200; // a glance, not a history window
 constexpr int IncomingPopupWidth = 560;
 constexpr int IncomingPopupHeight = 320;
+
+// One place for the unit format the diff header states every size in
+QString formattedFileSize(qint64 bytes)
+{
+	return QLocale{}.formattedDataSize(bytes, 1);
+}
+
+// Empty where the path is not a file on disk: a deleted entry, or a submodule's own directory
+QString workingTreeSizeLabel(const QString& absolutePath)
+{
+	const QFileInfo info{ absolutePath };
+	return info.isFile() ? formattedFileSize(info.size()) : QString{};
+}
 
 // The op strip opens with the operation's name, which a backend holds in its command's spelling
 QString capitalized(const QString& text)
@@ -1230,7 +1245,7 @@ void CommitWindow::showDiffForCurrentRow()
 	const std::optional<FileEntry> current = currentEntry();
 	if (!current)
 	{
-		_diffPane->showMessage({}, {}, {});
+		_diffPane->showMessage({}, {});
 		return;
 	}
 
@@ -1240,12 +1255,13 @@ void CommitWindow::showDiffForCurrentRow()
 	{
 		if (!entry.pointerMoved)
 		{
-			_diffPane->showMessage(entry.path, tr("submodule"), tr("The submodule pointer has not moved, but there are uncommitted changes inside the submodule.\nDouble-click to open it."));
+			_diffPane->showMessage({ entry.path, tr("submodule") }, tr("The submodule pointer has not moved, but there are uncommitted changes inside the submodule.\nDouble-click to open it."));
 			return;
 		}
-		_diffPane->showMessage(entry.path, tr("new commits"), tr("Loading..."));
-		_diffQuery = _repo->submodulePointerLog(entry.path, this, [this, entry](std::expected<QString, QString> log) {
-			_diffPane->showMessage(entry.path, tr("new commits"), log ? tr("New commits in the submodule:\n\n") + *log : log.error());
+		const DiffPane::ItemInfo info{ entry.path, tr("new commits") };
+		_diffPane->showMessage(info, tr("Loading..."));
+		_diffQuery = _repo->submodulePointerLog(entry.path, this, [this, info](std::expected<QString, QString> log) {
+			_diffPane->showMessage(info, log ? tr("New commits in the submodule:\n\n") + *log : log.error());
 		});
 		return;
 	}
@@ -1256,47 +1272,49 @@ void CommitWindow::showDiffForCurrentRow()
 		return;
 	}
 
-	const QString tag = tr("HEAD %1 working tree").arg(QChar(0x2192));
-	_diffPane->showMessage(entry.path, tag, tr("Loading..."));
+	const DiffPane::ItemInfo info{ entry.path, tr("HEAD %1 working tree").arg(QChar(0x2192)), workingTreeSizeLabel(absolutePath(entry)) };
+	_diffPane->showMessage(info, tr("Loading..."));
 	const qint64 maxBytes = CSettings{}.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong();
-	_diffQuery = _repo->diffFile(entry, maxBytes, this, [this, entry, tag](std::expected<QByteArray, QString> diff) {
+	_diffQuery = _repo->diffFile(entry, maxBytes, this, [this, info](std::expected<QByteArray, QString> diff) {
 		if (!diff)
-			_diffPane->showMessage(entry.path, tag, diff.error()); // an oversize diff fails here, never held whole
+			_diffPane->showMessage(info, diff.error()); // an oversize diff fails here, never held whole
 		else if (diff->isEmpty())
-			_diffPane->showMessage(entry.path, tag, tr("No content changes (only the mode or the line endings differ, or the file matches HEAD)."));
+			_diffPane->showMessage(info, tr("No content changes (only the mode or the line endings differ, or the file matches HEAD)."));
 		else
-			_diffPane->showDiff(entry.path, tag, QString::fromUtf8(*diff));
+			_diffPane->showDiff(info, QString::fromUtf8(*diff));
 	});
 }
 
 void CommitWindow::showFileContents(const FileEntry& entry)
 {
-	const QString tag = tr("new file");
-	QFile file{ absolutePath(entry) };
-	if (file.size() > CSettings{}.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong())
+	const QString path = absolutePath(entry);
+	QFile file{ path };
+	const qint64 sizeBytes = file.size();
+	const DiffPane::ItemInfo info{ entry.path, tr("new file"), formattedFileSize(sizeBytes) };
+	if (sizeBytes > CSettings{}.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong())
 	{
-		_diffPane->showMessage(entry.path, tag, tr("The file is too large to display (%1 MB).").arg(double(file.size()) / (1024 * 1024), 0, 'f', 1));
+		_diffPane->showMessage(info, tr("The file is too large to display (%1 MB).").arg(double(sizeBytes) / (1024 * 1024), 0, 'f', 1));
 		return;
 	}
 	if (!file.open(QIODevice::ReadOnly))
 	{
-		_diffPane->showMessage(entry.path, tag, tr("Could not read '%1'.").arg(QDir::toNativeSeparators(file.fileName())));
+		_diffPane->showMessage(info, tr("Could not read '%1'.").arg(QDir::toNativeSeparators(path)));
 		return;
 	}
 	const QByteArray contents = file.readAll();
 	if (contents.isEmpty())
 	{
-		_diffPane->showMessage(entry.path, tag, tr("The file is empty."));
+		_diffPane->showMessage(info, tr("The file is empty."));
 		return;
 	}
 	const std::optional<QString> text = decodedAsText(contents);
 	if (!text)
 	{
-		_diffPane->showMessage(entry.path, tag, tr("Binary file (%1 bytes).").arg(contents.size()));
+		_diffPane->showMessage(info, tr("Binary file (%1 bytes).").arg(contents.size()));
 		return;
 	}
 
-	_diffPane->showFileText(entry.path, tag, *text);
+	_diffPane->showFileText(info, *text);
 }
 
 void CommitWindow::onRowActivated(const QModelIndex& sourceIndex)

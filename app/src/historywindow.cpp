@@ -323,7 +323,7 @@ void HistoryWindow::reload()
 			_logModel.setCommits({}); // the reset clears the panes below through currentChanged
 			_countLabel->clear();
 			_loadMoreButton->setVisible(false);
-			_diffPane->showMessage({}, {}, result.error());
+			_diffPane->showMessage({}, result.error());
 			return;
 		}
 
@@ -628,7 +628,7 @@ void HistoryWindow::showFilesForCurrentCommit()
 	{
 		_filesModel.clear();
 		_fileCountLabel->clear();
-		_diffPane->showMessage({}, {}, {});
+		_diffPane->showMessage({}, {});
 		return;
 	}
 
@@ -656,7 +656,7 @@ void HistoryWindow::showFilesForCurrentCommit()
 		{
 			_filesModel.clear();
 			_fileCountLabel->clear();
-			_diffPane->showMessage({}, shortSha(sha), result.error());
+			_diffPane->showMessage({ .tag = shortSha(sha) }, result.error());
 			return;
 		}
 
@@ -681,22 +681,22 @@ void HistoryWindow::showDiffForCurrentFile()
 
 	const CommitFileChange& entry = *currentFile;
 	const QString sha = commit->sha;
-	const QString tag = shortSha(sha);
+	const DiffPane::ItemInfo info{ entry.path, shortSha(sha) };
 
-	_diffPane->showMessage(entry.path, tag, tr("Loading..."));
+	_diffPane->showMessage(info, tr("Loading..."));
 	const qint64 maxBytes = CSettings{}.value(Settings::MaxShownDiffBytesKey, Settings::MaxShownDiffBytesDefault).toLongLong();
-	_diffQuery = _repo->commitFileDiff(sha, entry, maxBytes, this, [this, entry, tag](std::expected<QByteArray, QString> diff) {
+	_diffQuery = _repo->commitFileDiff(sha, entry, maxBytes, this, [this, info](std::expected<QByteArray, QString> diff) {
 		if (!diff)
-			_diffPane->showMessage(entry.path, tag, diff.error()); // an oversize diff fails here, never held whole
+			_diffPane->showMessage(info, diff.error()); // an oversize diff fails here, never held whole
 		else if (diff->isEmpty())
-			_diffPane->showMessage(entry.path, tag, tr("No content changes (only the mode or the line endings differ, or a rename with identical content)."));
+			_diffPane->showMessage(info, tr("No content changes (only the mode or the line endings differ, or a rename with identical content)."));
 		else
-			_diffPane->showDiff(entry.path, tag, QString::fromUtf8(*diff));
+			_diffPane->showDiff(info, QString::fromUtf8(*diff));
 	});
 }
 
 void HistoryWindow::showCommitMessage(const CommitRecord& commit)
 {
-	_diffPane->showMessage({}, shortSha(commit.sha), commit.message);
+	_diffPane->showMessage({ .tag = shortSha(commit.sha) }, commit.message);
 }
 
