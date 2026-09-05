@@ -1,5 +1,6 @@
 #include "updatecheck.h"
 #include "settings.h"
+#include "version.h"
 
 #include "settings/csettings.h"
 #include "updaterUI/cupdaterdialog.h"

@@ -6,8 +6,14 @@ TEMPLATE = app
 TARGET   = gg
 macx:QMAKE_APPLICATION_BUNDLE_NAME = GoodGit   # the .app bundle is what the user sees on macOS; the binary inside it stays gg
 macx:QMAKE_INFO_PLIST = res/Info.plist   # qmake generates a plist with no CFBundleName and no version keys
-VERSION  = 1.3.0
-DEFINES += GG_VERSION=\\\"$$VERSION\\\"
+# The version is edited in src/version.h, which the code includes; this lifts it out of the GG_VERSION line
+# for qmake, which needs it for the exe's file-version metadata and the macOS plist.
+VERSION_DEFINE = $$cat($$PWD/src/version.h, lines)
+# LITERAL_HASH, or the # would start a comment and swallow the rest of the line, quoted or not
+VERSION_DEFINE = $$find(VERSION_DEFINE, "^$${LITERAL_HASH}define GG_VERSION")
+VERSION = $$replace(VERSION_DEFINE, "[^0-9.]", "")
+# Without this the makefile has no dependency on the header, so qmake would not re-run when the version changes
+QMAKE_INTERNAL_INCLUDED_FILES += $$PWD/src/version.h
 
 include(../global.pri)
 
@@ -76,6 +82,7 @@ HEADERS += \
 	src/updatecheck.h \
 	src/vcsprocess.h \
 	src/vcstypes.h \
+	src/version.h \
 	src/welcomewindow.h
 
 SOURCES += \

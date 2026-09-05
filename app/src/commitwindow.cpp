@@ -17,6 +17,7 @@
 #include "settingspages.h"
 #include "theme.h"
 #include "updatecheck.h"
+#include "version.h"
 
 #include "aboutdialog/caboutdialog.h"
 #include "dialogs/messagebox.h"
