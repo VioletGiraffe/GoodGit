@@ -41,7 +41,9 @@ private:
 	void updateHunkNavigator();
 
 private:
-	CLabelElided* _pathLabel = nullptr; // shows the size too, appended to the path
+	CLabelElided* _pathLabel = nullptr;
+	// Doubles as the header's spacer, so it must stay visible even with no size to show
+	CLabelElided* _sizeLabel = nullptr;
 	QLabel* _tagLabel = nullptr;
 	QWidget* _hunkNavigator = nullptr; // hidden whole where the content holds no hunk
 	QLabel* _hunkLabel = nullptr;

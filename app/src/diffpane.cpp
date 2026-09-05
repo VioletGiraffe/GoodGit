@@ -29,11 +29,16 @@ DiffPane::DiffPane(QWidget* parent) :
 	auto* headerLayout = new QHBoxLayout(header);
 	headerLayout->setContentsMargins(8, 6, 8, 6);
 	_pathLabel = new CLabelElided;
-	// Eliding does not shrink a QLabel's minimum width, which would otherwise become the pane's
-	_pathLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+	// Sized to its own text, so the size sits against it; CLabelElided's ellipsis floor still lets it shrink
+	_pathLabel->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
+	// A plain QLabel's minimum width is its whole text, which would become the header's floor
+	_sizeLabel = new CLabelElided;
+	_sizeLabel->setObjectName(QStringLiteral("diffTagLabel")); // dimmed, as the tag it precedes is
 	_tagLabel = new QLabel;
 	_tagLabel->setObjectName(QStringLiteral("diffTagLabel"));
-	headerLayout->addWidget(_pathLabel, 1);
+	headerLayout->addWidget(_pathLabel);
+	// Holds the header's slack: its text is left-aligned, so the size stays against the path and the gap falls after it
+	headerLayout->addWidget(_sizeLabel, 1);
 	headerLayout->addWidget(_tagLabel);
 	headerLayout->addWidget(buildHunkNavigator());
 	layout->addWidget(header);
@@ -48,6 +53,7 @@ DiffPane::DiffPane(QWidget* parent) :
 	const auto applyFontSettings = [this] {
 		const QFont mono = monospaceFont();
 		_pathLabel->setFont(mono);
+		_sizeLabel->setFont(mono);
 		_view->setFont(mono);
 		const int tabWidthSpaces = CSettings{}.value(Settings::DiffTabWidthKey, Settings::DiffTabWidthDefault).toInt();
 		_view->setTabStopDistance(tabWidthSpaces * QFontMetricsF{ mono }.horizontalAdvance(QLatin1Char(' ')));
@@ -116,8 +122,7 @@ void DiffPane::updateHunkNavigator()
 
 void DiffPane::setHeader(const ItemInfo& item)
 {
-	// The size joins the path's text: a label of its own would hold a minimum width the header could not shrink below.
-	// Middle elision keeps the tail, so a narrow pane drops the path before the size.
-	_pathLabel->setText(item.size.isEmpty() ? item.path : QStringLiteral("%1 (%2)").arg(item.path).arg(item.size));
+	_pathLabel->setText(item.path);
+	_sizeLabel->setText(item.size);
 	_tagLabel->setText(item.tag);
 }
