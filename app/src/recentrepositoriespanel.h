@@ -7,6 +7,8 @@ DISABLE_COMPILER_WARNINGS
 #include <QTreeWidget>
 RESTORE_COMPILER_WARNINGS
 
+class QLineEdit;
+
 // The recent repositories dock: one row per repository, expanding to the submodules its last refresh found (one level).
 // Activating a row opens that repository in its own window.
 // The rows come from the stored list alone; nothing here starts a process, so a moved or deleted repository
@@ -20,6 +22,9 @@ public:
 	// Keeps the rows whose absolute path contains `text`, plus the parent of every submodule kept, and
 	// expands those parents. An empty filter keeps everything and restores the expansion the user left.
 	void setFilter(const QString& text);
+
+	// The filter field for this panel: the same placeholder, tooltip and wiring at every site that shows a panel
+	[[nodiscard]] QLineEdit* createFilterField();
 
 protected:
 	// Row heights depend on the width the paths wrap into

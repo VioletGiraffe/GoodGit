@@ -522,19 +522,14 @@ QAction* CommitWindow::buildRecentRepositoriesDock()
 	headerLayout->addWidget(hideButton);
 	dock->setTitleBarWidget(header);
 
+	auto* panel = new RecentRepositoriesPanel{ _repo->path() };
+
 	// Its own row rather than the header's: the header row's buttons are what hold the dock's minimum width,
 	// and a field beside them would add to it
-	auto* filterEdit = new QLineEdit;
-	filterEdit->setPlaceholderText(tr("Filter"));
-	filterEdit->setToolTip(tr("Show only the repositories whose path contains this text"));
-	filterEdit->setClearButtonEnabled(true);
 	auto* filterRow = new QWidget;
 	auto* filterRowLayout = new QHBoxLayout(filterRow);
 	filterRowLayout->setContentsMargins(8, 6, 8, 6);
-	filterRowLayout->addWidget(filterEdit);
-
-	auto* panel = new RecentRepositoriesPanel{ _repo->path() };
-	connect(filterEdit, &QLineEdit::textChanged, panel, &RecentRepositoriesPanel::setFilter);
+	filterRowLayout->addWidget(panel->createFilterField());
 
 	auto* dockContents = new QWidget;
 	auto* dockContentsLayout = new QVBoxLayout(dockContents);

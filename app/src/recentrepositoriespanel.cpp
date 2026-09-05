@@ -9,6 +9,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QFileInfo>
 #include <QHeaderView>
+#include <QLineEdit>
 #include <QMenu>
 #include <QPainter>
 #include <QResizeEvent>
@@ -277,6 +278,16 @@ void RecentRepositoriesPanel::setFilter(const QString& text)
 	rememberExpansion(); // applyFilter() is about to expand whatever the filter matches
 	_filter = filter;
 	applyFilter();
+}
+
+QLineEdit* RecentRepositoriesPanel::createFilterField()
+{
+	auto* field = new QLineEdit;
+	field->setPlaceholderText(tr("Search repositories..."));
+	field->setToolTip(tr("Show only the repositories whose path contains this text"));
+	field->setClearButtonEnabled(true);
+	connect(field, &QLineEdit::textChanged, this, &RecentRepositoriesPanel::setFilter);
+	return field;
 }
 
 // Goes through _expandedRoots rather than the row: a rebuild while the menu is open destroys the row.

@@ -21,6 +21,7 @@ inline QString buildStyleSheet(const Theme& t)
 {
 	QString qss = QStringLiteral(R"qss(
 QMainWindow, QDialog, QWidget#welcomeWindow { background: @windowBg@; }
+QLabel#appVersionLabel { color: @textDim@; }
 
 /* ---------- bars ---------- */
 QFrame#repoBar { background: @surfaceAlt@; border-bottom: 1px solid @border@; }

@@ -5,6 +5,7 @@
 #include "recentrepositories.h"
 #include "recentrepositoriespanel.h"
 #include "repositorywindows.h"
+#include "version.h"
 
 #include "widgets/widgetutils.h"
 
@@ -14,6 +15,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QVBoxLayout>
 RESTORE_COMPILER_WARNINGS
@@ -43,10 +45,21 @@ WelcomeWindow::WelcomeWindow()
 	titleFont.setBold(true);
 	titleLabel->setFont(titleFont);
 
+	auto* versionLabel = new QLabel(QStringLiteral(GG_VERSION));
+	versionLabel->setObjectName(QStringLiteral("appVersionLabel")); // dimmed by the stylesheet
+
+	// Its own row: the version belongs to the name, and sits closer to it than the name does to the icon
+	auto* nameRow = new QHBoxLayout;
+	nameRow->setSpacing(6);
+	nameRow->addWidget(titleLabel);
+	versionLabel->setContentsMargins(0, 10, 0, 0); // off the title's top line, by eye
+	nameRow->addWidget(versionLabel, 0, Qt::AlignTop);
+
 	auto* titleRow = new QHBoxLayout;
 	titleRow->setSpacing(12);
+	titleRow->addStretch();
 	titleRow->addWidget(iconLabel);
-	titleRow->addWidget(titleLabel);
+	titleRow->addLayout(nameRow);
 	titleRow->addStretch();
 
 	auto* introLabel = new QLabel(tr("Each window shows one repository.\n\n"
@@ -93,14 +106,23 @@ WelcomeWindow::WelcomeWindow()
 	}
 #endif
 
-	auto* recentLabel = new QLabel(tr("Recent"));
-	recentLabel->setContentsMargins(Inset, 0, Inset, 6);
+	auto* panel = new RecentRepositoriesPanel{ QString{} }; // no current repository to mark
+	auto* filterEdit = panel->createFilterField();
+
+	// The field shares the label's row, unlike the dock's: no buttons here whose minimum width it would add to
+	auto* recentHeader = new QWidget;
+	auto* recentHeaderLayout = new QHBoxLayout(recentHeader);
+	recentHeaderLayout->setContentsMargins(Inset, 0, Inset, 6);
+	recentHeaderLayout->setSpacing(12);
+	recentHeaderLayout->addWidget(new QLabel(tr("Recent")));
+	recentHeaderLayout->addWidget(filterEdit);
+
 	auto* recentSection = new QWidget;
 	auto* recentLayout = new QVBoxLayout(recentSection);
 	recentLayout->setContentsMargins(0, 0, 0, 0);
 	recentLayout->setSpacing(0);
-	recentLayout->addWidget(recentLabel);
-	recentLayout->addWidget(new RecentRepositoriesPanel{ QString{} }, 1); // no current repository to mark
+	recentLayout->addWidget(recentHeader);
+	recentLayout->addWidget(panel, 1);
 
 	auto* layout = new QVBoxLayout(this);
 	layout->setContentsMargins(0, 0, 0, 0);
@@ -110,9 +132,17 @@ WelcomeWindow::WelcomeWindow()
 
 	const bool anyRecent = !RecentRepositories::list().empty();
 	recentSection->setVisible(anyRecent);
-	// The list can empty while this window stands: a row's context menu drops it
+	// The list can fill while this window stands: a folder scan adds to it. It can also empty: a row's context menu drops it
 	connect(&RecentRepositories::Notifier::instance(), &RecentRepositories::Notifier::changed, this,
-		[recentSection] { recentSection->setVisible(!RecentRepositories::list().empty()); });
+		[this, recentSection, filterEdit] {
+			const bool showList = !RecentRepositories::list().empty();
+			// The window sized for the introduction alone leaves the list no height to appear in
+			if (showList && recentSection->isHidden() && height() < WithRecentListHeight)
+				WidgetUtils::centerWidgetOnScreen(this, QSize{ width(), WithRecentListHeight });
+			if (!showList)
+				filterEdit->clear(); // hidden with the section, it must not still be filtering when the list comes back
+			recentSection->setVisible(showList);
+		});
 
 	connect(openButton, &QPushButton::clicked, this, [this] { browseForRepository(this); });
 	connect(scanButton, &QPushButton::clicked, this, [this] { scanFolderForRepositories(this); });

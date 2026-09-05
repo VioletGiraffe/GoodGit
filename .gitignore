@@ -11,6 +11,7 @@
 *.user
 .vs/
 .qtc_clangd/
+/enc_temp_folder/
 
 # Build results
 /bin/
