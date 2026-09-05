@@ -369,7 +369,7 @@ std::expected<qint64, QString> parseObjectSize(const QByteArray& output)
 	bool read = false;
 	const qint64 size = output.trimmed().toLongLong(&read);
 	if (!read)
-		return std::unexpected(QStringLiteral("Unexpected `cat-file -s` output: %1").arg(QString::fromUtf8(output.left(200))));
+		return std::unexpected(QStringLiteral("Unexpected `cat-file -s` output"));
 
 	return size;
 }

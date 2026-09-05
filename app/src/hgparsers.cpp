@@ -387,7 +387,7 @@ std::expected<qint64, QString> parseFileSize(const QByteArray& output)
 	bool read = false;
 	const qint64 size = output.trimmed().toLongLong(&read);
 	if (!read)
-		return std::unexpected(QStringLiteral("Unexpected `files -T {size}` output: %1").arg(textFromOutput(output.left(200))));
+		return std::unexpected(QStringLiteral("Unexpected `files -T {size}` output"));
 
 	return size;
 }
