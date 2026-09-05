@@ -37,6 +37,9 @@ public:
 	// Called by another window whose write changed this repository: a submodule's commit moves a pointer here, and
 	// a parent's discard inside the submodule changes its working tree
 	void refreshRepository();
+	// Called after this repository is pushed, from here or as one step of a parent's push. Not
+	// refreshRepository(): a push also stales the unpushed marks, which a working-tree change does not
+	void refreshAfterPush();
 
 signals:
 	// A commit, undo or abort here changed the history other windows show: the parent's gitlink row, the

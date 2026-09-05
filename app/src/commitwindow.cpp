@@ -198,6 +198,12 @@ void CommitWindow::refreshRepository()
 	_repo->refresh();
 }
 
+void CommitWindow::refreshAfterPush()
+{
+	_repo->refresh();
+	emit pushed();
+}
+
 void CommitWindow::buildUi()
 {
 	buildMenuBar();
@@ -1091,14 +1097,18 @@ void CommitWindow::runPushStep(size_t index, bool setUpstream)
 
 		if (result.ok)
 		{
+			// A submodule's own window, when one is open: its branch was just pushed from here.
+			// The last step is this repository, refreshed below.
+			if (CommitWindow* window = repositoryWindow(_pushSteps[index].workDir); window && window != this)
+				window->refreshAfterPush();
+
 			if (index + 1 < _pushSteps.size())
 			{
 				runPushStep(index + 1, /*setUpstream=*/false);
 				return;
 			}
 			endPush();
-			_repo->refresh();
-			emit pushed();
+			refreshAfterPush();
 			return;
 		}
 
