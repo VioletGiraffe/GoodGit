@@ -3,7 +3,6 @@
 #include "stylesheet.h"
 
 #include "assert/advanced_assert.h"
-#include "settings/csettings.h"
 #include "settingsui/csettingsdialog.h"
 #include "theme/cthemecontroller.h"
 #include "theme/cthemeiconhandler.h"
@@ -13,6 +12,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QApplication>
 #include <QFontDatabase>
 #include <QPalette>
+#include <QSettings>
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
@@ -65,7 +65,7 @@ QFont monospaceFont()
 {
 	if (!s_monospaceFont)
 	{
-		const CSettings settings;
+		const QSettings settings;
 		const QString family = settings.value(Settings::MonospaceFontFamilyKey).toString();
 		if (family.isEmpty())
 			s_monospaceFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);

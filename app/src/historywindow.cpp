@@ -7,7 +7,6 @@
 #include "settings.h"
 #include "theme.h"
 
-#include "settings/csettings.h"
 #include "settingsui/csettingsdialog.h"
 #include "widgets/clabelelided.h"
 #include "widgets/cpersistentwindow.h"
@@ -26,6 +25,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QLineEdit>
 #include <QMenu>
 #include <QPushButton>
+#include <QSettings>
 #include <QShortcut>
 #include <QSplitter>
 #include <QTimer>
@@ -75,7 +75,7 @@ HistoryWindow::HistoryWindow(const RepositoryLocation& location, QWidget* parent
 HistoryWindow::HistoryWindow(const RepositoryLocation& location, const QString& filePath, QWidget* parent) :
 	QMainWindow(parent, Qt::Window),
 	_repo{ openRepository(location) },
-	_query{ .maxCommits = CSettings{}.value(Settings::HistoryMaxCommitsKey, Settings::HistoryMaxCommitsDefault).toInt(), .path = filePath }
+	_query{ .maxCommits = QSettings{}.value(Settings::HistoryMaxCommitsKey, Settings::HistoryMaxCommitsDefault).toInt(), .path = filePath }
 {
 	setAttribute(Qt::WA_DeleteOnClose);
 	setWindowTitle(_query.path.isEmpty()
@@ -173,7 +173,7 @@ void HistoryWindow::buildUi()
 	_detailSplitter->addWidget(_diffPane);
 	_detailSplitter->setStretchFactor(0, 0);
 	_detailSplitter->setStretchFactor(1, 1);
-	if (const QByteArray state = CSettings{}.value(Settings::HistoryWindowDetailSplitterKey).toByteArray(); !state.isEmpty())
+	if (const QByteArray state = QSettings{}.value(Settings::HistoryWindowDetailSplitterKey).toByteArray(); !state.isEmpty())
 		_detailSplitter->restoreState(state);
 	else
 		_detailSplitter->setSizes({ FileListWidth, 860 });
@@ -185,7 +185,7 @@ void HistoryWindow::buildUi()
 	_splitter->addWidget(_detailSplitter);
 	_splitter->setStretchFactor(0, 1);
 	_splitter->setStretchFactor(1, 1);
-	if (const QByteArray state = CSettings{}.value(Settings::HistoryWindowSplitterKey).toByteArray(); !state.isEmpty())
+	if (const QByteArray state = QSettings{}.value(Settings::HistoryWindowSplitterKey).toByteArray(); !state.isEmpty())
 		_splitter->restoreState(state);
 	else
 		_splitter->setSizes({ 340, 420 });
@@ -253,7 +253,7 @@ bool HistoryWindow::eventFilter(QObject* watched, QEvent* event)
 
 void HistoryWindow::closeEvent(QCloseEvent* event)
 {
-	CSettings settings;
+	QSettings settings;
 	settings.setValue(Settings::HistoryWindowSplitterKey, _splitter->saveState());
 	settings.setValue(Settings::HistoryWindowDetailSplitterKey, _detailSplitter->saveState());
 	QMainWindow::closeEvent(event);

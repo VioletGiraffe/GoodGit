@@ -22,7 +22,6 @@
 #include "aboutdialog/caboutdialog.h"
 #include "dialogs/messagebox.h"
 #include "hash/wheathash.hpp"
-#include "settings/csettings.h"
 #include "settingsui/csettingsdialog.h"
 #include "string/stringutils.h"
 #include "widgets/clabelelided.h"
@@ -51,6 +50,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScreen>
+#include <QSettings>
 #include <QShortcut>
 #include <QSplitter>
 #include <QTextCursor>
@@ -362,7 +362,7 @@ void CommitWindow::buildUi()
 	_splitter->addWidget(rightPane);
 	_splitter->setStretchFactor(0, 0);
 	_splitter->setStretchFactor(1, 1);
-	if (const QByteArray state = CSettings{}.value(Settings::CommitWindowSplitterKey).toByteArray(); !state.isEmpty())
+	if (const QByteArray state = QSettings{}.value(Settings::CommitWindowSplitterKey).toByteArray(); !state.isEmpty())
 		_splitter->restoreState(state);
 	else
 		_initialWidthPending = true;
@@ -499,7 +499,7 @@ void CommitWindow::closeEvent(QCloseEvent* event)
 		return;
 	}
 
-	CSettings{}.setValue(Settings::CommitWindowSplitterKey, _splitter->saveState());
+	QSettings{}.setValue(Settings::CommitWindowSplitterKey, _splitter->saveState());
 	saveDraftMessage();
 	QMainWindow::closeEvent(event);
 }
@@ -734,7 +734,7 @@ void CommitWindow::saveDraftMessage()
 	if (!_stateWasRead)
 		return; // no parent sha was ever read here: an unreadable repository must not drop the stored draft
 
-	CSettings settings;
+	QSettings settings;
 	const QString group = draftGroup(_repo->path());
 	const QString message = _messageEdit->toPlainText();
 	if (message.trimmed().isEmpty())
@@ -755,7 +755,7 @@ void CommitWindow::restoreDraftIfParentUnchanged()
 	if (!_messageEdit->toPlainText().isEmpty())
 		return; // typed into while that refresh was still running
 
-	CSettings settings;
+	QSettings settings;
 	settings.beginGroup(draftGroup(_repo->path()));
 	const QString message = settings.value(Settings::CommitDraftMessageKey).toString();
 	// A group that is not there reads as an empty sha, the same value an unborn repository stores

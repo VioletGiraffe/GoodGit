@@ -3,7 +3,6 @@
 #include "settings.h"
 #include "theme.h"
 
-#include "settings/csettings.h"
 #include "settingsui/csettingsdialog.h"
 #include "widgets/clabelelided.h"
 
@@ -14,6 +13,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QLabel>
 #include <QLocale>
 #include <QPushButton>
+#include <QSettings>
 #include <QSizePolicy>
 #include <QVBoxLayout>
 RESTORE_COMPILER_WARNINGS
@@ -61,7 +61,7 @@ DiffPane::DiffPane(QWidget* parent) :
 		_pathLabel->setFont(mono);
 		_sizeLabel->setFont(mono);
 		_view->setFont(mono);
-		const int tabWidthSpaces = CSettings{}.value(Settings::DiffTabWidthKey, Settings::DiffTabWidthDefault).toInt();
+		const int tabWidthSpaces = QSettings{}.value(Settings::DiffTabWidthKey, Settings::DiffTabWidthDefault).toInt();
 		_view->setTabStopDistance(tabWidthSpaces * QFontMetricsF{ mono }.horizontalAdvance(QLatin1Char(' ')));
 	};
 	applyFontSettings();

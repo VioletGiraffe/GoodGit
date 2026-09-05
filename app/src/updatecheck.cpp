@@ -2,11 +2,11 @@
 #include "settings.h"
 #include "version.h"
 
-#include "settings/csettings.h"
 #include "updaterUI/cupdaterdialog.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QDateTime>
+#include <QSettings>
 RESTORE_COMPILER_WARNINGS
 
 #include <stdint.h>
@@ -22,7 +22,7 @@ QString repositoryName()
 
 void recordCheckTime()
 {
-	CSettings{}.setValue(Settings::LastUpdateCheckTimestampKey, QDateTime::currentDateTime());
+	QSettings{}.setValue(Settings::LastUpdateCheckTimestampKey, QDateTime::currentDateTime());
 }
 
 } // namespace
@@ -35,7 +35,7 @@ void checkForUpdatesInteractively(QWidget* parent)
 
 void checkForUpdatesIfDue()
 {
-	const CSettings settings;
+	const QSettings settings;
 	if (!settings.value(Settings::CheckForUpdatesAutomaticallyKey, Settings::CheckForUpdatesAutomaticallyDefault).toBool())
 		return;
 

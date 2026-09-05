@@ -2,7 +2,6 @@
 #include "settings.h"
 #include "theme.h"
 
-#include "settings/csettings.h"
 #include "theme/cthemecontroller.h"
 
 DISABLE_COMPILER_WARNINGS
@@ -15,6 +14,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QHBoxLayout>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QSettings>
 #include <QSpinBox>
 RESTORE_COMPILER_WARNINGS
 
@@ -27,7 +27,7 @@ QWidget* executableRow(QWidget* parent, QLineEdit*& edit, const char* settingsKe
 	auto* layout = new QHBoxLayout{ row };
 	layout->setContentsMargins(0, 0, 0, 0);
 	edit = new QLineEdit;
-	edit->setText(CSettings{}.value(settingsKey).toString());
+	edit->setText(QSettings{}.value(settingsKey).toString());
 	edit->setPlaceholderText(QLatin1String(defaultName));
 	auto* browseButton = new QPushButton{ MainSettingsPage::tr("Browse...") };
 	layout->addWidget(edit, 1);
@@ -55,7 +55,7 @@ constexpr const char* NewRowCheckPolicyByIndex[] = {
 MainSettingsPage::MainSettingsPage(QWidget* parent) :
 	CSettingsPage(parent)
 {
-	const CSettings settings;
+	const QSettings settings;
 	auto* layout = new QFormLayout{ this };
 
 	layout->addRow(tr("Git executable:"), executableRow(this, _gitExecutable, Settings::GitExecutableKey, Settings::GitExecutableDefault));
@@ -124,7 +124,7 @@ MainSettingsPage::MainSettingsPage(QWidget* parent) :
 
 void MainSettingsPage::acceptSettings()
 {
-	CSettings settings;
+	QSettings settings;
 	settings.setValue(Settings::GitExecutableKey, _gitExecutable->text().trimmed());
 	settings.setValue(Settings::HgExecutableKey, _hgExecutable->text().trimmed());
 	settings.setValue(Settings::TextEditorCommandKey, _textEditorCommand->text().trimmed());
@@ -175,7 +175,7 @@ ThemeFontSettingsPage::ThemeFontSettingsPage(QWidget* parent) :
 	layout->addRow(tr("Dark theme:"), themeCombo(true, _darkThemeOnEntry));
 
 	_systemFont = new QCheckBox{ tr("Use the system monospace font") };
-	_systemFont->setChecked(CSettings{}.value(Settings::MonospaceFontFamilyKey).toString().isEmpty());
+	_systemFont->setChecked(QSettings{}.value(Settings::MonospaceFontFamilyKey).toString().isEmpty());
 	layout->addRow(_systemFont);
 
 	const QFont currentMono = monospaceFont();
@@ -199,14 +199,14 @@ ThemeFontSettingsPage::ThemeFontSettingsPage(QWidget* parent) :
 	_diffTabWidth = new QSpinBox;
 	_diffTabWidth->setRange(1, 16);
 	_diffTabWidth->setSuffix(tr(" spaces"));
-	_diffTabWidth->setValue(CSettings{}.value(Settings::DiffTabWidthKey, Settings::DiffTabWidthDefault).toInt());
+	_diffTabWidth->setValue(QSettings{}.value(Settings::DiffTabWidthKey, Settings::DiffTabWidthDefault).toInt());
 	layout->addRow(tr("Tab width in diffs:"), _diffTabWidth);
 }
 
 void ThemeFontSettingsPage::acceptSettings()
 {
 	// The scheme and themes were stored when picked
-	CSettings settings;
+	QSettings settings;
 	const bool systemFont = _systemFont->isChecked();
 	settings.setValue(Settings::MonospaceFontFamilyKey, systemFont ? QString{} : _fontFamily->currentFont().family());
 	settings.setValue(Settings::MonospaceFontPointSizeKey, systemFont ? 0 : _fontSize->value());

@@ -1,13 +1,13 @@
 #pragma once
 
 #include "compiler/compiler_warnings_control.h"
-#include "settings/csettings.h"
 
 DISABLE_COMPILER_WARNINGS
+#include <QSettings>
 #include <QtGlobal> // qlonglong
 RESTORE_COMPILER_WARNINGS
 
-// Every storage key with its default. The values are read and written through CSettings at the use sites,
+// Every storage key with its default. The values are read and written through QSettings at the use sites,
 // except a value several files read, which gets an accessor here.
 namespace Settings {
 
@@ -39,7 +39,7 @@ inline constexpr const char* MaxShownDiffBytesKey = "MaxShownDiffBytes";
 inline constexpr qlonglong MaxShownDiffBytesDefault = 2LL * 1024LL * 1024LL;
 [[nodiscard]] inline qlonglong maxShownDiffBytes()
 {
-	return CSettings{}.value(MaxShownDiffBytesKey, MaxShownDiffBytesDefault).toLongLong();
+	return QSettings{}.value(MaxShownDiffBytesKey, MaxShownDiffBytesDefault).toLongLong();
 }
 
 // The viewer window renders far more than the diff pane; this bounds what is held in memory, not what can be drawn

@@ -2,8 +2,6 @@
 #include "repositoryfactory.h"
 #include "settings.h"
 
-#include "settings/csettings.h"
-
 DISABLE_COMPILER_WARNINGS
 #include <QDateTime>
 #include <QFileInfo>
@@ -11,6 +9,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSet>
+#include <QSettings>
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
@@ -80,7 +79,7 @@ void save(const std::vector<RecentRepository>& repositories)
 			{ QLatin1String(Settings::RecentRepositorySubmoduleKindsKey), kinds } });
 	}
 
-	CSettings{}.setValue(QLatin1String(Settings::RecentRepositoriesKey),
+	QSettings{}.setValue(QLatin1String(Settings::RecentRepositoriesKey),
 		QString::fromUtf8(QJsonDocument{ stored }.toJson(QJsonDocument::Compact)));
 
 	RecentRepositories::Notifier::instance().notifyChanged();
@@ -92,7 +91,7 @@ namespace RecentRepositories {
 
 std::vector<RecentRepository> list()
 {
-	const QString text = CSettings{}.value(QLatin1String(Settings::RecentRepositoriesKey)).toString();
+	const QString text = QSettings{}.value(QLatin1String(Settings::RecentRepositoriesKey)).toString();
 	const QJsonArray stored = QJsonDocument::fromJson(text.toUtf8()).array();
 
 	std::vector<RecentRepository> repositories;

@@ -7,14 +7,13 @@
 #include "queryround.h"
 #include "settings.h"
 
-#include "settings/csettings.h"
-
 DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QPointer>
 #include <QProcess>
+#include <QSettings>
 #include <QTemporaryFile>
 RESTORE_COMPILER_WARNINGS
 
@@ -141,7 +140,7 @@ QString revsetOf(const std::vector<Hg::GrepMatch>& matches, int maxCommits)
 QStringList diffArgs()
 {
 	QStringList args = { QStringLiteral("diff"), QStringLiteral("--git") };
-	if (!CSettings{}.value(Settings::ShowLineEndingOnlyChangesKey, Settings::ShowLineEndingOnlyChangesDefault).toBool())
+	if (!QSettings{}.value(Settings::ShowLineEndingOnlyChangesKey, Settings::ShowLineEndingOnlyChangesDefault).toBool())
 		args << QStringLiteral("-Z");
 	return args;
 }

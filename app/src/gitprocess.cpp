@@ -1,9 +1,8 @@
 #include "gitprocess.h"
 #include "settings.h"
 
-#include "settings/csettings.h"
-
 DISABLE_COMPILER_WARNINGS
+#include <QSettings>
 #include <QVersionNumber>
 RESTORE_COMPILER_WARNINGS
 
@@ -31,7 +30,7 @@ namespace Git {
 
 QString executablePath()
 {
-	QString executable = CSettings{}.value(Settings::GitExecutableKey).toString();
+	QString executable = QSettings{}.value(Settings::GitExecutableKey).toString();
 	if (executable.isEmpty())
 		executable = QLatin1String(Settings::GitExecutableDefault);
 	return executable;

@@ -2,7 +2,9 @@
 #include "hgcommandserver.h"
 #include "settings.h"
 
-#include "settings/csettings.h"
+DISABLE_COMPILER_WARNINGS
+#include <QSettings>
+RESTORE_COMPILER_WARNINGS
 
 namespace {
 
@@ -22,7 +24,7 @@ namespace Hg {
 
 QString executablePath()
 {
-	QString executable = CSettings{}.value(Settings::HgExecutableKey).toString();
+	QString executable = QSettings{}.value(Settings::HgExecutableKey).toString();
 	if (executable.isEmpty())
 		executable = QLatin1String(Settings::HgExecutableDefault);
 	return executable;

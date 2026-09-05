@@ -2,13 +2,13 @@
 #include "settings.h"
 #include "theme.h"
 
-#include "settings/csettings.h"
 #include "settingsui/csettingsdialog.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QApplication>
 #include <QBrush>
 #include <QFont>
+#include <QSettings>
 RESTORE_COMPILER_WARNINGS
 
 #include <unordered_map>
@@ -153,7 +153,7 @@ void ChangedFilesModel::setEntries(const std::vector<FileEntry>& entries, bool m
 			previousChecks[row.entry.path] = row.checked;
 	}
 
-	const QString newRowCheckPolicy = CSettings{}.value(Settings::NewRowCheckPolicyKey).toString();
+	const QString newRowCheckPolicy = QSettings{}.value(Settings::NewRowCheckPolicyKey).toString();
 
 	beginResetModel();
 	_rows.clear();

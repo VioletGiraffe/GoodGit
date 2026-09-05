@@ -4,7 +4,6 @@
 #include "settings.h"
 #include "theme.h"
 
-#include "settings/csettings.h"
 #include "settingsui/csettingsdialog.h"
 #include "string/stringutils.h"
 #include "widgets/clabelelided.h"
@@ -15,6 +14,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPoint>
+#include <QSettings>
 #include <QSizePolicy>
 #include <QStackedWidget>
 #include <QVBoxLayout>
@@ -74,7 +74,7 @@ FileViewerWindow::FileViewerWindow(Repository& repo, const QString& sha, const Q
 		const QFont mono = monospaceFont();
 		_pathLabel->setFont(mono);
 		_viewer->setFont(mono);
-		_viewer->setTabWidth(CSettings{}.value(Settings::DiffTabWidthKey, Settings::DiffTabWidthDefault).toInt());
+		_viewer->setTabWidth(QSettings{}.value(Settings::DiffTabWidthKey, Settings::DiffTabWidthDefault).toInt());
 	};
 	applyFontSettings();
 	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, applyFontSettings);
@@ -90,7 +90,7 @@ FileViewerWindow::FileViewerWindow(Repository& repo, const QString& sha, const Q
 
 	// The limit travels into the read: probing the size first would not bound it, the read applying checkout
 	// filters, so an LFS pointer's stored size is not the size of what arrives.
-	const qint64 maxBytes = CSettings{}.value(Settings::MaxViewedFileBytesKey, Settings::MaxViewedFileBytesDefault).toLongLong();
+	const qint64 maxBytes = QSettings{}.value(Settings::MaxViewedFileBytesKey, Settings::MaxViewedFileBytesDefault).toLongLong();
 	repo.fileAtRevision(sha, repoRelativePath, maxBytes, this, [this](std::expected<QByteArray, QString> content) {
 		if (!content)
 			showMessage(content.error()); // an oversize file fails here, never held whole

@@ -2,13 +2,13 @@
 #include "settings.h"
 
 #include "dialogs/messagebox.h"
-#include "settings/csettings.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QDesktopServices>
 #include <QDir>
 #include <QFileInfo>
 #include <QProcess>
+#include <QSettings>
 #include <QUrl>
 RESTORE_COMPILER_WARNINGS
 
@@ -52,7 +52,7 @@ void showInFileManager(const QString& path)
 
 void openInTextEditor(const QString& path, QWidget* dialogParent)
 {
-	QString command = CSettings{}.value(Settings::TextEditorCommandKey).toString().trimmed();
+	QString command = QSettings{}.value(Settings::TextEditorCommandKey).toString().trimmed();
 	if (command.isEmpty())
 		command = QLatin1String(Settings::TextEditorCommandDefault);
 

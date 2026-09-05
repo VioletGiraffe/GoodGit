@@ -4,14 +4,13 @@
 #include "queryround.h"
 #include "settings.h"
 
-#include "settings/csettings.h"
-
 DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QPointer>
 #include <QProcess>
+#include <QSettings>
 #include <QTemporaryFile>
 RESTORE_COMPILER_WARNINGS
 
@@ -208,7 +207,7 @@ QString headShaInGitDir(const QString& gitDirPath)
 // Either way the row still lists as modified and commits its working-tree content verbatim.
 QStringList eolDisplayFlags()
 {
-	return CSettings{}.value(Settings::ShowLineEndingOnlyChangesKey, Settings::ShowLineEndingOnlyChangesDefault).toBool()
+	return QSettings{}.value(Settings::ShowLineEndingOnlyChangesKey, Settings::ShowLineEndingOnlyChangesDefault).toBool()
 		? QStringList{} : QStringList{ QStringLiteral("--ignore-cr-at-eol") };
 }
 

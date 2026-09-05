@@ -2,7 +2,6 @@
 #include "settings.h"
 #include "theme.h"
 
-#include "settings/csettings.h"
 #include "settingsui/csettingsdialog.h"
 
 DISABLE_COMPILER_WARNINGS
@@ -13,6 +12,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QRegularExpression>
 #include <QScrollBar>
 #include <QSet>
+#include <QSettings>
 #include <QStringListModel>
 #include <QTextBlock>
 RESTORE_COMPILER_WARNINGS
@@ -25,7 +25,7 @@ constexpr int ColumnsPastGuide = 4; // the guide marks a limit to overrun, not t
 
 int subjectGuideColumn()
 {
-	return CSettings{}.value(Settings::SubjectGuideColumnKey, Settings::SubjectGuideColumnDefault).toInt();
+	return QSettings{}.value(Settings::SubjectGuideColumnKey, Settings::SubjectGuideColumnDefault).toInt();
 }
 
 // Not Qt's word boundaries: those break on '-' and '/', and a repo-relative path contains both
@@ -190,7 +190,7 @@ void MessageEdit::keyPressEvent(QKeyEvent* event)
 
 	// With auto-popup off, a popup summoned by Ctrl+Space still follows further typing
 	const QString prefix = completionPrefix();
-	const CSettings settings;
+	const QSettings settings;
 	const bool follow = settings.value(Settings::CompletionAutoPopupKey, Settings::CompletionAutoPopupDefault).toBool()
 		? prefix.length() >= settings.value(Settings::CompletionMinPrefixLengthKey, Settings::CompletionMinPrefixLengthDefault).toInt()
 		: _completer->popup()->isVisible() && !prefix.isEmpty();
