@@ -8,6 +8,9 @@
 
 #include "aboutdialog/caboutdialog.h"
 #include "settingsui/csettingsdialog.h"
+#ifdef _DEBUG
+#include "ui/widget-gallery/cwidgetgallery.h"
+#endif
 
 DISABLE_COMPILER_WARNINGS
 #include <QApplication>
@@ -64,7 +67,13 @@ void addHelpMenu(QMenuBar& menuBar, QWidget* dialogParent)
 {
 	QMenu* menu = menuBar.addMenu(QObject::tr("&Help"));
 	menu->addAction(QObject::tr("Check for &Updates..."), dialogParent, [dialogParent] { checkForUpdatesInteractively(dialogParent); });
+#ifdef _DEBUG
 	menu->addSeparator();
+	// Not tr(): debug-only functionality is never translated
+	menu->addAction(QStringLiteral("Widget &Gallery"), &CWidgetGalleryWindow::showNew);
+#endif
+	menu->addSeparator();
+	// Always the last item in Help
 	menu->addAction(QObject::tr("&About"), dialogParent, [dialogParent] {
 		CAboutDialog aboutDialog{ QStringLiteral(GG_VERSION), dialogParent };
 		aboutDialog.exec();
