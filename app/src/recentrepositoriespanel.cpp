@@ -38,6 +38,7 @@ constexpr int BadgeSpacing = 6;
 constexpr int BadgeTextPadding = 6;
 constexpr int BadgeVerticalPadding = 2;
 constexpr int MinimumTextWidth = 40;
+constexpr qreal KeyboardCursorRadius = 2.0;
 
 [[nodiscard]] QFont smallerFont(QFont font)
 {
@@ -83,9 +84,8 @@ public:
 		opt.text.clear(); // the base paints only the row separator; every glyph is painted here
 
 		// The view is NoSelection, so State_Selected never arrives
-		// The mouse-over is drawn for visual feedback, current item rect is for keyboard navigation
 		const Theme& theme = activeTheme();
-		if (opt.state.testFlag(QStyle::State_MouseOver) || opt.state.testFlag(QStyle::State_HasFocus))
+		if (opt.state.testFlag(QStyle::State_MouseOver))
 			painter->fillRect(option.rect, theme.palette.selectionBg);
 		else if (index.data(CurrentRole).toBool())
 			painter->fillRect(option.rect, theme.palette.surfaceAlt);
@@ -96,6 +96,19 @@ public:
 		if (index.data(CurrentRole).toBool())
 			painter->fillRect(QRect{ option.rect.left(), option.rect.top(), theme.metrics.selectionStripeWidth, option.rect.height() },
 				theme.palette.accent);
+
+		// The keyboard cursor: outlined, so it reads apart from the mouse-over fill on the same row
+		// QMacStyle draws no item view focus rect, and the sheet's `outline: none` suppresses QCommonStyle's
+		if (opt.state.testFlag(QStyle::State_HasFocus))
+		{
+			painter->save();
+			painter->setRenderHint(QPainter::Antialiasing);
+			painter->setPen(theme.palette.accent);
+			painter->setBrush(Qt::NoBrush);
+			// Half a pixel in, for the same reason as the badge's rounded rect below
+			painter->drawRoundedRect(QRectF{ option.rect }.adjusted(0.5, 0.5, -0.5, -0.5), KeyboardCursorRadius, KeyboardCursorRadius);
+			painter->restore();
+		}
 
 		const bool submodule = index.parent().isValid();
 		const QFontMetrics nameMetrics{ option.font };
@@ -210,7 +223,8 @@ RecentRepositoriesPanel::RecentRepositoriesPanel(QString currentRepositoryRoot, 
 	header()->setSectionResizeMode(0, QHeaderView::Stretch); // the rows are laid out against the viewport's width
 	setRootIsDecorated(true);
 	setIndentation(14);
-	setAllColumnsShowFocus(true);
+	// Without this the delegate never sees State_MouseOver: only the Windows style sets it itself
+	viewport()->setAttribute(Qt::WA_Hover);
 	// A row is opened, never selected; the keyboard focus still shows while the panel has focus
 	setSelectionMode(QAbstractItemView::NoSelection);
 	setExpandsOnDoubleClick(false); // a double click opens the repository
