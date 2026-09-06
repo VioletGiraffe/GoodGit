@@ -173,6 +173,7 @@ void HistoryWindow::buildUi()
 	_detailSplitter->addWidget(_diffPane);
 	_detailSplitter->setStretchFactor(0, 0);
 	_detailSplitter->setStretchFactor(1, 1);
+	_detailSplitter->setContentsMargins(4, 0, 4, 4);
 	if (const QByteArray state = QSettings{}.value(Settings::HistoryWindowDetailSplitterKey).toByteArray(); !state.isEmpty())
 		_detailSplitter->restoreState(state);
 	else
