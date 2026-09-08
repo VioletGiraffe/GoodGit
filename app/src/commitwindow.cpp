@@ -1343,15 +1343,7 @@ void CommitWindow::openEntryExternally(const FileEntry& entry)
 
 void CommitWindow::showHistoryWindow()
 {
-	HistoryWindow* window = repositoryHistoryWindow(_repo->path());
-	if (!window)
-		window = new HistoryWindow(_repo->location());
-
-	window->show();
-	if (window->isMinimized()) // show() does not restore a minimized window
-		window->setWindowState(window->windowState() & ~Qt::WindowMinimized);
-	window->raise();
-	window->activateWindow();
+	showRepositoryHistory(_repo->location());
 }
 
 void CommitWindow::continueOperation()
@@ -1475,9 +1467,7 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	editAction->setVisible(singleFile);
 
 	QAction* submoduleHistoryAction = menu.addAction(tr("View commit history"), this, [this, entry = first] {
-		// A new window each time, even where this submodule's history is already open
-		auto* window = new HistoryWindow(_repo->submoduleLocation(entry.path));
-		window->show();
+		showRepositoryHistory(_repo->submoduleLocation(entry.path));
 	});
 	submoduleHistoryAction->setVisible(single && first.isSubmodule);
 

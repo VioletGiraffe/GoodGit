@@ -65,6 +65,17 @@ FileRevisionTargets fileRevisionTargets(const CommitFileChange& entry, const Com
 	return targets;
 }
 
+// The whole repository's history, or none: a file history is not it
+HistoryWindow* repositoryHistoryWindow(const QString& repositoryRoot)
+{
+	for (HistoryWindow* window : historyWindowsFor(repositoryRoot))
+	{
+		if (window->filePath().isEmpty())
+			return window;
+	}
+	return nullptr;
+}
+
 } // namespace
 
 // The open windows are the registry, as with the repository windows
@@ -80,14 +91,18 @@ std::vector<HistoryWindow*> historyWindowsFor(const QString& repositoryRoot)
 	return windows;
 }
 
-HistoryWindow* repositoryHistoryWindow(const QString& repositoryRoot)
+HistoryWindow* showRepositoryHistory(const RepositoryLocation& location)
 {
-	for (HistoryWindow* window : historyWindowsFor(repositoryRoot))
-	{
-		if (window->filePath().isEmpty())
-			return window;
-	}
-	return nullptr;
+	HistoryWindow* window = repositoryHistoryWindow(location.root);
+	if (!window)
+		window = new HistoryWindow(location);
+
+	window->show();
+	if (window->isMinimized()) // show() does not restore a minimized window
+		window->setWindowState(window->windowState() & ~Qt::WindowMinimized);
+	window->raise();
+	window->activateWindow();
+	return window;
 }
 
 HistoryWindow::HistoryWindow(const RepositoryLocation& location) :
@@ -405,10 +420,12 @@ void HistoryWindow::loadRemainingCommits()
 	});
 }
 
-void HistoryWindow::revealCommit(const QString& sha)
+void HistoryWindow::revealCommit(const QString& sha, RevealMiss onMiss)
 {
 	_revealSha = sha;
 	_missedRevealSha.clear();
+	// A listing still loading was walked after this call was decided on, so a miss in it is real
+	_revealOnMiss = _logLoaded ? onMiss : RevealMiss::Report;
 	if (_logLoaded)
 		selectLoadedCommit(); // otherwise the listing's completion does it
 }
@@ -428,13 +445,21 @@ void HistoryWindow::selectLoadedCommit()
 		if (_fullLoadPending)
 			return; // the full depth may list it; decided when it lands
 
+		if (_revealOnMiss == RevealMiss::ReloadOnce)
+		{
+			_revealOnMiss = RevealMiss::Report; // the retry is spent; reload() leaves _revealSha for it
+			reload();
+			return;
+		}
+
 		// Reachable from no ref, or older than the limit
 		_missedRevealSha = _revealSha;
 		_revealSha.clear();
 		updateCountLabel();
 	}
 
-	if (_logModel.rowCount() > 0)
+	// The newest row stands in where a reset left no selection
+	if (!_logView->currentIndex().isValid() && _logModel.rowCount() > 0)
 		_logView->setCurrentIndex(_logModel.index(0, CommitLogModel::CommitColumn));
 }
 
@@ -477,10 +502,8 @@ std::optional<CommitRecord> HistoryWindow::currentCommit() const
 
 void HistoryWindow::openSubmoduleHistory(const CommitFileChange& entry)
 {
-	// A new window each time, even where this submodule's history is already open
-	auto* window = new HistoryWindow(_repo->submoduleLocation(entry.path));
-	window->show();
-	window->revealCommit(entry.submoduleSha);
+	// The gitlink names a commit the submodule holds, so a listing without it is out of date
+	showRepositoryHistory(_repo->submoduleLocation(entry.path))->revealCommit(entry.submoduleSha, RevealMiss::ReloadOnce);
 }
 
 void HistoryWindow::applySearch()

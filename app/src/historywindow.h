@@ -23,6 +23,13 @@ class QTreeView;
 class CLabelElided;
 class FileListView;
 
+// What a reveal does where the listing does not hold the commit
+enum class RevealMiss
+{
+	Report,    // name it in the count label
+	ReloadOnce // re-run the log query first, for a caller that knows the commit exists
+};
+
 // The commit history of one repository, read-only.
 // Owns its own Repository: a submodule's history may be opened without a CommitWindow on that submodule.
 // Every query is scoped to this window, so closing it drops the pending ones.
@@ -31,7 +38,8 @@ class HistoryWindow final : public QMainWindow
 {
 public:
 	explicit HistoryWindow(const RepositoryLocation& location);
-	// The history of one repo-relative path, traced across renames
+	// The history of one repo-relative path, traced across renames.
+	// Never deduplicated: two views of one file's history may be wanted side by side.
 	HistoryWindow(const RepositoryLocation& location, const QString& filePath);
 
 	[[nodiscard]] const QString& repositoryPath() const { return _repo->path(); }
@@ -40,8 +48,9 @@ public:
 
 	// Selects the commit and scrolls it into view once the listing is in.
 	// A commit the listing does not hold (reachable from no ref, or older than the limit) is named in the
-	// count label instead, the newest row being selected as usual.
-	void revealCommit(const QString& sha);
+	// count label instead, and a selection already made stands.
+	// ReloadOnce applies only where the listing predates the call: one still loading is already current.
+	void revealCommit(const QString& sha, RevealMiss onMiss = RevealMiss::Report);
 
 	// Re-runs the log query from scratch
 	void reload();
@@ -79,7 +88,7 @@ private:
 	// The same walk at the full _query.maxCommits, extending the shown batch in place: a cold open's second
 	// phase, and every Load more
 	void loadRemainingCommits();
-	// Selects the commit revealCommit() asked for, or the newest row
+	// Selects the commit revealCommit() asked for, or the newest row where nothing is selected
 	void selectLoadedCommit();
 	void showFilesForCurrentCommit();
 	void showDiffForCurrentFile();
@@ -101,6 +110,8 @@ private:
 	// The commit the next finished listing should land on; cleared once it has, so a later reload or Load
 	// more selects the newest row as usual
 	QString _revealSha;
+	// Downgraded to Report once the retry is spent, so a reveal re-runs the query at most once
+	RevealMiss _revealOnMiss = RevealMiss::Report;
 	// The reveal the finished listing could not satisfy, for the count label to name. Dropped as soon as the
 	// listing it was decided against changes: a reload, or a deeper walk
 	QString _missedRevealSha;
@@ -143,5 +154,5 @@ private:
 
 // Every open history window on this repository, whole-repository and per-file alike
 [[nodiscard]] std::vector<HistoryWindow*> historyWindowsFor(const QString& repositoryRoot);
-// The window showing the whole repository's history, or none; a file history is never returned
-[[nodiscard]] HistoryWindow* repositoryHistoryWindow(const QString& repositoryRoot);
+// This repository's whole history, in the window already showing it or a new one, raised and activated
+HistoryWindow* showRepositoryHistory(const RepositoryLocation& location);
