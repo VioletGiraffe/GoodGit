@@ -165,8 +165,8 @@ void DiffTextView::setContent(const QString& text, Content content)
 			if (line.kind == DiffLineKind::HunkHeader)
 				_hunkLines.push_back(index);
 		}
-		for (const MovedBlock& block : parsed.moves)
-			_moveMarks.push_back({ block });
+		for (MovedBlock& block : parsed.moves)
+			_moveMarks.push_back({ std::move(block) });
 		assignMoveLanes();
 	}
 	else
@@ -497,9 +497,9 @@ int DiffTextView::moveTargetAt(const QPoint& gutterPos) const
 		if (mark.lane != lane)
 			continue;
 		const MovedBlock& block = mark.block;
-		if (line >= block.removedFirst && line < block.removedFirst + block.lineCount)
+		if (line >= block.removedFirst && line < block.removedFirst + block.removedCount)
 			return block.addedFirst;
-		if (line >= block.addedFirst && line < block.addedFirst + block.lineCount)
+		if (line >= block.addedFirst && line < block.addedFirst + block.addedCount)
 			return block.removedFirst;
 	}
 	return -1;
@@ -509,7 +509,9 @@ void DiffTextView::assignMoveLanes()
 {
 	// Marks that overlap on screen take separate lanes, the lowest free one each, in order of where they start
 	const auto start = [](const MoveMark& mark) { return std::min(mark.block.removedFirst, mark.block.addedFirst); };
-	const auto end = [](const MoveMark& mark) { return std::max(mark.block.removedFirst, mark.block.addedFirst) + mark.block.lineCount; };
+	const auto end = [](const MoveMark& mark) {
+		return std::max(mark.block.removedFirst + mark.block.removedCount, mark.block.addedFirst + mark.block.addedCount);
+	};
 	std::sort(_moveMarks.begin(), _moveMarks.end(), [&](const MoveMark& a, const MoveMark& b) { return start(a) < start(b); });
 
 	std::vector<int> laneEnds; // the first line past the last mark in each lane
@@ -562,9 +564,11 @@ void DiffTextView::paintMoveMarks(QPainter& painter, const QRect& clip)
 		const MovedBlock& block = mark.block;
 		const bool movedDown = block.addedFirst > block.removedFirst;
 		const int upperFirst = movedDown ? block.removedFirst : block.addedFirst;
+		const int upperCount = movedDown ? block.removedCount : block.addedCount;
 		const int lowerFirst = movedDown ? block.addedFirst : block.removedFirst;
-		const qreal upperTop = topOf(upperFirst), upperBottom = bottomOf(upperFirst + block.lineCount - 1);
-		const qreal lowerTop = topOf(lowerFirst), lowerBottom = bottomOf(lowerFirst + block.lineCount - 1);
+		const int lowerCount = movedDown ? block.addedCount : block.removedCount;
+		const qreal upperTop = topOf(upperFirst), upperBottom = bottomOf(upperFirst + upperCount - 1);
+		const qreal lowerTop = topOf(lowerFirst), lowerBottom = bottomOf(lowerFirst + lowerCount - 1);
 		if (lowerBottom < clip.top() || upperTop > clip.bottom())
 			continue;
 

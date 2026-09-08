@@ -6,11 +6,11 @@ A unified diff read into **the lines to show for it**, which are not the diff's 
 
 ## `textdiff`
 
-Two lines aligned as sequences of tokens, answering how alike they are and the interleaving that holds both. Declines a pair too long or too unalike to be one edit. Also pairs two ranges of lines, each with the one it was most likely edited into: the pairing of the greatest total similarity, never crossing, which `unifieddiff` renders
+Two lines aligned as sequences of tokens, answering how alike they are and the interleaving that holds both. Declines a pair too long or too unalike to be one edit. Also pairs two ranges of lines, each with the one it was most likely edited into: the pairing of the greatest total similarity, never crossing, which `unifieddiff` renders and `movedblocks` uses between two anchors
 
 ## `movedblocks`
 
-The blocks a diff removed in one place and added in another: the same lines in the same order, whitespace at a line's ends ignored so a block moved into another nesting level still matches. A block needs a few lines with content in them, or every run of closing braces would be a move. Many-to-many: a block copied to several places, or several copies collapsed into one, are all reported, grouped. Greedy from the added side
+The blocks a diff removed in one place and added in another, edited on the way or not. A line the same on both sides, whitespace at its ends ignored so a block moved into another nesting level still matches, is an anchor; between two anchors a few lines per side may differ, paired by `textdiff` where alike enough, and a block may begin or end with lines edited into each other. The anchors alone must make a few lines with content in them, or every run of closing braces would be a move. Many-to-many: a block copied to several places, or several copies collapsed into one, are all reported, grouped; a copy is a block grown from another removed match that covers the same added lines. Greedy from the added side, each block reported with its two ranges and the line pairs inside them
 
 ## `difftextview`
 

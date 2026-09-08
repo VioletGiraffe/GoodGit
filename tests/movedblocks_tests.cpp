@@ -47,7 +47,8 @@ TEST_CASE("A block removed in one place and added in another is one move", "[mov
 	REQUIRE(blocks.size() == 1);
 	CHECK(blocks[0].removedFirst == 1);
 	CHECK(blocks[0].addedFirst == 6);
-	CHECK(blocks[0].lineCount == 3);
+	CHECK(blocks[0].removedCount == 3);
+	CHECK(blocks[0].addedCount == 3);
 	CHECK(blocks[0].group == 0);
 }
 
@@ -65,7 +66,8 @@ TEST_CASE("A block moved upward is found from its added side", "[movedblocks]")
 	REQUIRE(blocks.size() == 1);
 	CHECK(blocks[0].removedFirst == 3);
 	CHECK(blocks[0].addedFirst == 0);
-	CHECK(blocks[0].lineCount == 2);
+	CHECK(blocks[0].removedCount == 2);
+	CHECK(blocks[0].addedCount == 2);
 }
 
 TEST_CASE("Whitespace at either end of a line counts for nothing", "[movedblocks]")
@@ -80,7 +82,8 @@ TEST_CASE("Whitespace at either end of a line counts for nothing", "[movedblocks
 	const std::vector<MovedBlock> blocks = detectMovedBlocks(changeLines(diff));
 
 	REQUIRE(blocks.size() == 1);
-	CHECK(blocks[0].lineCount == 2);
+	CHECK(blocks[0].removedCount == 2);
+	CHECK(blocks[0].addedCount == 2);
 }
 
 TEST_CASE("Whitespace inside a line still counts", "[movedblocks]")
@@ -164,10 +167,11 @@ TEST_CASE("Lines without content sit inside a block without counting", "[movedbl
 	const std::vector<MovedBlock> blocks = detectMovedBlocks(changeLines(diff));
 
 	REQUIRE(blocks.size() == 1);
-	CHECK(blocks[0].lineCount == 5);
+	CHECK(blocks[0].removedCount == 5);
+	CHECK(blocks[0].addedCount == 5);
 }
 
-TEST_CASE("A block never starts on a line without content", "[movedblocks]")
+TEST_CASE("A line without content joins a block at either end without seeding one", "[movedblocks]")
 {
 	const QStringList diff = {
 		"-}",
@@ -181,9 +185,11 @@ TEST_CASE("A block never starts on a line without content", "[movedblocks]")
 	const std::vector<MovedBlock> blocks = detectMovedBlocks(changeLines(diff));
 
 	REQUIRE(blocks.size() == 1);
-	CHECK(blocks[0].removedFirst == 1);
-	CHECK(blocks[0].addedFirst == 5);
-	CHECK(blocks[0].lineCount == 2);
+	CHECK(blocks[0].removedFirst == 0);
+	CHECK(blocks[0].addedFirst == 4);
+	CHECK(blocks[0].removedCount == 3);
+	CHECK(blocks[0].addedCount == 3);
+	CHECK(blocks[0].pairs.size() == 3);
 }
 
 TEST_CASE("Anything but a removed line ends the removed side of a block", "[movedblocks]")
@@ -201,7 +207,8 @@ TEST_CASE("Anything but a removed line ends the removed side of a block", "[move
 	const std::vector<MovedBlock> blocks = detectMovedBlocks(changeLines(diff));
 
 	REQUIRE(blocks.size() == 1);
-	CHECK(blocks[0].lineCount == 2); // "return false;" alone is below the minimum
+	CHECK(blocks[0].removedCount == 2);
+	CHECK(blocks[0].addedCount == 2); // "return false;" alone is below the minimum
 }
 
 TEST_CASE("Independent moves are separate groups, in order of their added side", "[movedblocks]")
@@ -296,7 +303,8 @@ TEST_CASE("Periodic content is matched from the first of its overlapping starts 
 	REQUIRE(blocks.size() == 1);
 	CHECK(blocks[0].removedFirst == 0);
 	CHECK(blocks[0].addedFirst == 7);
-	CHECK(blocks[0].lineCount == 4);
+	CHECK(blocks[0].removedCount == 4);
+	CHECK(blocks[0].addedCount == 4);
 }
 
 TEST_CASE("The longest matching removed run wins over a shorter one", "[movedblocks]")
@@ -317,7 +325,8 @@ TEST_CASE("The longest matching removed run wins over a shorter one", "[movedblo
 
 	REQUIRE(blocks.size() == 1);
 	CHECK(blocks[0].removedFirst == 3);
-	CHECK(blocks[0].lineCount == 3);
+	CHECK(blocks[0].removedCount == 3);
+	CHECK(blocks[0].addedCount == 3);
 }
 
 TEST_CASE("Nothing to find", "[movedblocks]")
@@ -331,4 +340,261 @@ TEST_CASE("Nothing to find", "[movedblocks]")
 		"+names.push_back(name);",
 	};
 	CHECK(detectMovedBlocks(changeLines(unrelated)).empty());
+}
+
+TEST_CASE("A line edited on the way sits inside the block as an edited pair", "[movedblocks]")
+{
+	const QStringList diff = {
+		"-int total = computeTotal(items);",
+		"-if (total > limit)",
+		"-	return false;",
+		" context",
+		"+int total = computeTotal(items);",
+		"+if (total >= limit)",
+		"+	return false;",
+	};
+	const std::vector<MovedBlock> blocks = detectMovedBlocks(changeLines(diff));
+
+	REQUIRE(blocks.size() == 1);
+	CHECK(blocks[0].removedCount == 3);
+	CHECK(blocks[0].addedCount == 3);
+	REQUIRE(blocks[0].pairs.size() == 3);
+	CHECK(!blocks[0].pairs[0].edited);
+	CHECK(blocks[0].pairs[1].edited);
+	CHECK(blocks[0].pairs[1].removed == 1);
+	CHECK(blocks[0].pairs[1].added == 5);
+	CHECK(!blocks[0].pairs[1].alignment.segments.empty());
+	CHECK(!blocks[0].pairs[2].edited);
+}
+
+TEST_CASE("Lines edited at either end join the block", "[movedblocks]")
+{
+	const QStringList diff = {
+		"-int total = computeTotal(items);",
+		"-if (total > limit)",
+		"-	return false;",
+		"-names.push_back(name);",
+		" context",
+		"+int total = computeTotal(entries);",
+		"+if (total > limit)",
+		"+	return false;",
+		"+names.push_back(newName);",
+	};
+	const std::vector<MovedBlock> blocks = detectMovedBlocks(changeLines(diff));
+
+	REQUIRE(blocks.size() == 1);
+	CHECK(blocks[0].removedFirst == 0);
+	CHECK(blocks[0].addedFirst == 5);
+	CHECK(blocks[0].removedCount == 4);
+	CHECK(blocks[0].addedCount == 4);
+	REQUIRE(blocks[0].pairs.size() == 4);
+	CHECK(blocks[0].pairs[0].edited);
+	CHECK(!blocks[0].pairs[1].edited);
+	CHECK(!blocks[0].pairs[2].edited);
+	CHECK(blocks[0].pairs[3].edited);
+}
+
+TEST_CASE("A line too unlike its counterpart stays outside the block", "[movedblocks]")
+{
+	const QStringList diff = {
+		"-int total = computeTotal(items);",
+		"-if (total > limit)",
+		"-	return false;",
+		"-unrelated trailing statement here;",
+		" context",
+		"+int total = computeTotal(items);",
+		"+if (total > limit)",
+		"+	return false;",
+		"+something else entirely different;",
+	};
+	const std::vector<MovedBlock> blocks = detectMovedBlocks(changeLines(diff));
+
+	REQUIRE(blocks.size() == 1);
+	CHECK(blocks[0].removedCount == 3);
+	CHECK(blocks[0].addedCount == 3);
+	CHECK(blocks[0].pairs.size() == 3);
+}
+
+TEST_CASE("Lines put into a block or dropped from it sit inside it unpaired", "[movedblocks]")
+{
+	SECTION("put in")
+	{
+		const QStringList diff = {
+			"-int total = computeTotal(items);",
+			"-if (total > limit)",
+			"-	return false;",
+			" context",
+			"+int total = computeTotal(items);",
+			"+logCall(total);",
+			"+if (total > limit)",
+			"+	return false;",
+		};
+		const std::vector<MovedBlock> blocks = detectMovedBlocks(changeLines(diff));
+
+		REQUIRE(blocks.size() == 1);
+		CHECK(blocks[0].removedCount == 3);
+		CHECK(blocks[0].addedCount == 4);
+		REQUIRE(blocks[0].pairs.size() == 3);
+		CHECK(!blocks[0].pairs[1].edited);
+		CHECK(blocks[0].pairs[1].removed == 1);
+		CHECK(blocks[0].pairs[1].added == 6);
+	}
+
+	SECTION("dropped")
+	{
+		const QStringList diff = {
+			"-int total = computeTotal(items);",
+			"-logCall(total);",
+			"-if (total > limit)",
+			"-	return false;",
+			" context",
+			"+int total = computeTotal(items);",
+			"+if (total > limit)",
+			"+	return false;",
+		};
+		const std::vector<MovedBlock> blocks = detectMovedBlocks(changeLines(diff));
+
+		REQUIRE(blocks.size() == 1);
+		CHECK(blocks[0].removedCount == 4);
+		CHECK(blocks[0].addedCount == 3);
+		REQUIRE(blocks[0].pairs.size() == 3);
+		CHECK(blocks[0].pairs[1].removed == 2);
+		CHECK(blocks[0].pairs[1].added == 6);
+	}
+}
+
+TEST_CASE("A gap wider than the allowance ends the block, and the rest is a block of its own", "[movedblocks]")
+{
+	QStringList diff = {
+		"-int total = computeTotal(items);",
+		"-if (total > limit)",
+		"-	return computeFallback(items);",
+		"-names.push_back(name);",
+		" context",
+		"+int total = computeTotal(items);",
+		"+if (total > limit)",
+	};
+	const QStringList tail = {
+		"+	return computeFallback(items);",
+		"+names.push_back(name);",
+	};
+
+	SECTION("as many lines put in as allowed")
+	{
+		for (int i = 0; i < MaxMovedBlockGap; ++i)
+			diff.push_back(QStringLiteral("+// filler line number %1").arg(i));
+		diff.append(tail);
+		const std::vector<MovedBlock> blocks = detectMovedBlocks(changeLines(diff));
+
+		REQUIRE(blocks.size() == 1);
+		CHECK(blocks[0].removedCount == 4);
+		CHECK(blocks[0].addedCount == 4 + MaxMovedBlockGap);
+		CHECK(blocks[0].pairs.size() == 4);
+	}
+
+	SECTION("one more")
+	{
+		for (int i = 0; i <= MaxMovedBlockGap; ++i)
+			diff.push_back(QStringLiteral("+// filler line number %1").arg(i));
+		diff.append(tail);
+		const std::vector<MovedBlock> blocks = detectMovedBlocks(changeLines(diff));
+
+		REQUIRE(blocks.size() == 2);
+		CHECK(blocks[0].removedFirst == 0);
+		CHECK(blocks[0].removedCount == 2);
+		CHECK(blocks[0].addedCount == 2);
+		CHECK(blocks[1].removedFirst == 2);
+		CHECK(blocks[1].removedCount == 2);
+		CHECK(blocks[1].addedFirst == 7 + MaxMovedBlockGap + 1);
+		CHECK(blocks[1].addedCount == 2);
+		CHECK(blocks[0].group != blocks[1].group);
+	}
+}
+
+TEST_CASE("A gap never resumes on a line without content", "[movedblocks]")
+{
+	const QStringList diff = {
+		"-int total = computeTotal(items);",
+		"-if (total > limit)",
+		"-}",
+		"-names.push_back(name);",
+		" context",
+		"+int total = computeTotal(items);",
+		"+if (total > limit)",
+		"+other statement one;",
+		"+other statement two;",
+		"+}",
+		"+colors.push_back(color);",
+	};
+	const std::vector<MovedBlock> blocks = detectMovedBlocks(changeLines(diff));
+
+	REQUIRE(blocks.size() == 1);
+	CHECK(blocks[0].removedCount == 2);
+	CHECK(blocks[0].addedCount == 2);
+}
+
+TEST_CASE("Only anchors count toward the minimum", "[movedblocks]")
+{
+	const QStringList diff = {
+		"-int total = computeTotal(items);",
+		"-if (total > limit)",
+		" context",
+		"+int total = computeTotal(items);",
+		"+if (total >= limit)",
+	};
+	CHECK(detectMovedBlocks(changeLines(diff)).empty());
+}
+
+TEST_CASE("A block copied to several places, one of them edited, is one group", "[movedblocks]")
+{
+	const QStringList diff = {
+		"-int total = computeTotal(items);",
+		"-if (total > limit)",
+		"-	return false;",
+		" context",
+		"+int total = computeTotal(items);",
+		"+if (total > limit)",
+		"+	return false;",
+		" context",
+		"+int total = computeTotal(items);",
+		"+if (total >= limit)",
+		"+	return false;",
+	};
+	const std::vector<MovedBlock> blocks = detectMovedBlocks(changeLines(diff));
+
+	REQUIRE(blocks.size() == 2);
+	CHECK(blocks[0].addedFirst == 4);
+	CHECK(blocks[1].addedFirst == 8);
+	CHECK(blocks[0].group == blocks[1].group);
+	REQUIRE(blocks[1].pairs.size() == 3);
+	CHECK(!blocks[0].pairs[1].edited);
+	CHECK(blocks[1].pairs[1].edited);
+}
+
+TEST_CASE("Several removed copies collapsed into one, one of them edited, are all copies", "[movedblocks]")
+{
+	const QStringList diff = {
+		"-int total = computeTotal(items);",
+		"-if (total >= limit)",
+		"-	return false;",
+		" context",
+		"-int total = computeTotal(items);",
+		"-if (total > limit)",
+		"-	return false;",
+		" context",
+		"+int total = computeTotal(items);",
+		"+if (total > limit)",
+		"+	return false;",
+	};
+	const std::vector<MovedBlock> blocks = detectMovedBlocks(changeLines(diff));
+
+	REQUIRE(blocks.size() == 2);
+	CHECK(blocks[0].removedFirst == 0);
+	CHECK(blocks[1].removedFirst == 4);
+	CHECK(blocks[0].addedFirst == 8);
+	CHECK(blocks[1].addedFirst == 8);
+	CHECK(blocks[0].group == blocks[1].group);
+	REQUIRE(blocks[0].pairs.size() == 3);
+	CHECK(blocks[0].pairs[1].edited);
+	CHECK(!blocks[1].pairs[1].edited);
 }

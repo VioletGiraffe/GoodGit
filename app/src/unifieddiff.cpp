@@ -309,11 +309,8 @@ ParsedDiff parseUnifiedDiff(QStringView diff)
 	std::vector<bool> moved(lines.size(), false);
 	for (const MovedBlock& block : moves)
 	{
-		for (int k = 0; k < block.lineCount; ++k)
-		{
-			moved[size_t(block.removedFirst + k)] = true;
-			moved[size_t(block.addedFirst + k)] = true;
-		}
+		std::fill_n(moved.begin() + block.removedFirst, block.removedCount, true);
+		std::fill_n(moved.begin() + block.addedFirst, block.addedCount, true);
 	}
 
 	ParsedDiff parsed;
@@ -361,12 +358,17 @@ ParsedDiff parseUnifiedDiff(QStringView diff)
 		i = addedEnd;
 	}
 
-	// A block's lines are all shown as they stand, one after another, so its first line places the whole of it
+	// A block's lines are all shown as they stand, one after another, so each maps to the line shown for it
 	for (MovedBlock& block : moves)
 	{
 		block.removedFirst = shownLine[size_t(block.removedFirst)];
 		block.addedFirst = shownLine[size_t(block.addedFirst)];
 		assert(block.removedFirst >= 0 && block.addedFirst >= 0);
+		for (MovedLinePair& pair : block.pairs)
+		{
+			pair.removed = shownLine[size_t(pair.removed)];
+			pair.added = shownLine[size_t(pair.added)];
+		}
 	}
 	parsed.moves = std::move(moves);
 

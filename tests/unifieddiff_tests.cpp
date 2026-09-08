@@ -105,12 +105,13 @@ TEST_CASE("A block moved within a file: the installer steps of CI.yml moved abov
 	const MovedBlock& block = parsed.moves[0];
 	CHECK(block.addedFirst == 8);
 	CHECK(block.removedFirst == 41);
-	CHECK(block.lineCount == 26);
+	CHECK(block.removedCount == 26);
+	CHECK(block.addedCount == 26);
 	CHECK(block.group == 0);
 	CHECK(shown[block.addedFirst] == "+    - name: Windows - create installer");
-	CHECK(shown[block.addedFirst + block.lineCount - 1] == "+");
+	CHECK(shown[block.addedFirst + block.addedCount - 1] == "+");
 	CHECK(shown[block.removedFirst] == "-    - name: Windows - create installer");
-	CHECK(shown[block.removedFirst + block.lineCount - 1] == "-");
+	CHECK(shown[block.removedFirst + block.removedCount - 1] == "-");
 	CHECK(parsed.lines[size_t(block.addedFirst)].kind == DiffLineKind::Added);
 	CHECK(parsed.lines[size_t(block.removedFirst)].kind == DiffLineKind::Removed);
 	CHECK(countOfKind(parsed, DiffLineKind::Added) == 26);
@@ -144,7 +145,8 @@ TEST_CASE("A moved block ends a run, and the rest of the run still pairs", "[uni
 	REQUIRE(parsed.moves.size() == 1);
 	CHECK(parsed.moves[0].removedFirst == 2);
 	CHECK(parsed.moves[0].addedFirst == 8);
-	CHECK(parsed.moves[0].lineCount == 2);
+	CHECK(parsed.moves[0].removedCount == 2);
+	CHECK(parsed.moves[0].addedCount == 2);
 }
 
 // The accepted limit of the run rule: a block in the middle of a run cuts the removed lines before it off
