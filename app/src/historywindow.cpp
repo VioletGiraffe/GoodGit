@@ -67,13 +67,35 @@ FileRevisionTargets fileRevisionTargets(const CommitFileChange& entry, const Com
 
 } // namespace
 
-HistoryWindow::HistoryWindow(const RepositoryLocation& location, QWidget* parent) :
-	HistoryWindow(location, {}, parent)
+// The open windows are the registry, as with the repository windows
+std::vector<HistoryWindow*> historyWindowsFor(const QString& repositoryRoot)
+{
+	std::vector<HistoryWindow*> windows;
+	for (QWidget* widget : QApplication::topLevelWidgets())
+	{
+		auto* window = dynamic_cast<HistoryWindow*>(widget); // not qobject_cast: HistoryWindow has no meta-object
+		if (window && sameDirectoryOnDisk(window->repositoryPath(), repositoryRoot))
+			windows.push_back(window);
+	}
+	return windows;
+}
+
+HistoryWindow* repositoryHistoryWindow(const QString& repositoryRoot)
+{
+	for (HistoryWindow* window : historyWindowsFor(repositoryRoot))
+	{
+		if (window->filePath().isEmpty())
+			return window;
+	}
+	return nullptr;
+}
+
+HistoryWindow::HistoryWindow(const RepositoryLocation& location) :
+	HistoryWindow(location, {})
 {
 }
 
-HistoryWindow::HistoryWindow(const RepositoryLocation& location, const QString& filePath, QWidget* parent) :
-	QMainWindow(parent, Qt::Window),
+HistoryWindow::HistoryWindow(const RepositoryLocation& location, const QString& filePath) :
 	_repo{ openRepository(location) },
 	_query{ .maxCommits = QSettings{}.value(Settings::HistoryMaxCommitsKey, Settings::HistoryMaxCommitsDefault).toInt(), .path = filePath }
 {
@@ -455,8 +477,8 @@ std::optional<CommitRecord> HistoryWindow::currentCommit() const
 
 void HistoryWindow::openSubmoduleHistory(const CommitFileChange& entry)
 {
-	// Not deduplicated, matching the commit window's submodule windows
-	auto* window = new HistoryWindow(_repo->submoduleLocation(entry.path), this);
+	// A new window each time, even where this submodule's history is already open
+	auto* window = new HistoryWindow(_repo->submoduleLocation(entry.path));
 	window->show();
 	window->revealCommit(entry.submoduleSha);
 }
@@ -620,7 +642,7 @@ void HistoryWindow::showFileContextMenu(const QPoint& pos)
 
 void HistoryWindow::openFileHistory(const QString& filePath)
 {
-	auto* window = new HistoryWindow(_repo->location(), filePath, this);
+	auto* window = new HistoryWindow(_repo->location(), filePath);
 	window->show();
 }
 

@@ -10,6 +10,7 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <memory>
+#include <vector>
 
 class QCheckBox;
 class QFrame;
@@ -25,12 +26,17 @@ class FileListView;
 // The commit history of one repository, read-only.
 // Owns its own Repository: a submodule's history may be opened without a CommitWindow on that submodule.
 // Every query is scoped to this window, so closing it drops the pending ones.
+// Parentless: it takes its own taskbar entry and outlives the window that opened it.
 class HistoryWindow final : public QMainWindow
 {
 public:
-	HistoryWindow(const RepositoryLocation& location, QWidget* parent);
+	explicit HistoryWindow(const RepositoryLocation& location);
 	// The history of one repo-relative path, traced across renames
-	HistoryWindow(const RepositoryLocation& location, const QString& filePath, QWidget* parent);
+	HistoryWindow(const RepositoryLocation& location, const QString& filePath);
+
+	[[nodiscard]] const QString& repositoryPath() const { return _repo->path(); }
+	// The repo-relative path whose history this traces; empty in a whole-repository history
+	[[nodiscard]] const QString& filePath() const { return _query.path; }
 
 	// Selects the commit and scrolls it into view once the listing is in.
 	// A commit the listing does not hold (reachable from no ref, or older than the limit) is named in the
@@ -134,3 +140,8 @@ private:
 	// carries: the size arrives on its own query, and the diff must not restate a header without it.
 	DiffPane::ItemInfo _currentItem;
 };
+
+// Every open history window on this repository, whole-repository and per-file alike
+[[nodiscard]] std::vector<HistoryWindow*> historyWindowsFor(const QString& repositoryRoot);
+// The window showing the whole repository's history, or none; a file history is never returned
+[[nodiscard]] HistoryWindow* repositoryHistoryWindow(const QString& repositoryRoot);

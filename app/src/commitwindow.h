@@ -6,7 +6,6 @@
 
 DISABLE_COMPILER_WARNINGS
 #include <QMainWindow>
-#include <QPointer>
 #include <QSet>
 RESTORE_COMPILER_WARNINGS
 
@@ -24,7 +23,6 @@ class DiffPane;
 class FileListView;
 class MessageEdit;
 class CLabelElided;
-class HistoryWindow;
 
 // One window = one repository. Submodule rows open another instance of this window.
 class CommitWindow final : public QMainWindow
@@ -46,7 +44,7 @@ signals:
 	// A commit, undo or abort here changed the history other windows show: the parent's gitlink row, the
 	// history listing
 	void historyChanged();
-	void pushed(); // the history window's unpushed marks are stale until it hears this
+	void pushed(); // the history windows' unpushed marks are stale until this fires
 
 protected:
 	bool eventFilter(QObject* watched, QEvent* event) override;
@@ -201,7 +199,6 @@ private:
 
 	std::vector<PushStep> _pushSteps; // the running push's plan
 
-	QPointer<HistoryWindow> _historyWindow; // at most one per repo window, raised again on a second click
 	Vcs::Query _diffQuery; // whatever fills the diff pane: a file's diff, or a submodule's incoming commits
 	// The working tree's whole diff, once per refresh: a row's diff is cut out of it, the message completion
 	// word pool reads it, and a block moved between files is found across it. Absent where the query failed

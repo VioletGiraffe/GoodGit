@@ -179,6 +179,17 @@ CommitWindow::CommitWindow(const RepositoryLocation& location) :
 	installEventFilter(new CPersistenceEnabler(QStringLiteral("CommitWindow"), this, CPersistenceEnabler::Delayed{ true }, CPersistenceEnabler::SetDefaultSize{ false }));
 
 	connect(_repo.get(), &Repository::refreshed, this, &CommitWindow::onRefreshed);
+
+	// Every history window on this repository follows this window's writes, including those it did not open
+	connect(this, &CommitWindow::historyChanged, this, [this] {
+		for (HistoryWindow* window : historyWindowsFor(_repo->path()))
+			window->reload();
+	});
+	connect(this, &CommitWindow::pushed, this, [this] {
+		for (HistoryWindow* window : historyWindowsFor(_repo->path()))
+			window->refreshUnpushedMarks();
+	});
+
 	_repo->refresh();
 }
 
@@ -1332,15 +1343,15 @@ void CommitWindow::openEntryExternally(const FileEntry& entry)
 
 void CommitWindow::showHistoryWindow()
 {
-	if (!_historyWindow)
-	{
-		_historyWindow = new HistoryWindow(_repo->location(), this);
-		connect(this, &CommitWindow::historyChanged, _historyWindow, &HistoryWindow::reload);
-		connect(this, &CommitWindow::pushed, _historyWindow, &HistoryWindow::refreshUnpushedMarks);
-	}
-	_historyWindow->show();
-	_historyWindow->raise();
-	_historyWindow->activateWindow();
+	HistoryWindow* window = repositoryHistoryWindow(_repo->path());
+	if (!window)
+		window = new HistoryWindow(_repo->location());
+
+	window->show();
+	if (window->isMinimized()) // show() does not restore a minimized window
+		window->setWindowState(window->windowState() & ~Qt::WindowMinimized);
+	window->raise();
+	window->activateWindow();
 }
 
 void CommitWindow::continueOperation()
@@ -1464,8 +1475,8 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	editAction->setVisible(singleFile);
 
 	QAction* submoduleHistoryAction = menu.addAction(tr("View commit history"), this, [this, entry = first] {
-		// Not deduplicated like this repo's own history window, matching openSubmoduleWindow
-		auto* window = new HistoryWindow(_repo->submoduleLocation(entry.path), this);
+		// A new window each time, even where this submodule's history is already open
+		auto* window = new HistoryWindow(_repo->submoduleLocation(entry.path));
 		window->show();
 	});
 	submoduleHistoryAction->setVisible(single && first.isSubmodule);
@@ -1473,7 +1484,7 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	QAction* fileHistoryAction = menu.addAction(tr("View file history"), this, [this, entry = first] {
 		// Nothing is committed at a rename's new path yet
 		const QString& path = entry.oldPath.isEmpty() ? entry.path : entry.oldPath;
-		auto* window = new HistoryWindow(_repo->location(), path, this);
+		auto* window = new HistoryWindow(_repo->location(), path);
 		window->show();
 	});
 	// A submodule's history is its own repo's, offered above; an untracked or newly added file is in no commit
