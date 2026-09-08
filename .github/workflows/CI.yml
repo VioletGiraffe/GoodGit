@@ -132,7 +132,6 @@ jobs:
 
     - name: Mac - build
       if: startsWith(matrix.os, 'macos')
-      working-directory: ${{env.GITHUB_WORKSPACE}}
       run: |
         clang --version
         $QT_ROOT_DIR/bin/qmake -r CONFIG+=release
@@ -140,7 +139,6 @@ jobs:
 
     - name: Mac - create DMG
       if: startsWith(matrix.os, 'macos')
-      working-directory: ${{env.GITHUB_WORKSPACE}}
       run: ./scripts/create_dmg.sh $QT_ROOT_DIR
 
     - name: Archive DMG
@@ -164,7 +162,6 @@ jobs:
 
     - name: Linux - build
       if: startsWith(matrix.os, 'ubuntu')
-      working-directory: ${{env.GITHUB_WORKSPACE}}
       run: |
         $QT_ROOT_DIR/bin/qmake -r CONFIG+=release
         make -j4
