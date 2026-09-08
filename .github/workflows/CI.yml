@@ -134,6 +134,10 @@ jobs:
         $QT_ROOT_DIR/bin/qmake -r CONFIG+=release
         make -j4
 
+    - name: Mac - tests
+      if: startsWith(matrix.os, 'macos')
+      run: scripts/run_tests.sh
+
     - name: Mac - create DMG
       if: startsWith(matrix.os, 'macos')
       working-directory: ${{env.GITHUB_WORKSPACE}}
@@ -158,18 +162,10 @@ jobs:
         $QT_ROOT_DIR/bin/qmake -r CONFIG+=release
         make -j4
 
-    # - name: Test run
-    #   if: startsWith(matrix.os, 'macos')
-    #   run: ./tests/bin/tests.app/Contents/MacOS/tests
-      
-    # - name: Test run
-    #   if: startsWith(matrix.os, 'ubuntu')
-    #   run: ./tests/bin/tests
-
-    # - name: Test run
-    #   if: startsWith(matrix.os, 'widows')
-    #   run: ./tests/bin/tests.exe
-    
+    # After the build step: that is where gcc 14 is installed
+    - name: Linux - tests
+      if: startsWith(matrix.os, 'ubuntu')
+      run: scripts/run_tests.sh
 
   create-release:
     needs: build

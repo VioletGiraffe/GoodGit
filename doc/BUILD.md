@@ -30,10 +30,11 @@ platform icons and `Info.plist`.
 and UI-free sources (`unifieddiff`, `textdiff`, `movedblocks`) straight from `app/src` against QtCore, with
 diffs captured from real changes as fixtures under `tests/fixtures/`.
 
-`scripts/run_tests.bat` builds and runs it (`debug` as the argument for the debug configuration);
-`scripts/debug_tests.bat` runs the built tests under cdb. Both resolve the Qt kit through `scripts/qt_kit.bat`:
-`QT_ROOT_DIR` if set, else the git-ignored `scripts/local-env.bat`, else `C:\Qt\6.*`. On other platforms the
-project is built by hand with qmake. CI runs the tests on Windows only.
+`scripts/run_tests.bat` (Windows) and `scripts/run_tests.sh` (macOS, Linux) build and run it (`debug` as the
+argument for the debug configuration); `scripts/debug_tests.bat` runs the built tests under cdb. The Qt kit is
+`QT_ROOT_DIR` if set, else the git-ignored `scripts/local-env.bat` / `local-env.sh`, else the default install
+location (`C:\Qt\6.*`, `~/Qt/6.*`); the shell script also falls back to a `qmake6` or `qmake` on PATH. CI runs
+the tests on all three platforms.
 
 ## Version
 

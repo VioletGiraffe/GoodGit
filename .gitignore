@@ -13,6 +13,7 @@
 .qtc_clangd/
 /enc_temp_folder/
 /scripts/local-env.bat
+/scripts/local-env.sh
 
 # Build results
 /bin/
