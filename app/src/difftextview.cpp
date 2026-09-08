@@ -32,7 +32,10 @@ static constexpr int DepartingChevronGap = 6;
 static constexpr qreal StrikeThicknessDivisor = 9.0;
 static constexpr qreal MinStrikeThickness = 2.0;
 
-// How far an edit within a moved block deepens the added band toward the text color
+// A moved block's bands: the view background toward the theme's rename color, the removed copy fainter
+static constexpr float MovedToBandTint = 0.12f;
+static constexpr float MovedFromBandTint = 0.06f;
+// How far an edit within a moved block deepens the added copy's band toward the rename color
 static constexpr float MovedEditEmphasis = 0.3f;
 
 namespace {
@@ -266,26 +269,33 @@ void DiffTextView::applyDiffFormats()
 	hunkText.setForeground(theme.diffHunk);
 	dimmedText.setForeground(theme.palette.textDim);
 
-	QTextBlockFormat addedBand, removedBand;
+	// A moved block is neither added nor removed: its copies are banded in the rename color, the one it left
+	// fainter and dimmed, the one it went to in the widget's own text color as text that is there, only not new
+	const QColor movedToBg = blended(theme.palette.surface, theme.stRenamed, MovedToBandTint);
+	const QTextCharFormat movedToText;
+	QTextBlockFormat addedBand, removedBand, movedToBand, movedFromBand;
 	addedBand.setBackground(theme.diffAddBg);
 	removedBand.setBackground(theme.diffDelBg);
+	movedToBand.setBackground(movedToBg);
+	movedFromBand.setBackground(blended(theme.palette.surface, theme.stRenamed, MovedFromBandTint));
 
 	// A merged line carries no band, so its spans are the only thing naming either side, and they take the
-	// diff colors themselves. An added line is banded already, so its span is the band deepened toward the
-	// text. The strike over removed text is painted rather than set here, in paintRemovedStrikes.
-	QTextCharFormat removedSpan, addedSpan, addedLineSpan;
+	// diff colors themselves. A moved block's added copy is banded already, so its span is the band deepened.
+	// The strike over removed text is painted rather than set here, in paintRemovedStrikes.
+	QTextCharFormat removedSpan, addedSpan, movedEditSpan;
 	removedSpan.setBackground(theme.diffDelBg);
 	removedSpan.setForeground(theme.diffDelFg);
 	addedSpan.setBackground(theme.diffAddBg);
 	addedSpan.setForeground(theme.diffAddFg);
-	addedLineSpan.setBackground(blended(theme.diffAddBg, theme.diffAddFg, MovedEditEmphasis));
+	movedEditSpan.setBackground(blended(movedToBg, theme.stRenamed, MovedEditEmphasis));
 
 	QTextCursor cursor{ document() };
 	cursor.beginEditBlock();
 	size_t spanIndex = 0;
 	for (QTextBlock block = document()->begin(); block.isValid(); block = block.next())
 	{
-		const DiffLineKind kind = _lines[size_t(block.blockNumber())].kind;
+		const DiffLine& line = _lines[size_t(block.blockNumber())];
+		const DiffLineKind kind = line.kind;
 		const QTextCharFormat* textFormat = nullptr;
 		const QTextBlockFormat* bandFormat = nullptr;
 		switch (kind)
@@ -294,12 +304,12 @@ void DiffTextView::applyDiffFormats()
 		case DiffLineKind::Edited:
 			break; // the widget's own text color, unbanded
 		case DiffLineKind::Added:
-			textFormat = &addedText;
-			bandFormat = &addedBand;
+			textFormat = line.moved ? &movedToText : &addedText;
+			bandFormat = line.moved ? &movedToBand : &addedBand;
 			break;
 		case DiffLineKind::Removed:
-			textFormat = &removedText;
-			bandFormat = &removedBand;
+			textFormat = line.moved ? &dimmedText : &removedText;
+			bandFormat = line.moved ? &movedFromBand : &removedBand;
 			break;
 		case DiffLineKind::HunkHeader:
 			textFormat = &hunkText;
@@ -329,9 +339,9 @@ void DiffTextView::applyDiffFormats()
 		// After the line's own format, which covers the whole block and would otherwise replace these
 		while (spanIndex < _spans.size() && _spans[spanIndex].line == block.blockNumber())
 		{
-			assert(kind == DiffLineKind::Edited || kind == DiffLineKind::Added); // no other kind of line carries spans
+			assert(kind == DiffLineKind::Edited || (kind == DiffLineKind::Added && line.moved)); // no other line carries spans
 			const DiffSpan& span = _spans[spanIndex++];
-			const QTextCharFormat& spanFormat = kind == DiffLineKind::Added ? addedLineSpan : span.removed ? removedSpan : addedSpan;
+			const QTextCharFormat& spanFormat = kind == DiffLineKind::Added ? movedEditSpan : span.removed ? removedSpan : addedSpan;
 			cursor.setPosition(block.position() + span.start);
 			cursor.setPosition(block.position() + span.start + span.length, QTextCursor::KeepAnchor);
 			cursor.mergeCharFormat(spanFormat);

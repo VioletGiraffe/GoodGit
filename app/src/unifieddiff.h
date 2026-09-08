@@ -35,6 +35,7 @@ struct DiffLine
 	DiffLineKind kind = DiffLineKind::FileHeader;
 	int oldLine = 0;
 	int newLine = 0;
+	bool moved = false; // within a block of `moves`: shown as a move, not as a change. Added or Removed only
 };
 
 // A range of text only one side of an edit has: on a merged line, either side's; on the added line of a

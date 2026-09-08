@@ -369,6 +369,10 @@ ParsedDiff parseUnifiedDiff(QStringView diff)
 			pair.removed = shownLine[size_t(pair.removed)];
 			pair.added = shownLine[size_t(pair.added)];
 		}
+		for (int k = 0; k < block.removedCount; ++k)
+			parsed.lines[size_t(block.removedFirst + k)].moved = true;
+		for (int k = 0; k < block.addedCount; ++k)
+			parsed.lines[size_t(block.addedFirst + k)].moved = true;
 	}
 
 	// An edit on the way is marked on the added line alone: the edit belongs where the block now is

@@ -231,6 +231,8 @@ TEST_CASE("An edit within a moved block is marked on the added line alone", "[un
 	CHECK(parsed.moves[0].pairs[1].removed == 3);
 	CHECK(parsed.moves[0].pairs[1].added == 9);
 	CHECK(countOfKind(parsed, DiffLineKind::Edited) == 0);
+	for (size_t line = 0; line < parsed.lines.size(); ++line)
+		CHECK(parsed.lines[line].moved == ((line >= 2 && line < 5) || (line >= 8 && line < 11)));
 
 	REQUIRE(parsed.spans.size() == 1);
 	CHECK(parsed.spans[0].line == 9);

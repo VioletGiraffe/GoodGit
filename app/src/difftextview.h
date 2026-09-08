@@ -15,7 +15,8 @@ class QPaintEvent;
 // A read-only monospace view of one file's text, in one of three kinds:
 //   diff    - a unified diff: added and removed lines banded across the full width, an edit small enough
 //             shown as one line with what it took out struck through beside what it put in, headers dimmed,
-//             and a gutter carrying both files' line numbers. A moved block has both its places bracketed in
+//             and a gutter carrying both files' line numbers. A moved block is banded in the rename color
+//             instead, the copy it left fainter with its text dimmed, and has both its places bracketed in
 //             the gutter and joined by a line with arrowheads the way it went, one color per move; a click
 //             on either bracket brings the other end to the top. An edit on the way is marked on the added
 //             copy, as the text it put in.
