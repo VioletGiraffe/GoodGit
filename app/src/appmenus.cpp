@@ -42,7 +42,7 @@ QAction* addFileMenu(QMenuBar& menuBar, QWidget* dialogParent)
 		[dialogParent] { installCommandLineToolAndReport(dialogParent); });
 	menu->addSeparator();
 #endif
-	menu->addAction(QObject::tr("E&xit"), [] { QApplication::closeAllWindows(); }); // not quit(): closeEvent saves the layout state
+	menu->addAction(QObject::tr("E&xit"), [] { QApplication::closeAllWindows(); }); // not quit(): a window with a write in flight refuses to close
 	return openRepositoryAction;
 }
 

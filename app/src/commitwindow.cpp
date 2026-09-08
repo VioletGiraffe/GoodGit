@@ -176,7 +176,7 @@ CommitWindow::CommitWindow(const RepositoryLocation& location) :
 	buildUi();
 
 	// One geometry for every commit window
-	installEventFilter(new CPersistenceEnabler(QStringLiteral("CommitWindow"), this, CPersistenceEnabler::Delayed{ true }, CPersistenceEnabler::SetDefaultSize{ false }));
+	enablePersistence(this, QStringLiteral("CommitWindow"), CPersistenceEnabler::Delayed{ true }, CPersistenceEnabler::SetDefaultSize{ false });
 
 	connect(_repo.get(), &Repository::refreshed, this, &CommitWindow::onRefreshed);
 

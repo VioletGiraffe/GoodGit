@@ -122,7 +122,7 @@ HistoryWindow::HistoryWindow(const RepositoryLocation& location, const QString& 
 	buildUi();
 
 	// One geometry for every history window
-	installEventFilter(new CPersistenceEnabler(QStringLiteral("HistoryWindow"), this));
+	enablePersistence(this, QStringLiteral("HistoryWindow"));
 
 	reload();
 }
