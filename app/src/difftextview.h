@@ -16,7 +16,8 @@ class QPaintEvent;
 //   diff    - a unified diff: added and removed lines banded across the full width, an edit small enough
 //             shown as one line with what it took out struck through beside what it put in, headers dimmed,
 //             and a gutter carrying both files' line numbers. A moved block has both its places bracketed in
-//             the gutter and joined by a line with arrowheads the way it went, one color per move.
+//             the gutter and joined by a line with arrowheads the way it went, one color per move; a click
+//             on either bracket brings the other end to the top.
 //   file    - a file's own contents: one gutter column, no diff decoration
 //   message - prose, such as a placeholder or an error: no gutter, no decoration
 //
@@ -58,8 +59,12 @@ public:
 	void goToPreviousHunk();
 	void goToNextHunk();
 
-	// Called by the gutter widget, which owns nothing but its paint event
+	void scrollLineToTop(int line);
+
+	// Called by the gutter widget, which owns nothing but its paint and mouse events
 	void paintGutter(QPaintEvent* event);
+	// The line a click at `gutterPos` jumps to - a move's other end, from the bracket at either - or -1
+	[[nodiscard]] int moveTargetAt(const QPoint& gutterPos) const;
 
 protected:
 	void paintEvent(QPaintEvent* event) override;
@@ -81,7 +86,7 @@ private:
 	void assignMoveLanes();
 	void paintMoveMarks(QPainter& painter, const QRect& clip);
 	[[nodiscard]] int moveColumnWidth() const; // 0 without moves
-	void scrollLineToTop(int line);
+	[[nodiscard]] int lineAt(int y) const;     // the line at that height of the viewport, -1 below the last
 	void applyDiffFormats();
 	void updateNumberWidths();
 	void updateGutterWidth();

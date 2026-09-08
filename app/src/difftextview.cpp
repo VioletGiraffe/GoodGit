@@ -5,6 +5,7 @@
 
 DISABLE_COMPILER_WARNINGS
 #include <QEvent>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QPolygonF>
@@ -36,10 +37,29 @@ namespace {
 class DiffGutter final : public QWidget
 {
 public:
-	explicit DiffGutter(DiffTextView* view) : QWidget(view), _view{ view } {}
+	explicit DiffGutter(DiffTextView* view) : QWidget(view), _view{ view }
+	{
+		setMouseTracking(true); // the cursor changes over a move's bracket
+	}
 
 protected:
 	void paintEvent(QPaintEvent* event) override { _view->paintGutter(event); }
+
+	void mouseMoveEvent(QMouseEvent* event) override
+	{
+		if (_view->moveTargetAt(event->pos()) >= 0)
+			setCursor(Qt::PointingHandCursor);
+		else
+			unsetCursor();
+	}
+
+	void mousePressEvent(QMouseEvent* event) override
+	{
+		if (event->button() != Qt::LeftButton)
+			return;
+		if (const int target = _view->moveTargetAt(event->pos()); target >= 0)
+			_view->scrollLineToTop(target);
+	}
 
 private:
 	DiffTextView* _view = nullptr;
@@ -446,6 +466,43 @@ void DiffTextView::paintGutter(QPaintEvent* event)
 
 	if (!_moveMarks.empty())
 		paintMoveMarks(painter, event->rect());
+}
+
+int DiffTextView::lineAt(int y) const
+{
+	for (QTextBlock block = firstVisibleBlock(); block.isValid(); block = block.next())
+	{
+		const QRectF rect = blockBoundingGeometry(block).translated(contentOffset());
+		if (rect.top() > y)
+			break;
+		if (rect.bottom() >= y)
+			return block.blockNumber();
+	}
+	return -1;
+}
+
+int DiffTextView::moveTargetAt(const QPoint& gutterPos) const
+{
+	// The gutter and the viewport share their top edge, so a height in one is the same line in the other
+	const int columnLeft = _gutterWidth - GutterOuterMargin - _moveLaneCount * _moveLaneWidth;
+	if (_moveMarks.empty() || gutterPos.x() < columnLeft)
+		return -1;
+	const int lane = (gutterPos.x() - columnLeft) / _moveLaneWidth;
+	const int line = lineAt(gutterPos.y());
+	if (lane >= _moveLaneCount || line < 0)
+		return -1;
+
+	for (const MoveMark& mark : _moveMarks)
+	{
+		if (mark.lane != lane)
+			continue;
+		const MovedBlock& block = mark.block;
+		if (line >= block.removedFirst && line < block.removedFirst + block.lineCount)
+			return block.addedFirst;
+		if (line >= block.addedFirst && line < block.addedFirst + block.lineCount)
+			return block.removedFirst;
+	}
+	return -1;
 }
 
 void DiffTextView::assignMoveLanes()
