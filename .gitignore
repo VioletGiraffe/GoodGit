@@ -16,6 +16,8 @@
 # Build results
 /bin/
 /build/
+/tests/bin/
+/tests/build/
 dist/
 
 # qmake-generated

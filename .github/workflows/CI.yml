@@ -41,6 +41,11 @@ jobs:
       with:
         arch: x64
 
+    - name: Windows - tests
+      if: startsWith(matrix.os, 'windows')
+      shell: cmd
+      run: scripts\run_tests.bat
+
     - name: Windows - build
       if: startsWith(matrix.os, 'windows')
       shell: cmd

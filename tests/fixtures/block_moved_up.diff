@@ -1,0 +1,70 @@
+diff --git a/.github/workflows/CI.yml b/.github/workflows/CI.yml
+index dad7a63..d2206f9 100644
+--- a/.github/workflows/CI.yml
++++ b/.github/workflows/CI.yml
+@@ -49,6 +49,32 @@ jobs:
+         %QT_ROOT_DIR%\bin\qmake.exe -tp vc -r
+         msbuild /t:Build /p:Configuration=Release || exit /b 1
+ 
++    - name: Windows - create installer
++      if: startsWith(matrix.os, 'windows')
++      shell: cmd
++      run: |
++        @echo on
++        set STAGING_DIR=dist
++        RMDIR /S /Q %STAGING_DIR%
++        mkdir %STAGING_DIR%
++        copy /y bin\release\gg.exe "%STAGING_DIR%\" >nul
++        mkdir %STAGING_DIR%\launcher
++        copy /y bin\release\launcher\gg.exe "%STAGING_DIR%\launcher\" >nul
++        REM The tls plugins stay: the update check talks to the GitHub API over HTTPS and fails without a backend
++        %QT_ROOT_DIR%\bin\windeployqt.exe --dir %STAGING_DIR% --force --release --compiler-runtime --no-translations --no-system-d3d-compiler --no-system-dxc-compiler --no-opengl-sw --skip-plugin-types networkinformation %STAGING_DIR%\gg.exe
++
++        del %STAGING_DIR%\dxil.dll >nul
++        del %STAGING_DIR%\dxcompiler.dll >nul
++
++        "%programfiles(x86)%\Inno Setup 6\iscc" installer.iss
++
++    - name: Archive Installer
++      if: success() && startsWith(matrix.os, 'windows')
++      uses: actions/upload-artifact@v4
++      with:
++        name: GoodGit.exe
++        path: GoodGit.exe
++
+     - name: Windows - install cloc
+       if: startsWith(matrix.os, 'windows')
+       shell: pwsh
+@@ -95,32 +121,6 @@ jobs:
+         "{0:N2} KB  {1}" -f ($exe.Length / 1KB), $exe.Name
+         Get-PeSectionSizes $exe.FullName | Format-Table Name, KB -AutoSize
+ 
+-    - name: Windows - create installer
+-      if: startsWith(matrix.os, 'windows')
+-      shell: cmd
+-      run: |
+-        @echo on
+-        set STAGING_DIR=dist
+-        RMDIR /S /Q %STAGING_DIR%
+-        mkdir %STAGING_DIR%
+-        copy /y bin\release\gg.exe "%STAGING_DIR%\" >nul
+-        mkdir %STAGING_DIR%\launcher
+-        copy /y bin\release\launcher\gg.exe "%STAGING_DIR%\launcher\" >nul
+-        REM The tls plugins stay: the update check talks to the GitHub API over HTTPS and fails without a backend
+-        %QT_ROOT_DIR%\bin\windeployqt.exe --dir %STAGING_DIR% --force --release --compiler-runtime --no-translations --no-system-d3d-compiler --no-system-dxc-compiler --no-opengl-sw --skip-plugin-types networkinformation %STAGING_DIR%\gg.exe
+-
+-        del %STAGING_DIR%\dxil.dll >nul
+-        del %STAGING_DIR%\dxcompiler.dll >nul
+-
+-        "%programfiles(x86)%\Inno Setup 6\iscc" installer.iss
+-
+-    - name: Archive Installer
+-      if: success() && startsWith(matrix.os, 'windows')
+-      uses: actions/upload-artifact@v4
+-      with:
+-        name: GoodGit.exe
+-        path: GoodGit.exe
+-
+     - name: Mac - build
+       if: startsWith(matrix.os, 'macos')
+       working-directory: ${{env.GITHUB_WORKSPACE}}

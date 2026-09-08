@@ -68,6 +68,7 @@ HEADERS += \
 	src/historymodels.h \
 	src/historywindow.h \
 	src/messageedit.h \
+	src/movedblocks.h \
 	src/queryround.h \
 	src/recentrepositories.h \
 	src/recentrepositoriespanel.h \
@@ -110,6 +111,7 @@ SOURCES += \
 	src/historywindow.cpp \
 	src/main.cpp \
 	src/messageedit.cpp \
+	src/movedblocks.cpp \
 	src/recentrepositories.cpp \
 	src/recentrepositoriespanel.cpp \
 	src/repository.cpp \

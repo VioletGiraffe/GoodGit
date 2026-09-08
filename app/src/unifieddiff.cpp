@@ -1,4 +1,5 @@
 #include "unifieddiff.h"
+#include "movedblocks.h"
 #include "textdiff.h"
 
 #include <algorithm>
@@ -332,26 +333,56 @@ ParsedDiff parseUnifiedDiff(QStringView diff)
 		texts.push_back(split.text);
 	}
 
+	// Moves are found before the pairing below, which would otherwise merge a moved line with whatever was
+	// added in the block's place. A continuation is a fragment without a marker char: never part of a block.
+	std::vector<ChangeLine> changeLines;
+	changeLines.reserve(lines.size());
+	for (size_t i = 0; i < lines.size(); ++i)
+	{
+		ChangeLine change;
+		const DiffLineKind kind = lines[i].kind;
+		if (!splits[i].continuation && (kind == DiffLineKind::Removed || kind == DiffLineKind::Added))
+			change = { texts[i].sliced(1), kind == DiffLineKind::Removed ? ChangeSide::Removed : ChangeSide::Added };
+		changeLines.push_back(change);
+	}
+	std::vector<MovedBlock> moves = detectMovedBlocks(changeLines);
+	std::vector<bool> moved(lines.size(), false);
+	for (const MovedBlock& block : moves)
+	{
+		for (int k = 0; k < block.lineCount; ++k)
+		{
+			moved[size_t(block.removedFirst + k)] = true;
+			moved[size_t(block.addedFirst + k)] = true;
+		}
+	}
+
 	ParsedDiff parsed;
 	parsed.text.reserve(diff.size());
 	parsed.lines.reserve(lines.size());
 
+	// Where each line the diff printed stands in the result; -1 for one merged into a pair
+	std::vector<int> shownLine(lines.size(), -1);
+	// A line that can join a run's pairing: a continuation has no marker char, and a moved line is spoken for
+	const auto pairable = [&](int k, DiffLineKind kind) {
+		return lines[size_t(k)].kind == kind && !splits[size_t(k)].continuation && !moved[size_t(k)];
+	};
+
 	const int count = int(lines.size());
 	for (int i = 0; i < count; )
 	{
-		// A continuation carries no marker char, so it cannot join a run's pairing: shown as it stands
-		if (lines[size_t(i)].kind != DiffLineKind::Removed || splits[size_t(i)].continuation)
+		if (!pairable(i, DiffLineKind::Removed))
 		{
+			shownLine[size_t(i)] = int(parsed.lines.size());
 			appendLine(parsed, lines[size_t(i)], texts[size_t(i)]);
 			++i;
 			continue;
 		}
 
 		// A modification prints its removed lines and then its added ones. Anything else between them - a
-		// hunk header, a context line, a continuation - ends the run, and the removed lines are a deletion
-		// of their own.
+		// hunk header, a context line, a continuation, a moved line - ends the run, and the removed lines are
+		// a deletion of their own.
 		int removedEnd = i;
-		while (removedEnd < count && lines[size_t(removedEnd)].kind == DiffLineKind::Removed && !splits[size_t(removedEnd)].continuation)
+		while (removedEnd < count && pairable(removedEnd, DiffLineKind::Removed))
 			++removedEnd;
 
 		// Except the no-newline marker, which annotates the removed line before it rather than ending the
@@ -361,7 +392,7 @@ ParsedDiff parseUnifiedDiff(QStringView diff)
 			&& lines[size_t(addedBegin + 1)].kind == DiffLineKind::Added)
 			++addedBegin;
 		int addedEnd = addedBegin;
-		while (addedEnd < count && lines[size_t(addedEnd)].kind == DiffLineKind::Added && !splits[size_t(addedEnd)].continuation)
+		while (addedEnd < count && pairable(addedEnd, DiffLineKind::Added))
 			++addedEnd;
 
 		appendRun(parsed, lines, texts, i, removedEnd, addedBegin, addedEnd);
@@ -369,6 +400,15 @@ ParsedDiff parseUnifiedDiff(QStringView diff)
 			appendLine(parsed, lines[size_t(removedEnd)], texts[size_t(removedEnd)]);
 		i = addedEnd;
 	}
+
+	// A block's lines are all shown as they stand, one after another, so its first line places the whole of it
+	for (MovedBlock& block : moves)
+	{
+		block.removedFirst = shownLine[size_t(block.removedFirst)];
+		block.addedFirst = shownLine[size_t(block.addedFirst)];
+		assert(block.removedFirst >= 0 && block.addedFirst >= 0);
+	}
+	parsed.moves = std::move(moves);
 
 	return parsed;
 }

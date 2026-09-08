@@ -1,5 +1,6 @@
 #pragma once
 
+#include "movedblocks.h"
 #include "compiler/compiler_warnings_control.h"
 
 DISABLE_COMPILER_WARNINGS
@@ -12,7 +13,8 @@ RESTORE_COMPILER_WARNINGS
 
 // Reads a unified diff into the lines to show for it. A removed line and the added line one edit turned it
 // into become a single line carrying both, where that still reads as one line; every other line is the
-// diff's own, unchanged.
+// diff's own, unchanged. A block removed in one place and added in another is reported as a move, its
+// lines standing as the diff printed them.
 // Backend-free: git and Mercurial (with --git) print the same format.
 
 enum class DiffLineKind : uint8_t
@@ -50,6 +52,7 @@ struct ParsedDiff
 	QString text;                // the lines to show, joined by '\n'
 	std::vector<DiffLine> lines; // one per line of `text`
 	std::vector<DiffSpan> spans; // ascending by line
+	std::vector<MovedBlock> moves; // as indices into `lines`, ascending by addedFirst
 };
 
 [[nodiscard]] ParsedDiff parseUnifiedDiff(QStringView diff);
