@@ -102,7 +102,7 @@ TEST_CASE("A block moved within a file: the installer steps of CI.yml moved abov
 
 	REQUIRE(shown.size() == 70);
 	REQUIRE(parsed.moves.size() == 1);
-	const MovedBlock& block = parsed.moves[0];
+	const DiffMove& block = parsed.moves[0];
 	CHECK(block.addedFirst == 8);
 	CHECK(block.removedFirst == 41);
 	CHECK(block.removedCount == 26);
@@ -226,10 +226,9 @@ TEST_CASE("An edit within a moved block is marked on the added line alone", "[un
 	REQUIRE(parsed.moves.size() == 1);
 	CHECK(parsed.moves[0].removedFirst == 2);
 	CHECK(parsed.moves[0].addedFirst == 8);
-	REQUIRE(parsed.moves[0].pairs.size() == 3);
-	CHECK(parsed.moves[0].pairs[1].edited);
-	CHECK(parsed.moves[0].pairs[1].removed == 3);
-	CHECK(parsed.moves[0].pairs[1].added == 9);
+	CHECK(parsed.moves[0].removedCount == 3);
+	CHECK(parsed.moves[0].addedCount == 3);
+	CHECK(!parsed.moves[0].foreign);
 	CHECK(countOfKind(parsed, DiffLineKind::Edited) == 0);
 	for (size_t line = 0; line < parsed.lines.size(); ++line)
 		CHECK(parsed.lines[line].moved == ((line >= 2 && line < 5) || (line >= 8 && line < 11)));
@@ -294,4 +293,88 @@ TEST_CASE("A block copied to several places keeps every copy out of the pairing"
 	CHECK(countOfKind(parsed, DiffLineKind::Edited) == 0);
 	REQUIRE(parsed.spans.size() == 1);
 	CHECK(parsed.spans[0].line == 9);
+}
+
+TEST_CASE("A change set is cut into its files' sections, a rename keyed by both paths", "[unifieddiff]")
+{
+	const ChangeSetDiff set{ fixture("moved_between_files.diff") };
+
+	REQUIRE(set.fileCount() == 3);
+	CHECK(set.fileIndex("src/alpha.cpp") == 0);
+	CHECK(set.fileIndex("src/beta.cpp") == 1);
+	CHECK(set.fileIndex("docs/new name.md") == 2);
+	CHECK(set.fileIndex("docs/old name.md") == 2);
+	CHECK(!set.fileIndex("src/gamma.cpp"));
+	CHECK(set.filePath(2) == "docs/new name.md");
+	CHECK(set.fileDiff(0).startsWith(QLatin1String("diff --git a/src/alpha.cpp")));
+	CHECK(set.fileDiff(0).endsWith(QLatin1String(" }\n")));
+	CHECK(!set.fileDiff(0).contains(QLatin1String("beta")));
+	CHECK(set.fileDiff(2).startsWith(QLatin1String("diff --git a/docs/old name.md")));
+	CHECK(set.fileDiff(2).endsWith(QLatin1String(" tail\n")));
+}
+
+TEST_CASE("A block moved between two files is a move in either, its far end named", "[unifieddiff]")
+{
+	const ChangeSetDiff set{ fixture("moved_between_files.diff") };
+
+	SECTION("the file it left")
+	{
+		const ParsedDiff parsed = parseUnifiedDiff(set, 0);
+
+		REQUIRE(parsed.moves.size() == 1);
+		const DiffMove& move = parsed.moves[0];
+		CHECK(move.removedFirst == 7);
+		CHECK(move.removedCount == 4);
+		CHECK(move.addedCount == 0);
+		REQUIRE(move.foreign);
+		CHECK(move.foreign->path == "src/beta.cpp");
+		CHECK(move.foreign->diffLine == 7);
+		for (size_t line = 0; line < parsed.lines.size(); ++line)
+			CHECK(parsed.lines[line].moved == (line >= 7 && line < 11));
+		CHECK(parsed.spans.empty()); // the edit is marked where the block went
+	}
+
+	SECTION("the file it went to")
+	{
+		const ParsedDiff parsed = parseUnifiedDiff(set, 1);
+
+		REQUIRE(parsed.moves.size() == 1);
+		const DiffMove& move = parsed.moves[0];
+		CHECK(move.addedFirst == 7);
+		CHECK(move.addedCount == 4);
+		CHECK(move.removedCount == 0);
+		REQUIRE(move.foreign);
+		CHECK(move.foreign->path == "src/alpha.cpp");
+		CHECK(move.foreign->diffLine == 7);
+		CHECK(parsed.shownLine[7] == 7);
+		REQUIRE(parsed.spans.size() == 1);
+		CHECK(parsed.spans[0].line == 8);
+	}
+
+	SECTION("a file it does not touch")
+	{
+		const ParsedDiff parsed = parseUnifiedDiff(set, 2);
+
+		CHECK(parsed.moves.empty());
+		CHECK(parsed.lines[9].kind == DiffLineKind::Edited);
+		CHECK(parsed.shownLine[10] == -1); // merged into the line before it
+		CHECK(parsed.shownLine[11] == 10);
+	}
+}
+
+TEST_CASE("A section parsed through its set shows as it does alone, its moves aside", "[unifieddiff]")
+{
+	const ChangeSetDiff set{ fixture("moved_between_files.diff") };
+	const ParsedDiff inSet = parseUnifiedDiff(set, 1);
+	const ParsedDiff alone = parseUnifiedDiff(set.fileDiff(1));
+
+	CHECK(inSet.text == alone.text);
+	REQUIRE(inSet.lines.size() == alone.lines.size());
+	for (size_t line = 0; line < alone.lines.size(); ++line)
+	{
+		CHECK(inSet.lines[line].kind == alone.lines[line].kind);
+		CHECK(inSet.lines[line].newLine == alone.lines[line].newLine);
+	}
+	CHECK(alone.moves.empty()); // the block's other end is in another file
+	CHECK(alone.spans.empty());
 }

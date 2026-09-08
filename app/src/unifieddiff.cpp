@@ -276,49 +276,76 @@ void appendRun(ParsedDiff& parsed, const std::vector<DiffLine>& lines, const std
 	appendUnpairedUpTo(removedEnd, addedEnd);
 }
 
-} // namespace
-
-ParsedDiff parseUnifiedDiff(QStringView diff)
+// One file's diff read into its lines, before anything is rendered
+struct ScannedDiff
 {
-	const std::vector<SplitLine> splits = splitLines(diff);
-
+	qsizetype textSize = 0; // of the diff read, which the text shown is about as long as
+	std::vector<SplitLine> splits;
 	std::vector<DiffLine> lines;
 	std::vector<QStringView> texts;
-	lines.reserve(splits.size());
-	texts.reserve(splits.size());
-	UnifiedDiffScanner scanner;
-	for (const SplitLine& split : splits)
-	{
-		lines.push_back(scanner.scan(split));
-		texts.push_back(split.text);
-	}
+};
 
-	// Moves are found before the pairing below, which would otherwise merge a moved line with whatever was
-	// added in the block's place. A continuation is a fragment without a marker char: never part of a block.
+ScannedDiff scanDiff(QStringView diff)
+{
+	ScannedDiff scanned;
+	scanned.textSize = diff.size();
+	scanned.splits = splitLines(diff);
+	scanned.lines.reserve(scanned.splits.size());
+	scanned.texts.reserve(scanned.splits.size());
+	UnifiedDiffScanner scanner;
+	for (const SplitLine& split : scanned.splits)
+	{
+		scanned.lines.push_back(scanner.scan(split));
+		scanned.texts.push_back(split.text);
+	}
+	return scanned;
+}
+
+// The lines as the move detection takes them, one per line read: a continuation is a fragment without a
+// marker char, never part of a block
+std::vector<ChangeLine> changeLinesOf(const ScannedDiff& scanned)
+{
 	std::vector<ChangeLine> changeLines;
-	changeLines.reserve(lines.size());
-	for (size_t i = 0; i < lines.size(); ++i)
+	changeLines.reserve(scanned.lines.size());
+	for (size_t i = 0; i < scanned.lines.size(); ++i)
 	{
 		ChangeLine change;
-		const DiffLineKind kind = lines[i].kind;
-		if (!splits[i].continuation && (kind == DiffLineKind::Removed || kind == DiffLineKind::Added))
-			change = { texts[i].sliced(1), kind == DiffLineKind::Removed ? ChangeSide::Removed : ChangeSide::Added };
+		const DiffLineKind kind = scanned.lines[i].kind;
+		if (!scanned.splits[i].continuation && (kind == DiffLineKind::Removed || kind == DiffLineKind::Added))
+			change = { scanned.texts[i].sliced(1), kind == DiffLineKind::Removed ? ChangeSide::Removed : ChangeSide::Added };
 		changeLines.push_back(change);
 	}
-	std::vector<MovedBlock> moves = detectMovedBlocks(changeLines);
+	return changeLines;
+}
+
+// A move as the rendering takes it in: the block in the lines read, a range in another file empty, starting
+// at 0, and that end named. A pair's index on an empty range is meaningless.
+struct FileMove
+{
+	MovedBlock block;
+	std::optional<ForeignEnd> foreign;
+};
+
+// Renders the lines read into the lines shown, the moves given standing as read: they are found first, or
+// the pairing would merge a moved line with whatever was added in the block's place
+ParsedDiff render(const ScannedDiff& scanned, std::vector<FileMove> moves)
+{
+	const std::vector<SplitLine>& splits = scanned.splits;
+	const std::vector<DiffLine>& lines = scanned.lines;
+	const std::vector<QStringView>& texts = scanned.texts;
+
 	std::vector<bool> moved(lines.size(), false);
-	for (const MovedBlock& block : moves)
+	for (const FileMove& move : moves)
 	{
-		std::fill_n(moved.begin() + block.removedFirst, block.removedCount, true);
-		std::fill_n(moved.begin() + block.addedFirst, block.addedCount, true);
+		std::fill_n(moved.begin() + move.block.removedFirst, move.block.removedCount, true);
+		std::fill_n(moved.begin() + move.block.addedFirst, move.block.addedCount, true);
 	}
 
 	ParsedDiff parsed;
-	parsed.text.reserve(diff.size());
+	parsed.text.reserve(scanned.textSize);
 	parsed.lines.reserve(lines.size());
-
-	// Where each line the diff printed stands in the result; -1 for one merged into a pair
-	std::vector<int> shownLine(lines.size(), -1);
+	parsed.shownLine.assign(lines.size(), -1);
+	std::vector<int>& shownLine = parsed.shownLine;
 	// A line that can join a run's pairing: a continuation has no marker char, and a moved line is spoken for
 	const auto pairable = [&](int k, DiffLineKind kind) {
 		return lines[size_t(k)].kind == kind && !splits[size_t(k)].continuation && !moved[size_t(k)];
@@ -359,39 +386,179 @@ ParsedDiff parseUnifiedDiff(QStringView diff)
 	}
 
 	// A block's lines are all shown as they stand, one after another, so each maps to the line shown for it
-	for (MovedBlock& block : moves)
+	for (FileMove& move : moves)
 	{
-		block.removedFirst = shownLine[size_t(block.removedFirst)];
-		block.addedFirst = shownLine[size_t(block.addedFirst)];
-		assert(block.removedFirst >= 0 && block.addedFirst >= 0);
-		for (MovedLinePair& pair : block.pairs)
+		const MovedBlock& block = move.block;
+		DiffMove shown;
+		shown.removedCount = block.removedCount;
+		shown.addedCount = block.addedCount;
+		shown.group = block.group;
+		shown.foreign = std::move(move.foreign);
+		if (block.removedCount > 0)
 		{
-			pair.removed = shownLine[size_t(pair.removed)];
-			pair.added = shownLine[size_t(pair.added)];
+			shown.removedFirst = shownLine[size_t(block.removedFirst)];
+			assert(shown.removedFirst >= 0);
+			for (int k = 0; k < block.removedCount; ++k)
+				parsed.lines[size_t(shown.removedFirst + k)].moved = true;
 		}
-		for (int k = 0; k < block.removedCount; ++k)
-			parsed.lines[size_t(block.removedFirst + k)].moved = true;
-		for (int k = 0; k < block.addedCount; ++k)
-			parsed.lines[size_t(block.addedFirst + k)].moved = true;
-	}
-
-	// An edit on the way is marked on the added line alone: the edit belongs where the block now is
-	for (const MovedBlock& block : moves)
-	{
-		for (const MovedLinePair& pair : block.pairs)
+		if (block.addedCount > 0)
 		{
-			if (!pair.edited)
-				continue;
-			for (const MergeSegment& segment : pair.alignment.segments)
+			shown.addedFirst = shownLine[size_t(block.addedFirst)];
+			assert(shown.addedFirst >= 0);
+			for (int k = 0; k < block.addedCount; ++k)
+				parsed.lines[size_t(shown.addedFirst + k)].moved = true;
+
+			// An edit on the way is marked on the added line alone: the edit belongs where the block now is
+			for (const MovedLinePair& pair : block.pairs)
 			{
-				if (segment.kind == SegmentKind::Added)
-					parsed.spans.push_back(DiffSpan{ pair.added, segment.range.start + 1, segment.range.length, false }); // past the marker
+				if (!pair.edited)
+					continue;
+				for (const MergeSegment& segment : pair.alignment.segments)
+				{
+					if (segment.kind == SegmentKind::Added)
+						parsed.spans.push_back(DiffSpan{ shownLine[size_t(pair.added)], segment.range.start + 1, segment.range.length, false }); // past the marker
+				}
 			}
 		}
+		parsed.moves.push_back(std::move(shown));
 	}
 	// The runs' spans came in line order; the moves' were appended after them
 	std::stable_sort(parsed.spans.begin(), parsed.spans.end(), [](const DiffSpan& l, const DiffSpan& r) { return l.line < r.line; });
-	parsed.moves = std::move(moves);
 
 	return parsed;
+}
+
+// The path of a "diff --git a/P b/P" header, empty where the two differ: a rename names its paths on lines
+// of their own
+QString samePathOf(QStringView header)
+{
+	const QStringView rest = header.sliced(11); // past "diff --git "
+	const qsizetype length = (rest.size() - 5) / 2; // "a/" P " b/" P
+	if (length < 0 || rest.size() != 2 * length + 5 || !rest.startsWith(QLatin1String("a/")) || rest.sliced(length + 2, 3) != QLatin1String(" b/"))
+		return {};
+	const QStringView path = rest.sliced(2, length);
+	return path == rest.sliced(length + 5) ? path.toString() : QString{};
+}
+
+} // namespace
+
+ParsedDiff parseUnifiedDiff(QStringView diff)
+{
+	const ScannedDiff scanned = scanDiff(diff);
+	std::vector<FileMove> moves;
+	for (MovedBlock& block : detectMovedBlocks(changeLinesOf(scanned)))
+		moves.push_back(FileMove{ std::move(block), std::nullopt });
+	return render(scanned, std::move(moves));
+}
+
+ChangeSetDiff::ChangeSetDiff(QString text) :
+	_text{ std::move(text) }
+{
+	const QStringView whole{ _text };
+	const QLatin1String sectionStart{ "diff --git " };
+	// Every section start, then each section's paths from its header lines
+	for (qsizetype pos = 0; pos < whole.size(); )
+	{
+		qsizetype lineEnd = whole.indexOf(QLatin1Char('\n'), pos);
+		if (lineEnd < 0)
+			lineEnd = whole.size();
+		const QStringView line = whole.sliced(pos, lineEnd - pos);
+		if (line.startsWith(sectionStart))
+		{
+			if (!_files.empty())
+				_files.back().length = pos - _files.back().start;
+			_files.push_back(File{ .path = samePathOf(line), .start = pos });
+		}
+		else if (!_files.empty() && _files.back().path.isEmpty())
+		{
+			// A rename's or copy's header lines, up to the first hunk or a binary notice
+			if (line.startsWith(QLatin1String("rename from ")) || line.startsWith(QLatin1String("copy from ")))
+				_files.back().oldPath = line.sliced(line.indexOf(QLatin1String("from ")) + 5).toString();
+			else if (line.startsWith(QLatin1String("rename to ")) || line.startsWith(QLatin1String("copy to ")))
+				_files.back().path = line.sliced(line.indexOf(QLatin1String("to ")) + 3).toString();
+		}
+		pos = lineEnd + 1;
+	}
+	if (!_files.empty())
+		_files.back().length = whole.size() - _files.back().start;
+
+	std::vector<ChangeLine> sequence;
+	for (size_t i = 0; i < _files.size(); ++i)
+	{
+		const ScannedDiff scanned = scanDiff(fileDiff(int(i)));
+		const std::vector<ChangeLine> changeLines = changeLinesOf(scanned);
+		_files[i].firstLine = int(sequence.size());
+		_files[i].lineCount = int(changeLines.size());
+		sequence.insert(sequence.end(), changeLines.begin(), changeLines.end());
+	}
+	_moves = detectMovedBlocks(sequence);
+}
+
+std::optional<int> ChangeSetDiff::fileIndex(const QString& path) const
+{
+	for (size_t i = 0; i < _files.size(); ++i)
+	{
+		if (_files[i].path == path || (!_files[i].oldPath.isEmpty() && _files[i].oldPath == path))
+			return int(i);
+	}
+	return std::nullopt;
+}
+
+QStringView ChangeSetDiff::fileDiff(int file) const
+{
+	return QStringView{ _text }.sliced(_files[size_t(file)].start, _files[size_t(file)].length);
+}
+
+int ChangeSetDiff::fileOfLine(int line) const
+{
+	const auto after = std::upper_bound(_files.begin(), _files.end(), line, [](int l, const File& file) { return l < file.firstLine; });
+	assert(after != _files.begin());
+	return int(after - _files.begin()) - 1;
+}
+
+ParsedDiff parseUnifiedDiff(const ChangeSetDiff& set, int file)
+{
+	const ChangeSetDiff::File& here = set._files[size_t(file)];
+	const auto inThisFile = [&](int line) { return line >= here.firstLine && line < here.firstLine + here.lineCount; };
+	const auto foreignEnd = [&](int line) {
+		const ChangeSetDiff::File& there = set._files[size_t(set.fileOfLine(line))];
+		return ForeignEnd{ there.path, line - there.firstLine };
+	};
+
+	std::vector<FileMove> moves;
+	for (const MovedBlock& block : set._moves)
+	{
+		const bool removedHere = inThisFile(block.removedFirst), addedHere = inThisFile(block.addedFirst);
+		if (!removedHere && !addedHere)
+			continue;
+
+		FileMove move{ block, std::nullopt };
+		if (removedHere)
+		{
+			move.block.removedFirst -= here.firstLine;
+			for (MovedLinePair& pair : move.block.pairs)
+				pair.removed -= here.firstLine;
+		}
+		else
+		{
+			move.block.removedFirst = 0;
+			move.block.removedCount = 0;
+			move.foreign = foreignEnd(block.removedFirst);
+		}
+		if (addedHere)
+		{
+			move.block.addedFirst -= here.firstLine;
+			for (MovedLinePair& pair : move.block.pairs)
+				pair.added -= here.firstLine;
+		}
+		else
+		{
+			move.block.addedFirst = 0;
+			move.block.addedCount = 0;
+			move.foreign = foreignEnd(block.addedFirst);
+		}
+		moves.push_back(std::move(move));
+	}
+
+	return render(scanDiff(set.fileDiff(file)), std::move(moves));
 }

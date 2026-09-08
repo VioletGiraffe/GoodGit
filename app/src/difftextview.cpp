@@ -178,8 +178,8 @@ void DiffTextView::setContent(const QString& text, Content content)
 			if (line.kind == DiffLineKind::HunkHeader)
 				_hunkLines.push_back(index);
 		}
-		for (MovedBlock& block : parsed.moves)
-			_moveMarks.push_back({ std::move(block) });
+		for (DiffMove& move : parsed.moves)
+			_moveMarks.push_back({ std::move(move) });
 		assignMoveLanes();
 	}
 	else
@@ -518,7 +518,7 @@ int DiffTextView::moveTargetAt(const QPoint& gutterPos) const
 	{
 		if (mark.lane != lane)
 			continue;
-		const MovedBlock& block = mark.block;
+		const DiffMove& block = mark.move;
 		if (line >= block.removedFirst && line < block.removedFirst + block.removedCount)
 			return block.addedFirst;
 		if (line >= block.addedFirst && line < block.addedFirst + block.addedCount)
@@ -530,9 +530,9 @@ int DiffTextView::moveTargetAt(const QPoint& gutterPos) const
 void DiffTextView::assignMoveLanes()
 {
 	// Marks that overlap on screen take separate lanes, the lowest free one each, in order of where they start
-	const auto start = [](const MoveMark& mark) { return std::min(mark.block.removedFirst, mark.block.addedFirst); };
+	const auto start = [](const MoveMark& mark) { return std::min(mark.move.removedFirst, mark.move.addedFirst); };
 	const auto end = [](const MoveMark& mark) {
-		return std::max(mark.block.removedFirst + mark.block.removedCount, mark.block.addedFirst + mark.block.addedCount);
+		return std::max(mark.move.removedFirst + mark.move.removedCount, mark.move.addedFirst + mark.move.addedCount);
 	};
 	std::sort(_moveMarks.begin(), _moveMarks.end(), [&](const MoveMark& a, const MoveMark& b) { return start(a) < start(b); });
 
@@ -583,7 +583,7 @@ void DiffTextView::paintMoveMarks(QPainter& painter, const QRect& clip)
 	const Theme& theme = activeTheme();
 	for (const MoveMark& mark : _moveMarks)
 	{
-		const MovedBlock& block = mark.block;
+		const DiffMove& block = mark.move;
 		const bool movedDown = block.addedFirst > block.removedFirst;
 		const int upperFirst = movedDown ? block.removedFirst : block.addedFirst;
 		const int upperCount = movedDown ? block.removedCount : block.addedCount;

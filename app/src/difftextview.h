@@ -79,7 +79,7 @@ private:
 	// One move's marks: the block's two places, in a lane of their own where moves overlap on screen
 	struct MoveMark
 	{
-		MovedBlock block; // in lines of the document
+		DiffMove move;    // in lines of the document
 		int lane = 0;
 	};
 
