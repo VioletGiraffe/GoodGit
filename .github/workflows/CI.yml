@@ -126,6 +126,10 @@ jobs:
         "{0:N2} KB  {1}" -f ($exe.Length / 1KB), $exe.Name
         Get-PeSectionSizes $exe.FullName | Format-Table Name, KB -AutoSize
 
+    - name: Mac - tests
+      if: startsWith(matrix.os, 'macos')
+      run: scripts/run_tests.sh
+
     - name: Mac - build
       if: startsWith(matrix.os, 'macos')
       working-directory: ${{env.GITHUB_WORKSPACE}}
@@ -133,10 +137,6 @@ jobs:
         clang --version
         $QT_ROOT_DIR/bin/qmake -r CONFIG+=release
         make -j4
-
-    - name: Mac - tests
-      if: startsWith(matrix.os, 'macos')
-      run: scripts/run_tests.sh
 
     - name: Mac - create DMG
       if: startsWith(matrix.os, 'macos')
@@ -150,22 +150,24 @@ jobs:
         name: GoodGit.dmg
         path: GoodGit.dmg
 
-    - name: Linux
+    - name: Linux - set up gcc 14
       if: startsWith(matrix.os, 'ubuntu')
-      working-directory: ${{env.GITHUB_WORKSPACE}}
       run: |
         sudo apt update -y; sudo apt install -qq gcc-14 g++-14
         sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 50
         sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 50
         g++ --version
 
-        $QT_ROOT_DIR/bin/qmake -r CONFIG+=release
-        make -j4
-
-    # After the build step: that is where gcc 14 is installed
     - name: Linux - tests
       if: startsWith(matrix.os, 'ubuntu')
       run: scripts/run_tests.sh
+
+    - name: Linux - build
+      if: startsWith(matrix.os, 'ubuntu')
+      working-directory: ${{env.GITHUB_WORKSPACE}}
+      run: |
+        $QT_ROOT_DIR/bin/qmake -r CONFIG+=release
+        make -j4
 
   create-release:
     needs: build
