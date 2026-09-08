@@ -10,13 +10,15 @@ RESTORE_COMPILER_WARNINGS
 class QLabel;
 class QPushButton;
 class CLabelElided;
+class ChangeSetDiff;
 class DiffTextView;
+struct ParsedDiff;
 
 // The unit format every header states a size in
 [[nodiscard]] QString formattedFileSize(qint64 bytes);
 
-// A header naming what is shown and where it is from, over a read-only monospace view. The pane neither
-// reads nor caps the text; the caller does both.
+// A header naming what is shown and where it is from, over a read-only monospace view. The pane reads
+// nothing; the caller does, and caps what it reads.
 class DiffPane final : public QWidget
 {
 public:
@@ -31,7 +33,11 @@ public:
 
 	explicit DiffPane(QWidget* parent = nullptr);
 
-	void showDiff(const ItemInfo& item, const QString& text);
+	void showDiff(const ItemInfo& item, ParsedDiff parsed);
+	// One file's section of a change set, parsed with the set's moves. A message instead where the section
+	// is over `maxBytes`, as a query's answer would be, or holds no content change - headers alone - which
+	// `noContentText` describes.
+	void showSection(const ItemInfo& item, const ChangeSetDiff& set, int file, qint64 maxBytes, const QString& noContentText);
 	// A file's own contents, for a file no backend is asked to diff: numbered, undecorated
 	void showFileText(const ItemInfo& item, const QString& text);
 	// Prose rather than file content: a placeholder, a failure, a commit message. Neither numbered nor decorated.

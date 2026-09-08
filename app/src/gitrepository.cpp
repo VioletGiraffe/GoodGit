@@ -211,6 +211,13 @@ QStringList eolDisplayFlags()
 		? QStringList{} : QStringList{ QStringLiteral("--ignore-cr-at-eol") };
 }
 
+// The flags of every diff shown as a patch: ChangeSetDiff cuts its sections at the a/ and b/ prefixes,
+// which a diff.noprefix config would otherwise drop
+QStringList patchDisplayFlags()
+{
+	return eolDisplayFlags() + QStringList{ QStringLiteral("--src-prefix=a/"), QStringLiteral("--dst-prefix=b/") };
+}
+
 QStringList trackedChangeCountsArgs(const QString& base)
 {
 	return trackedDiffArgs(base, QStringLiteral("--numstat"), eolDisplayFlags());
@@ -946,21 +953,27 @@ QString GitRepository::diffBase() const
 
 Vcs::Query GitRepository::diffFile(const FileEntry& entry, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
-	QStringList args = QStringList{ QStringLiteral("diff") } + eolDisplayFlags();
+	QStringList args = QStringList{ QStringLiteral("diff") } + patchDisplayFlags();
 	args << QStringLiteral("-M") << diffBase() << QStringLiteral("--") << entry.path;
 	if (!entry.oldPath.isEmpty())
 		args.push_back(entry.oldPath);
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}), maxBytes);
 }
 
-Vcs::Query GitRepository::diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone)
+Vcs::Query GitRepository::workingTreeDiff(qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
-	// --function-context: the pool wants the names around a change, not only the changed lines
-	// --ignore-cr-at-eol regardless of the display setting: a line-ending conversion would flood the word
-	// pool with every line of the file
-	QStringList args = { QStringLiteral("diff"), QStringLiteral("--ignore-cr-at-eol"),
-		QStringLiteral("--function-context"), QStringLiteral("--ignore-submodules"), diffBase() };
-	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
+	// --ignore-submodules=dirty: a submodule's own changes are shown from inside it, and finding them means
+	// scanning its working tree
+	QStringList args = QStringList{ QStringLiteral("diff") } + patchDisplayFlags();
+	args << QStringLiteral("-M") << QStringLiteral("--ignore-submodules=dirty") << diffBase();
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}), maxBytes);
+}
+
+Vcs::Query GitRepository::commitDiff(const QString& sha, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone)
+{
+	QStringList args = QStringList{ QStringLiteral("show"), QStringLiteral("-M") } + patchDisplayFlags();
+	args << QStringLiteral("--format=") << sha;
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}), maxBytes);
 }
 
 Vcs::Query GitRepository::commitLog(const LogQuery& query, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone)
@@ -1011,7 +1024,7 @@ Vcs::Query GitRepository::commitFileCounts(const QString& sha, const QObject* co
 
 Vcs::Query GitRepository::commitFileDiff(const QString& sha, const CommitFileChange& file, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
-	QStringList args = QStringList{ QStringLiteral("show"), QStringLiteral("-M") } + eolDisplayFlags();
+	QStringList args = QStringList{ QStringLiteral("show"), QStringLiteral("-M") } + patchDisplayFlags();
 	args << QStringLiteral("--format=") << sha << QStringLiteral("--") << file.path;
 	if (!file.oldPath.isEmpty())
 		args.push_back(file.oldPath); // both sides, or the pathspec filters the rename out before -M can pair it

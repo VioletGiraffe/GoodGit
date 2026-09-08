@@ -2,6 +2,8 @@
 #include "difftextview.h"
 #include "settings.h"
 #include "theme.h"
+#include "unifieddiff.h"
+#include "vcsprocess.h"
 
 #include "settingsui/csettingsdialog.h"
 #include "widgets/clabelelided.h"
@@ -68,11 +70,24 @@ DiffPane::DiffPane(QWidget* parent) :
 	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, applyFontSettings);
 }
 
-void DiffPane::showDiff(const ItemInfo& item, const QString& text)
+void DiffPane::showDiff(const ItemInfo& item, ParsedDiff parsed)
 {
 	setHeader(item);
-	_view->showDiff(text);
+	_view->showDiff(std::move(parsed));
 	updateHunkNavigator();
+}
+
+void DiffPane::showSection(const ItemInfo& item, const ChangeSetDiff& set, int file, qint64 maxBytes, const QString& noContentText)
+{
+	const QStringView section = set.fileDiff(file);
+	// Characters against a byte limit: a section of that many characters is at least that many bytes, so
+	// one over the limit is caught, and one under it by less than its non-ASCII share is let through
+	if (section.size() > maxBytes)
+		showMessage(item, outputTooLargeText(maxBytes));
+	else if (!diffHasContent(section))
+		showMessage(item, noContentText);
+	else
+		showDiff(item, parseUnifiedDiff(set, file));
 }
 
 void DiffPane::showFileText(const ItemInfo& item, const QString& text)

@@ -3,6 +3,7 @@
 #include "diffpane.h"
 #include "historymodels.h"
 #include "repository.h"
+#include "unifieddiff.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QMainWindow>
@@ -122,6 +123,12 @@ private:
 	Vcs::Query _fileCountsQuery;
 	Vcs::Query _diffQuery;
 	Vcs::Query _sizeQuery;
+	// The current commit's whole diff: a file's diff is cut out of it, and a block moved between files is
+	// found across it. Absent where the query failed or the diff passed its cap; a file is then diffed on its own.
+	std::optional<ChangeSetDiff> _changeSet;
+	Vcs::Query _changeSetQuery;
+	bool _changeSetPending = false; // the query is out: a file waits for it instead of being diffed on its own
+	bool _fileAwaitsChangeSet = false; // the file shown is waiting, so the set's arrival shows it
 
 	// What the pane's header states about the file being shown. A member rather than a value each callback
 	// carries: the size arrives on its own query, and the diff must not restate a header without it.

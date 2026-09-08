@@ -58,8 +58,9 @@ upstream ref is not in the list at all. With no remote-tracking ref every commit
 list would ring, so that case marks nothing instead. Mercurial answers from `draft()`, locally and for free,
 and suppresses the same case on the configured push paths.
 
-Selecting a commit shows its message and queries its files and their line counts, a job each, so the rows
-may appear before their counts; selecting a file queries that file's diff. All are cancelled when the
-selection moves on. A merge shows a note instead of files: `git show` prints no diff for one without `--cc`,
+Selecting a commit shows its message and queries its files, their line counts and the commit's whole diff, a
+job each, so the rows may appear before their counts; selecting a file cuts its section out of the whole
+diff, held as a `ChangeSetDiff` so a block moved between two files shows as one, and queries the file's own
+diff only where the whole one failed or passed its cap. All are cancelled when the selection moves on. A merge shows a note instead of files: `git show` prints no diff for one without `--cc`,
 so merges are detected from the parent count rather than from an empty result.
 

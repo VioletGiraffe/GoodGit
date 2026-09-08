@@ -41,7 +41,7 @@ class DiffTextView final : public QPlainTextEdit
 public:
 	explicit DiffTextView(QWidget* parent = nullptr);
 
-	void showDiff(const QString& text);
+	void showDiff(ParsedDiff parsed);
 	void showFileText(const QString& text);
 	void showMessage(const QString& text);
 
@@ -83,7 +83,9 @@ private:
 		int lane = 0;
 	};
 
-	void setContent(const QString& text, Content content);
+	void setContent(const QString& text, Content content); // FileText or Message
+	void resetContent(Content content); // before the text changes
+	void finishContent();               // after it: the formats, the gutter
 	void paintRemovedStrikes(const QRect& clip);
 	void assignMoveLanes();
 	void paintMoveMarks(QPainter& painter, const QRect& clip);

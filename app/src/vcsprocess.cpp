@@ -57,13 +57,17 @@ QString ProcessResult::errorText() const
 	}
 
 	if (outcome == ProcessOutcome::OutputTooLarge)
-		return QObject::tr("Too large to display: over the %1 limit.")
-			.arg(QLocale{}.formattedDataSize(outputLimit, 0, QLocale::DataSizeTraditionalFormat));
+		return outputTooLargeText(outputLimit);
 
 	const QString note = outcome == ProcessOutcome::Crashed
 		? QStringLiteral("%1 terminated abnormally.").arg(toolName)
 		: QStringLiteral("%1 did not finish within the time allowed and was stopped.").arg(toolName);
 	return stderrText.isEmpty() ? note : note + QStringLiteral("\n\n") + stderrText;
+}
+
+QString outputTooLargeText(qint64 limit)
+{
+	return QObject::tr("Too large to display: over the %1 limit.").arg(QLocale{}.formattedDataSize(limit, 0, QLocale::DataSizeTraditionalFormat));
 }
 
 namespace Vcs {

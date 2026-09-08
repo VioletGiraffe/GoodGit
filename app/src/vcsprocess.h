@@ -68,6 +68,9 @@ struct ProcessResult
 	[[nodiscard]] QString errorText() const;
 };
 
+// What errorText() says of OutputTooLarge, for a caller that applies the same limit to text it holds already
+[[nodiscard]] QString outputTooLargeText(qint64 limit);
+
 namespace Vcs {
 
 // Bounds the wait for a killed process to exit; it should be gone at once

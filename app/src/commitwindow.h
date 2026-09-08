@@ -2,6 +2,7 @@
 
 #include "changedfilesmodel.h"
 #include "repository.h"
+#include "unifieddiff.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QMainWindow>
@@ -202,7 +203,13 @@ private:
 
 	QPointer<HistoryWindow> _historyWindow; // at most one per repo window, raised again on a second click
 	Vcs::Query _diffQuery; // whatever fills the diff pane: a file's diff, or a submodule's incoming commits
-	Vcs::Query _wordPoolQuery;
+	// The working tree's whole diff, once per refresh: a row's diff is cut out of it, the message completion
+	// word pool reads it, and a block moved between files is found across it. Absent where the query failed
+	// or the diff passed its cap; a row is then diffed on its own.
+	std::optional<ChangeSetDiff> _changeSet;
+	Vcs::Query _changeSetQuery;
+	bool _changeSetPending = false; // the query is out: a row waits for it instead of being diffed on its own
+	bool _rowAwaitsChangeSet = false; // the row shown is waiting, so the set's arrival shows it
 	// Held for a whole writing flow, dialogs and the asynchronous reattach included, not just while a process
 	// runs: two flows would meet at index.lock, and the second would commit a pathspec the first already took
 	bool _mutationInFlight = false;

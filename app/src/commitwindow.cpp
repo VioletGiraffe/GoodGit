@@ -589,6 +589,22 @@ void CommitWindow::onRefreshed()
 		});
 	}
 
+	// Cancelled, or refreshes in quick succession would leave the set built by whichever finished last
+	_changeSetQuery.cancel();
+	_changeSet.reset();
+	_changeSetPending = true;
+	_changeSetQuery = _repo->workingTreeDiff(Settings::MaxChangeSetDiffBytes, this, [this](std::expected<QByteArray, QString> diff) {
+		_changeSetPending = false;
+		QStringList changedPaths;
+		for (const FileEntry& file : _repo->files())
+			changedPaths.push_back(file.path);
+		_messageEdit->setCompletionSources(changedPaths, diff.value_or(QByteArray{}));
+		if (diff)
+			_changeSet.emplace(QString::fromUtf8(*diff));
+		if (_rowAwaitsChangeSet)
+			showDiffForCurrentRow();
+	});
+
 	restoreSelectionByPath(selection);
 	// Even if the current row did not move: the list may have emptied, or the content changed underneath
 	showDiffForCurrentRow();
@@ -598,15 +614,6 @@ void CommitWindow::onRefreshed()
 		_stateWasRead = true;
 		restoreDraftIfParentUnchanged();
 	}
-
-	// Cancelled, or refreshes in quick succession would leave the pool built by whichever finished last
-	_wordPoolQuery.cancel();
-	_wordPoolQuery = _repo->diffAllChanges(this, [this](std::expected<QByteArray, QString> diff) {
-		QStringList changedPaths;
-		for (const FileEntry& file : _repo->files())
-			changedPaths.push_back(file.path);
-		_messageEdit->setCompletionSources(changedPaths, std::move(diff).value_or(QByteArray{}));
-	});
 }
 
 void CommitWindow::applyDefaultWindowSize()
@@ -1205,6 +1212,7 @@ void CommitWindow::closePushLogEntry(const ProcessResult& result)
 void CommitWindow::showDiffForCurrentRow()
 {
 	_diffQuery.cancel();
+	_rowAwaitsChangeSet = false;
 
 	const std::optional<FileEntry> current = currentEntry();
 	if (!current)
@@ -1237,14 +1245,27 @@ void CommitWindow::showDiffForCurrentRow()
 	}
 
 	const DiffPane::ItemInfo info{ entry.path, tr("HEAD %1 working tree").arg(QChar(0x2192)), workingTreeSizeLabel(absolutePath(entry)) };
+	const QString noContentText = tr("No content changes (only the mode or the line endings differ, or the file matches HEAD).");
 	_diffPane->showMessage(info, tr("Loading..."));
-	_diffQuery = _repo->diffFile(entry, Settings::maxShownDiffBytes(), this, [this, info](std::expected<QByteArray, QString> diff) {
+
+	if (const std::optional<int> section = _changeSet ? _changeSet->fileIndex(entry.path) : std::nullopt)
+	{
+		_diffPane->showSection(info, *_changeSet, *section, Settings::maxShownDiffBytes(), noContentText);
+		return;
+	}
+	if (_changeSetPending)
+	{
+		_rowAwaitsChangeSet = true;
+		return;
+	}
+
+	_diffQuery = _repo->diffFile(entry, Settings::maxShownDiffBytes(), this, [this, info, noContentText](std::expected<QByteArray, QString> diff) {
 		if (!diff)
 			_diffPane->showMessage(info, diff.error()); // an oversize diff fails here, never held whole
 		else if (diff->isEmpty())
-			_diffPane->showMessage(info, tr("No content changes (only the mode or the line endings differ, or the file matches HEAD)."));
+			_diffPane->showMessage(info, noContentText);
 		else
-			_diffPane->showDiff(info, QString::fromUtf8(*diff));
+			_diffPane->showDiff(info, parseUnifiedDiff(QString::fromUtf8(*diff)));
 	});
 }
 

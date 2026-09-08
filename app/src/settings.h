@@ -42,6 +42,10 @@ inline constexpr qlonglong MaxShownDiffBytesDefault = 2LL * 1024LL * 1024LL;
 	return QSettings{}.value(MaxShownDiffBytesKey, MaxShownDiffBytesDefault).toLongLong();
 }
 
+// A whole change's diff is held for cutting one file's section out of, and for finding blocks moved between
+// files. Above this it is not held, and each file is diffed on its own.
+inline constexpr qlonglong MaxChangeSetDiffBytes = 128LL * 1024LL * 1024LL;
+
 // The viewer window renders far more than the diff pane; this bounds what is held in memory, not what can be drawn
 inline constexpr const char* MaxViewedFileBytesKey = "MaxViewedFileBytes";
 inline constexpr qlonglong MaxViewedFileBytesDefault = 256LL * 1024LL * 1024LL;

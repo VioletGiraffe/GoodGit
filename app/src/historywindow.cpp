@@ -623,6 +623,9 @@ void HistoryWindow::showFilesForCurrentCommit()
 {
 	_filesQuery.cancel();
 	_fileCountsQuery.cancel();
+	_changeSetQuery.cancel();
+	_changeSet.reset();
+	_changeSetPending = false;
 
 	const QModelIndex current = _logView->currentIndex();
 	if (!current.isValid() || current.row() >= _logModel.rowCount())
@@ -669,12 +672,21 @@ void HistoryWindow::showFilesForCurrentCommit()
 	_fileCountsQuery = _repo->commitFileCounts(sha, this, [this](std::expected<std::map<QString, LineCounts>, QString> counts) {
 		_filesModel.setLineCounts(std::move(counts).value_or(std::map<QString, LineCounts>{}));
 	});
+	_changeSetPending = true;
+	_changeSetQuery = _repo->commitDiff(sha, Settings::MaxChangeSetDiffBytes, this, [this](std::expected<QByteArray, QString> diff) {
+		_changeSetPending = false;
+		if (diff)
+			_changeSet.emplace(QString::fromUtf8(*diff));
+		if (_fileAwaitsChangeSet)
+			showDiffForCurrentFile();
+	});
 }
 
 void HistoryWindow::showDiffForCurrentFile()
 {
 	_diffQuery.cancel();
 	_sizeQuery.cancel(); // its callback writes the header, which the next selection owns from here on
+	_fileAwaitsChangeSet = false;
 
 	const std::optional<CommitFileChange> currentFile = fileEntryAt(_filesView->currentSourceIndex());
 	const std::optional<CommitRecord> commit = currentCommit();
@@ -685,15 +697,26 @@ void HistoryWindow::showDiffForCurrentFile()
 	const QString sha = commit->sha;
 	_currentItem = { entry.path, shortSha(sha) };
 
+	const QString noContentText = tr("No content changes (only the mode or the line endings differ, or a rename with identical content).");
 	_diffPane->showMessage(_currentItem, tr("Loading..."));
-	_diffQuery = _repo->commitFileDiff(sha, entry, Settings::maxShownDiffBytes(), this, [this](std::expected<QByteArray, QString> diff) {
-		if (!diff)
-			_diffPane->showMessage(_currentItem, diff.error()); // an oversize diff fails here, never held whole
-		else if (diff->isEmpty())
-			_diffPane->showMessage(_currentItem, tr("No content changes (only the mode or the line endings differ, or a rename with identical content)."));
-		else
-			_diffPane->showDiff(_currentItem, QString::fromUtf8(*diff));
-	});
+
+	// A submodule row's diff is not the path's own, so the set never answers for it
+	const std::optional<int> section = !entry.isSubmodule && _changeSet ? _changeSet->fileIndex(entry.path) : std::nullopt;
+	if (section)
+		_diffPane->showSection(_currentItem, *_changeSet, *section, Settings::maxShownDiffBytes(), noContentText);
+	else if (!entry.isSubmodule && _changeSetPending)
+		_fileAwaitsChangeSet = true;
+	else
+	{
+		_diffQuery = _repo->commitFileDiff(sha, entry, Settings::maxShownDiffBytes(), this, [this, noContentText](std::expected<QByteArray, QString> diff) {
+			if (!diff)
+				_diffPane->showMessage(_currentItem, diff.error()); // an oversize diff fails here, never held whole
+			else if (diff->isEmpty())
+				_diffPane->showMessage(_currentItem, noContentText);
+			else
+				_diffPane->showDiff(_currentItem, parseUnifiedDiff(QString::fromUtf8(*diff)));
+		});
+	}
 
 	// A deleted file and a submodule pointer have no blob to size, and the query would only fail on them
 	if (entry.type != ChangeType::Deleted && !entry.isSubmodule)

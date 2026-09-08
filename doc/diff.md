@@ -18,5 +18,5 @@ The read-only view under the pane's header: added and removed lines banded to th
 
 ## `diffpane`
 
-The pane both windows show one file's text in: path and tag header over the view, with the hunk the view sits at named beside a step either way through the rest, within the one file shown. Three content kinds, since only the first is a diff: a diff, a file's own contents (numbered, undecorated), and a message - a placeholder, a failure, a commit message. Neither reads nor caps the text; the size limit travels into the read, so an oversize diff or file arrives as an ordinary failure and shows like any other
+The pane both windows show one file's text in: path and tag header over the view, with the hunk the view sits at named beside a step either way through the rest, within the one file shown. Three content kinds, since only the first is a diff: a diff, a file's own contents (numbered, undecorated), and a message - a placeholder, a failure, a commit message. Reads nothing: a diff arrives parsed, or as one file's section of a `ChangeSetDiff` the pane parses with the set's moves. The size limit travels into the read of a file's own diff, and a section is held to the same limit, so an oversize diff or file shows as an ordinary failure like any other
 

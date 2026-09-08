@@ -134,18 +134,19 @@ QString revsetOf(const std::vector<Hg::GrepMatch>& matches, int maxCommits)
 }
 
 // --git: names renames and binary files instead of printing every line as added.
+// -p: the enclosing function's name in the hunk header, as git prints it.
 // -Z (git's --ignore-cr-at-eol): whether a line-endings-only change shows is a display setting.
 // The line counts come from these same args, so they always match the shown diff.
 // Either way the row still commits its content verbatim.
 QStringList diffArgs()
 {
-	QStringList args = { QStringLiteral("diff"), QStringLiteral("--git") };
+	QStringList args = { QStringLiteral("diff"), QStringLiteral("--git"), QStringLiteral("-p") };
 	if (!QSettings{}.value(Settings::ShowLineEndingOnlyChangesKey, Settings::ShowLineEndingOnlyChangesDefault).toBool())
 		args << QStringLiteral("-Z");
 	return args;
 }
 
-// No context lines: for the word pool and for line counting
+// No context lines: for line counting
 QStringList contextFreeDiffArgs()
 {
 	QStringList args = diffArgs();
@@ -796,15 +797,16 @@ Vcs::Query HgRepository::diffFile(const FileEntry& entry, qint64 maxBytes, const
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}), maxBytes);
 }
 
-Vcs::Query HgRepository::diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone)
+Vcs::Query HgRepository::workingTreeDiff(qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
-	// hg has no --function-context: -p puts the enclosing function's name in the hunk header, and the wide
-	// fixed context stands in for its body
-	// -Z regardless of the display setting: a line-ending conversion would flood the word pool with every
-	// line of the file
-	QStringList args = { QStringLiteral("diff"), QStringLiteral("--git"), QStringLiteral("-Z"),
-		QStringLiteral("-p"), QStringLiteral("-U"), QStringLiteral("15") };
-	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}));
+	return runQuery(path(), diffArgs(), context, Vcs::answering(std::move(onDone), std::identity{}), maxBytes);
+}
+
+Vcs::Query HgRepository::commitDiff(const QString& sha, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone)
+{
+	QStringList args = diffArgs();
+	args << QStringLiteral("-c") << sha;
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), std::identity{}), maxBytes);
 }
 
 Vcs::Query HgRepository::commitLog(const LogQuery& query, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone)

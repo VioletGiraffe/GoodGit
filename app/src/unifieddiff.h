@@ -116,3 +116,7 @@ private:
 [[nodiscard]] ParsedDiff parseUnifiedDiff(QStringView diff);
 // One section, its moves those of the set that touch it
 [[nodiscard]] ParsedDiff parseUnifiedDiff(const ChangeSetDiff& set, int file);
+
+// Whether a diff carries a content change - a hunk, or a binary notice. A mode-only or a line-ending-only
+// change prints headers alone.
+[[nodiscard]] bool diffHasContent(QStringView diff);

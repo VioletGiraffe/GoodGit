@@ -562,3 +562,11 @@ ParsedDiff parseUnifiedDiff(const ChangeSetDiff& set, int file)
 
 	return render(scanDiff(set.fileDiff(file)), std::move(moves));
 }
+
+bool diffHasContent(QStringView diff)
+{
+	const auto hasLineStarting = [&](QLatin1String start) {
+		return diff.startsWith(start) || diff.contains(QLatin1Char('\n') + QString{ start });
+	};
+	return hasLineStarting(QLatin1String("@@")) || hasLineStarting(QLatin1String("Binary file")) || hasLineStarting(QLatin1String("GIT binary patch"));
+}

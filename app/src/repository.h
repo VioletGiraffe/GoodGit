@@ -201,8 +201,11 @@ public:
 	// One tracked change against the last commit. Untracked files are not asked of the backend: the window
 	// reads and shows the file itself.
 	virtual Vcs::Query diffFile(const FileEntry& entry, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) = 0;
-	// Every change in one diff, with no context lines; feeds the message completion word pool
-	virtual Vcs::Query diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone) = 0;
+	// Every tracked change against the last commit in one diff, each file's section as diffFile prints it,
+	// so ChangeSetDiff cuts out what the file's own query would answer. Also feeds the message completion word pool.
+	virtual Vcs::Query workingTreeDiff(qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) = 0;
+	// One commit's whole diff, each file's section as commitFileDiff prints it
+	virtual Vcs::Query commitDiff(const QString& sha, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) = 0;
 
 	// The parameters of one history view's walk
 	struct LogQuery

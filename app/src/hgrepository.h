@@ -51,7 +51,8 @@ public:
 	void localBranchExists(const QString& name, const QObject* context, std::function<void(bool)> onDone) override;
 
 	Vcs::Query diffFile(const FileEntry& entry, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) override;
-	Vcs::Query diffAllChanges(const QObject* context, Vcs::Answer<QByteArray> onDone) override;
+	Vcs::Query workingTreeDiff(qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) override;
+	Vcs::Query commitDiff(const QString& sha, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) override;
 
 	Vcs::Query commitLog(const LogQuery& query, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone) override;
 	Vcs::Query commitsAddingOrRemovingText(const LogQuery& query, const QObject* context, Vcs::Answer<QSet<QString>> onDone) override;

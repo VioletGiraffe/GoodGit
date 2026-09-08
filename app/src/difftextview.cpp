@@ -135,9 +135,24 @@ DiffTextView::DiffTextView(QWidget* parent) :
 	});
 }
 
-void DiffTextView::showDiff(const QString& text)
+void DiffTextView::showDiff(ParsedDiff parsed)
 {
-	setContent(text, Content::Diff);
+	resetContent(Content::Diff);
+	setPlainText(parsed.text);
+	_lines = std::move(parsed.lines);
+	_spans = std::move(parsed.spans);
+	for (int index = 0, count = int(_lines.size()); index < count; ++index)
+	{
+		const DiffLine& line = _lines[size_t(index)];
+		_maxOldLine = std::max(_maxOldLine, line.oldLine);
+		_maxNewLine = std::max(_maxNewLine, line.newLine);
+		if (line.kind == DiffLineKind::HunkHeader)
+			_hunkLines.push_back(index);
+	}
+	for (DiffMove& move : parsed.moves)
+		_moveMarks.push_back({ std::move(move) });
+	assignMoveLanes();
+	finishContent();
 }
 
 void DiffTextView::showFileText(const QString& text)
@@ -152,6 +167,29 @@ void DiffTextView::showMessage(const QString& text)
 
 void DiffTextView::setContent(const QString& text, Content content)
 {
+	assert(content != Content::Diff);
+	resetContent(content);
+
+	// A block ends at its terminator, so a trailing one would add an empty last block to number.
+	// QTextDocument reads a CRLF as one terminator, so both characters go.
+	QStringView body{ text };
+	if (body.endsWith(QLatin1Char('\n')))
+		body.chop(body.endsWith(QLatin1String("\r\n")) ? 2 : 1);
+	setPlainText(body.toString());
+
+	if (content == Content::FileText)
+	{
+		_maxNewLine = document()->blockCount();
+		_lines.reserve(size_t(_maxNewLine));
+		for (int number = 1; number <= _maxNewLine; ++number)
+			_lines.push_back(DiffLine{ DiffLineKind::Context, 0, number });
+	}
+
+	finishContent();
+}
+
+void DiffTextView::resetContent(Content content)
+{
 	_content = content;
 
 	// Cleared before the text changes, so a paint arriving in between indexes nothing
@@ -162,45 +200,11 @@ void DiffTextView::setContent(const QString& text, Content content)
 	_moveLaneCount = 0;
 	_maxOldLine = 0;
 	_maxNewLine = 0;
+}
 
-	if (content == Content::Diff)
-	{
-		// The lines shown are not the diff's own: an edit the parse could merge arrives as one line
-		ParsedDiff parsed = parseUnifiedDiff(text);
-		setPlainText(parsed.text);
-		_lines = std::move(parsed.lines);
-		_spans = std::move(parsed.spans);
-		for (int index = 0, count = int(_lines.size()); index < count; ++index)
-		{
-			const DiffLine& line = _lines[size_t(index)];
-			_maxOldLine = std::max(_maxOldLine, line.oldLine);
-			_maxNewLine = std::max(_maxNewLine, line.newLine);
-			if (line.kind == DiffLineKind::HunkHeader)
-				_hunkLines.push_back(index);
-		}
-		for (DiffMove& move : parsed.moves)
-			_moveMarks.push_back({ std::move(move) });
-		assignMoveLanes();
-	}
-	else
-	{
-		// A block ends at its terminator, so a trailing one would add an empty last block to number.
-		// QTextDocument reads a CRLF as one terminator, so both characters go.
-		QStringView body{ text };
-		if (body.endsWith(QLatin1Char('\n')))
-			body.chop(body.endsWith(QLatin1String("\r\n")) ? 2 : 1);
-		setPlainText(body.toString());
-
-		if (content == Content::FileText)
-		{
-			_maxNewLine = document()->blockCount();
-			_lines.reserve(size_t(_maxNewLine));
-			for (int number = 1; number <= _maxNewLine; ++number)
-				_lines.push_back(DiffLine{ DiffLineKind::Context, 0, number });
-		}
-	}
-
-	assert(content == Content::Message ? _lines.empty() : _lines.size() == size_t(document()->blockCount()));
+void DiffTextView::finishContent()
+{
+	assert(_content == Content::Message ? _lines.empty() : _lines.size() == size_t(document()->blockCount()));
 
 	// setPlainText seeds the whole text with the char format at the caret: a line applyDiffFormats leaves alone would keep it
 	QTextCursor cursor{ document() };

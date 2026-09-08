@@ -362,6 +362,16 @@ TEST_CASE("A block moved between two files is a move in either, its far end name
 	}
 }
 
+TEST_CASE("A diff has content where it holds a hunk or a binary notice", "[unifieddiff]")
+{
+	CHECK(diffHasContent(joined({ "diff --git a/f b/f", "--- a/f", "+++ b/f", "@@ -1 +1 @@", "-x", "+y" })));
+	CHECK(diffHasContent(joined({ "diff --git a/f b/f", "index 1..2 100644", "Binary files a/f and b/f differ" })));
+	CHECK(diffHasContent(joined({ "diff --git a/f b/f", "index 1..2 100644", "GIT binary patch", "literal 3" })));
+	CHECK(diffHasContent(joined({ "@@ -1 +1 @@", "-x", "+y" })));
+	CHECK(!diffHasContent(joined({ "diff --git a/f b/f", "old mode 100644", "new mode 100755" })));
+	CHECK(!diffHasContent(QString{}));
+}
+
 TEST_CASE("A section parsed through its set shows as it does alone, its moves aside", "[unifieddiff]")
 {
 	const ChangeSetDiff set{ fixture("moved_between_files.diff") };
