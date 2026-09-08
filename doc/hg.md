@@ -11,6 +11,10 @@ Verified against Mercurial 7.2.2 on Windows. Version floors are named where one 
 ## Invocation
 
 - `HGPLAIN=1` removes localisation, user aliases and defaults rewriting the command.
+- **hg line-buffers stdout only when it is a tty.** Into a pipe its status text waits in an 8 KB buffer until
+  the process exits, so a long command's log arrives all at once. Only stderr is flushed per write.
+- The progress meter is the exception: it prints to stderr, and needs both `HGPLAINEXCEPT=progress` (HGPLAIN
+  suppresses it) and `progress.assume-tty=True` (a pipe is not a tty).
 - The user's extensions must **not** be disabled: a repository may need one (largefiles, lfs) to be readable
   at all.
 - Every invocation pays Python startup, so a refresh batches its queries rather than chaining them.
@@ -172,6 +176,8 @@ touching the user's configuration. Which tool `extdiff` starts is the user's `[e
 - The hello block is `capabilities: ... runcommand ...` then `encoding: ...`.
 - An input request's length field is how much input is wanted; no payload follows it.
 - Arguments are NUL-separated bytes, the same ones hg would read from a real command line.
+- Every frame is flushed as it is written, so output arrives live here even though the same command into a
+  pipe would batch it. A subprocess hg spawns still inherits the real stderr, which is the server's own.
 - Without `-R` a command runs on the bound repository whatever the cwd; without `--cwd` relative paths
   resolve against the server's cwd.
 - A desynced stream is only catchable at the frame header: past it, a garbage length is waited on forever by

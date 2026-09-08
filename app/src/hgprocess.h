@@ -7,6 +7,7 @@
 // Every hg invocation goes through here. The job contract is Vcs::Job's, whichever transport carries it.
 // Invariants applied to every call:
 //   HGPLAIN=1
+//   HGPLAINEXCEPT=progress: a meter still needs progress.assume-tty, which only the push passes
 //   --config ui.interactive=False: a prompt nobody would see fails instead of hanging
 //   --config diff.nobinary=True: no diff carries a binary file's contents
 // The user's extensions stay enabled, like their hooks. A broken extension prints to stderr when the
@@ -14,7 +15,8 @@
 namespace Hg {
 
 // Server is the default: a warm command server skips the interpreter startup every fresh process pays.
-// Process is for a command that must own one: push streams its progress and must be kill-cancellable.
+// Process is for a command that must own one: a push runs for minutes over the network, and neither its
+// duration nor its failures may reach the shared servers.
 enum class Transport : uint8_t { Server, Process };
 
 Vcs::Job* run(const QString& workDir, QStringList args, const QObject* context, Vcs::Callback callback,

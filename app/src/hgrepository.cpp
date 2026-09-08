@@ -644,9 +644,10 @@ void HgRepository::planPush(Vcs::Answer<std::vector<PushStep>> onDone)
 
 Vcs::Job* HgRepository::runPushStep(const PushStep& step, bool /*setUpstream*/, Vcs::Callback onDone)
 {
-	// A separate process: the push log streams its output, and cancelling mid-transfer must kill it
-	return Hg::run(step.workDir, { QStringLiteral("push"), QStringLiteral("-r"), QStringLiteral(".") }, this,
-		tolerantOfEmptyResult(std::move(onDone)), {}, Hg::Transport::Process);
+	// Its own process: a push must not run on a shared server (see Hg::Transport)
+	// The meter is all the log gets while the push runs: hg's status text sits in its stdout buffer until exit
+	return Hg::run(step.workDir, { QStringLiteral("--config"), QStringLiteral("progress.assume-tty=True"), QStringLiteral("push"),
+		QStringLiteral("-r"), QStringLiteral(".") }, this, tolerantOfEmptyResult(std::move(onDone)), {}, Hg::Transport::Process);
 }
 
 std::optional<QString> HgRepository::missingUpstreamName(const PushStep& /*step*/, const ProcessResult& /*failure*/) const
