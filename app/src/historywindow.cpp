@@ -165,6 +165,17 @@ void HistoryWindow::buildUi()
 	filesLayout->addWidget(_filesView, 1);
 
 	_diffPane = new DiffPane;
+	// The other file's row shows its section at once, from the set the end came from, so the scroll lands
+	connect(_diffPane, &DiffPane::foreignEndActivated, this, [this](const ForeignEnd& end) {
+		for (int row = 0; row < _filesModel.rowCount(); ++row)
+		{
+			if (_filesModel.entryAt(row).path != end.path)
+				continue;
+			_filesView->setSelectedSourceRows({ row }, row);
+			_diffPane->scrollDiffLineToTop(end.diffLine);
+			return;
+		}
+	});
 
 	_detailSplitter = new QSplitter(Qt::Horizontal);
 	_detailSplitter->setChildrenCollapsible(false);

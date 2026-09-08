@@ -54,6 +54,7 @@ DiffPane::DiffPane(QWidget* parent) :
 	_view = new DiffTextView;
 	_view->setObjectName(QStringLiteral("diffView"));
 	layout->addWidget(_view, 1);
+	connect(_view, &DiffTextView::foreignEndActivated, this, &DiffPane::foreignEndActivated);
 
 	connect(_view, &QPlainTextEdit::updateRequest, this, &DiffPane::updateHunkNavigator);
 	updateHunkNavigator();
@@ -75,6 +76,11 @@ void DiffPane::showDiff(const ItemInfo& item, ParsedDiff parsed)
 	setHeader(item);
 	_view->showDiff(std::move(parsed));
 	updateHunkNavigator();
+}
+
+void DiffPane::scrollDiffLineToTop(int diffLine)
+{
+	_view->scrollDiffLineToTop(diffLine);
 }
 
 void DiffPane::showSection(const ItemInfo& item, const ChangeSetDiff& set, int file, qint64 maxBytes, const QString& noContentText)

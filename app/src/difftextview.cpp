@@ -5,6 +5,7 @@
 
 DISABLE_COMPILER_WARNINGS
 #include <QEvent>
+#include <QHelpEvent>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
@@ -13,10 +14,12 @@ DISABLE_COMPILER_WARNINGS
 #include <QScrollBar>
 #include <QTextBlock>
 #include <QTextLayout>
+#include <QToolTip>
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 #include <assert.h>
+#include <limits.h>
 
 // Padding outside the first and last number column
 static constexpr int GutterOuterMargin = 6;
@@ -27,6 +30,8 @@ static constexpr int MoveLanePadding = 8;
 // Between a bracket's end and the arrowhead next to it: the arriving one close in, the departing one set apart
 static constexpr int ArrivingChevronGap = 2;
 static constexpr int DepartingChevronGap = 6;
+// How far the stub toward another file runs past its arrowhead
+static constexpr int ForeignStubTail = 3;
 
 // The strike through removed text follows the font's height, floored so it stays a line at small sizes
 static constexpr qreal StrikeThicknessDivisor = 9.0;
@@ -60,7 +65,7 @@ protected:
 
 	void mouseMoveEvent(QMouseEvent* event) override
 	{
-		if (_view->moveTargetAt(event->pos()) >= 0)
+		if (_view->moveMarkAt(event->pos()))
 			setCursor(Qt::PointingHandCursor);
 		else
 			unsetCursor();
@@ -70,8 +75,23 @@ protected:
 	{
 		if (event->button() != Qt::LeftButton)
 			return;
-		if (const int target = _view->moveTargetAt(event->pos()); target >= 0)
-			_view->scrollLineToTop(target);
+		if (const std::optional<DiffTextView::MarkHit> hit = _view->moveMarkAt(event->pos()))
+			_view->followMoveMark(*hit);
+	}
+
+	bool event(QEvent* event) override
+	{
+		if (event->type() != QEvent::ToolTip)
+			return QWidget::event(event);
+
+		const auto* help = static_cast<QHelpEvent*>(event);
+		const std::optional<DiffTextView::MarkHit> hit = _view->moveMarkAt(help->pos());
+		const QString text = hit ? _view->moveMarkTooltip(*hit) : QString{};
+		if (text.isEmpty())
+			QToolTip::hideText();
+		else
+			QToolTip::showText(help->globalPos(), text, this);
+		return true;
 	}
 
 private:
@@ -141,6 +161,7 @@ void DiffTextView::showDiff(ParsedDiff parsed)
 	setPlainText(parsed.text);
 	_lines = std::move(parsed.lines);
 	_spans = std::move(parsed.spans);
+	_shownLine = std::move(parsed.shownLine);
 	for (int index = 0, count = int(_lines.size()); index < count; ++index)
 	{
 		const DiffLine& line = _lines[size_t(index)];
@@ -197,6 +218,7 @@ void DiffTextView::resetContent(Content content)
 	_spans.clear();
 	_hunkLines.clear();
 	_moveMarks.clear();
+	_shownLine.clear();
 	_moveLaneCount = 0;
 	_maxOldLine = 0;
 	_maxNewLine = 0;
@@ -507,48 +529,91 @@ int DiffTextView::lineAt(int y) const
 	return -1;
 }
 
-int DiffTextView::moveTargetAt(const QPoint& gutterPos) const
+std::optional<DiffTextView::MarkHit> DiffTextView::moveMarkAt(const QPoint& gutterPos) const
 {
 	// The gutter and the viewport share their top edge, so a height in one is the same line in the other
 	const int columnLeft = _gutterWidth - GutterOuterMargin - _moveLaneCount * _moveLaneWidth;
 	if (_moveMarks.empty() || gutterPos.x() < columnLeft)
-		return -1;
+		return std::nullopt;
 	const int lane = (gutterPos.x() - columnLeft) / _moveLaneWidth;
 	const int line = lineAt(gutterPos.y());
 	if (lane >= _moveLaneCount || line < 0)
-		return -1;
+		return std::nullopt;
 
 	for (const MoveMark& mark : _moveMarks)
 	{
 		if (mark.lane != lane)
 			continue;
-		const DiffMove& block = mark.move;
-		if (line >= block.removedFirst && line < block.removedFirst + block.removedCount)
-			return block.addedFirst;
-		if (line >= block.addedFirst && line < block.addedFirst + block.addedCount)
-			return block.removedFirst;
+		const DiffMove& move = mark.move;
+		if (line >= move.removedFirst && line < move.removedFirst + move.removedCount)
+			return MarkHit{ &move, true };
+		if (line >= move.addedFirst && line < move.addedFirst + move.addedCount)
+			return MarkHit{ &move, false };
 	}
-	return -1;
+	return std::nullopt;
+}
+
+void DiffTextView::followMoveMark(const MarkHit& hit)
+{
+	const DiffMove& move = *hit.move;
+	if (move.foreign)
+	{
+		// A copy: a receiver replaces the content, and the marks with it, before it is done reading the end
+		const ForeignEnd end = *move.foreign;
+		emit foreignEndActivated(end);
+	}
+	else
+		scrollLineToTop(hit.removedEnd ? move.addedFirst : move.removedFirst);
+}
+
+QString DiffTextView::moveMarkTooltip(const MarkHit& hit) const
+{
+	const DiffMove& move = *hit.move;
+	if (!move.foreign)
+		return {};
+	return (hit.removedEnd ? tr("Moved to %1") : tr("Moved from %1")).arg(move.foreign->path);
+}
+
+void DiffTextView::scrollDiffLineToTop(int diffLine)
+{
+	if (diffLine >= 0 && size_t(diffLine) < _shownLine.size() && _shownLine[size_t(diffLine)] >= 0)
+		scrollLineToTop(_shownLine[size_t(diffLine)]);
 }
 
 void DiffTextView::assignMoveLanes()
 {
-	// Marks that overlap on screen take separate lanes, the lowest free one each, in order of where they start
-	const auto start = [](const MoveMark& mark) { return std::min(mark.move.removedFirst, mark.move.addedFirst); };
-	const auto end = [](const MoveMark& mark) {
-		return std::max(mark.move.removedFirst + mark.move.removedCount, mark.move.addedFirst + mark.move.addedCount);
+	// The lines a move's marks cover: its ranges here, and one more past the end a stub to another file leaves from
+	const auto extent = [](const MoveMark& mark) {
+		const DiffMove& move = mark.move;
+		int start = INT_MAX, end = 0;
+		if (move.removedCount > 0)
+		{
+			start = std::min(start, move.removedFirst);
+			end = std::max(end, move.removedFirst + move.removedCount);
+		}
+		if (move.addedCount > 0)
+		{
+			start = std::min(start, move.addedFirst);
+			end = std::max(end, move.addedFirst + move.addedCount);
+		}
+		if (move.foreign)
+			move.foreign->below ? ++end : --start;
+		return std::pair{ start, end };
 	};
-	std::sort(_moveMarks.begin(), _moveMarks.end(), [&](const MoveMark& a, const MoveMark& b) { return start(a) < start(b); });
+
+	// Marks that overlap on screen take separate lanes, the lowest free one each, in order of where they start
+	std::sort(_moveMarks.begin(), _moveMarks.end(), [&](const MoveMark& a, const MoveMark& b) { return extent(a).first < extent(b).first; });
 
 	std::vector<int> laneEnds; // the first line past the last mark in each lane
 	for (MoveMark& mark : _moveMarks)
 	{
+		const auto [start, end] = extent(mark);
 		size_t lane = 0;
-		while (lane < laneEnds.size() && laneEnds[lane] > start(mark))
+		while (lane < laneEnds.size() && laneEnds[lane] > start)
 			++lane;
 		if (lane == laneEnds.size())
 			laneEnds.push_back(0);
-		laneEnds[lane] = end(mark);
+		laneEnds[lane] = end;
 		mark.lane = int(lane);
 	}
 	_moveLaneCount = int(laneEnds.size());
@@ -580,52 +645,87 @@ void DiffTextView::paintMoveMarks(QPainter& painter, const QRect& clip)
 		painter.drawLine(QPointF(x, top + 1), QPointF(x + tick, top + 1));
 		painter.drawLine(QPointF(x, bottom - 1), QPointF(x + tick, bottom - 1));
 	};
+	const qreal chevronHeight = chevronHalfWidth;
 	const auto drawChevron = [&](int x, qreal baseY, qreal apexY) {
 		painter.drawPolygon(QPolygonF{ QPointF(x - chevronHalfWidth, baseY), QPointF(x + chevronHalfWidth, baseY), QPointF(x, apexY) });
 	};
+	// A chevron past a bracket's end at `edgeY`, `gap` away from it, pointing the way the block went
+	const auto drawChevronBelow = [&](int x, qreal edgeY, int gap, bool pointsDown) {
+		const qreal near = edgeY + gap, far = near + chevronHeight;
+		drawChevron(x, pointsDown ? near : far, pointsDown ? far : near);
+	};
+	const auto drawChevronAbove = [&](int x, qreal edgeY, int gap, bool pointsDown) {
+		const qreal near = edgeY - gap, far = near - chevronHeight;
+		drawChevron(x, pointsDown ? far : near, pointsDown ? near : far);
+	};
+	// Where a stub toward another file ends: past its chevron by the tail
+	const qreal stubLength = DepartingChevronGap + chevronHeight + ForeignStubTail;
 
 	const Theme& theme = activeTheme();
 	for (const MoveMark& mark : _moveMarks)
 	{
-		const DiffMove& block = mark.move;
-		const bool movedDown = block.addedFirst > block.removedFirst;
-		const int upperFirst = movedDown ? block.removedFirst : block.addedFirst;
-		const int upperCount = movedDown ? block.removedCount : block.addedCount;
-		const int lowerFirst = movedDown ? block.addedFirst : block.removedFirst;
-		const int lowerCount = movedDown ? block.addedCount : block.removedCount;
-		const qreal upperTop = topOf(upperFirst), upperBottom = bottomOf(upperFirst + upperCount - 1);
-		const qreal lowerTop = topOf(lowerFirst), lowerBottom = bottomOf(lowerFirst + lowerCount - 1);
-		if (lowerBottom < clip.top() || upperTop > clip.bottom())
-			continue;
-
-		const QColor color = theme.graphLanes[size_t(block.group) % theme.graphLanes.size()];
+		const DiffMove& move = mark.move;
+		const QColor color = theme.graphLanes[size_t(move.group) % theme.graphLanes.size()];
 		const int spineX = columnLeft + mark.lane * _moveLaneWidth + 1;
 		const int lineX = spineX + tick / 2; // the line and its arrowheads run inside the bracket, centered under its strokes
+
+		if (!move.foreign)
+		{
+			const bool movedDown = move.addedFirst > move.removedFirst;
+			const int upperFirst = movedDown ? move.removedFirst : move.addedFirst;
+			const int upperCount = movedDown ? move.removedCount : move.addedCount;
+			const int lowerFirst = movedDown ? move.addedFirst : move.removedFirst;
+			const int lowerCount = movedDown ? move.addedCount : move.removedCount;
+			const qreal upperTop = topOf(upperFirst), upperBottom = bottomOf(upperFirst + upperCount - 1);
+			const qreal lowerTop = topOf(lowerFirst), lowerBottom = bottomOf(lowerFirst + lowerCount - 1);
+			if (lowerBottom < clip.top() || upperTop > clip.bottom())
+				continue;
+
+			painter.setRenderHint(QPainter::Antialiasing, false);
+			painter.setBrush(Qt::NoBrush);
+			painter.setPen(QPen{ color, 1 });
+			painter.drawLine(QPointF(lineX, upperBottom), QPointF(lineX, lowerTop));
+			painter.setPen(QPen{ color, 2 });
+			drawBracket(spineX, upperTop, upperBottom);
+			drawBracket(spineX, lowerTop, lowerBottom);
+
+			// An arrowhead at each end of the line between the brackets, both pointing the way the block went
+			painter.setRenderHint(QPainter::Antialiasing, true);
+			painter.setPen(Qt::NoPen);
+			painter.setBrush(color);
+			drawChevronBelow(lineX, upperBottom, movedDown ? DepartingChevronGap : ArrivingChevronGap, movedDown);
+			drawChevronAbove(lineX, lowerTop, movedDown ? ArrivingChevronGap : DepartingChevronGap, movedDown);
+			continue;
+		}
+
+		// The one place here bracketed, with a stub toward the other file - below or above, as it comes after
+		// or before this one - and an arrowhead pointing the way the block went: away for a departure, in for an arrival
+		const bool departed = move.removedCount > 0;
+		const int first = departed ? move.removedFirst : move.addedFirst;
+		const int count = departed ? move.removedCount : move.addedCount;
+		const qreal top = topOf(first), bottom = bottomOf(first + count - 1);
+		if (bottom + stubLength < clip.top() || top - stubLength > clip.bottom())
+			continue;
+
+		const bool below = move.foreign->below;
+		const bool movedDown = departed == below;
+		const int gap = departed ? DepartingChevronGap : ArrivingChevronGap;
+		const qreal edgeY = below ? bottom : top;
+		const qreal stubEnd = below ? bottom + stubLength : top - stubLength;
 
 		painter.setRenderHint(QPainter::Antialiasing, false);
 		painter.setBrush(Qt::NoBrush);
 		painter.setPen(QPen{ color, 1 });
-		painter.drawLine(QPointF(lineX, upperBottom), QPointF(lineX, lowerTop));
+		painter.drawLine(QPointF(lineX, edgeY), QPointF(lineX, stubEnd));
 		painter.setPen(QPen{ color, 2 });
-		drawBracket(spineX, upperTop, upperBottom);
-		drawBracket(spineX, lowerTop, lowerBottom);
+		drawBracket(spineX, top, bottom);
 
-		// An arrowhead at each end of the line between the brackets, both pointing the way the block went
 		painter.setRenderHint(QPainter::Antialiasing, true);
 		painter.setPen(Qt::NoPen);
 		painter.setBrush(color);
-		const qreal chevronHeight = chevronHalfWidth;
-		const int upperGap = movedDown ? DepartingChevronGap : ArrivingChevronGap;
-		const int lowerGap = movedDown ? ArrivingChevronGap : DepartingChevronGap;
-		if (movedDown)
-		{
-			drawChevron(lineX, upperBottom + upperGap, upperBottom + upperGap + chevronHeight);
-			drawChevron(lineX, lowerTop - lowerGap - chevronHeight, lowerTop - lowerGap);
-		}
+		if (below)
+			drawChevronBelow(lineX, edgeY, gap, movedDown);
 		else
-		{
-			drawChevron(lineX, upperBottom + upperGap + chevronHeight, upperBottom + upperGap);
-			drawChevron(lineX, lowerTop - lowerGap, lowerTop - lowerGap - chevronHeight);
-		}
+			drawChevronAbove(lineX, edgeY, gap, movedDown);
 	}
 }

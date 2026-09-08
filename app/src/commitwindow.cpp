@@ -408,6 +408,11 @@ QWidget* CommitWindow::buildRightPane()
 	rightLayout->setSpacing(0);
 	_diffPane = new DiffPane;
 	rightLayout->addWidget(_diffPane, 1);
+	// The other file's row shows its section at once, from the set the end came from, so the scroll lands
+	connect(_diffPane, &DiffPane::foreignEndActivated, this, [this](const ForeignEnd& end) {
+		restoreSelectionByPath({ { end.path }, end.path });
+		_diffPane->scrollDiffLineToTop(end.diffLine);
+	});
 	_pushLogPane = buildPushLogPane();
 	rightLayout->addWidget(_pushLogPane);
 	return rightPane;

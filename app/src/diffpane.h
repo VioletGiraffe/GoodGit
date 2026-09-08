@@ -12,6 +12,7 @@ class QPushButton;
 class CLabelElided;
 class ChangeSetDiff;
 class DiffTextView;
+struct ForeignEnd;
 struct ParsedDiff;
 
 // The unit format every header states a size in
@@ -21,6 +22,8 @@ struct ParsedDiff;
 // nothing; the caller does, and caps what it reads.
 class DiffPane final : public QWidget
 {
+	Q_OBJECT
+
 public:
 	// What the header states about the item shown. Every field may be empty.
 	struct ItemInfo
@@ -45,6 +48,13 @@ public:
 
 	// Restates the header over the content already shown, for a field that arrives after it
 	void setHeader(const ItemInfo& item);
+
+	// A line of the diff shown, as ForeignEnd::diffLine names one in the file it points into
+	void scrollDiffLineToTop(int diffLine);
+
+signals:
+	// A click on the mark of a block moved to or from another file: the window owning the file list shows that file
+	void foreignEndActivated(const ForeignEnd& end);
 
 private:
 	[[nodiscard]] QWidget* buildHunkNavigator();

@@ -6,6 +6,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QPlainTextEdit>
 RESTORE_COMPILER_WARNINGS
 
+#include <optional>
 #include <stdint.h>
 #include <vector>
 
@@ -18,8 +19,9 @@ class QPaintEvent;
 //             and a gutter carrying both files' line numbers. A moved block is banded in the rename color
 //             instead, the copy it left fainter with its text dimmed, and has both its places bracketed in
 //             the gutter and joined by a line with arrowheads the way it went, one color per move; a click
-//             on either bracket brings the other end to the top. An edit on the way is marked on the added
-//             copy, as the text it put in.
+//             on either bracket brings the other end to the top. A block moved to or from another file has
+//             the one place here bracketed, with a stub and an arrowhead toward that file, which a tooltip
+//             names and a click announces. An edit on the way is marked on the added copy, as the text it put in.
 //   file    - a file's own contents: one gutter column, no diff decoration
 //   message - prose, such as a placeholder or an error: no gutter, no decoration
 //
@@ -38,6 +40,8 @@ class QPaintEvent;
 //   - Numbers and formats are computed once per content, over the whole text: the text is never edited.
 class DiffTextView final : public QPlainTextEdit
 {
+	Q_OBJECT
+
 public:
 	explicit DiffTextView(QWidget* parent = nullptr);
 
@@ -62,11 +66,25 @@ public:
 	void goToNextHunk();
 
 	void scrollLineToTop(int line);
+	// A line of the diff read, as ForeignEnd::diffLine names one. Does nothing for a line not shown.
+	void scrollDiffLineToTop(int diffLine);
 
 	// Called by the gutter widget, which owns nothing but its paint and mouse events
 	void paintGutter(QPaintEvent* event);
-	// The line a click at `gutterPos` jumps to - a move's other end, from the bracket at either - or -1
-	[[nodiscard]] int moveTargetAt(const QPoint& gutterPos) const;
+	// A move's mark under a gutter position: the move, and which of its two ends the bracket there is
+	struct MarkHit
+	{
+		const DiffMove* move = nullptr;
+		bool removedEnd = false;
+	};
+	[[nodiscard]] std::optional<MarkHit> moveMarkAt(const QPoint& gutterPos) const;
+	// Brings the mark's other end to the top, or emits foreignEndActivated where that end is in another file
+	void followMoveMark(const MarkHit& hit);
+	// Names the other file, where the mark's other end is in one; empty otherwise
+	[[nodiscard]] QString moveMarkTooltip(const MarkHit& hit) const;
+
+signals:
+	void foreignEndActivated(const ForeignEnd& end);
 
 protected:
 	void paintEvent(QPaintEvent* event) override;
@@ -101,6 +119,7 @@ private:
 	std::vector<DiffSpan> _spans;       // ascending by line, so the formatting pass walks it in step
 	std::vector<int> _hunkLines;        // the line each hunk header is on, ascending
 	std::vector<MoveMark> _moveMarks;   // ascending by the first line of either place
+	std::vector<int> _shownLine;        // ParsedDiff::shownLine of the diff shown, empty for the other kinds
 	Content _content = Content::Message;
 	int _maxOldLine = 0; // the widest number each column has to fit
 	int _maxNewLine = 0;

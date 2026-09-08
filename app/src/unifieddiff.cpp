@@ -521,8 +521,9 @@ ParsedDiff parseUnifiedDiff(const ChangeSetDiff& set, int file)
 	const ChangeSetDiff::File& here = set._files[size_t(file)];
 	const auto inThisFile = [&](int line) { return line >= here.firstLine && line < here.firstLine + here.lineCount; };
 	const auto foreignEnd = [&](int line) {
-		const ChangeSetDiff::File& there = set._files[size_t(set.fileOfLine(line))];
-		return ForeignEnd{ there.path, line - there.firstLine };
+		const int thereIndex = set.fileOfLine(line);
+		const ChangeSetDiff::File& there = set._files[size_t(thereIndex)];
+		return ForeignEnd{ there.path, line - there.firstLine, thereIndex > file };
 	};
 
 	std::vector<FileMove> moves;

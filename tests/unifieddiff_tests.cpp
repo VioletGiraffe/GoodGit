@@ -329,6 +329,7 @@ TEST_CASE("A block moved between two files is a move in either, its far end name
 		REQUIRE(move.foreign);
 		CHECK(move.foreign->path == "src/beta.cpp");
 		CHECK(move.foreign->diffLine == 7);
+		CHECK(move.foreign->below);
 		for (size_t line = 0; line < parsed.lines.size(); ++line)
 			CHECK(parsed.lines[line].moved == (line >= 7 && line < 11));
 		CHECK(parsed.spans.empty()); // the edit is marked where the block went
@@ -346,6 +347,7 @@ TEST_CASE("A block moved between two files is a move in either, its far end name
 		REQUIRE(move.foreign);
 		CHECK(move.foreign->path == "src/alpha.cpp");
 		CHECK(move.foreign->diffLine == 7);
+		CHECK(!move.foreign->below);
 		CHECK(parsed.shownLine[7] == 7);
 		REQUIRE(parsed.spans.size() == 1);
 		CHECK(parsed.spans[0].line == 8);

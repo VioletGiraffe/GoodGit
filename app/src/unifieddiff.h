@@ -56,6 +56,7 @@ struct ForeignEnd
 {
 	QString path;     // the other file, as ChangeSetDiff keys it
 	int diffLine = 0; // the first line of the range there, in that file's own diff; its ParsedDiff::shownLine maps it
+	bool below = false; // the other file comes after this one in the change set
 };
 
 // A move as one file's view has it, in shown lines. A range in another file is empty here, and `foreign`
