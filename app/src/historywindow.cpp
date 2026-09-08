@@ -341,6 +341,9 @@ void HistoryWindow::reload()
 	_logQuery.cancel(); // including a pending full-depth phase
 	_pickaxeQuery.cancel();
 
+	// The listing is replaced wholesale, dropping the selection with it; the row is found again by its sha
+	_reselectSha = selectedSha();
+
 	refreshUnpushedMarks();
 	refreshCurrentCommitMark();
 	_logLoaded = false;
@@ -412,8 +415,13 @@ void HistoryWindow::loadRemainingCommits()
 		_logCapped = int(commits.size()) >= _query.maxCommits;
 		_loadMoreButton->setVisible(_logCapped);
 
+		// Read before the extension, which may fall back to a reset that drops the selection
+		const QString selected = selectedSha();
 		if (!_logModel.extendCommits(std::move(commits)))
-			selectLoadedCommit(); // the extension fell back to a reset, which dropped the selection
+		{
+			_reselectSha = selected;
+			selectLoadedCommit();
+		}
 		else if (!_revealSha.isEmpty())
 			selectLoadedCommit(); // a reveal the first batch missed; otherwise the user's selection stands
 		updateCountLabel();
@@ -432,14 +440,19 @@ void HistoryWindow::revealCommit(const QString& sha, RevealMiss onMiss)
 
 void HistoryWindow::selectLoadedCommit()
 {
+	const auto selectRow = [this](int row) {
+		const QModelIndex index = _logModel.index(row, CommitLogModel::CommitColumn);
+		_logView->setCurrentIndex(index); // updates the panes below through currentChanged
+		_logView->scrollTo(index, QAbstractItemView::PositionAtCenter);
+	};
+
 	if (!_revealSha.isEmpty())
 	{
 		if (const int row = _logModel.rowOfSha(_revealSha); row >= 0)
 		{
-			const QModelIndex index = _logModel.index(row, CommitLogModel::CommitColumn);
 			_revealSha.clear();
-			_logView->setCurrentIndex(index); // updates the panes below through currentChanged
-			_logView->scrollTo(index, QAbstractItemView::PositionAtCenter);
+			_reselectSha.clear(); // the reveal outranks the row the reload replaced
+			selectRow(row);
 			return;
 		}
 		if (_fullLoadPending)
@@ -456,6 +469,18 @@ void HistoryWindow::selectLoadedCommit()
 		_missedRevealSha = _revealSha;
 		_revealSha.clear();
 		updateCountLabel();
+	}
+
+	if (!_reselectSha.isEmpty())
+	{
+		// Absent where the commit no longer shows: undone, or hidden by the active search
+		const int row = _logModel.rowOfSha(_reselectSha);
+		_reselectSha.clear();
+		if (row >= 0)
+		{
+			selectRow(row);
+			return;
+		}
 	}
 
 	// The newest row stands in where a reset left no selection
@@ -498,6 +523,12 @@ std::optional<CommitRecord> HistoryWindow::currentCommit() const
 	if (!current.isValid() || current.row() >= _logModel.rowCount())
 		return {};
 	return _logModel.commitAt(current.row());
+}
+
+QString HistoryWindow::selectedSha() const
+{
+	const std::optional<CommitRecord> commit = currentCommit();
+	return commit ? commit->sha : QString{};
 }
 
 void HistoryWindow::openSubmoduleHistory(const CommitFileChange& entry)

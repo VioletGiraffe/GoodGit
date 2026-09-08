@@ -52,7 +52,7 @@ public:
 	// ReloadOnce applies only where the listing predates the call: one still loading is already current.
 	void revealCommit(const QString& sha, RevealMiss onMiss = RevealMiss::Report);
 
-	// Re-runs the log query from scratch
+	// Re-runs the log query from scratch, returning to the commit the view was on
 	void reload();
 	// Re-reads which commits are unpushed, leaving the list and the selection alone
 	void refreshUnpushedMarks();
@@ -84,11 +84,13 @@ private:
 	[[nodiscard]] std::optional<CommitFileChange> fileEntryAt(const QModelIndex& sourceIndex) const;
 	// The commit whose files are listed; absent while none is selected
 	[[nodiscard]] std::optional<CommitRecord> currentCommit() const;
+	// Its sha, empty while no row is current. Not the model's current sha, which is the checked-out commit.
+	[[nodiscard]] QString selectedSha() const;
 	void openSubmoduleHistory(const CommitFileChange& entry);
 	// The same walk at the full _query.maxCommits, extending the shown batch in place: a cold open's second
 	// phase, and every Load more
 	void loadRemainingCommits();
-	// Selects the commit revealCommit() asked for, or the newest row where nothing is selected
+	// Selects the commit revealCommit() asked for, the one a reload replaced, or the newest row
 	void selectLoadedCommit();
 	void showFilesForCurrentCommit();
 	void showDiffForCurrentFile();
@@ -108,8 +110,11 @@ private:
 	// and the count label says more is coming
 	bool _fullLoadPending = false;
 	// The commit the next finished listing should land on; cleared once it has, so a later reload or Load
-	// more selects the newest row as usual
+	// more does not land on it again
 	QString _revealSha;
+	// The commit the view returns to once a reload's listing lands, so a refresh does not move the reader.
+	// A reveal outranks it.
+	QString _reselectSha;
 	// Downgraded to Report once the retry is spent, so a reveal re-runs the query at most once
 	RevealMiss _revealOnMiss = RevealMiss::Report;
 	// The reveal the finished listing could not satisfy, for the count label to name. Dropped as soon as the
