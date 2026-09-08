@@ -204,3 +204,92 @@ TEST_CASE("A move's lines are placed among the lines shown, not the diff's own",
 	CHECK(shown[4] == "-int total = computeTotal();");
 	CHECK(shown[9] == "+int total = computeTotal();");
 }
+
+TEST_CASE("An edit within a moved block is marked on the added line alone", "[unifieddiff]")
+{
+	const ParsedDiff parsed = parseUnifiedDiff(joined({
+		"@@ -1,5 +1,3 @@",
+		" context",
+		"-int total = computeTotal(items);",
+		"-if (total > limit)",
+		"-	return false;",
+		" context",
+		"@@ -20,2 +18,5 @@",
+		" context",
+		"+int total = computeTotal(items);",
+		"+if (total >= limit)",
+		"+	return false;",
+		" context",
+	}));
+	const QStringList shown = parsed.text.split(QLatin1Char('\n'));
+
+	REQUIRE(parsed.moves.size() == 1);
+	CHECK(parsed.moves[0].removedFirst == 2);
+	CHECK(parsed.moves[0].addedFirst == 8);
+	REQUIRE(parsed.moves[0].pairs.size() == 3);
+	CHECK(parsed.moves[0].pairs[1].edited);
+	CHECK(parsed.moves[0].pairs[1].removed == 3);
+	CHECK(parsed.moves[0].pairs[1].added == 9);
+	CHECK(countOfKind(parsed, DiffLineKind::Edited) == 0);
+
+	REQUIRE(parsed.spans.size() == 1);
+	CHECK(parsed.spans[0].line == 9);
+	CHECK(!parsed.spans[0].removed);
+	CHECK(shown[9].mid(parsed.spans[0].start, parsed.spans[0].length) == "="); // by token: '>' is shared, '=' is new
+}
+
+TEST_CASE("Spans stay in line order with a move marked below a merged line", "[unifieddiff]")
+{
+	const ParsedDiff parsed = parseUnifiedDiff(joined({
+		"@@ -1,5 +1,3 @@",
+		" context",
+		"+int total = computeTotal(items);",
+		"+if (total >= limit)",
+		"+	return false;",
+		"-old line to edit here",
+		"+new line to edit here",
+		" context",
+		"@@ -20,2 +18,5 @@",
+		" context",
+		"-int total = computeTotal(items);",
+		"-if (total > limit)",
+		"-	return false;",
+		" context",
+	}));
+
+	REQUIRE(parsed.moves.size() == 1);
+	CHECK(parsed.moves[0].addedFirst == 2);
+	CHECK(parsed.lines[5].kind == DiffLineKind::Edited);
+	REQUIRE(parsed.spans.size() == 3);
+	CHECK(parsed.spans[0].line == 3); // the move's, before the merged line's
+	CHECK(parsed.spans[1].line == 5);
+	CHECK(parsed.spans[2].line == 5);
+}
+
+TEST_CASE("A block copied to several places keeps every copy out of the pairing", "[unifieddiff]")
+{
+	const ParsedDiff parsed = parseUnifiedDiff(joined({
+		"@@ -1,5 +1,8 @@",
+		" context",
+		"-int total = computeTotal(items);",
+		"-if (total > limit)",
+		"-	return false;",
+		"+int total = computeTotal(items);",
+		"+if (total > limit)",
+		"+	return false;",
+		"+int total = computeTotal(items);",
+		"+if (total >= limit)",
+		"+	return false;",
+		" context",
+	}));
+
+	REQUIRE(parsed.moves.size() == 2);
+	CHECK(parsed.moves[0].removedFirst == 2);
+	CHECK(parsed.moves[0].addedFirst == 5);
+	CHECK(parsed.moves[1].removedFirst == 2);
+	CHECK(parsed.moves[1].addedFirst == 8);
+	CHECK(parsed.moves[0].group == parsed.moves[1].group);
+	CHECK(countOfKind(parsed, DiffLineKind::Edited) == 0);
+	REQUIRE(parsed.spans.size() == 1);
+	CHECK(parsed.spans[0].line == 9);
+}

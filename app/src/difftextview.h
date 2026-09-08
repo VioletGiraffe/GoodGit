@@ -17,7 +17,8 @@ class QPaintEvent;
 //             shown as one line with what it took out struck through beside what it put in, headers dimmed,
 //             and a gutter carrying both files' line numbers. A moved block has both its places bracketed in
 //             the gutter and joined by a line with arrowheads the way it went, one color per move; a click
-//             on either bracket brings the other end to the top.
+//             on either bracket brings the other end to the top. An edit on the way is marked on the added
+//             copy, as the text it put in.
 //   file    - a file's own contents: one gutter column, no diff decoration
 //   message - prose, such as a placeholder or an error: no gutter, no decoration
 //

@@ -370,6 +370,23 @@ ParsedDiff parseUnifiedDiff(QStringView diff)
 			pair.added = shownLine[size_t(pair.added)];
 		}
 	}
+
+	// An edit on the way is marked on the added line alone: the edit belongs where the block now is
+	for (const MovedBlock& block : moves)
+	{
+		for (const MovedLinePair& pair : block.pairs)
+		{
+			if (!pair.edited)
+				continue;
+			for (const MergeSegment& segment : pair.alignment.segments)
+			{
+				if (segment.kind == SegmentKind::Added)
+					parsed.spans.push_back(DiffSpan{ pair.added, segment.range.start + 1, segment.range.length, false }); // past the marker
+			}
+		}
+	}
+	// The runs' spans came in line order; the moves' were appended after them
+	std::stable_sort(parsed.spans.begin(), parsed.spans.end(), [](const DiffSpan& l, const DiffSpan& r) { return l.line < r.line; });
 	parsed.moves = std::move(moves);
 
 	return parsed;

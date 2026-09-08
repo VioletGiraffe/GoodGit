@@ -14,7 +14,7 @@ RESTORE_COMPILER_WARNINGS
 // Reads a unified diff into the lines to show for it. A removed line and the added line one edit turned it
 // into become a single line carrying both, where that still reads as one line; every other line is the
 // diff's own, unchanged. A block removed in one place and added in another is reported as a move, its
-// lines standing as the diff printed them.
+// lines standing as the diff printed them, an edit on the way marked on the added line.
 // Backend-free: git and Mercurial (with --git) print the same format.
 
 enum class DiffLineKind : uint8_t
@@ -37,8 +37,9 @@ struct DiffLine
 	int newLine = 0;
 };
 
-// A range of a merged line that only one side of the edit has. No other kind of line carries one: a line
-// the diff printed itself is marked by being printed at all.
+// A range of text only one side of an edit has: on a merged line, either side's; on the added line of a
+// moved block, what the block's removed line lacks. No other line carries one: a line the diff printed
+// itself is marked by being printed at all.
 struct DiffSpan
 {
 	int line = 0;   // index into the lines
