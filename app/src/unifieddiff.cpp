@@ -2,6 +2,10 @@
 #include "movedblocks.h"
 #include "textdiff.h"
 
+DISABLE_COMPILER_WARNINGS
+#include <QByteArray>
+RESTORE_COMPILER_WARNINGS
+
 #include <algorithm>
 #include <assert.h>
 #include <utility>
@@ -428,16 +432,130 @@ ParsedDiff render(const ScannedDiff& scanned, std::vector<FileMove> moves)
 	return parsed;
 }
 
-// The path of a "diff --git a/P b/P" header, empty where the two differ: a rename names its paths on lines
-// of their own
-QString samePathOf(QStringView header)
+// The closing quote of the token opening at `open`, -1 where the line ends first
+qsizetype closingQuote(QStringView line, qsizetype open)
+{
+	for (qsizetype i = open + 1; i < line.size(); ++i)
+	{
+		if (line[i] == QLatin1Char('\\'))
+			++i;
+		else if (line[i] == QLatin1Char('"'))
+			return i;
+	}
+	return -1;
+}
+
+// The name a C-quoted token stands for, its quotes already stripped. A path holding a quote, a backslash or
+// a control character is quoted, and a byte outside ASCII is written \NNN where core.quotepath is on. The
+// escapes stand for bytes, so the token is decoded once they are all put back.
+QString unquotedPath(QStringView body)
+{
+	QByteArray bytes;
+	for (qsizetype i = 0; i < body.size(); )
+	{
+		// Whole runs at a time: a character outside the basic plane is two units here, and one alone
+		// encodes as the replacement character
+		const qsizetype escape = body.indexOf(QLatin1Char('\\'), i);
+		bytes += body.sliced(i, (escape < 0 ? body.size() : escape) - i).toUtf8();
+		if (escape < 0)
+			break;
+
+		i = escape + 1;
+		if (i == body.size())
+			break;
+
+		if (body[i] >= QLatin1Char('0') && body[i] <= QLatin1Char('7'))
+		{
+			int value = 0;
+			for (int digits = 0; digits < 3 && i < body.size() && body[i] >= QLatin1Char('0') && body[i] <= QLatin1Char('7'); ++digits, ++i)
+				value = value * 8 + (body[i].unicode() - u'0');
+			bytes += char(uint8_t(value));
+			continue;
+		}
+
+		switch (body[i].unicode())
+		{
+		case u'a': bytes += '\a'; break;
+		case u'b': bytes += '\b'; break;
+		case u'f': bytes += '\f'; break;
+		case u'n': bytes += '\n'; break;
+		case u'r': bytes += '\r'; break;
+		case u't': bytes += '\t'; break;
+		case u'v': bytes += '\v'; break;
+		default: bytes += body.sliced(i, 1).toUtf8(); break; // \" and \\ stand for themselves
+		}
+		++i;
+	}
+	return QString::fromUtf8(bytes);
+}
+
+// One path as a header line names it, quoted or plain. Absent where a quoted token has no closing quote.
+std::optional<QString> pathToken(QStringView token)
+{
+	if (!token.startsWith(QLatin1Char('"')))
+		return token.toString();
+	const qsizetype close = closingQuote(token, 0);
+	if (close != token.size() - 1)
+		return std::nullopt;
+	return unquotedPath(token.sliced(1, close - 1));
+}
+
+// The paths of a "diff --git" header, the a/ and b/ prefixes stripped; oldPath is set for a rename or a copy
+// only. Absent where the header names two paths with neither quoted: nothing marks where the first of
+// "a/old name b/new name" ends, and the rename or copy lines carry them instead.
+struct HeaderPaths
+{
+	QString oldPath;
+	QString path;
+};
+
+std::optional<HeaderPaths> headerPaths(QStringView header)
 {
 	const QStringView rest = header.sliced(11); // past "diff --git "
-	const qsizetype length = (rest.size() - 5) / 2; // "a/" P " b/" P
-	if (length < 0 || rest.size() != 2 * length + 5 || !rest.startsWith(QLatin1String("a/")) || rest.sliced(length + 2, 3) != QLatin1String(" b/"))
-		return {};
-	const QStringView path = rest.sliced(2, length);
-	return path == rest.sliced(length + 5) ? path.toString() : QString{};
+
+	// One path named twice, so its length follows from the line's: "a/" P " b/" P. Tried before the quotes,
+	// since a name may hold one and not be quoted for it, as hg leaves it. The literal " b/" it demands is
+	// only there where both sides are plain.
+	const qsizetype length = (rest.size() - 5) / 2;
+	if (length > 0 && rest.size() == 2 * length + 5 && rest.startsWith(QLatin1String("a/")) && rest.sliced(length + 2, 3) == QLatin1String(" b/"))
+	{
+		const QStringView path = rest.sliced(2, length);
+		if (path == rest.sliced(length + 5))
+			return HeaderPaths{ .path = path.toString() };
+	}
+
+	// A quoted token ends at its closing quote, and a path needing no quotes holds none, so one quoted side
+	// is enough to split the pair
+	const qsizetype quote = rest.indexOf(QLatin1Char('"'));
+	if (quote < 0)
+		return std::nullopt; // two plain paths, which only the rename or copy lines can tell apart
+	QString first;
+	std::optional<QString> second;
+	if (quote == 0)
+	{
+		const qsizetype close = closingQuote(rest, 0);
+		if (close < 0 || close + 1 >= rest.size() || rest[close + 1] != QLatin1Char(' '))
+			return std::nullopt;
+		first = unquotedPath(rest.sliced(1, close - 1));
+		second = pathToken(rest.sliced(close + 2));
+	}
+	else
+	{
+		if (rest[quote - 1] != QLatin1Char(' '))
+			return std::nullopt;
+		first = rest.sliced(0, quote - 1).toString();
+		second = pathToken(rest.sliced(quote));
+	}
+
+	if (!second || !first.startsWith(QLatin1String("a/")) || !second->startsWith(QLatin1String("b/")))
+		return std::nullopt;
+
+	HeaderPaths paths{ .oldPath = first.sliced(2), .path = second->sliced(2) };
+	if (paths.path.isEmpty())
+		return std::nullopt;
+	if (paths.oldPath == paths.path)
+		paths.oldPath.clear();
+	return paths;
 }
 
 } // namespace
@@ -467,20 +585,30 @@ ChangeSetDiff::ChangeSetDiff(QString text) :
 		{
 			if (!_files.empty())
 				_files.back().length = pos - _files.back().start;
-			_files.push_back(File{ .path = samePathOf(line), .start = pos });
+			File file{ .start = pos };
+			if (const std::optional<HeaderPaths> paths = headerPaths(line))
+			{
+				file.path = paths->path;
+				file.oldPath = paths->oldPath;
+			}
+			_files.push_back(std::move(file));
 		}
 		else if (!_files.empty() && _files.back().path.isEmpty())
 		{
 			// A rename's or copy's header lines, up to the first hunk or a binary notice
 			if (line.startsWith(QLatin1String("rename from ")) || line.startsWith(QLatin1String("copy from ")))
-				_files.back().oldPath = line.sliced(line.indexOf(QLatin1String("from ")) + 5).toString();
+				_files.back().oldPath = pathToken(line.sliced(line.indexOf(QLatin1String("from ")) + 5)).value_or(QString{});
 			else if (line.startsWith(QLatin1String("rename to ")) || line.startsWith(QLatin1String("copy to ")))
-				_files.back().path = line.sliced(line.indexOf(QLatin1String("to ")) + 3).toString();
+				_files.back().path = pathToken(line.sliced(line.indexOf(QLatin1String("to ")) + 3)).value_or(QString{});
 		}
 		pos = lineEnd + 1;
 	}
 	if (!_files.empty())
 		_files.back().length = whole.size() - _files.back().start;
+
+	// A section's path comes from its header or from the rename or copy lines; one still empty means a
+	// header shape this does not read
+	assert(std::none_of(_files.begin(), _files.end(), [](const File& file) { return file.path.isEmpty(); }));
 
 	std::vector<ChangeLine> sequence;
 	for (size_t i = 0; i < _files.size(); ++i)

@@ -313,6 +313,70 @@ TEST_CASE("A change set is cut into its files' sections, a rename keyed by both 
 	CHECK(set.fileDiff(2).endsWith(QLatin1String(" tail\n")));
 }
 
+TEST_CASE("A quoted path in a header is keyed by the name it stands for", "[unifieddiff]")
+{
+	// git quotes a path holding a quote, a backslash or a control character, each side on its own, and
+	// writes a byte outside ASCII as \NNN where core.quotepath is on
+	const ChangeSetDiff set{ joined({
+		R"(diff --git "a/src/we\"ird.cpp" "b/src/we\"ird.cpp")",
+		"@@ -1,1 +1,1 @@",
+		"-old",
+		"+new",
+		R"(diff --git "a/back\\slash.txt" "b/back\\slash.txt")",
+		"@@ -1,1 +1,1 @@",
+		"-old",
+		"+new",
+		R"(diff --git "a/caf\303\251.md" "b/caf\303\251.md")",
+		"@@ -1,1 +1,1 @@",
+		"-old",
+		"+new",
+		// Quoted for the quote, the emoji left as the bytes it is: a character of two UTF-16 units either side of an escape
+		R"(diff --git "a/emoji 🙂\"x.txt" "b/emoji 🙂\"x.txt")",
+		"@@ -1,1 +1,1 @@",
+		"-old",
+		"+new",
+	}) };
+
+	REQUIRE(set.fileCount() == 4);
+	CHECK(set.fileIndex(R"(src/we"ird.cpp)") == 0);
+	CHECK(set.fileIndex(R"(back\slash.txt)") == 1);
+	CHECK(set.fileIndex(QString::fromUtf8("café.md")) == 2);
+	CHECK(set.fileIndex(QString::fromUtf8(R"(emoji 🙂"x.txt)")) == 3);
+	CHECK(set.filePath(0) == R"(src/we"ird.cpp)");
+}
+
+TEST_CASE("A quote in a path that was not quoted for it is still read, as hg leaves it", "[unifieddiff]")
+{
+	const ChangeSetDiff set{ joined({
+		R"(diff --git a/src/we"ird.cpp b/src/we"ird.cpp)",
+		"@@ -1,1 +1,1 @@",
+		"-old",
+		"+new",
+	}) };
+
+	REQUIRE(set.fileCount() == 1);
+	CHECK(set.fileIndex(R"(src/we"ird.cpp)") == 0);
+}
+
+TEST_CASE("A rename with one side quoted is keyed by both paths from the header alone", "[unifieddiff]")
+{
+	// Only the side needing quotes carries them, and the rename lines quote the same way
+	const ChangeSetDiff set{ joined({
+		R"(diff --git a/plain name.txt "b/quoted \"name\".txt")",
+		"similarity index 90%",
+		"rename from plain name.txt",
+		R"(rename to "quoted \"name\".txt")",
+		"@@ -1,1 +1,1 @@",
+		"-old",
+		"+new",
+	}) };
+
+	REQUIRE(set.fileCount() == 1);
+	CHECK(set.fileIndex("plain name.txt") == 0);
+	CHECK(set.fileIndex(R"(quoted "name".txt)") == 0);
+	CHECK(set.filePath(0) == R"(quoted "name".txt)");
+}
+
 TEST_CASE("A block moved between two files is a move in either, its far end named", "[unifieddiff]")
 {
 	const ChangeSetDiff set{ fixture("moved_between_files.diff") };
