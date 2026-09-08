@@ -19,9 +19,10 @@ class QPaintEvent;
 //             and a gutter carrying both files' line numbers. A moved block is banded in the rename color
 //             instead, the copy it left fainter with its text dimmed, and has both its places bracketed in
 //             the gutter and joined by a line with arrowheads the way it went, one color per move; a click
-//             on either bracket brings the other end to the top. A block moved to or from another file has
-//             the one place here bracketed, with a stub and an arrowhead toward that file, which a tooltip
-//             names and a click announces. An edit on the way is marked on the added copy, as the text it put in.
+//             on either bracket, or on the line joining them, brings the other end to the top. A block moved
+//             to or from another file has the one place here bracketed, with a stub and an arrowhead toward
+//             that file, which a tooltip names and a click announces. An edit on the way is marked on the
+//             added copy, as the text it put in.
 //   file    - a file's own contents: one gutter column, no diff decoration
 //   message - prose, such as a placeholder or an error: no gutter, no decoration
 //
@@ -71,12 +72,14 @@ public:
 
 	// Called by the gutter widget, which owns nothing but its paint and mouse events
 	void paintGutter(QPaintEvent* event);
-	// A move's mark under a gutter position: the move, and which of its two ends the bracket there is
+	// A move's mark under a gutter position: the move, and the end the position is at - the bracket there, or
+	// the nearer one where the position is on the line joining the two
 	struct MarkHit
 	{
 		const DiffMove* move = nullptr;
 		bool removedEnd = false;
 	};
+	// The whole lane is the target, over both brackets and the line joining them
 	[[nodiscard]] std::optional<MarkHit> moveMarkAt(const QPoint& gutterPos) const;
 	// Brings the mark's other end to the top, or emits foreignEndActivated where that end is in another file
 	void followMoveMark(const MarkHit& hit);

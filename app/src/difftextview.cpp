@@ -127,6 +127,26 @@ int digitCount(int value)
 	return digits;
 }
 
+// The lines a move's mark spans, half-open: its two ranges and the line joining them, and one line past the
+// end a stub to another file leaves from
+std::pair<int, int> markedLinesOf(const DiffMove& move)
+{
+	int start = INT_MAX, end = 0;
+	if (move.removedCount > 0)
+	{
+		start = std::min(start, move.removedFirst);
+		end = std::max(end, move.removedFirst + move.removedCount);
+	}
+	if (move.addedCount > 0)
+	{
+		start = std::min(start, move.addedFirst);
+		end = std::max(end, move.addedFirst + move.addedCount);
+	}
+	if (move.foreign)
+		move.foreign->below ? ++end : --start;
+	return { start, end };
+}
+
 } // namespace
 
 DiffTextView::DiffTextView(QWidget* parent) :
@@ -540,15 +560,23 @@ std::optional<DiffTextView::MarkHit> DiffTextView::moveMarkAt(const QPoint& gutt
 	if (lane >= _moveLaneCount || line < 0)
 		return std::nullopt;
 
+	// 0 within the range, else the distance in lines; INT_MAX for the empty range of a move ending in another file
+	const auto distanceTo = [line](int first, int count) {
+		if (count == 0)
+			return INT_MAX;
+		return line < first ? first - line : std::max(0, line - (first + count - 1));
+	};
+
 	for (const MoveMark& mark : _moveMarks)
 	{
 		if (mark.lane != lane)
 			continue;
 		const DiffMove& move = mark.move;
-		if (line >= move.removedFirst && line < move.removedFirst + move.removedCount)
-			return MarkHit{ &move, true };
-		if (line >= move.addedFirst && line < move.addedFirst + move.addedCount)
-			return MarkHit{ &move, false };
+		const auto [start, end] = markedLinesOf(move);
+		if (line < start || line >= end)
+			continue;
+		// The bracket the line is in, or the nearer one where it is on the stroke joining them
+		return MarkHit{ &move, distanceTo(move.removedFirst, move.removedCount) <= distanceTo(move.addedFirst, move.addedCount) };
 	}
 	return std::nullopt;
 }
@@ -582,32 +610,14 @@ void DiffTextView::scrollDiffLineToTop(int diffLine)
 
 void DiffTextView::assignMoveLanes()
 {
-	// The lines a move's marks cover: its ranges here, and one more past the end a stub to another file leaves from
-	const auto extent = [](const MoveMark& mark) {
-		const DiffMove& move = mark.move;
-		int start = INT_MAX, end = 0;
-		if (move.removedCount > 0)
-		{
-			start = std::min(start, move.removedFirst);
-			end = std::max(end, move.removedFirst + move.removedCount);
-		}
-		if (move.addedCount > 0)
-		{
-			start = std::min(start, move.addedFirst);
-			end = std::max(end, move.addedFirst + move.addedCount);
-		}
-		if (move.foreign)
-			move.foreign->below ? ++end : --start;
-		return std::pair{ start, end };
-	};
-
 	// Marks that overlap on screen take separate lanes, the lowest free one each, in order of where they start
-	std::sort(_moveMarks.begin(), _moveMarks.end(), [&](const MoveMark& a, const MoveMark& b) { return extent(a).first < extent(b).first; });
+	std::sort(_moveMarks.begin(), _moveMarks.end(),
+		[](const MoveMark& a, const MoveMark& b) { return markedLinesOf(a.move).first < markedLinesOf(b.move).first; });
 
 	std::vector<int> laneEnds; // the first line past the last mark in each lane
 	for (MoveMark& mark : _moveMarks)
 	{
-		const auto [start, end] = extent(mark);
+		const auto [start, end] = markedLinesOf(mark.move);
 		size_t lane = 0;
 		while (lane < laneEnds.size() && laneEnds[lane] > start)
 			++lane;
