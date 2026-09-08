@@ -41,7 +41,12 @@ jobs:
       with:
         arch: x64
 
-    - name: Windows - tests
+    - name: Windows - tests (debug)
+      if: startsWith(matrix.os, 'windows')
+      shell: cmd
+      run: scripts\run_tests.bat debug
+
+    - name: Windows - tests (release)
       if: startsWith(matrix.os, 'windows')
       shell: cmd
       run: scripts\run_tests.bat
@@ -126,7 +131,11 @@ jobs:
         "{0:N2} KB  {1}" -f ($exe.Length / 1KB), $exe.Name
         Get-PeSectionSizes $exe.FullName | Format-Table Name, KB -AutoSize
 
-    - name: Mac - tests
+    - name: Mac - tests (debug)
+      if: startsWith(matrix.os, 'macos')
+      run: scripts/run_tests.sh debug
+
+    - name: Mac - tests (release)
       if: startsWith(matrix.os, 'macos')
       run: scripts/run_tests.sh
 
@@ -156,7 +165,11 @@ jobs:
         sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 50
         g++ --version
 
-    - name: Linux - tests
+    - name: Linux - tests (debug)
+      if: startsWith(matrix.os, 'ubuntu')
+      run: scripts/run_tests.sh debug
+
+    - name: Linux - tests (release)
       if: startsWith(matrix.os, 'ubuntu')
       run: scripts/run_tests.sh
 
