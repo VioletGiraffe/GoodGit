@@ -6,7 +6,7 @@ A unified diff read into **the lines to show for it**, which are not the diff's 
 
 ## `textdiff`
 
-Two lines aligned as sequences of tokens, answering how alike they are and the interleaving that holds both. Declines a pair too long or too unalike to be one edit
+Two lines aligned as sequences of tokens, answering how alike they are and the interleaving that holds both. Declines a pair too long or too unalike to be one edit. Also pairs two ranges of lines, each with the one it was most likely edited into: the pairing of the greatest total similarity, never crossing, which `unifieddiff` renders
 
 ## `movedblocks`
 

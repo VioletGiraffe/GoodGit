@@ -1,6 +1,7 @@
 #include "textdiff.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace {
 
@@ -163,4 +164,53 @@ TokenAlignment alignTokens(QStringView left, QStringView right)
 		appendSegment(alignment.segments, SegmentKind::Common, leftTokens.range(k));
 
 	return alignment;
+}
+
+std::vector<LinePair> pairSimilarLines(std::span<const QStringView> left, std::span<const QStringView> right)
+{
+	const int leftCount = int(left.size()), rightCount = int(right.size());
+	if (leftCount == 0 || rightCount == 0 || int64_t(leftCount) * rightCount > MaxLinePairings)
+		return {};
+
+	// Every candidate pair, aligned once: the pairing scores them all, and an accepted pair keeps the
+	// segments the alignment already found
+	std::vector<TokenAlignment> alignments;
+	alignments.reserve(size_t(leftCount) * size_t(rightCount));
+	for (int i = 0; i < leftCount; ++i)
+		for (int j = 0; j < rightCount; ++j)
+			alignments.push_back(alignTokens(left[size_t(i)], right[size_t(j)]));
+
+	const auto alignment = [&](int i, int j) -> TokenAlignment& { return alignments[size_t(i) * size_t(rightCount) + size_t(j)]; };
+
+	// best(i, j) is the highest total similarity reachable by pairing the left lines from i on with the
+	// right lines from j on. Counted from the far end, so the walk below runs forwards.
+	const int width = rightCount + 1;
+	std::vector<double> best(size_t(leftCount + 1) * size_t(width), 0.0);
+	const auto cell = [width](int i, int j) { return size_t(i) * size_t(width) + size_t(j); };
+	const auto pairedScore = [&](int i, int j) {
+		const double similarity = alignment(i, j).similarity;
+		return similarity >= SimilarityThreshold ? similarity + best[cell(i + 1, j + 1)] : -1.0;
+	};
+
+	for (int i = leftCount - 1; i >= 0; --i)
+		for (int j = rightCount - 1; j >= 0; --j)
+			best[cell(i, j)] = std::max({ best[cell(i + 1, j)], best[cell(i, j + 1)], pairedScore(i, j) });
+
+	std::vector<LinePair> pairs;
+	int i = 0, j = 0;
+	while (i < leftCount && j < rightCount)
+	{
+		if (pairedScore(i, j) >= best[cell(i, j)])
+		{
+			pairs.push_back(LinePair{ i, j, std::move(alignment(i, j)) });
+			++i;
+			++j;
+		}
+		else if (best[cell(i + 1, j)] >= best[cell(i, j + 1)])
+			++i;
+		else
+			++j;
+	}
+
+	return pairs;
 }

@@ -6,6 +6,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QStringView>
 RESTORE_COMPILER_WARNINGS
 
+#include <span>
 #include <stdint.h>
 #include <vector>
 
@@ -50,3 +51,23 @@ inline constexpr int MaxAlignedLineLength = 1000;
 inline constexpr int MaxAlignedTokens = 64;
 
 [[nodiscard]] TokenAlignment alignTokens(QStringView left, QStringView right);
+
+// A left line and the right line it was most likely edited into, as indices into the sequences given
+struct LinePair
+{
+	int left = 0;
+	int right = 0;
+	TokenAlignment alignment;
+};
+
+// Below this the two lines have nothing to do with each other. It is a floor and a way to rank candidates,
+// not the test of whether one line was edited into the other: how many fragments the merge comes out in
+// answers that far better, and does it after the two have been aligned.
+inline constexpr double SimilarityThreshold = 0.3;
+// Two ranges offering more pairings than this are a rewritten block, where no pairing is worth finding
+inline constexpr int MaxLinePairings = 100;
+
+// The pairing of the greatest total similarity, no pair below SimilarityThreshold. Pairs never cross: the
+// lines are sequences, and a crossing pair would mark a line against one it does not answer. Ascending on
+// both sides. Empty above MaxLinePairings.
+[[nodiscard]] std::vector<LinePair> pairSimilarLines(std::span<const QStringView> left, std::span<const QStringView> right);

@@ -6,13 +6,6 @@
 #include <assert.h>
 #include <utility>
 
-// Below this the two lines have nothing to do with each other. It is a floor and a way to rank candidates,
-// not the test of whether one line was edited into the other: how many fragments the merge comes out in
-// answers that far better, and does it after the two have been aligned.
-static constexpr double SimilarityThreshold = 0.3;
-// A run offering more pairings than this is a rewritten block, where no pairing is worth finding
-static constexpr int MaxRunPairings = 100;
-
 // A merged line stops reading as one line once it is a chain of alternating old and new fragments. A longer
 // line carries more of them before that happens, so the allowance grows with it.
 // A pair exceeding it is not one edit at all: its lines stand as the diff printed them, unmarked, since
@@ -247,73 +240,40 @@ void appendPair(ParsedDiff& parsed, const std::vector<DiffLine>& lines, const st
 	appendLine(parsed, lines[size_t(addedIndex)], addedText);
 }
 
+// The lines [begin, end) past their marker character: it is not content, and the two sides never carry the same one
+std::vector<QStringView> contents(const std::vector<QStringView>& texts, int begin, int end)
+{
+	std::vector<QStringView> result;
+	result.reserve(size_t(end - begin));
+	for (int k = begin; k < end; ++k)
+		result.push_back(texts[size_t(k)].sliced(1));
+	return result;
+}
+
 // Renders the removed lines [removedBegin, removedEnd) against the added lines [addedBegin, addedEnd),
-// pairing each removed line with the added line it was most likely edited into.
+// pairing each removed line with the added line it was most likely edited into. The lines between two
+// pairs are emitted removed first, as the diff prints a modification.
 void appendRun(ParsedDiff& parsed, const std::vector<DiffLine>& lines, const std::vector<QStringView>& texts,
 	int removedBegin, int removedEnd, int addedBegin, int addedEnd)
 {
-	const int removedCount = removedEnd - removedBegin;
-	const int addedCount = addedEnd - addedBegin;
-	if (addedCount == 0 || int64_t(removedCount) * addedCount > MaxRunPairings)
-	{
-		for (int k = removedBegin; k < removedEnd; ++k)
-			appendLine(parsed, lines[size_t(k)], texts[size_t(k)]);
-		for (int k = addedBegin; k < addedEnd; ++k)
-			appendLine(parsed, lines[size_t(k)], texts[size_t(k)]);
-		return;
-	}
+	const std::vector<LinePair> pairs = pairSimilarLines(contents(texts, removedBegin, removedEnd), contents(texts, addedBegin, addedEnd));
 
-	// Every candidate pair, aligned once: the pairing scores them all, and an accepted pair reuses the
-	// segments the alignment already found
-	std::vector<TokenAlignment> alignments;
-	alignments.reserve(size_t(removedCount) * size_t(addedCount));
-	for (int i = 0; i < removedCount; ++i)
-	{
-		for (int j = 0; j < addedCount; ++j)
-		{
-			// Past the marker character: it is not content, and the two sides never carry the same one
-			alignments.push_back(alignTokens(texts[size_t(removedBegin + i)].sliced(1),
-				texts[size_t(addedBegin + j)].sliced(1)));
-		}
-	}
-
-	const auto alignment = [&](int i, int j) -> const TokenAlignment& { return alignments[size_t(i) * size_t(addedCount) + size_t(j)]; };
-
-	// best(i, j) is the highest total similarity reachable by pairing the removed lines from i on with the
-	// added lines from j on. Pairs never cross: a diff is a sequence, and a crossing pair would mark a line
-	// against one it does not answer. It is also what lets the walk below emit the run in one order.
-	const int width = addedCount + 1;
-	std::vector<double> best(size_t(removedCount + 1) * size_t(width), 0.0);
-	const auto cell = [width](int i, int j) { return size_t(i) * size_t(width) + size_t(j); };
-	const auto pairedScore = [&](int i, int j) {
-		const double similarity = alignment(i, j).similarity;
-		return similarity >= SimilarityThreshold ? similarity + best[cell(i + 1, j + 1)] : -1.0;
+	int i = removedBegin, j = addedBegin;
+	const auto appendUnpairedUpTo = [&](int removedIndex, int addedIndex) {
+		for (; i < removedIndex; ++i)
+			appendLine(parsed, lines[size_t(i)], texts[size_t(i)]);
+		for (; j < addedIndex; ++j)
+			appendLine(parsed, lines[size_t(j)], texts[size_t(j)]);
 	};
 
-	for (int i = removedCount - 1; i >= 0; --i)
-		for (int j = addedCount - 1; j >= 0; --j)
-			best[cell(i, j)] = std::max({ best[cell(i + 1, j)], best[cell(i, j + 1)], pairedScore(i, j) });
-
-	int i = 0, j = 0;
-	while (i < removedCount || j < addedCount)
+	for (const LinePair& pair : pairs)
 	{
-		if (i < removedCount && j < addedCount && pairedScore(i, j) >= best[cell(i, j)])
-		{
-			appendPair(parsed, lines, texts, removedBegin + i, addedBegin + j, alignment(i, j));
-			++i;
-			++j;
-		}
-		else if (j >= addedCount || (i < removedCount && best[cell(i + 1, j)] >= best[cell(i, j + 1)]))
-		{
-			appendLine(parsed, lines[size_t(removedBegin + i)], texts[size_t(removedBegin + i)]);
-			++i;
-		}
-		else
-		{
-			appendLine(parsed, lines[size_t(addedBegin + j)], texts[size_t(addedBegin + j)]);
-			++j;
-		}
+		appendUnpairedUpTo(removedBegin + pair.left, addedBegin + pair.right);
+		appendPair(parsed, lines, texts, i, j, pair.alignment);
+		++i;
+		++j;
 	}
+	appendUnpairedUpTo(removedEnd, addedEnd);
 }
 
 } // namespace
