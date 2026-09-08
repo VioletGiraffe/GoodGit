@@ -7,6 +7,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QEvent>
 #include <QPainter>
 #include <QPaintEvent>
+#include <QPolygonF>
 #include <QResizeEvent>
 #include <QScrollBar>
 #include <QTextBlock>
@@ -20,6 +21,11 @@ RESTORE_COMPILER_WARNINGS
 static constexpr int GutterOuterMargin = 6;
 // Between the two number columns
 static constexpr int GutterColumnGap = 8;
+// A move mark's lane is a digit's width plus this: room for the bracket, with the line and arrowheads inside it
+static constexpr int MoveLanePadding = 8;
+// Between a bracket's end and the arrowhead next to it: the arriving one close in, the departing one set apart
+static constexpr int ArrivingChevronGap = 2;
+static constexpr int DepartingChevronGap = 6;
 
 // The strike through removed text follows the font's height, floored so it stays a line at small sizes
 static constexpr qreal StrikeThicknessDivisor = 9.0;
@@ -119,6 +125,8 @@ void DiffTextView::setContent(const QString& text, Content content)
 	_lines.clear();
 	_spans.clear();
 	_hunkLines.clear();
+	_moveMarks.clear();
+	_moveLaneCount = 0;
 	_maxOldLine = 0;
 	_maxNewLine = 0;
 
@@ -137,6 +145,9 @@ void DiffTextView::setContent(const QString& text, Content content)
 			if (line.kind == DiffLineKind::HunkHeader)
 				_hunkLines.push_back(index);
 		}
+		for (const MovedBlock& block : parsed.moves)
+			_moveMarks.push_back({ block });
+		assignMoveLanes();
 	}
 	else
 	{
@@ -302,6 +313,12 @@ void DiffTextView::updateNumberWidths()
 	const int digitWidth = fontMetrics().horizontalAdvance(QLatin1Char('9'));
 	_oldNumberWidth = _maxOldLine == 0 ? 0 : digitCount(_maxOldLine) * digitWidth;
 	_newNumberWidth = _maxNewLine == 0 ? 0 : digitCount(_maxNewLine) * digitWidth;
+	_moveLaneWidth = digitWidth + MoveLanePadding;
+}
+
+int DiffTextView::moveColumnWidth() const
+{
+	return _moveLaneCount == 0 ? 0 : _moveLaneCount * _moveLaneWidth + GutterColumnGap;
 }
 
 void DiffTextView::updateGutterWidth()
@@ -309,7 +326,7 @@ void DiffTextView::updateGutterWidth()
 	int width = 0;
 	if (_oldNumberWidth != 0 || _newNumberWidth != 0)
 	{
-		width = 2 * GutterOuterMargin + _oldNumberWidth + _newNumberWidth;
+		width = 2 * GutterOuterMargin + moveColumnWidth() + _oldNumberWidth + _newNumberWidth;
 		if (_oldNumberWidth != 0 && _newNumberWidth != 0)
 			width += GutterColumnGap;
 	}
@@ -408,7 +425,7 @@ void DiffTextView::paintGutter(QPaintEvent* event)
 
 	const int numberHeight = fontMetrics().height();
 	const int oldColumnRight = GutterOuterMargin + _oldNumberWidth;
-	const int newColumnRight = _gutterWidth - GutterOuterMargin;
+	const int newColumnRight = _gutterWidth - GutterOuterMargin - moveColumnWidth(); // the move marks sit next to the text
 
 	for (QTextBlock block = firstVisibleBlock(); block.isValid(); block = block.next())
 	{
@@ -425,5 +442,103 @@ void DiffTextView::paintGutter(QPaintEvent* event)
 			painter.drawText(0, top, oldColumnRight, numberHeight, Qt::AlignRight, QString::number(line.oldLine));
 		if (line.newLine != 0)
 			painter.drawText(0, top, newColumnRight, numberHeight, Qt::AlignRight, QString::number(line.newLine));
+	}
+
+	if (!_moveMarks.empty())
+		paintMoveMarks(painter, event->rect());
+}
+
+void DiffTextView::assignMoveLanes()
+{
+	// Marks that overlap on screen take separate lanes, the lowest free one each, in order of where they start
+	const auto start = [](const MoveMark& mark) { return std::min(mark.block.removedFirst, mark.block.addedFirst); };
+	const auto end = [](const MoveMark& mark) { return std::max(mark.block.removedFirst, mark.block.addedFirst) + mark.block.lineCount; };
+	std::sort(_moveMarks.begin(), _moveMarks.end(), [&](const MoveMark& a, const MoveMark& b) { return start(a) < start(b); });
+
+	std::vector<int> laneEnds; // the first line past the last mark in each lane
+	for (MoveMark& mark : _moveMarks)
+	{
+		size_t lane = 0;
+		while (lane < laneEnds.size() && laneEnds[lane] > start(mark))
+			++lane;
+		if (lane == laneEnds.size())
+			laneEnds.push_back(0);
+		laneEnds[lane] = end(mark);
+		mark.lane = int(lane);
+	}
+	_moveLaneCount = int(laneEnds.size());
+}
+
+void DiffTextView::paintMoveMarks(QPainter& painter, const QRect& clip)
+{
+	// Only lines on screen have a geometry; one beyond either end counts as far past it, so a mark's strokes
+	// run off the edge as they would were the viewport taller
+	const int firstVisible = firstVisibleBlock().blockNumber();
+	int lastVisible = firstVisible;
+	for (QTextBlock block = firstVisibleBlock(); block.isValid(); block = block.next())
+	{
+		if (blockBoundingGeometry(block).translated(contentOffset()).top() > viewport()->height())
+			break;
+		lastVisible = block.blockNumber();
+	}
+	constexpr qreal FarOff = 1e6;
+	const auto lineRect = [&](int line) { return blockBoundingGeometry(document()->findBlockByNumber(line)).translated(contentOffset()); };
+	const auto topOf = [&](int line) { return line < firstVisible ? -FarOff : line > lastVisible ? FarOff : lineRect(line).top(); };
+	const auto bottomOf = [&](int line) { return line < firstVisible ? -FarOff : line > lastVisible ? FarOff : lineRect(line).bottom(); };
+
+	const int columnLeft = _gutterWidth - GutterOuterMargin - _moveLaneCount * _moveLaneWidth;
+	const int tick = _moveLaneWidth - 4;       // a bracket's horizontal stroke, a margin either side of it in the lane
+	const int chevronHalfWidth = tick / 2 - 1; // within the bracket's opening
+	// Facing the lines it brackets, kept a pixel inside the block so the stroke's width stays within it
+	const auto drawBracket = [&](int x, qreal top, qreal bottom) {
+		painter.drawLine(QPointF(x, top + 1), QPointF(x, bottom - 1));
+		painter.drawLine(QPointF(x, top + 1), QPointF(x + tick, top + 1));
+		painter.drawLine(QPointF(x, bottom - 1), QPointF(x + tick, bottom - 1));
+	};
+	const auto drawChevron = [&](int x, qreal baseY, qreal apexY) {
+		painter.drawPolygon(QPolygonF{ QPointF(x - chevronHalfWidth, baseY), QPointF(x + chevronHalfWidth, baseY), QPointF(x, apexY) });
+	};
+
+	const Theme& theme = activeTheme();
+	for (const MoveMark& mark : _moveMarks)
+	{
+		const MovedBlock& block = mark.block;
+		const bool movedDown = block.addedFirst > block.removedFirst;
+		const int upperFirst = movedDown ? block.removedFirst : block.addedFirst;
+		const int lowerFirst = movedDown ? block.addedFirst : block.removedFirst;
+		const qreal upperTop = topOf(upperFirst), upperBottom = bottomOf(upperFirst + block.lineCount - 1);
+		const qreal lowerTop = topOf(lowerFirst), lowerBottom = bottomOf(lowerFirst + block.lineCount - 1);
+		if (lowerBottom < clip.top() || upperTop > clip.bottom())
+			continue;
+
+		const QColor color = theme.graphLanes[size_t(block.group) % theme.graphLanes.size()];
+		const int spineX = columnLeft + mark.lane * _moveLaneWidth + 1;
+		const int lineX = spineX + tick / 2; // the line and its arrowheads run inside the bracket, centered under its strokes
+
+		painter.setRenderHint(QPainter::Antialiasing, false);
+		painter.setBrush(Qt::NoBrush);
+		painter.setPen(QPen{ color, 1 });
+		painter.drawLine(QPointF(lineX, upperBottom), QPointF(lineX, lowerTop));
+		painter.setPen(QPen{ color, 2 });
+		drawBracket(spineX, upperTop, upperBottom);
+		drawBracket(spineX, lowerTop, lowerBottom);
+
+		// An arrowhead at each end of the line between the brackets, both pointing the way the block went
+		painter.setRenderHint(QPainter::Antialiasing, true);
+		painter.setPen(Qt::NoPen);
+		painter.setBrush(color);
+		const qreal chevronHeight = chevronHalfWidth;
+		const int upperGap = movedDown ? DepartingChevronGap : ArrivingChevronGap;
+		const int lowerGap = movedDown ? ArrivingChevronGap : DepartingChevronGap;
+		if (movedDown)
+		{
+			drawChevron(lineX, upperBottom + upperGap, upperBottom + upperGap + chevronHeight);
+			drawChevron(lineX, lowerTop - lowerGap - chevronHeight, lowerTop - lowerGap);
+		}
+		else
+		{
+			drawChevron(lineX, upperBottom + upperGap + chevronHeight, upperBottom + upperGap);
+			drawChevron(lineX, lowerTop - lowerGap, lowerTop - lowerGap - chevronHeight);
+		}
 	}
 }

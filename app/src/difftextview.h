@@ -9,12 +9,14 @@ RESTORE_COMPILER_WARNINGS
 #include <stdint.h>
 #include <vector>
 
+class QPainter;
 class QPaintEvent;
 
 // A read-only monospace view of one file's text, in one of three kinds:
 //   diff    - a unified diff: added and removed lines banded across the full width, an edit small enough
 //             shown as one line with what it took out struck through beside what it put in, headers dimmed,
-//             and a gutter carrying both files' line numbers
+//             and a gutter carrying both files' line numbers. A moved block has both its places bracketed in
+//             the gutter and joined by a line with arrowheads the way it went, one color per move.
 //   file    - a file's own contents: one gutter column, no diff decoration
 //   message - prose, such as a placeholder or an error: no gutter, no decoration
 //
@@ -67,8 +69,18 @@ protected:
 private:
 	enum class Content : uint8_t { Diff, FileText, Message };
 
+	// One move's marks: the block's two places, in a lane of their own where moves overlap on screen
+	struct MoveMark
+	{
+		MovedBlock block; // in lines of the document
+		int lane = 0;
+	};
+
 	void setContent(const QString& text, Content content);
 	void paintRemovedStrikes(const QRect& clip);
+	void assignMoveLanes();
+	void paintMoveMarks(QPainter& painter, const QRect& clip);
+	[[nodiscard]] int moveColumnWidth() const; // 0 without moves
 	void scrollLineToTop(int line);
 	void applyDiffFormats();
 	void updateNumberWidths();
@@ -79,11 +91,14 @@ private:
 	std::vector<DiffLine> _lines;       // one per block of the document, empty for a message
 	std::vector<DiffSpan> _spans;       // ascending by line, so the formatting pass walks it in step
 	std::vector<int> _hunkLines;        // the line each hunk header is on, ascending
+	std::vector<MoveMark> _moveMarks;   // ascending by the first line of either place
 	Content _content = Content::Message;
 	int _maxOldLine = 0; // the widest number each column has to fit
 	int _maxNewLine = 0;
 	int _oldNumberWidth = 0; // in pixels, 0 where the column carries no numbers
 	int _newNumberWidth = 0;
+	int _moveLaneCount = 0;
+	int _moveLaneWidth = 0;  // in pixels, from the font
 	int _gutterWidth = 0;    // the viewport's left margin, and so the gutter's width
 	QWidget* _gutter = nullptr;
 };
