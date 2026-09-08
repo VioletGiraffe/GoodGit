@@ -59,6 +59,7 @@ public:
 
 protected:
 	bool eventFilter(QObject* watched, QEvent* event) override;
+	void showEvent(QShowEvent* event) override;
 	void closeEvent(QCloseEvent* event) override;
 
 private:
@@ -104,6 +105,7 @@ private:
 	// Load more doubles maxCommits and re-runs the whole query: the walk cannot be resumed from a cursor
 	// (doc/ARCHITECTURE.md). The path is fixed at construction; the content search is not.
 	Repository::LogQuery _query;
+	bool _cascaded = false; // the placement runs once, on the show that restores the stored geometry
 	bool _logCapped = false; // the last query returned its full limit, so older commits exist unread
 	bool _logLoaded = false; // the marks query can land first, and its counts mean nothing until this
 	// The full-limit walk of a cold open is still running: a reveal miss waits for it instead of re-walking,

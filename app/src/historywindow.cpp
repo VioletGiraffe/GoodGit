@@ -44,6 +44,8 @@ constexpr int SearchDebounceMs = 200; // a keystroke rescans every commit and re
 constexpr int FileListWidth = 320;
 constexpr int MaxFilePathLabelWidth = 420; // beyond this the path elides
 constexpr int PickaxeEditWidth = 320;
+constexpr int CascadeStep = 28;  // about a title bar, so the window underneath stays identifiable
+constexpr int CascadeLength = 8; // steps before the search gives up, which keeps the last one on screen
 constexpr qsizetype MaxShownPickaxeTerm = 24;
 
 // The revisions holding one listed change's content. An empty sha means that revision does not hold the file.
@@ -82,10 +84,9 @@ HistoryWindow* repositoryHistoryWindow(const QString& repositoryRoot)
 std::vector<HistoryWindow*> historyWindowsFor(const QString& repositoryRoot)
 {
 	std::vector<HistoryWindow*> windows;
-	for (QWidget* widget : QApplication::topLevelWidgets())
+	for (HistoryWindow* window : WidgetUtils::findTopLevelWindows<HistoryWindow>())
 	{
-		auto* window = dynamic_cast<HistoryWindow*>(widget); // not qobject_cast: HistoryWindow has no meta-object
-		if (window && sameDirectoryOnDisk(window->repositoryPath(), repositoryRoot))
+		if (sameDirectoryOnDisk(window->repositoryPath(), repositoryRoot))
 			windows.push_back(window);
 	}
 	return windows;
@@ -298,6 +299,29 @@ bool HistoryWindow::eventFilter(QObject* watched, QEvent* event)
 		}
 	}
 	return QMainWindow::eventFilter(watched, event);
+}
+
+void HistoryWindow::showEvent(QShowEvent* event)
+{
+	QMainWindow::showEvent(event);
+	if (_cascaded)
+		return;
+	_cascaded = true;
+
+	// One stored geometry serves every history window, so a second one opens exactly on top of the first.
+	// The persistence filter restores that geometry on this same event, ahead of this handler.
+	const auto positionTaken = [this](QPoint position) {
+		const std::vector<HistoryWindow*> windows = WidgetUtils::findTopLevelWindows<HistoryWindow>();
+		return std::ranges::any_of(windows, [&](const HistoryWindow* window) {
+			return window != this && window->isVisible() && window->pos() == position;
+		});
+	};
+
+	QPoint position = pos();
+	for (int step = 0; step < CascadeLength && positionTaken(position); ++step)
+		position += QPoint{ CascadeStep, CascadeStep };
+	if (position != pos())
+		move(position);
 }
 
 void HistoryWindow::closeEvent(QCloseEvent* event)

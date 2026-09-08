@@ -8,6 +8,7 @@
 
 #include "dialogs/messagebox.h"
 #include "widgets/chighlightoverlay.h"
+#include "widgets/widgetutils.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QApplication>
@@ -123,12 +124,7 @@ private:
 // The one up, or none
 WelcomeWindow* welcomeWindow()
 {
-	for (QWidget* widget : QApplication::topLevelWidgets())
-	{
-		if (auto* welcome = dynamic_cast<WelcomeWindow*>(widget)) // not qobject_cast: WelcomeWindow has no meta-object
-			return welcome;
-	}
-	return nullptr;
+	return WidgetUtils::findTopLevelWindow<WelcomeWindow>();
 }
 
 void closeWelcomeWindow()
@@ -142,10 +138,9 @@ void closeWelcomeWindow()
 CommitWindow* repositoryWindow(const QString& root)
 {
 	// The open windows are the registry: a closed one drops out without any bookkeeping
-	for (QWidget* widget : QApplication::topLevelWidgets())
+	for (CommitWindow* window : WidgetUtils::findTopLevelWindows<CommitWindow>())
 	{
-		auto* window = qobject_cast<CommitWindow*>(widget);
-		if (window && sameDirectoryOnDisk(window->repositoryPath(), root))
+		if (sameDirectoryOnDisk(window->repositoryPath(), root))
 			return window;
 	}
 	return nullptr;
