@@ -22,8 +22,11 @@ A path is bytes, not text in a known encoding. Git stores what the filesystem ga
   holds, so the local 8-bit codec applies.
 - Commit messages, author names and ref names are UTF-8 by git's own convention, whatever the paths are.
 - Under `-z` git emits paths unquoted and gives a rename its own NUL-separated tokens, never the ` -> `
-  syntax, so a filename containing ` -> ` stays unambiguous. `core.quotepath=false` covers the output that
-  is not `-z`.
+  syntax, so a filename containing ` -> ` stays unambiguous. It is the only output free of quoting.
+- Outside `-z` a path is quoted for either of two reasons, and `core.quotepath=false` disposes of one: it
+  stops the escaping of bytes outside ASCII. The other holds whatever the setting says: a path containing
+  `"`, `\` or a control character is C-quoted, each side of a `diff --git` header independently, and the
+  rename and copy lines with it.
 - argv on Windows caps near 32 KB, so a long path list travels through
   `--pathspec-from-file=- --pathspec-file-nul` on stdin. A commit message has no length bound at all and
   goes through a temp file.
