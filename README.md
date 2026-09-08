@@ -5,7 +5,7 @@
 * No login required in the app, uses your environment git/hg as configured.
 
 
-Design and component overview: [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md).
+Architecture, and the index into the per-concern docs: [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md).
 Behavior of the underlying tools: [doc/git.md](doc/git.md), [doc/hg.md](doc/hg.md).
 
 ## Requirements
@@ -25,6 +25,7 @@ git clone --recurse-submodules https://github.com/VioletGiraffe/GoodGit.git
 ```
 
 Then build the top-level `GoodGit.pro` with qmake (or open it in Qt Creator). The binary is `bin/<config>/gg`, and `bin/<config>/GoodGit.app` on macOS.
+Tests, scripts and the release pipeline: [doc/BUILD.md](doc/BUILD.md).
 
 ## Usage
 

@@ -3,7 +3,7 @@
 Facts about Mercurial, not about this app. Each was established by a probe, a read of hg's own Python
 sources, or a wrong assumption that cost work; the ones that produced no code have nowhere else to live.
 
-What the app does about these is in `ARCHITECTURE.md` - Invocation invariants, Text encoding, Backends. This
+What the app does about these is in `invocation.md`, `encoding.md` and under Backends in `ARCHITECTURE.md`. This
 file states what hg does; that one states the rules built on it.
 
 Verified against Mercurial 7.2.2 on Windows. Version floors are named where one is known.

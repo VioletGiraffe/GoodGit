@@ -3,7 +3,7 @@
 Facts about git, not about this app. Each was established by a probe, a source read, or a wrong assumption
 that cost work; the ones that produced no code have nowhere else to live.
 
-What the app does about these is in `ARCHITECTURE.md` - Invocation invariants, Text encoding, Refresh. This
+What the app does about these is in `invocation.md`, `encoding.md` and `refresh.md`. This
 file states what git does; that one states the rules built on it.
 
 Verified against git 2.37.1.windows.1. Version floors are named where one is known.
