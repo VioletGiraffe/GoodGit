@@ -3,3 +3,6 @@
 
 # cmd.exe mis-parses LF-only batch files
 *.bat text eol=crlf
+
+# The diff parser matches git's LF-terminated headers exactly; CRLF breaks it
+tests/fixtures/*.diff text eol=lf
