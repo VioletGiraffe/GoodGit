@@ -1,6 +1,7 @@
 #include "difftextview.h"
 #include "theme.h"
 
+#include "assert/advanced_assert.h"
 #include "theme/cthemecontroller.h"
 
 DISABLE_COMPILER_WARNINGS
@@ -18,7 +19,6 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
-#include <assert.h>
 #include <limits.h>
 
 // Padding outside the first and last number column
@@ -208,7 +208,7 @@ void DiffTextView::showMessage(const QString& text)
 
 void DiffTextView::setContent(const QString& text, Content content)
 {
-	assert(content != Content::Diff);
+	assert_r(content != Content::Diff);
 	resetContent(content);
 
 	// A block ends at its terminator, so a trailing one would add an empty last block to number.
@@ -246,7 +246,7 @@ void DiffTextView::resetContent(Content content)
 
 void DiffTextView::finishContent()
 {
-	assert(_content == Content::Message ? _lines.empty() : _lines.size() == size_t(document()->blockCount()));
+	assert_r(_content == Content::Message ? _lines.empty() : _lines.size() == size_t(document()->blockCount()));
 
 	// setPlainText seeds the whole text with the char format at the caret: a line applyDiffFormats leaves alone would keep it
 	QTextCursor cursor{ document() };
@@ -385,7 +385,7 @@ void DiffTextView::applyDiffFormats()
 		// After the line's own format, which covers the whole block and would otherwise replace these
 		while (spanIndex < _spans.size() && _spans[spanIndex].line == block.blockNumber())
 		{
-			assert(kind == DiffLineKind::Edited || (kind == DiffLineKind::Added && line.moved)); // no other line carries spans
+			assert_r(kind == DiffLineKind::Edited || (kind == DiffLineKind::Added && line.moved)); // no other line carries spans
 			const DiffSpan& span = _spans[spanIndex++];
 			const QTextCharFormat& spanFormat = kind == DiffLineKind::Added ? movedEditSpan : span.removed ? removedSpan : addedSpan;
 			cursor.setPosition(block.position() + span.start);

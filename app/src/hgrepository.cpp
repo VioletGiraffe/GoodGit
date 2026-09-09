@@ -7,6 +7,8 @@
 #include "queryround.h"
 #include "settings.h"
 
+#include "assert/advanced_assert.h"
+
 DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QFile>
@@ -19,7 +21,6 @@ RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 #include <array>
-#include <assert.h>
 #include <functional>
 #include <utility>
 
@@ -624,7 +625,11 @@ void HgRepository::abortOperation(Vcs::Answer<void> onDone)
 	QStringList args = operationInHgDir(path()).abortArgs;
 	if (args.isEmpty() && state().op == RepoOp::Merge)
 		args = { QStringLiteral("merge"), QStringLiteral("--abort") }; // the dirstate-v2 merge only the run saw
-	assert(!args.isEmpty());
+	if (args.isEmpty()) // the operation ended or changed outside the app since the refresh that enabled the action
+	{
+		Vcs::answerLater(this, std::move(onDone), std::unexpected(QObject::tr("No operation to abort.")));
+		return;
+	}
 
 	Hg::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));
 }
@@ -633,7 +638,11 @@ void HgRepository::continueOperation(Vcs::Answer<void> onDone)
 {
 	// A histedit stopped on a `mess` action opens the user's editor here and waits for it to close
 	QStringList args = operationInHgDir(path()).continueArgs;
-	assert(!args.isEmpty());
+	if (args.isEmpty()) // the operation ended or changed outside the app since the refresh that enabled the action
+	{
+		Vcs::answerLater(this, std::move(onDone), std::unexpected(QObject::tr("No operation to continue.")));
+		return;
+	}
 
 	Hg::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));
 }

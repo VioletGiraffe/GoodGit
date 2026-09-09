@@ -4,6 +4,8 @@
 #include "queryround.h"
 #include "settings.h"
 
+#include "assert/advanced_assert.h"
+
 DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QFile>
@@ -15,7 +17,6 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
-#include <assert.h>
 #include <map>
 
 namespace {
@@ -824,7 +825,11 @@ void GitRepository::abortOperation(Vcs::Answer<void> onDone)
 	// Read at action time rather than carried in the state: the git directory is the current answer for which
 	// operation is running, and each is abandoned through the command that started it.
 	QStringList args = operationInGitDir(_gitDir).abortArgs;
-	assert(!args.isEmpty());
+	if (args.isEmpty()) // the operation ended or changed outside the app since the refresh that enabled the action
+	{
+		Vcs::answerLater(this, std::move(onDone), std::unexpected(QObject::tr("No operation to abort.")));
+		return;
+	}
 
 	Git::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));
 }
@@ -833,7 +838,11 @@ void GitRepository::continueOperation(Vcs::Answer<void> onDone)
 {
 	// `rebase --continue` has no --no-edit and opens the user's editor on the message, waiting for it to close
 	QStringList args = operationInGitDir(_gitDir).continueArgs;
-	assert(!args.isEmpty());
+	if (args.isEmpty()) // the operation ended or changed outside the app since the refresh that enabled the action
+	{
+		Vcs::answerLater(this, std::move(onDone), std::unexpected(QObject::tr("No operation to continue.")));
+		return;
+	}
 
 	Git::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));
 }
@@ -1200,7 +1209,7 @@ void uncommittedDiscardPlan(const QString& workDir, const QObject* context, std:
 
 void discardAllUncommitted(const QString& workDir, const SubmoduleDiscardPlan& plan, const QObject* context, Vcs::Answer<void> onDone)
 {
-	assert(!plan.restored.isEmpty() || !plan.keptOnDisk.isEmpty());
+	assert_r(!plan.restored.isEmpty() || !plan.keptOnDisk.isEmpty());
 
 	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
 	// Exactly the paths the plan named, never a whole-tree pathspec: a restore checks out over every nested

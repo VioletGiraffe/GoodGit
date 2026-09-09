@@ -22,6 +22,9 @@ Follows from the no-staging model in `committing.md`:
 - Continue runs that command unchanged, so it may open the user's editor and wait for it to close: `git
   rebase --continue` does, on the message of the commit it completes. The editor is deliberately not
   overridden - the window stays in its mutation-in-flight state until the editor closes.
+- Abort and Continue read their command off the on-disk markers at action time rather than from the cached
+  state, so an operation finished or abandoned outside the app since the last refresh is reported instead of
+  run. Continue has no confirmation dialog, and so no `StateStamp` to catch that first (`refresh.md`).
 - An operation is classified by how it must be finished, not by what its system calls it, so `RepoOp` stays
   git's vocabulary and everything the app cannot carry through is one value. The strip shows the operation's
   own name instead, which the backend supplies alongside it: an hg graft is not a cherry-pick to whoever

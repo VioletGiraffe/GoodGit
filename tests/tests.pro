@@ -16,7 +16,7 @@ DESTDIR = bin/$${OUTPUT_DIR}
 OBJECTS_DIR = build/$${OUTPUT_DIR}
 MOC_DIR = build/$${OUTPUT_DIR}
 
-INCLUDEPATH += ../app/src ../cpp-template-utils
+INCLUDEPATH += ../app/src ../cpputils ../cpp-template-utils
 
 DEFINES += FIXTURES_DIR=\\\"$$PWD/fixtures/\\\"
 
@@ -35,3 +35,7 @@ SOURCES += \
 	main.cpp \
 	movedblocks_tests.cpp \
 	unifieddiff_tests.cpp
+
+# The app sources assert through cpputils: these compile in what that needs, without the whole static library
+include(../cpputils/assert/assert.pri)
+include(../cpputils/debugger/debugger.pri)

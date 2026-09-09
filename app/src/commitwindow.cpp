@@ -14,6 +14,7 @@
 #include "settings.h"
 #include "theme.h"
 
+#include "assert/advanced_assert.h"
 #include "dialogs/messagebox.h"
 #include "hash/wheathash.hpp"
 #include "settingsui/csettingsdialog.h"
@@ -54,7 +55,6 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
-#include <assert.h>
 
 namespace {
 
@@ -842,7 +842,7 @@ bool CommitWindow::writeInFlight() const
 
 void CommitWindow::beginMutation()
 {
-	assert(!_mutationInFlight);
+	assert_r(!_mutationInFlight);
 	_mutationInFlight = true;
 	updateControlStates();
 }
@@ -1034,8 +1034,8 @@ void CommitWindow::doCommit(bool pushAfterwards, StateStamp decisionStamp)
 	const QString message = _messageEdit->toPlainText();
 	const QStringList pathspec = _filesModel.checkedPathspec();
 	const QStringList untracked = _filesModel.checkedUntrackedPaths();
-	assert(!message.trimmed().isEmpty() && !pathspec.isEmpty());
-	assert(_mutationInFlight); // held by startCommit across the reattach and the dialogs
+	assert_r(!message.trimmed().isEmpty() && !pathspec.isEmpty());
+	assert_r(_mutationInFlight); // held by startCommit across the reattach and the dialogs
 
 	const auto onDone = [this, message, pushAfterwards](std::expected<void, QString> result) {
 		endMutation();
@@ -1061,7 +1061,7 @@ void CommitWindow::doCommit(bool pushAfterwards, StateStamp decisionStamp)
 
 void CommitWindow::startPush()
 {
-	assert(!_pushInFlight); // doCommit reaches this too, but Commit & Push is off while a push runs
+	assert_r(!_pushInFlight); // doCommit reaches this too, but Commit & Push is off while a push runs
 	_pushInFlight = true;
 	updateControlStates();
 	_pushLogView->clearLog();
@@ -1081,7 +1081,7 @@ void CommitWindow::startPush()
 
 void CommitWindow::runPushStep(size_t index, bool setUpstream)
 {
-	assert(index < _pushSteps.size());
+	assert_r(index < _pushSteps.size());
 	const PushStep& step = _pushSteps[index];
 
 	_pushLogPane->show(); // before the entry: the log's scrolling needs a laid-out viewport
@@ -1364,7 +1364,7 @@ void CommitWindow::abortOperation()
 
 	const RepoOp op = _repo->state().op;
 	const OperationHint hint = _repo->state().opHint; // copied: a refresh may land in the dialog's event loop
-	assert(op != RepoOp::None); // the action is disabled without one
+	assert_and_return_r(op != RepoOp::None, ); // the action is disabled without one
 
 	const bool bisect = op == RepoOp::Bisect;
 	const QString title = bisect ? tr("End the bisect?") : tr("Abort the %1?").arg(hint.name);

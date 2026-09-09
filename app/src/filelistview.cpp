@@ -2,6 +2,8 @@
 #include "changedfilesmodel.h" // for the column layout and the sort key both file lists share
 #include "filelistdelegate.h"
 
+#include "assert/advanced_assert.h"
+
 DISABLE_COMPILER_WARNINGS
 #include <QGuiApplication>
 #include <QHeaderView>
@@ -12,7 +14,6 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
-#include <assert.h>
 
 namespace {
 
@@ -90,7 +91,7 @@ FileListView::FileListView(QWidget* parent) :
 
 void FileListView::setModel(QAbstractItemModel* sourceModel)
 {
-	assert(sourceModel); // the sizing and the sort below address sections, which exist only once there is a model
+	assert_r(sourceModel); // the sizing and the sort below address sections, which exist only once there is a model
 	_proxy->setSourceModel(sourceModel);
 	QTreeView::setModel(_proxy);
 

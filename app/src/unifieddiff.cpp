@@ -2,12 +2,13 @@
 #include "movedblocks.h"
 #include "textdiff.h"
 
+#include "assert/advanced_assert.h"
+
 DISABLE_COMPILER_WARNINGS
 #include <QByteArray>
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
-#include <assert.h>
 #include <utility>
 
 // A merged line stops reading as one line once it is a chain of alternating old and new fragments. A longer
@@ -177,7 +178,7 @@ void appendLine(ParsedDiff& parsed, const DiffLine& line, QStringView text)
 // Spans of the line appended last, which is where they were measured against
 void appendSpans(ParsedDiff& parsed, std::vector<DiffSpan> spans)
 {
-	assert(!parsed.lines.empty());
+	assert_and_return_r(!parsed.lines.empty(), );
 
 	const int line = int(parsed.lines.size()) - 1;
 	for (DiffSpan& span : spans)
@@ -401,14 +402,14 @@ ParsedDiff render(const ScannedDiff& scanned, std::vector<FileMove> moves)
 		if (block.removedCount > 0)
 		{
 			shown.removedFirst = shownLine[size_t(block.removedFirst)];
-			assert(shown.removedFirst >= 0);
+			assert_r(shown.removedFirst >= 0);
 			for (int k = 0; k < block.removedCount; ++k)
 				parsed.lines[size_t(shown.removedFirst + k)].moved = true;
 		}
 		if (block.addedCount > 0)
 		{
 			shown.addedFirst = shownLine[size_t(block.addedFirst)];
-			assert(shown.addedFirst >= 0);
+			assert_r(shown.addedFirst >= 0);
 			for (int k = 0; k < block.addedCount; ++k)
 				parsed.lines[size_t(shown.addedFirst + k)].moved = true;
 
@@ -608,7 +609,7 @@ ChangeSetDiff::ChangeSetDiff(QString text) :
 
 	// A section's path comes from its header or from the rename or copy lines; one still empty means a
 	// header shape this does not read
-	assert(std::none_of(_files.begin(), _files.end(), [](const File& file) { return file.path.isEmpty(); }));
+	assert_r(std::none_of(_files.begin(), _files.end(), [](const File& file) { return file.path.isEmpty(); }));
 
 	std::vector<ChangeLine> sequence;
 	for (size_t i = 0; i < _files.size(); ++i)
@@ -640,7 +641,7 @@ QStringView ChangeSetDiff::fileDiff(int file) const
 int ChangeSetDiff::fileOfLine(int line) const
 {
 	const auto after = std::upper_bound(_files.begin(), _files.end(), line, [](int l, const File& file) { return l < file.firstLine; });
-	assert(after != _files.begin());
+	assert_and_return_r(after != _files.begin(), 0); // only a negative line lands before the first file, which starts at line 0
 	return int(after - _files.begin()) - 1;
 }
 

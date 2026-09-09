@@ -1,6 +1,7 @@
 #include "hgcommandserver.h"
 #include "hgprocess.h"
 
+#include "assert/advanced_assert.h"
 #include "settingsui/csettingsdialog.h"
 
 DISABLE_COMPILER_WARNINGS
@@ -11,7 +12,6 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
-#include <assert.h>
 #include <utility>
 
 namespace {
@@ -137,7 +137,7 @@ void HgCommandServer::waitForExit(QDeadlineTimer deadline)
 
 void HgCommandServer::execute(Hg::ServerJob* job)
 {
-	assert(idle());
+	assert_r(idle());
 	_currentJob = job;
 	job->_runningOn = this;
 
@@ -302,7 +302,7 @@ void HgServerPool::shutdown()
 Vcs::Job* HgServerPool::run(const Vcs::Tool& tool, const QString& workDir, QStringList args, const QObject* context,
 	Vcs::Callback callback, QByteArray stdinData)
 {
-	assert(!_shutDown);
+	assert_r(!_shutDown);
 	if (_unavailable || _failedRoots.contains(workDir) || !stdinData.isEmpty())
 		return Vcs::run(tool, workDir, std::move(args), context, std::move(callback), std::move(stdinData));
 
