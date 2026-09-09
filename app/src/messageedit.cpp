@@ -60,7 +60,7 @@ bool hasAtLeastFourLetters(const QString& token)
 	return false;
 }
 
-// Every changed path and its basename, plus identifier-shaped words from the diff.
+// Every changed path in every spelling, plus identifier-shaped words from the diff.
 // Context lines count as much as changed ones: the backends ask for the enclosing function, whose names
 // describe the change.
 // Fewer than 4 letters and a small stoplist weed out prose function words.
@@ -87,8 +87,16 @@ QStringList completionWordsFor(const QStringList& changedPaths, QByteArray diff)
 	QSet<QString> words;
 	for (const QString& path : changedPaths)
 	{
+		// Every spelling goes in - the whole path, each directory prefix, each component: the typed prefix picks
 		words.insert(path);
-		words.insert(path.mid(path.lastIndexOf(QLatin1Char('/')) + 1));
+		qsizetype componentStart = 0;
+		for (qsizetype slash = path.indexOf(QLatin1Char('/')); slash != -1; slash = path.indexOf(QLatin1Char('/'), componentStart))
+		{
+			words.insert(path.left(slash + 1));
+			words.insert(path.mid(componentStart, slash - componentStart));
+			componentStart = slash + 1;
+		}
+		words.insert(path.mid(componentStart)); // the basename
 	}
 
 	diff.truncate(MaxDiffBytesForWords);
@@ -99,8 +107,9 @@ QStringList completionWordsFor(const QStringList& changedPaths, QByteArray diff)
 			break;
 		// A hunk header's tail is the enclosing function's name; the numbers before it cannot start a word.
 		// Every --git metadata line starts with a letter, so the prefix test alone keeps them out.
+		// The space is what tells a file header from a changed line whose own text starts with "--" or "++"
 		if (rawLine.size() < 2 || (rawLine[0] != ' ' && rawLine[0] != '+' && rawLine[0] != '-' && rawLine[0] != '@')
-			|| rawLine.startsWith("+++") || rawLine.startsWith("---"))
+			|| rawLine.startsWith("+++ ") || rawLine.startsWith("--- "))
 			continue;
 
 		const QString line = QString::fromUtf8(rawLine);

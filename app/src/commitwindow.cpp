@@ -605,18 +605,24 @@ void CommitWindow::onRefreshed()
 		});
 	}
 
+	// The path half of the completion pool needs no query, so it goes in before one is started
+	QStringList changedPaths;
+	for (const FileEntry& file : _repo->files())
+		changedPaths.push_back(file.path);
+	_messageEdit->setCompletionSources(changedPaths, {});
+
 	// Cancelled, or refreshes in quick succession would leave the set built by whichever finished last
 	_changeSetQuery.cancel();
 	_changeSet.reset();
 	_changeSetPending = true;
-	_changeSetQuery = _repo->workingTreeDiff(Settings::MaxChangeSetDiffBytes, this, [this](std::expected<QByteArray, QString> diff) {
+	_changeSetQuery = _repo->workingTreeDiff(Settings::MaxChangeSetDiffBytes, this, [this, changedPaths](std::expected<QByteArray, QString> diff) {
 		_changeSetPending = false;
-		QStringList changedPaths;
-		for (const FileEntry& file : _repo->files())
-			changedPaths.push_back(file.path);
-		_messageEdit->setCompletionSources(changedPaths, diff.value_or(QByteArray{}));
+		// A failed diff leaves the pool as the paths set above
 		if (diff)
+		{
+			_messageEdit->setCompletionSources(changedPaths, *diff);
 			_changeSet.emplace(QString::fromUtf8(*diff));
+		}
 		if (_rowAwaitsChangeSet)
 			showDiffForCurrentRow();
 	});

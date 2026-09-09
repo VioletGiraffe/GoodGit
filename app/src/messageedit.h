@@ -16,7 +16,7 @@ class MessageEdit final : public QPlainTextEdit
 public:
 	explicit MessageEdit(QWidget* parent = nullptr);
 
-	// Rebuilds the pool: every changed path and its basename, plus identifier-shaped words from `diff`
+	// Rebuilds the pool: every changed path in every spelling, plus identifier-shaped words from `diff`
 	void setCompletionSources(const QStringList& changedPaths, QByteArray diff);
 
 	// Wide enough for the subject guide column, which the base's font-independent placeholder hint ignores
