@@ -394,24 +394,28 @@ ParsedDiff render(const ScannedDiff& scanned, std::vector<FileMove> moves)
 	for (FileMove& move : moves)
 	{
 		const MovedBlock& block = move.block;
+		const int removedFirst = block.removedCount > 0 ? shownLine[size_t(block.removedFirst)] : 0;
+		const int addedFirst = block.addedCount > 0 ? shownLine[size_t(block.addedFirst)] : 0;
+		if (removedFirst < 0 || addedFirst < 0)
+		{
+			assert_unconditional_r("A moved block's line was merged into a pair");
+			continue; // leaves the lines undecorated
+		}
+
 		DiffMove shown;
+		shown.removedFirst = removedFirst;
 		shown.removedCount = block.removedCount;
+		shown.addedFirst = addedFirst;
 		shown.addedCount = block.addedCount;
 		shown.group = block.group;
 		shown.foreign = std::move(move.foreign);
-		if (block.removedCount > 0)
+		for (int k = 0; k < block.removedCount; ++k)
+			parsed.lines[size_t(removedFirst + k)].moved = true;
+
+		if (block.addedCount > 0) // the pairs below carry this file's indices only where the added range is here
 		{
-			shown.removedFirst = shownLine[size_t(block.removedFirst)];
-			assert_r(shown.removedFirst >= 0);
-			for (int k = 0; k < block.removedCount; ++k)
-				parsed.lines[size_t(shown.removedFirst + k)].moved = true;
-		}
-		if (block.addedCount > 0)
-		{
-			shown.addedFirst = shownLine[size_t(block.addedFirst)];
-			assert_r(shown.addedFirst >= 0);
 			for (int k = 0; k < block.addedCount; ++k)
-				parsed.lines[size_t(shown.addedFirst + k)].moved = true;
+				parsed.lines[size_t(addedFirst + k)].moved = true;
 
 			// An edit on the way is marked on the added line alone: the edit belongs where the block now is
 			for (const MovedLinePair& pair : block.pairs)
@@ -611,6 +615,8 @@ ChangeSetDiff::ChangeSetDiff(QString text) :
 	// header shape this does not read
 	assert_r(std::none_of(_files.begin(), _files.end(), [](const File& file) { return file.path.isEmpty(); }));
 
+	// Every file's change lines in one sequence: a move from one file to another is found this way.
+	// No block straddles a file boundary: each file's diff opens with headers, which end a block on both sides.
 	std::vector<ChangeLine> sequence;
 	for (size_t i = 0; i < _files.size(); ++i)
 	{
