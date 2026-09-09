@@ -164,10 +164,7 @@ CommitWindow* openRepositoryWindow(const RepositoryLocation& location, QWidget* 
 	RecentRepositories::recordOpen(location);
 
 	if (window)
-	{
-		window->raise();
-		window->activateWindow();
-	}
+		WidgetUtils::bringWindowToFront(window);
 	else
 	{
 		window = new CommitWindow{ location };
@@ -277,9 +274,7 @@ void showWelcomeWindow()
 	if (!welcome)
 		welcome = new WelcomeWindow;
 
-	welcome->show(); // a no-op on one already up
-	welcome->raise();
-	welcome->activateWindow();
+	WidgetUtils::bringWindowToFront(welcome);
 }
 
 void acceptRepositoryFolderDrops(QWidget* target)

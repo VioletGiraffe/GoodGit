@@ -98,11 +98,7 @@ HistoryWindow* showRepositoryHistory(const RepositoryLocation& location)
 	if (!window)
 		window = new HistoryWindow(location);
 
-	window->show();
-	if (window->isMinimized()) // show() does not restore a minimized window
-		window->setWindowState(window->windowState() & ~Qt::WindowMinimized);
-	window->raise();
-	window->activateWindow();
+	WidgetUtils::bringWindowToFront(window);
 	return window;
 }
 
