@@ -5,12 +5,14 @@
 # local-env.sh beside this script, git-ignored, where a developer sets it for their machine; the default
 # installation location ~/Qt/<version>/{macos,gcc_64}; a qmake6 or qmake already on PATH (a distribution's Qt).
 # An argument of "debug" builds and runs the debug configuration.
+# Any further arguments go to the test executable, e.g. a Catch2 test spec.
 
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG=release
 [ "${1:-}" = debug ] && CONFIG=debug
+if [ $# -gt 0 ]; then shift; fi
 
 [ -z "${QT_ROOT_DIR:-}" ] && [ -f "${SCRIPT_DIR}/local-env.sh" ] && . "${SCRIPT_DIR}/local-env.sh"
 if [ -z "${QT_ROOT_DIR:-}" ]; then
@@ -37,4 +39,4 @@ fi
 cd "${SCRIPT_DIR}/../tests" || exit 2
 "${QMAKE}" tests.pro CONFIG+="${CONFIG}" || exit 1
 make -j"$(getconf _NPROCESSORS_ONLN)" || exit 1
-exec "bin/${CONFIG}/tests"
+exec "bin/${CONFIG}/tests" "$@"

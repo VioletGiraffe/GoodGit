@@ -32,5 +32,6 @@ SOURCES += \
 	../app/src/movedblocks.cpp \
 	../app/src/textdiff.cpp \
 	../app/src/unifieddiff.cpp \
+	main.cpp \
 	movedblocks_tests.cpp \
 	unifieddiff_tests.cpp
