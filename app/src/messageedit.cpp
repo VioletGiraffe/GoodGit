@@ -23,11 +23,6 @@ namespace {
 
 constexpr int ColumnsPastGuide = 4; // the guide marks a limit to overrun, not the edge of the editor
 
-int subjectGuideColumn()
-{
-	return QSettings{}.value(Settings::SubjectGuideColumnKey, Settings::SubjectGuideColumnDefault).toInt();
-}
-
 // Not Qt's word boundaries: those break on '-' and '/', and a repo-relative path contains both
 bool isCompletionTokenChar(QChar c)
 {
@@ -47,14 +42,13 @@ bool looksLikeHexSha(const QString& token)
 	return true;
 }
 
-// Letters, not characters: "x1234567" and "a_2_bc" are not words.
-// Four: one more than the default minimum prefix the auto-popup waits for.
-bool hasAtLeastFourLetters(const QString& token)
+// Letters, not characters: "x1234567" and "a_2_bc" are not words
+bool hasEnoughLetters(const QString& token, int minLetters)
 {
 	int letters = 0;
 	for (const QChar c : token)
 	{
-		if (c.isLetter() && ++letters == 4)
+		if (c.isLetter() && ++letters == minLetters)
 			return true;
 	}
 	return false;
@@ -63,9 +57,10 @@ bool hasAtLeastFourLetters(const QString& token)
 // Every changed path in every spelling, plus identifier-shaped words from the diff.
 // Context lines count as much as changed ones: the backends ask for the enclosing function, whose names
 // describe the change.
-// Fewer than 4 letters and a small stoplist weed out prose function words.
+// A small stoplist weeds out prose function words.
+// Fewer than `minLetters` letters is not worth pooling: typing that much already spells the word out.
 // Hex-sha-shaped tokens are dropped: submodule pointer diffs would pollute the pool.
-QStringList completionWordsFor(const QStringList& changedPaths, QByteArray diff)
+QStringList completionWordsFor(const QStringList& changedPaths, QByteArray diff, int minLetters)
 {
 	constexpr qsizetype MaxDiffBytesForWords = 8 * 1024 * 1024;
 	constexpr qsizetype MaxWords = 20000;
@@ -82,7 +77,8 @@ QStringList completionWordsFor(const QStringList& changedPaths, QByteArray diff)
 		QStringLiteral("where"), QStringLiteral("which"), QStringLiteral("while"), QStringLiteral("after"),
 		QStringLiteral("before"), QStringLiteral("about"), QStringLiteral("because"),
 	};
-	static const QRegularExpression wordRe(QStringLiteral("[A-Za-z_][A-Za-z0-9_]{3,}"));
+	// Length is the cheap half of the test: a word of minLetters letters is at least that many characters
+	const QRegularExpression wordRe{ QStringLiteral("[A-Za-z_][A-Za-z0-9_]{%1,}").arg(minLetters - 1) };
 
 	QSet<QString> words;
 	for (const QString& path : changedPaths)
@@ -116,7 +112,7 @@ QStringList completionWordsFor(const QStringList& changedPaths, QByteArray diff)
 		for (auto it = wordRe.globalMatch(line); it.hasNext(); )
 		{
 			const QString token = it.next().captured();
-			if (hasAtLeastFourLetters(token) && !stopWords.contains(token.toLower()) && !looksLikeHexSha(token))
+			if (hasEnoughLetters(token, minLetters) && !stopWords.contains(token.toLower()) && !looksLikeHexSha(token))
 				words.insert(token);
 		}
 	}
@@ -126,13 +122,13 @@ QStringList completionWordsFor(const QStringList& changedPaths, QByteArray diff)
 }
 
 MessageEdit::MessageEdit(QWidget* parent) :
-	QPlainTextEdit(parent),
-	_guideColumn{ subjectGuideColumn() }
+	QPlainTextEdit(parent)
 {
+	readSettings();
 	setFont(monospaceFont());
 	// update() for a guide-column change under an unchanged font
 	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] {
-		_guideColumn = subjectGuideColumn();
+		readSettings();
 		setFont(monospaceFont());
 		viewport()->update();
 	});
@@ -151,6 +147,14 @@ MessageEdit::MessageEdit(QWidget* parent) :
 	_completer->popup()->installEventFilter(this);
 }
 
+void MessageEdit::readSettings()
+{
+	const QSettings settings;
+	_guideColumn = settings.value(Settings::SubjectGuideColumnKey, Settings::SubjectGuideColumnDefault).toInt();
+	_autoPopup = settings.value(Settings::CompletionAutoPopupKey, Settings::CompletionAutoPopupDefault).toBool();
+	_minPrefixLength = settings.value(Settings::CompletionMinPrefixLengthKey, Settings::CompletionMinPrefixLengthDefault).toInt();
+}
+
 QSize MessageEdit::sizeHint() const
 {
 	const qreal textWidth = fontMetrics().horizontalAdvance(QLatin1Char('x')) * (_guideColumn + ColumnsPastGuide)
@@ -161,7 +165,10 @@ QSize MessageEdit::sizeHint() const
 
 void MessageEdit::setCompletionSources(const QStringList& changedPaths, QByteArray diff)
 {
-	QStringList words = completionWordsFor(changedPaths, std::move(diff));
+	// A word no longer than the prefix that opens the popup is already typed out by the time it opens.
+	// Ctrl+Space waits for no prefix, so with the auto-popup off the floor is two letters.
+	const int minLetters = _autoPopup ? _minPrefixLength + 1 : 2;
+	QStringList words = completionWordsFor(changedPaths, std::move(diff), minLetters);
 	// Sorted once, so that each block putExactCaseMatchesFirst produces is alphabetical
 	std::sort(words.begin(), words.end(),
 		[](const QString& l, const QString& r) { return l.compare(r, Qt::CaseInsensitive) < 0; });
@@ -199,9 +206,7 @@ void MessageEdit::keyPressEvent(QKeyEvent* event)
 
 	// With auto-popup off, a popup summoned by Ctrl+Space still follows further typing
 	const QString prefix = completionPrefix();
-	const QSettings settings;
-	const bool follow = settings.value(Settings::CompletionAutoPopupKey, Settings::CompletionAutoPopupDefault).toBool()
-		? prefix.length() >= settings.value(Settings::CompletionMinPrefixLengthKey, Settings::CompletionMinPrefixLengthDefault).toInt()
+	const bool follow = _autoPopup ? prefix.length() >= _minPrefixLength
 		: _completer->popup()->isVisible() && !prefix.isEmpty();
 	if (follow)
 		showCompletions(prefix);

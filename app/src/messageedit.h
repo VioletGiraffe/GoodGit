@@ -16,7 +16,8 @@ class MessageEdit final : public QPlainTextEdit
 public:
 	explicit MessageEdit(QWidget* parent = nullptr);
 
-	// Rebuilds the pool: every changed path in every spelling, plus identifier-shaped words from `diff`
+	// Rebuilds the pool: every changed path in every spelling, plus identifier-shaped words from `diff`.
+	// The shortest word it keeps follows the completion settings as they stood at this call
 	void setCompletionSources(const QStringList& changedPaths, QByteArray diff);
 
 	// Wide enough for the subject guide column, which the base's font-independent placeholder hint ignores
@@ -28,6 +29,8 @@ protected:
 	bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+	void readSettings();
+
 	// The completion token before the cursor: path and identifier characters, not Qt's word boundaries
 	[[nodiscard]] QTextCursor completionPrefixSelection() const;
 	[[nodiscard]] QString completionPrefix() const;
@@ -40,6 +43,8 @@ private:
 	QStringListModel* _completerModel = nullptr;
 	// The pool, sorted case-insensitively. Each prefix reorders a copy into the model; this order stays pristine
 	QStringList _completionWords;
-	// Cached: the setting is a registry read, and paintEvent runs per keystroke and cursor blink
+	// Cached: each is a registry read, and paintEvent and keyPressEvent both run per keystroke
 	int _guideColumn = 0;
+	bool _autoPopup = true;
+	int _minPrefixLength = 0;
 };
