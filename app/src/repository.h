@@ -140,8 +140,8 @@ public:
 	// The command may open the user's editor and wait on it, so the answer can be a long time coming.
 	virtual void continueOperation(Vcs::Answer<void> onDone) = 0;
 
-	// The commands the push needs, in the order they must run; this repository's own is last. Nothing has
-	// run yet, so a submodule that cannot be pushed is a refusal here rather than a failure halfway through.
+	// The commands the push needs, in the order they must run; this repository's own is last, so the answer is never an empty
+	// list. Nothing has run yet, so a submodule that cannot be pushed is a refusal here rather than a failure halfway through.
 	virtual void planPush(Vcs::Answer<std::vector<PushStep>> onDone) = 0;
 	// Runs one planned step. Returns the job so the caller can stream its output into the push log.
 	// Reported as a process rather than an answer: the push log shows the exit code when there was no output.
