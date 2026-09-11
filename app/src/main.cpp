@@ -8,8 +8,10 @@
 
 DISABLE_COMPILER_WARNINGS
 #include <QApplication>
+#include <QByteArrayList>
 #include <QDir>
 #include <QIcon>
+#include <QtGlobal> // qgetenv, qputenv
 RESTORE_COMPILER_WARNINGS
 
 namespace {
@@ -22,10 +24,33 @@ int runApplication()
 	return exitCode;
 }
 
+#ifdef Q_OS_MACOS
+// launchd's PATH lacks the Homebrew and MacPorts directories: an app started from Finder or the Dock inherits it
+// Both package managers' shell setup puts these first: the app then runs the same git and hg as a terminal
+// A directory already on PATH is not moved: a terminal launch keeps the user's order
+void prependPackageManagerDirectoriesToPath()
+{
+	const QByteArray inheritedPath = qgetenv("PATH");
+	const QByteArrayList inheritedDirectories = inheritedPath.split(':');
+	QByteArrayList path;
+	for (const char* directory : { "/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin" })
+	{
+		if (!inheritedDirectories.contains(directory))
+			path.append(directory);
+	}
+	if (!inheritedPath.isEmpty()) // an empty entry would put the current directory on PATH
+		path.append(inheritedPath);
+	qputenv("PATH", path.join(':'));
+}
+#endif
+
 } // namespace
 
 int main(int argc, char* argv[])
 {
+#ifdef Q_OS_MACOS
+	prependPackageManagerDirectoriesToPath();
+#endif
 	QApplication app{ argc, argv };
 	QApplication::setOrganizationName(QStringLiteral("GoodGit"));
 	QApplication::setApplicationName(QStringLiteral("GoodGit"));

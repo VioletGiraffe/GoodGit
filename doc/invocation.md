@@ -1,5 +1,11 @@
 # Invoking the tools
 
+## The executables
+
+`git` and `hg` resolve on PATH unless Preferences sets a path. On macOS, startup prepends the Homebrew and
+MacPorts bin directories missing from PATH: an app started from Finder or the Dock inherits launchd's PATH,
+without them. Child processes inherit the result, including the helpers git and hg start (git-lfs, gpg).
+
 ## Invocation invariants
 
 `gitprocess` applies to every call: `-c core.quotepath=false`, `GIT_TERMINAL_PROMPT=0` (a credential miss
