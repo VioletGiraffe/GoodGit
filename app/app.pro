@@ -22,7 +22,9 @@ QT += network   # the autoupdater library queries the GitHub releases API
 Release:OUTPUT_DIR=release/
 Debug:OUTPUT_DIR=debug/
 
-DESTDIR  = ../bin/$${OUTPUT_DIR}
+BIN_DIR  = ../bin/$${OUTPUT_DIR}   # the static libs, and on Windows the exe that loads this
+DESTDIR  = $${BIN_DIR}
+win32:DESTDIR = $${BIN_DIR}lib   # the exe sits in BIN_DIR and loads this out of lib, see doc/BUILD.md
 OBJECTS_DIR = ../build/$${OUTPUT_DIR}/$${TARGET}
 MOC_DIR     = ../build/$${OUTPUT_DIR}/$${TARGET}
 UI_DIR      = ../build/$${OUTPUT_DIR}/$${TARGET}
@@ -131,10 +133,10 @@ macx:ICON = res/goodgit-mac.icns   # built from res/goodgit-mac.svg (Apple icon 
 #                 LIBS
 ###################################################
 
-LIBS += -L$${DESTDIR} -lautoupdater -lqtutils -lcpputils -lthin_io
+LIBS += -L$${BIN_DIR} -lautoupdater -lqtutils -lcpputils -lthin_io
 
 mac*|linux*|freebsd*{
-	PRE_TARGETDEPS += $${DESTDIR}/libautoupdater.a $${DESTDIR}/libqtutils.a $${DESTDIR}/libcpputils.a $${DESTDIR}/libthin_io.a
+	PRE_TARGETDEPS += $${BIN_DIR}/libautoupdater.a $${BIN_DIR}/libqtutils.a $${BIN_DIR}/libcpputils.a $${BIN_DIR}/libthin_io.a
 
 	QMAKE_CXXFLAGS_WARN_ON += -Wno-missing-field-initializers
 }

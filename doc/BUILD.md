@@ -17,9 +17,10 @@ platform icons and `Info.plist`.
 ## `gg` on PATH
 
 - **Windows**: the application is `gg.dll`, exporting `ggMain`; the `launcher` subproject builds the `gg.exe`
-  that loads it from the directory above its own. Only the launcher's directory goes on PATH, so the Qt DLLs
-  sitting beside the application are not offered to every process's DLL search; the launcher reaches them with
-  `SetDllDirectory` on its own process. The installer adds the launcher's directory to the system PATH.
+  that loads it out of the `lib` directory beside itself. Only the executable's own directory goes on PATH, so
+  the Qt DLLs deployed into `lib` are not offered to every process's DLL search; the launcher reaches them
+  with `SetDllDirectory` on its own process. It also passes `lib` to `ggMain`: Qt looks for the deployed
+  plugins in the executable's directory, which is not where they are. The installer adds that directory to PATH.
 - **macOS**: File > Install 'gg' Command Line Tool (also offered on the welcome window) points `/usr/local/bin/gg` at
   the running bundle's executable (`commandlinetool_mac`). macOS asks for administrator credentials where that
   directory is not user-writable.

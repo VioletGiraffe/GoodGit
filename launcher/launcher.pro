@@ -1,5 +1,5 @@
 TEMPLATE = app
-TARGET   = gg   # the name typed in a terminal; the gg.dll it loads carries the same name one level up
+TARGET   = gg   # the name typed in a terminal; the gg.dll it loads carries the same name one level down
 QMAKE_PROJECT_NAME = launcher   # a VS solution cannot hold two projects named after the same target
 
 include(../version.pri)
@@ -14,7 +14,7 @@ Release:OUTPUT_DIR=release/
 Debug:OUTPUT_DIR=debug/
 
 # DESTDIR is the directory that goes on PATH; OBJECTS_DIR must differ from the app's, both having a main.cpp
-DESTDIR     = ../bin/$${OUTPUT_DIR}launcher
+DESTDIR     = ../bin/$${OUTPUT_DIR}
 OBJECTS_DIR = ../build/$${OUTPUT_DIR}/launcher
 
 SOURCES += main.cpp

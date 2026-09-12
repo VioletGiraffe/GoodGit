@@ -11,6 +11,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QByteArrayList>
 #include <QDir>
 #include <QIcon>
+#include <QString>
 #include <QtGlobal> // qgetenv, qputenv
 RESTORE_COMPILER_WARNINGS
 
@@ -46,13 +47,17 @@ void prependPackageManagerDirectoriesToPath()
 
 } // namespace
 
-// On Windows the application is a DLL that launcher/gg.exe loads and calls into, see doc/BUILD.md
+// On Windows the application is a DLL that the launcher exe loads and calls into, see doc/BUILD.md
 #ifdef Q_OS_WIN
-extern "C" __declspec(dllexport) int ggMain(int argc, char* argv[])
+extern "C" __declspec(dllexport) int ggMain(int argc, char* argv[], const wchar_t* libraryDirectory)
 #else
 int main(int argc, char* argv[])
 #endif
 {
+#ifdef Q_OS_WIN
+	// The Qt plugins deploy beside this dll. The default library paths name the exe's directory and the Qt prefix.
+	QApplication::addLibraryPath(QString::fromWCharArray(libraryDirectory));
+#endif
 #ifdef Q_OS_MACOS
 	prependPackageManagerDirectoriesToPath();
 #endif

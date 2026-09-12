@@ -1,5 +1,5 @@
-// Loads gg.dll from the directory above this one and runs it. Only this directory goes on PATH: the
-// application's own directory holds the Qt DLLs, and a PATH entry for it would offer them to every process's
+// Loads gg.dll from the lib directory beside this executable and runs it. Only this executable's own
+// directory goes on PATH: lib holds the Qt DLLs, and a PATH entry for it would offer them to every process's
 // DLL search.
 
 #include <Windows.h>
@@ -9,10 +9,11 @@
 
 namespace {
 
+constexpr const wchar_t* LibraryDirectoryName = L"lib";
 constexpr const wchar_t* ApplicationFileName = L"gg.dll";
 constexpr const char* EntryPointName = "ggMain";
 
-using EntryPoint = int (*)(int argc, char* argv[]);
+using EntryPoint = int (*)(int argc, char* argv[], const wchar_t* libraryDirectory);
 
 std::wstring ownExecutablePath()
 {
@@ -54,15 +55,18 @@ int reportFailure(const std::wstring& message)
 // WinMain, not wWinMain: the wide CRT startup leaves __argv null
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 {
-	// <install dir>\launcher\gg.exe -> <install dir>
-	std::wstring directory = ownExecutablePath();
-	if (directory.empty() || !removeLastPathComponent(directory) || !removeLastPathComponent(directory))
+	// <install dir>\gg.exe -> <install dir>\lib
+	std::wstring libraryDirectory = ownExecutablePath();
+	if (libraryDirectory.empty() || !removeLastPathComponent(libraryDirectory))
 		return reportFailure(L"Could not locate the GoodGit installation directory.");
 
-	// Resolves the Qt DLLs that gg.dll and the Qt plugins import. Not PATH: no child process inherits it.
-	::SetDllDirectoryW(directory.c_str());
+	libraryDirectory += L'\\';
+	libraryDirectory += LibraryDirectoryName;
 
-	const std::wstring application = directory + L'\\' + ApplicationFileName;
+	// Resolves the Qt DLLs that gg.dll and the Qt plugins import. Not PATH: no child process inherits it.
+	::SetDllDirectoryW(libraryDirectory.c_str());
+
+	const std::wstring application = libraryDirectory + L'\\' + ApplicationFileName;
 	const HMODULE module = ::LoadLibraryW(application.c_str());
 	if (!module)
 		return reportFailure(L"Could not load " + application);
@@ -72,5 +76,5 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		return reportFailure(L"Could not find the entry point in " + application);
 
 	// Not unloaded: the module's static destructors then run at process exit, as an exe's do
-	return entryPoint(__argc, __argv);
+	return entryPoint(__argc, __argv, libraryDirectory.c_str());
 }

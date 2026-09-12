@@ -67,14 +67,14 @@ jobs:
         set STAGING_DIR=dist
         RMDIR /S /Q %STAGING_DIR%
         mkdir %STAGING_DIR%
-        copy /y bin\release\gg.dll "%STAGING_DIR%\" >nul
-        mkdir %STAGING_DIR%\launcher
-        copy /y bin\release\launcher\gg.exe "%STAGING_DIR%\launcher\" >nul
+        copy /y bin\release\gg.exe "%STAGING_DIR%\" >nul
+        mkdir %STAGING_DIR%\lib
+        copy /y bin\release\lib\gg.dll "%STAGING_DIR%\lib\" >nul
         REM The tls plugins stay: the update check talks to the GitHub API over HTTPS and fails without a backend
-        %QT_ROOT_DIR%\bin\windeployqt.exe --dir %STAGING_DIR% --force --release --compiler-runtime --no-translations --no-system-d3d-compiler --no-system-dxc-compiler --no-opengl-sw --skip-plugin-types networkinformation %STAGING_DIR%\gg.dll
+        %QT_ROOT_DIR%\bin\windeployqt.exe --dir %STAGING_DIR%\lib --force --release --compiler-runtime --no-translations --no-system-d3d-compiler --no-system-dxc-compiler --no-opengl-sw --skip-plugin-types networkinformation %STAGING_DIR%\lib\gg.dll
 
-        del %STAGING_DIR%\dxil.dll >nul
-        del %STAGING_DIR%\dxcompiler.dll >nul
+        del %STAGING_DIR%\lib\dxil.dll >nul
+        del %STAGING_DIR%\lib\dxcompiler.dll >nul
 
         "%programfiles(x86)%\Inno Setup 6\iscc" installer.iss
 
@@ -127,7 +127,7 @@ jobs:
           $sections | Sort-Object KB -Descending
         }
 
-        $binary = Get-Item 'bin\release\gg.dll'
+        $binary = Get-Item 'bin\release\lib\gg.dll'
         "{0:N2} KB  {1}" -f ($binary.Length / 1KB), $binary.Name
         Get-PeSectionSizes $binary.FullName | Format-Table Name, KB -AutoSize
 

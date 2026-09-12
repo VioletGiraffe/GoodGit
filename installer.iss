@@ -2,10 +2,10 @@
 #define MyAppPublisher "VioletGiraffe"
 #define MyAppExeName "gg.exe"
 #define MyAppDllName "gg.dll"
-#define LauncherDirName "launcher"
+#define LibDirName "lib"
 #define VCRedistExeName "vc_redist.x64.exe"
 ; Version is read from the built dll (which gets it from VERSION in version.pri) - single source of truth
-#define MyAppVersion GetVersionNumbersString(AddBackslash(SourcePath) + "dist\" + MyAppDllName)
+#define MyAppVersion GetVersionNumbersString(AddBackslash(SourcePath) + "dist\" + LibDirName + "\" + MyAppDllName)
 
 [Setup]
 ; Fixed install identity: must never change, or upgrades stop finding existing installs
@@ -24,10 +24,10 @@ ArchitecturesInstallIn64BitMode=x64compatible
 ; 10.0.17763 is 1809, the oldest Windows that Qt 6.8 supports
 MinVersion=10.0.17763
 WizardStyle=modern
-UninstallDisplayIcon={app}\{#LauncherDirName}\{#MyAppExeName}
+UninstallDisplayIcon={app}\{#MyAppExeName}
 SetupIconFile=app\res\goodgit.ico
 
-; The launcher dir is added to the system PATH (gg is meant to be launched from a terminal in a repo);
+; The install dir is added to the system PATH (gg is meant to be launched from a terminal in a repo);
 ; this makes the installer broadcast the environment change so new shells pick it up without a reboot
 ChangesEnvironment=yes
 
@@ -37,38 +37,34 @@ Compression=lzma2/ultra64
 LZMAUseSeparateProcess=yes
 LZMABlockSize=8192
 
-[InstallDelete]
-; Installs predating gg.dll put the application at {app}\gg.exe: left in place it runs as an old GoodGit against the new Qt DLLs
-Type: files; Name: "{app}\{#MyAppExeName}"
-
 [Files]
 ; Both binaries have their own entry so ignoreversion forces overwrite on same-version rebuilds. Being non-wildcard
 ; Sources, they also make a missing one (e.g. a failed build) a hard compile error instead of a silent broken installer.
 ; Excludes matches by file name at any depth, so it keeps the wildcard off both.
-Source: "{#SourcePath}\dist\{#MyAppDllName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourcePath}\dist\{#LauncherDirName}\{#MyAppExeName}"; DestDir: "{app}\{#LauncherDirName}"; Flags: ignoreversion
+Source: "{#SourcePath}\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourcePath}\dist\{#LibDirName}\{#MyAppDllName}"; DestDir: "{app}\{#LibDirName}"; Flags: ignoreversion
 Source: "{#SourcePath}\dist\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs; Excludes: "{#VCRedistExeName},{#MyAppExeName},{#MyAppDllName}"
-Source: "{#SourcePath}\dist\{#VCRedistExeName}";  DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "{#SourcePath}\dist\{#LibDirName}\{#VCRedistExeName}";  DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "{#SourcePath}\LICENSE"; DestDir: "{app}"
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#LauncherDirName}\{#MyAppExeName}"
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autoprograms}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#LauncherDirName}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Tasks]
 Name: desktopicon; Description: {cm:CreateDesktopIcon}; GroupDescription: {cm:AdditionalIcons};
 
 [Registry]
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; \
-	ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}\{#LauncherDirName}"; \
-	Check: NeedsAddToPath(ExpandConstant('{app}\{#LauncherDirName}'))
+	ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; \
+	Check: NeedsAddToPath(ExpandConstant('{app}'))
 
 [Run]
 Filename: "{tmp}\{#VCRedistExeName}"; Parameters: "/install /quiet /norestart"; StatusMsg: Installing Microsoft C++ Runtime...; Flags: runhidden waituntilterminated skipifdoesntexist
 
 [UninstallDelete]
-Type: dirifempty; Name: "{app}\{#LauncherDirName}"
+Type: dirifempty; Name: "{app}\{#LibDirName}"
 Type: dirifempty; Name: "{app}"
 
 [Code]
@@ -98,7 +94,7 @@ begin
 	if not RegQueryStringValue(HKEY_LOCAL_MACHINE, EnvironmentKey, 'Path', Path) then
 		exit;
 
-	Dir := ExpandConstant('{app}\{#LauncherDirName}');
+	Dir := ExpandConstant('{app}');
 	Position := Pos(';' + Uppercase(Dir) + ';', ';' + Uppercase(Path) + ';');
 	if Position = 0 then
 		exit;
