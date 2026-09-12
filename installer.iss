@@ -1,10 +1,11 @@
 #define MyAppName "GoodGit"
 #define MyAppPublisher "VioletGiraffe"
 #define MyAppExeName "gg.exe"
+#define MyAppDllName "gg.dll"
 #define LauncherDirName "launcher"
 #define VCRedistExeName "vc_redist.x64.exe"
-; Version is read from the built exe (which gets it from VERSION in app/app.pro) - single source of truth
-#define MyAppVersion GetVersionNumbersString(AddBackslash(SourcePath) + "dist\" + MyAppExeName)
+; Version is read from the built dll (which gets it from VERSION in version.pri) - single source of truth
+#define MyAppVersion GetVersionNumbersString(AddBackslash(SourcePath) + "dist\" + MyAppDllName)
 
 [Setup]
 ; Fixed install identity: must never change, or upgrades stop finding existing installs
@@ -23,7 +24,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 ; 10.0.17763 is 1809, the oldest Windows that Qt 6.8 supports
 MinVersion=10.0.17763
 WizardStyle=modern
-UninstallDisplayIcon={app}\{#MyAppExeName}
+UninstallDisplayIcon={app}\{#LauncherDirName}\{#MyAppExeName}
 SetupIconFile=app\res\goodgit.ico
 
 ; The launcher dir is added to the system PATH (gg is meant to be launched from a terminal in a repo);
@@ -36,20 +37,24 @@ Compression=lzma2/ultra64
 LZMAUseSeparateProcess=yes
 LZMABlockSize=8192
 
+[InstallDelete]
+; Installs predating gg.dll put the application at {app}\gg.exe: left in place it runs as an old GoodGit against the new Qt DLLs
+Type: files; Name: "{app}\{#MyAppExeName}"
+
 [Files]
-; Both exes have their own entry so ignoreversion forces overwrite on same-version rebuilds. Being non-wildcard
-; Sources, they also make a missing exe (e.g. a failed build) a hard compile error instead of a silent broken installer.
-; The wildcard's Excludes matches by file name at any depth, so it covers the launcher copy too.
-Source: "{#SourcePath}\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+; Both binaries have their own entry so ignoreversion forces overwrite on same-version rebuilds. Being non-wildcard
+; Sources, they also make a missing one (e.g. a failed build) a hard compile error instead of a silent broken installer.
+; Excludes matches by file name at any depth, so it keeps the wildcard off both.
+Source: "{#SourcePath}\dist\{#MyAppDllName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourcePath}\dist\{#LauncherDirName}\{#MyAppExeName}"; DestDir: "{app}\{#LauncherDirName}"; Flags: ignoreversion
-Source: "{#SourcePath}\dist\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs; Excludes: "{#VCRedistExeName},{#MyAppExeName}"
+Source: "{#SourcePath}\dist\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs; Excludes: "{#VCRedistExeName},{#MyAppExeName},{#MyAppDllName}"
 Source: "{#SourcePath}\dist\{#VCRedistExeName}";  DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "{#SourcePath}\LICENSE"; DestDir: "{app}"
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#LauncherDirName}\{#MyAppExeName}"
 Name: "{autoprograms}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#LauncherDirName}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Tasks]
 Name: desktopicon; Description: {cm:CreateDesktopIcon}; GroupDescription: {cm:AdditionalIcons};

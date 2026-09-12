@@ -46,7 +46,12 @@ void prependPackageManagerDirectoriesToPath()
 
 } // namespace
 
+// On Windows the application is a DLL that launcher/gg.exe loads and calls into, see doc/BUILD.md
+#ifdef Q_OS_WIN
+extern "C" __declspec(dllexport) int ggMain(int argc, char* argv[])
+#else
 int main(int argc, char* argv[])
+#endif
 {
 #ifdef Q_OS_MACOS
 	prependPackageManagerDirectoriesToPath();

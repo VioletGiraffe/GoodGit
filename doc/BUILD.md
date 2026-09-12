@@ -16,9 +16,10 @@ platform icons and `Info.plist`.
 
 ## `gg` on PATH
 
-- **Windows**: the `launcher` subproject builds a second `gg.exe` that starts the real one from the directory
-  above it. Only the launcher's directory goes on PATH, so the Qt DLLs sitting beside the application are not
-  offered to every process's DLL search. The installer adds that directory to the system PATH.
+- **Windows**: the application is `gg.dll`, exporting `ggMain`; the `launcher` subproject builds the `gg.exe`
+  that loads it from the directory above its own. Only the launcher's directory goes on PATH, so the Qt DLLs
+  sitting beside the application are not offered to every process's DLL search; the launcher reaches them with
+  `SetDllDirectory` on its own process. The installer adds the launcher's directory to the system PATH.
 - **macOS**: File > Install 'gg' Command Line Tool (also offered on the welcome window) points `/usr/local/bin/gg` at
   the running bundle's executable (`commandlinetool_mac`). macOS asks for administrator credentials where that
   directory is not user-writable.
@@ -38,9 +39,9 @@ the tests on all three platforms.
 
 ## Version
 
-`app/src/version.h` is the one place the version is written. `app.pro` parses it for the exe metadata and the
-macOS plist; the installer reads it back from the built exe. A release tag must spell the same value: the update
-check compares `GG_VERSION` against the tag names.
+`app/src/version.h` is the one place the version is written. `version.pri` parses it for the binaries'
+file-version metadata and the macOS plist; the installer reads it back from the built `gg.dll`. A release tag
+must spell the same value: the update check compares `GG_VERSION` against the tag names.
 
 ## Release
 

@@ -32,3 +32,4 @@ Makefile.Release
 
 .DS_Store
 /app/gg_resource.rc
+/launcher/gg_resource.rc

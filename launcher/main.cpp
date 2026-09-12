@@ -1,13 +1,18 @@
-// Starts gg.exe from the directory above this one. Only this directory goes on PATH: the application's own
-// directory holds the Qt DLLs, and a PATH entry for it would offer them to every process's DLL search.
+// Loads gg.dll from the directory above this one and runs it. Only this directory goes on PATH: the
+// application's own directory holds the Qt DLLs, and a PATH entry for it would offer them to every process's
+// DLL search.
 
 #include <Windows.h>
 
+#include <stdlib.h>   // __argc, __argv
 #include <string>
 
 namespace {
 
-constexpr const wchar_t* ApplicationFileName = L"gg.exe";
+constexpr const wchar_t* ApplicationFileName = L"gg.dll";
+constexpr const char* EntryPointName = "ggMain";
+
+using EntryPoint = int (*)(int argc, char* argv[]);
 
 std::wstring ownExecutablePath()
 {
@@ -38,31 +43,6 @@ bool removeLastPathComponent(std::wstring& path)
 	return true;
 }
 
-// Skips the program name: quoted it ends at the closing quote, unquoted at the first whitespace. Escapes
-// are not processed within it.
-const wchar_t* argumentsOf(const wchar_t* commandLine)
-{
-	if (*commandLine == L'"')
-	{
-		++commandLine;
-		while (*commandLine != L'\0' && *commandLine != L'"')
-			++commandLine;
-
-		if (*commandLine == L'"')
-			++commandLine;
-	}
-	else
-	{
-		while (*commandLine != L'\0' && *commandLine != L' ' && *commandLine != L'\t')
-			++commandLine;
-	}
-
-	while (*commandLine == L' ' || *commandLine == L'\t')
-		++commandLine;
-
-	return commandLine;
-}
-
 int reportFailure(const std::wstring& message)
 {
 	::MessageBoxW(nullptr, message.c_str(), L"GoodGit", MB_ICONERROR | MB_OK);
@@ -71,35 +51,26 @@ int reportFailure(const std::wstring& message)
 
 }
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
+// WinMain, not wWinMain: the wide CRT startup leaves __argv null
+int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 {
-	// <install dir>\launcher\gg.exe -> <install dir>\gg.exe
-	std::wstring application = ownExecutablePath();
-	if (application.empty() || !removeLastPathComponent(application) || !removeLastPathComponent(application))
-		return reportFailure(L"Could not locate the GoodGit executable.");
+	// <install dir>\launcher\gg.exe -> <install dir>
+	std::wstring directory = ownExecutablePath();
+	if (directory.empty() || !removeLastPathComponent(directory) || !removeLastPathComponent(directory))
+		return reportFailure(L"Could not locate the GoodGit installation directory.");
 
-	application += L'\\';
-	application += ApplicationFileName;
+	// Resolves the Qt DLLs that gg.dll and the Qt plugins import. Not PATH: no child process inherits it.
+	::SetDllDirectoryW(directory.c_str());
 
-	// CreateProcessW takes the exact image from the first argument and the child's argv[0] from the command
-	// line, and writes to the latter's buffer.
-	std::wstring commandLine = L'"' + application + L'"';
-	const wchar_t* const arguments = argumentsOf(::GetCommandLineW());
-	if (*arguments != L'\0')
-	{
-		commandLine += L' ';
-		commandLine += arguments;
-	}
+	const std::wstring application = directory + L'\\' + ApplicationFileName;
+	const HMODULE module = ::LoadLibraryW(application.c_str());
+	if (!module)
+		return reportFailure(L"Could not load " + application);
 
-	STARTUPINFOW startupInfo{};
-	startupInfo.cb = sizeof(startupInfo);
-	PROCESS_INFORMATION process{};
+	const EntryPoint entryPoint = reinterpret_cast<EntryPoint>(::GetProcAddress(module, EntryPointName));
+	if (!entryPoint)
+		return reportFailure(L"Could not find the entry point in " + application);
 
-	// The inherited working directory is the point of the launcher: gg opens the repository the terminal is in
-	if (!::CreateProcessW(application.c_str(), commandLine.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startupInfo, &process))
-		return reportFailure(L"Could not start " + application);
-
-	::CloseHandle(process.hThread);
-	::CloseHandle(process.hProcess);
-	return 0;
+	// Not unloaded: the module's static destructors then run at process exit, as an exe's do
+	return entryPoint(__argc, __argv);
 }
