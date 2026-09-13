@@ -10,13 +10,6 @@ Conventions this codebase follows beyond ordinary C++ and Qt practice.
     string), `qobject_cast` to the class. Cast to a class without a meta-object with `dynamic_cast`.
   - Without it `tr()` uses the base class's translation context: known and accepted.
 
-## Design
-
-- **A helper must not replace an idiom unless it removes something that matters.** A reader who knows the language or
-  framework reads the idiom at a glance and has to open the helper. What justifies that: logic, a lifetime or ordering
-  rule, a precondition the call sites would otherwise each get right. Fewer characters and one hidden name do not.
-  - Example: subscribers call `connect(&X::instance(), &X::signal, context, fn)`, not an `X::subscribe(context, fn)`.
-
 ## Naming
 
 - **Never "chrome" for UI framing**, in code, comments or docs. Name the element: window background, toolbars,
