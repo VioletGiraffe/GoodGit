@@ -11,6 +11,7 @@ RESTORE_COMPILER_WARNINGS
 
 class QLabel;
 class QStackedWidget;
+class CFindBar;
 class CLabelElided;
 class CLightningFastViewerWidget;
 class Repository;
@@ -42,4 +43,5 @@ private:
 	QStackedWidget* _stack = nullptr;
 	QLabel* _messageLabel = nullptr;
 	CLightningFastViewerWidget* _viewer = nullptr;
+	CFindBar* _findBar = nullptr;
 };

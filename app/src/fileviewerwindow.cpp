@@ -11,8 +11,10 @@
 #include "widgets/clightningfastviewer.h"
 
 DISABLE_COMPILER_WARNINGS
+#include <QDeadlineTimer>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QKeySequence>
 #include <QLabel>
 #include <QPoint>
 #include <QRegularExpression>
@@ -116,9 +118,21 @@ FileViewerWindow::FileViewerWindow(const QString& title, const QString& headerTe
 	_stack->addWidget(_messageLabel);
 	_stack->addWidget(_viewer);
 	layout->addWidget(_stack, 1);
-	auto* findBar = new CFindBar{ _viewer };
-	findBar->setObjectName(QStringLiteral("findBar"));
-	layout->addWidget(findBar);
+	const auto findWithWrapAround = [viewer = _viewer](const auto& pattern, QTextDocument::FindFlags flags) {
+		return viewer->find(pattern, flags, /*wrapAround=*/true);
+	};
+	const auto countMatches = [viewer = _viewer](const auto& pattern, QTextDocument::FindFlags flags, QDeadlineTimer deadline, bool highlight) {
+		viewer->setCountedMatchesHighlighted(highlight);
+		return viewer->countMatches(pattern, flags, deadline);
+	};
+	_findBar = new CFindBar{
+		CFindBar::HostFunctions{ .findText = findWithWrapAround, .findRegex = findWithWrapAround, .countText = countMatches, .countRegex = countMatches,
+			.clearHighlights = [viewer = _viewer] { viewer->setCountedMatchesHighlighted(false); } },
+		CFindBar::Keys{ .find = QKeySequence::Find, .findNext = QKeySequence::FindNext, .findPrevious = QKeySequence::FindPrevious },
+		QString::fromLatin1(Settings::FileViewerWindowFindGroupKey) };
+	_findBar->setObjectName(QStringLiteral("findBar"));
+	layout->addWidget(_findBar);
+	addActions(_findBar->findActions());
 	setCentralWidget(central);
 
 	const auto applyFontSettings = [this] {
@@ -150,6 +164,7 @@ void FileViewerWindow::showContent(const QByteArray& bytes)
 		_viewer->setText(*text);
 	else
 		_viewer->setData(bytes);
+	_findBar->clearStatus();
 
 	_stack->setCurrentWidget(_viewer);
 }

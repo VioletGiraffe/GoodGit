@@ -111,5 +111,6 @@ inline constexpr const char* CommitDraftParentShaKey = "parentSha";
 inline constexpr const char* CommitWindowSplitterKey = "CommitWindow/splitterState";
 inline constexpr const char* HistoryWindowSplitterKey = "HistoryWindow/splitterState";
 inline constexpr const char* HistoryWindowDetailSplitterKey = "HistoryWindowDetail/splitterState";
+inline constexpr const char* FileViewerWindowFindGroupKey = "FileViewerWindow/Find";
 
 } // namespace Settings
