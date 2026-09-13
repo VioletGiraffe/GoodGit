@@ -77,6 +77,11 @@ QPlainTextEdit { background: @surface@; color: @text@; border: none; }
 QPlainTextEdit#messageEdit { border: 1px solid @buttonBorder@; border-radius: @controlRadius@px; }
 QPlainTextEdit#diffView { color: @diffCtx@; }
 
+/* Input fields: windows11 fills them from the palette only where the brush is set explicitly, which a background rule does.
+   -qt-style-features: the base style keeps drawing the field; without it the stylesheet engine draws the field itself.
+   Editable combo boxes only: a non-editable one fills from Button, which the rule also sets. */
+QLineEdit, QComboBox[editable="true"], QAbstractSpinBox { background: @surface@; -qt-style-features: background-color; }
+
 QSplitter::handle { background: @border@; }
 
 /* Completion popup */
