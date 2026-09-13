@@ -1,7 +1,7 @@
 #include "externalapps.h"
 #include "settings.h"
 
-#include "dialogs/messagebox.h"
+#include "dialogs/messagedialog.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QDesktopServices>
@@ -60,7 +60,7 @@ void openInTextEditor(const QString& path, QWidget* dialogParent)
 	QStringList arguments = QProcess::splitCommand(command);
 	if (arguments.isEmpty())
 	{
-		MessageBox::notice(dialogParent, QStringLiteral("No text editor configured"),
+		MessageDialog::notice(dialogParent, QStringLiteral("No text editor configured"),
 			QStringLiteral("Set the command to edit a file with in Preferences > Main, using %path% where the file goes."),
 			{}, QMessageBox::Information);
 		return;
@@ -79,7 +79,7 @@ void openInTextEditor(const QString& path, QWidget* dialogParent)
 
 	if (!QProcess::startDetached(program, arguments))
 	{
-		MessageBox::notice(dialogParent, QStringLiteral("Could not start the text editor"),
+		MessageDialog::notice(dialogParent, QStringLiteral("Could not start the text editor"),
 			QStringLiteral("'%1' could not be started. Check the command in Preferences > Main.").arg(program),
 			command);
 	}

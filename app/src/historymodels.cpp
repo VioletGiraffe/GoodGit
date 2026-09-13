@@ -2,7 +2,7 @@
 #include "changedfilesmodel.h"
 #include "theme.h"
 
-#include "settingsui/csettingsdialog.h"
+#include "appdialogs/csettingsdialog.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QApplication>

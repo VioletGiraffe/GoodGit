@@ -2,7 +2,7 @@
 #include "hgprocess.h"
 
 #include "assert/advanced_assert.h"
-#include "settingsui/csettingsdialog.h"
+#include "appdialogs/csettingsdialog.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QApplication>

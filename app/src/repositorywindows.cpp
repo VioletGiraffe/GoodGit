@@ -6,7 +6,7 @@
 #include "theme.h"
 #include "welcomewindow.h"
 
-#include "dialogs/messagebox.h"
+#include "dialogs/messagedialog.h"
 #include "widgets/chighlightoverlay.h"
 #include "widgets/widgetutils.h"
 
@@ -156,7 +156,7 @@ CommitWindow* openRepositoryWindow(const RepositoryLocation& location, QWidget* 
 	{
 		if (const std::optional<QString> problem = Git::versionProblem(location.root))
 		{
-			MessageBox::notice(dialogParent, QApplication::applicationName(), *problem, {}, QMessageBox::Critical);
+			MessageDialog::notice(dialogParent, QApplication::applicationName(), *problem, {}, QMessageBox::Critical);
 			return nullptr;
 		}
 	}
@@ -181,7 +181,7 @@ CommitWindow* openRepositoryWindowAt(const QString& path, QWidget* dialogParent)
 	if (location)
 		return openRepositoryWindow(*location, dialogParent);
 
-	MessageBox::notice(dialogParent, QApplication::applicationName(), noRepositoryMessage(path, location.error()), {}, QMessageBox::Critical);
+	MessageDialog::notice(dialogParent, QApplication::applicationName(), noRepositoryMessage(path, location.error()), {}, QMessageBox::Critical);
 	return nullptr;
 }
 
@@ -190,12 +190,12 @@ CommitWindow* openSubmoduleRepositoryWindow(const QString& root, QWidget* dialog
 	const std::expected<RepositoryLocation, std::vector<ProcessResult>> location = findRepository(root);
 	if (!location)
 	{
-		MessageBox::notice(dialogParent, QApplication::applicationName(), noRepositoryMessage(root, location.error()), {}, QMessageBox::Critical);
+		MessageDialog::notice(dialogParent, QApplication::applicationName(), noRepositoryMessage(root, location.error()), {}, QMessageBox::Critical);
 		return nullptr;
 	}
 	if (!sameDirectoryOnDisk(location->root, root))
 	{
-		MessageBox::notice(dialogParent, QApplication::applicationName(),
+		MessageDialog::notice(dialogParent, QApplication::applicationName(),
 			QObject::tr("'%1' is not a repository of its own. If it is a submodule, it has not been initialized yet.")
 				.arg(QDir::toNativeSeparators(root)), {});
 		return nullptr;
@@ -210,7 +210,7 @@ CommitWindow* openRecentRepository(const QString& root, QWidget* dialogParent)
 		return openRepositoryWindow(*location, dialogParent);
 
 	// Keep is the default: an unmounted drive looks exactly like a deleted repository
-	const std::optional<int> answer = MessageBox::question(dialogParent, QApplication::applicationName(),
+	const std::optional<int> answer = MessageDialog::question(dialogParent, QApplication::applicationName(),
 		noRepositoryMessage(root, location.error()), { QObject::tr("Remove from list"), QObject::tr("Keep") }, 1);
 	if (answer == 0)
 		RecentRepositories::forget(root);
@@ -254,13 +254,13 @@ void scanFolderForRepositories(QWidget* dialogParent, ScanReport report)
 				.arg(added)
 				.arg(added == 1 ? QObject::tr("repository") : QObject::tr("repositories"), nativePath);
 
-		MessageBox::notice(parent, QApplication::applicationName(), message, {}, QMessageBox::Information);
+		MessageDialog::notice(parent, QApplication::applicationName(), message, {}, QMessageBox::Information);
 	});
 }
 
 void clearRecentRepositories(QWidget* dialogParent)
 {
-	if (MessageBox::question(dialogParent, QObject::tr("Clear the recent list?"),
+	if (MessageDialog::question(dialogParent, QObject::tr("Clear the recent list?"),
 		QObject::tr("Every repository is removed from the list. Nothing on disk is touched."),
 		{ QObject::tr("Clear the list") }) != 0)
 		return;

@@ -5,7 +5,7 @@
 #include "unifieddiff.h"
 #include "vcsprocess.h"
 
-#include "settingsui/csettingsdialog.h"
+#include "appdialogs/csettingsdialog.h"
 #include "widgets/clabelelided.h"
 
 DISABLE_COMPILER_WARNINGS

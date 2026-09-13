@@ -1,6 +1,6 @@
 #pragma once
 
-#include "settingsui/csettingspage.h"
+#include "appdialogs/csettingspage.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <Qt>

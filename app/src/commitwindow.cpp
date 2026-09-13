@@ -15,9 +15,9 @@
 #include "theme.h"
 
 #include "assert/advanced_assert.h"
-#include "dialogs/messagebox.h"
+#include "dialogs/messagedialog.h"
 #include "hash/wheathash.hpp"
-#include "settingsui/csettingsdialog.h"
+#include "appdialogs/csettingsdialog.h"
 #include "string/stringutils.h"
 #include "widgets/clabelelided.h"
 #include "widgets/cpersistentwindow.h"
@@ -552,7 +552,7 @@ void CommitWindow::closeEvent(QCloseEvent* event)
 		if (_pushInFlight)
 			_pushLogPane->show(); // may have been hidden mid-push; it shows how far the push has got
 
-		MessageBox::notice(this, tr("Cannot close yet"), _pushInFlight
+		MessageDialog::notice(this, tr("Cannot close yet"), _pushInFlight
 			? tr("A push is running. Wait for it to finish, then close the window.")
 			: tr("An operation that changes the repository is running. Wait for it to finish, then close the window."), {});
 		return;
@@ -888,7 +888,7 @@ bool CommitWindow::stateMovedSince(const StateStamp& stamp)
 		&& _repo->probeHeadSha() == stamp.probedHeadSha)
 		return false;
 
-	MessageBox::notice(this, tr("Repository changed"),
+	MessageDialog::notice(this, tr("Repository changed"),
 		tr("The repository changed while the dialog was open, so nothing was done.\n"
 		   "Review the new state and retry."), {});
 	_repo->refresh();
@@ -907,7 +907,7 @@ void CommitWindow::startCommit(bool pushAfterwards)
 	const QStringList unresolved = _filesModel.unresolvedConflictPaths();
 	if (!unresolved.isEmpty())
 	{
-		MessageBox::notice(this, tr("Unresolved conflicts"),
+		MessageDialog::notice(this, tr("Unresolved conflicts"),
 			tr("%1 file(s) still have conflicts. Edit each one, then mark it resolved from the file list's "
 			   "context menu:\n\n%2").arg(unresolved.size()).arg(listedPaths(unresolved)), {});
 		return;
@@ -932,7 +932,7 @@ void CommitWindow::confirmUntrackedThenCommit(bool pushAfterwards, StateStamp de
 	const QStringList untracked = _filesModel.checkedUntrackedPaths();
 	if (!untracked.isEmpty())
 	{
-		const auto answer = MessageBox::question(this, tr("Start tracking new files?"),
+		const auto answer = MessageDialog::question(this, tr("Start tracking new files?"),
 			tr("%1 checked file(s) are not tracked yet. Committing will add them to the repository:\n\n%2")
 				.arg(untracked.size()).arg(listedPaths(untracked)),
 			{ tr("Track and commit") });
@@ -974,7 +974,7 @@ void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 
 	if (state.localBranchesAtHead.size() > 1)
 	{
-		const auto answer = MessageBox::question(this, tr("Not on a branch"),
+		const auto answer = MessageDialog::question(this, tr("Not on a branch"),
 			tr("Several branches point at the current commit. Which one should be checked out for this commit?"),
 			state.localBranchesAtHead);
 		if (answer && !stateMovedSince(stamp))
@@ -989,7 +989,7 @@ void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 		QString remoteBranch = state.remoteBranchesAtHead.front();
 		if (state.remoteBranchesAtHead.size() > 1)
 		{
-			const auto answer = MessageBox::question(this, tr("Not on a branch"),
+			const auto answer = MessageDialog::question(this, tr("Not on a branch"),
 				tr("HEAD matches several remote branches. Which one should the new local branch track?"),
 				state.remoteBranchesAtHead);
 			if (!answer || stateMovedSince(stamp))
@@ -1005,7 +1005,7 @@ void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 			if (exists)
 			{
 				// Checking it out would move the working tree
-				MessageBox::notice(this, tr("Cannot reattach"),
+				MessageDialog::notice(this, tr("Cannot reattach"),
 					tr("HEAD matches %1, but the local branch '%2' already exists and points elsewhere.\n"
 					   "Committing is blocked - resolve the branch state first.").arg(remoteBranch, localName), {});
 				onDone(false);
@@ -1021,7 +1021,7 @@ void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
 		return;
 	}
 
-	MessageBox::notice(this, tr("Cannot commit"),
+	MessageDialog::notice(this, tr("Cannot commit"),
 		tr("Not on a branch, and no branch points at this commit.\n"
 		   "A commit made here could not be pushed. Check out a branch first."), {});
 	onDone(false);
@@ -1138,7 +1138,7 @@ bool CommitWindow::offerUpstreamThenRetry(size_t index, const QString& upstream)
 		: tr("Submodule '%1' is on branch '%2', which has no upstream configured. Push it to '%3' and set the upstream?")
 			.arg(step.subject, step.branch, upstream);
 
-	if (MessageBox::question(this, tr("No upstream branch"), text, { tr("Push and set upstream") }) != 0)
+	if (MessageDialog::question(this, tr("No upstream branch"), text, { tr("Push and set upstream") }) != 0)
 		return false;
 
 	runPushStep(index, /*setUpstream=*/true);
@@ -1391,7 +1391,7 @@ void CommitWindow::abortOperation()
 				  "not survive either.");
 
 	const StateStamp stamp = stateStamp();
-	const auto answer = MessageBox::question(this, title, text, { bisect ? tr("End bisect") : tr("Abort") });
+	const auto answer = MessageDialog::question(this, title, text, { bisect ? tr("End bisect") : tr("Abort") });
 	if (answer != 0 || stateMovedSince(stamp))
 		return;
 
@@ -1615,7 +1615,7 @@ void CommitWindow::deleteSelection()
 	if (!trackedPaths.isEmpty() || !addedPaths.isEmpty() || untrackedPaths.size() > 1)
 	{
 		const QStringList prompted = trackedPaths + addedPaths + untrackedPaths;
-		const auto answer = MessageBox::question(this, tr("Delete files?"),
+		const auto answer = MessageDialog::question(this, tr("Delete files?"),
 			tr("Move %1 file(s) to the Recycle Bin?\n\n%2").arg(prompted.size()).arg(listedPaths(prompted)),
 			{ tr("Delete") });
 		if (answer != 0)
@@ -1628,7 +1628,7 @@ void CommitWindow::deleteSelection()
 			if (QFile::moveToTrash(QDir(_repo->path()).filePath(path)))
 				continue;
 			// Never fall back to a permanent delete
-			MessageBox::notice(this, tr("Delete failed"),
+			MessageDialog::notice(this, tr("Delete failed"),
 				tr("Could not move '%1' to the Recycle Bin (the file may be locked, or the volume has no Recycle Bin).\n"
 				   "The remaining files were not deleted.").arg(path), {});
 			break;
@@ -1712,7 +1712,7 @@ void CommitWindow::discardSelection()
 					   "modified or unreadable content, cannot be discarded.").arg(skippedRows);
 
 		const StateStamp stamp = stateStamp();
-		const auto answer = MessageBox::question(this, tr("Discard changes?"), text, { tr("Discard") });
+		const auto answer = MessageDialog::question(this, tr("Discard changes?"), text, { tr("Discard") });
 		if (answer != 0 || stateMovedSince(stamp))
 			return;
 	}
@@ -1769,7 +1769,7 @@ void CommitWindow::discardSubmoduleContent(const FileEntry& submodule)
 					.arg(plan.keptOnDisk.size());
 			text += tr("\n\nUntracked files are left alone, and the submodule stays on its branch.");
 
-			if (MessageBox::question(this, tr("Discard changes?"), text, { tr("Discard") }) != 0)
+			if (MessageDialog::question(this, tr("Discard changes?"), text, { tr("Discard") }) != 0)
 				return;
 		}
 		if (stateMovedSince(stamp))
@@ -1820,12 +1820,12 @@ void CommitWindow::undoLastCommit()
 			}
 			return QString{};
 		}();
-		MessageBox::notice(this, tr("Cannot undo the last commit"), reason, {}, QMessageBox::Information);
+		MessageDialog::notice(this, tr("Cannot undo the last commit"), reason, {}, QMessageBox::Information);
 		return;
 	}
 
 	const StateStamp stamp = stateStamp();
-	const auto answer = MessageBox::question(this, tr("Undo the last commit?"),
+	const auto answer = MessageDialog::question(this, tr("Undo the last commit?"),
 		tr("'%1' will be undone. Its changes return to this list as uncommitted changes; the working tree "
 			"is not modified.").arg(subjectOrPlaceholder(state.headSubject)),
 		{ tr("Undo commit") });
@@ -1871,7 +1871,7 @@ void CommitWindow::addPatternToIgnoreFile(const IgnorePattern& pattern)
 	QFile file{ QDir{ _repo->path() }.filePath(_repo->ignoreFileName()) };
 	if (!file.open(QIODevice::ReadWrite)) // read too: the backend places the pattern by the existing content
 	{
-		MessageBox::notice(this, tr("Failed to update %1").arg(_repo->ignoreFileName()),
+		MessageDialog::notice(this, tr("Failed to update %1").arg(_repo->ignoreFileName()),
 			tr("Could not open '%1' for writing.").arg(QDir::toNativeSeparators(file.fileName())), {});
 		return;
 	}
@@ -1886,7 +1886,7 @@ void CommitWindow::addPatternToIgnoreFile(const IgnorePattern& pattern)
 void CommitWindow::showError(const QString& title, const QString& details)
 {
 	// The command's output verbatim: hook output is what makes a rejected commit diagnosable
-	MessageBox::notice(this, title, title + QLatin1Char('.'), details);
+	MessageDialog::notice(this, title, title + QLatin1Char('.'), details);
 }
 
 QString CommitWindow::absolutePath(const FileEntry& entry) const

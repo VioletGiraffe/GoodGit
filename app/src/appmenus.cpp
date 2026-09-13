@@ -6,8 +6,8 @@
 #include "updatecheck.h"
 #include "version.h"
 
-#include "aboutdialog/caboutdialog.h"
-#include "settingsui/csettingsdialog.h"
+#include "appdialogs/caboutdialog.h"
+#include "appdialogs/csettingsdialog.h"
 #ifdef _DEBUG
 #include "ui/widget-gallery/cwidgetgallery.h"
 #endif
