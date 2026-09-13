@@ -89,6 +89,7 @@ class ChangeSetDiff
 public:
 	explicit ChangeSetDiff(QString text);
 
+	[[nodiscard]] const QString& text() const { return _text; }
 	[[nodiscard]] int fileCount() const { return int(_files.size()); }
 	[[nodiscard]] std::optional<int> fileIndex(const QString& path) const; // by either path of a rename
 	[[nodiscard]] const QString& filePath(int file) const { return _files[size_t(file)].path; }

@@ -86,7 +86,7 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `updatecheck`, `com
 | `main` | Startup: on macOS the package managers' directories on PATH (see `invocation.md`), the application identity, the theme, the automatic update check, then the way in described in `repositories.md`. Ends the hg command servers once the event loop returns |
 | `appmenus` | The menus every window shares - File, Edit, Repository, Help: their actions need no repository. A commit window appends its own items to the Repository menu |
 | `welcomewindow` | The window shown with nothing to open: what the app needs, a folder chooser, the recent list. The one window without a repository |
-| `fileviewerwindow` | One file as of one commit, read-only: decoded where the bytes are text, a hex dump (qtutils `CLightningFastViewerWidget`) where they are not |
+| `fileviewerwindow` | Read-only text in a window of its own, on qtutils `CLightningFastViewerWidget`: one file as of one commit, decoded where the bytes are text and a hex dump where they are not; or a change's whole diff, scrolled to the file the pane shows |
 | `updatecheck` | The interactive and the automatic update check, see `updates.md` |
 | `commandlinetool_mac` | macOS only: the `/usr/local/bin/gg` link, see `doc/BUILD.md` |
 | `stylesheet` | The application QSS with `@token@` placeholders filled from a `Theme`. Detail header of `theme.cpp` |
@@ -98,7 +98,7 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `updatecheck`, `com
 |---|---|---|---|---|
 | `CommitWindow` | owns one | one per repository; a second request raises it | stored, one key for the kind | `openRepositoryWindow()` only; a submodule row opens one on the submodule |
 | `HistoryWindow` | owns one of its own | one per commit window for the whole history, kept and re-shown; a file or submodule history is a new window each time | stored, one key for the kind | the commit window, or another history window (a submodule row, a file's history) |
-| `FileViewerWindow` | borrows the opener's, in the constructor only | never deduplicated; cascaded from the opener, several are meant to sit side by side | none | a history window's file row; with Shift, the parent commit's version |
+| `FileViewerWindow` | a file borrows the opener's, in the constructor only; a diff none | never deduplicated; cascaded from the opener, several are meant to sit side by side | none | a history window's file row; with Shift, the parent commit's version. A whole diff: Full diff in either window's diff pane |
 | `WelcomeWindow` | none | at most one | none | startup with nothing to open, View > Show Welcome Screen; closed by any open |
 | Preferences (qtutils `CSettingsDialog`) | none | modal | none | the Edit menu |
 

@@ -4,6 +4,7 @@
 #include "diffpane.h"
 #include "externalapps.h"
 #include "filelistview.h"
+#include "fileviewerwindow.h"
 #include "historymodels.h"
 #include "historywindow.h"
 #include "messageedit.h"
@@ -73,6 +74,12 @@ QString workingTreeSizeLabel(const QString& absolutePath)
 {
 	const QFileInfo info{ absolutePath };
 	return info.isFile() ? formattedFileSize(info.size()) : QString{};
+}
+
+// The tag of every diff this window shows
+QString workingTreeTag()
+{
+	return CommitWindow::tr("HEAD %1 working tree").arg(QChar(0x2192));
 }
 
 // The op strip opens with the operation's name, which a backend holds in its command's spelling
@@ -423,6 +430,10 @@ QWidget* CommitWindow::buildRightPane()
 	connect(_diffPane, &DiffPane::foreignEndActivated, this, [this](const ForeignEnd& end) {
 		restoreSelectionByPath({ { end.path }, end.path });
 		_diffPane->scrollDiffLineToTop(end.diffLine);
+	});
+	connect(_diffPane, &DiffPane::fullDiffRequested, this, [this] {
+		const std::optional<FileEntry> current = currentEntry();
+		FileViewerWindow::showChangeSetDiff(_changeSet, _changeSetPending, current ? current->path : QString{}, _repo->name(), workingTreeTag(), this);
 	});
 	_pushLogPane = buildPushLogPane();
 	rightLayout->addWidget(_pushLogPane);
@@ -1266,7 +1277,7 @@ void CommitWindow::showDiffForCurrentRow()
 		return;
 	}
 
-	const DiffPane::ItemInfo info{ entry.path, tr("HEAD %1 working tree").arg(QChar(0x2192)), workingTreeSizeLabel(absolutePath(entry)) };
+	const DiffPane::ItemInfo info{ entry.path, workingTreeTag(), workingTreeSizeLabel(absolutePath(entry)) };
 	const QString noContentText = tr("No content changes (only the mode or the line endings differ, or the file matches HEAD).");
 	_diffPane->showMessage(info, tr("Loading..."));
 

@@ -49,6 +49,12 @@ DiffPane::DiffPane(QWidget* parent) :
 	headerLayout->addWidget(_sizeLabel, 1);
 	headerLayout->addWidget(_tagLabel);
 	headerLayout->addWidget(buildHunkNavigator());
+	auto* fullDiffButton = new QPushButton{ tr("Full diff") };
+	fullDiffButton->setToolTip(tr("Every file's diff as the command printed it, in a separate window"));
+	fullDiffButton->setFocusPolicy(Qt::NoFocus); // the file list keeps the keyboard
+	headerLayout->addSpacing(12); // set off from the hunk navigation
+	headerLayout->addWidget(fullDiffButton);
+	connect(fullDiffButton, &QPushButton::clicked, this, &DiffPane::fullDiffRequested);
 	layout->addWidget(header);
 
 	_view = new DiffTextView;

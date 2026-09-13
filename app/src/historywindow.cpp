@@ -210,6 +210,10 @@ void HistoryWindow::buildUi()
 			return;
 		}
 	});
+	connect(_diffPane, &DiffPane::fullDiffRequested, this, [this] {
+		const std::optional<CommitFileChange> file = fileEntryAt(_filesView->currentSourceIndex());
+		FileViewerWindow::showChangeSetDiff(_changeSet, _changeSetPending, file ? file->path : QString{}, _repo->name(), shortSha(selectedSha()), this);
+	});
 
 	_detailSplitter = new QSplitter(Qt::Horizontal);
 	_detailSplitter->setChildrenCollapsible(false);

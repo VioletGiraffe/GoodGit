@@ -14,9 +14,11 @@ DISABLE_COMPILER_WARNINGS
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPoint>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QSizePolicy>
 #include <QStackedWidget>
+#include <QTextDocument>
 #include <QVBoxLayout>
 RESTORE_COMPILER_WARNINGS
 
@@ -32,12 +34,57 @@ int cascadePosition = 0;
 } // namespace
 
 FileViewerWindow::FileViewerWindow(Repository& repo, const QString& sha, const QString& repoRelativePath, QWidget* parent) :
+	FileViewerWindow(repoRelativePath.section(QLatin1Char('/'), -1) + QStringLiteral(" @ ") + shortSha(sha), repoRelativePath, shortSha(sha), parent)
+{
+	showMessage(tr("Loading..."));
+
+	// The limit travels into the read: probing the size first would not bound it, the read applying checkout
+	// filters, so an LFS pointer's stored size is not the size of what arrives.
+	const qint64 maxBytes = QSettings{}.value(Settings::MaxViewedFileBytesKey, Settings::MaxViewedFileBytesDefault).toLongLong();
+	repo.fileAtRevision(sha, repoRelativePath, maxBytes, this, [this](std::expected<QByteArray, QString> content) {
+		if (!content)
+			showMessage(content.error()); // an oversize file fails here, never held whole
+		else if (content->isEmpty())
+			showMessage(tr("The file is empty."));
+		else
+			showContent(*content);
+	});
+}
+
+void FileViewerWindow::showChangeSetDiff(const std::optional<ChangeSetDiff>& set, bool pending, const QString& currentPath,
+	const QString& repositoryName, const QString& tag, QWidget* parent)
+{
+	auto* window = new FileViewerWindow(tr("Diff - %1 @ %2").arg(repositoryName, tag), repositoryName, tag, parent);
+	if (!set || set->text().isEmpty())
+	{
+		window->showMessage(set ? tr("The diff is empty.") : pending ? tr("The diff is still loading.") : tr("The whole diff is not available."));
+		window->show();
+		return;
+	}
+
+	window->_viewer->setText(set->text());
+	window->_stack->setCurrentWidget(window->_viewer);
+	// Shown before scrolling: the viewer indexes its lines on its first resize
+	window->show();
+
+	const std::optional<int> file = set->fileIndex(currentPath);
+	if (!file)
+		return;
+
+	// The section's "diff --git" line, matched whole: a later file's content may hold the same text
+	const QStringView section = set->fileDiff(*file);
+	const QRegularExpression headerLine{ QStringLiteral("^") + QRegularExpression::escape(section.left(section.indexOf(QLatin1Char('\n'))))
+		+ QStringLiteral("$"), QRegularExpression::MultilineOption };
+	// Searched backward from the end: the viewer scrolls a match above the view to its top row
+	window->_viewer->moveToEnd();
+	window->_viewer->find(headerLine, QTextDocument::FindBackward | QTextDocument::FindCaseSensitively);
+}
+
+FileViewerWindow::FileViewerWindow(const QString& title, const QString& headerText, const QString& tag, QWidget* parent) :
 	QMainWindow(parent, Qt::Window)
 {
 	setAttribute(Qt::WA_DeleteOnClose);
-
-	const QString tag = shortSha(sha);
-	setWindowTitle(repoRelativePath.section(QLatin1Char('/'), -1) + QStringLiteral(" @ ") + tag);
+	setWindowTitle(title);
 
 	auto* central = new QWidget;
 	auto* layout = new QVBoxLayout(central);
@@ -51,7 +98,7 @@ FileViewerWindow::FileViewerWindow(Repository& repo, const QString& sha, const Q
 	_pathLabel = new CLabelElided;
 	// Eliding does not shrink a QLabel's minimum width, which would otherwise become the window's
 	_pathLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-	_pathLabel->setText(repoRelativePath);
+	_pathLabel->setText(headerText);
 	auto* tagLabel = new QLabel{ tag };
 	tagLabel->setObjectName(QStringLiteral("diffTagLabel"));
 	headerLayout->addWidget(_pathLabel, 1);
@@ -79,26 +126,12 @@ FileViewerWindow::FileViewerWindow(Repository& repo, const QString& sha, const Q
 	applyFontSettings();
 	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, applyFontSettings);
 
-	showMessage(tr("Loading..."));
-
 	resize(DefaultWidth, DefaultHeight);
 	if (const QWidget* anchor = parent ? parent->window() : nullptr)
 	{
 		const int offset = CascadeStep * (cascadePosition++ % CascadeLength + 1);
 		move(anchor->pos() + QPoint{ offset, offset });
 	}
-
-	// The limit travels into the read: probing the size first would not bound it, the read applying checkout
-	// filters, so an LFS pointer's stored size is not the size of what arrives.
-	const qint64 maxBytes = QSettings{}.value(Settings::MaxViewedFileBytesKey, Settings::MaxViewedFileBytesDefault).toLongLong();
-	repo.fileAtRevision(sha, repoRelativePath, maxBytes, this, [this](std::expected<QByteArray, QString> content) {
-		if (!content)
-			showMessage(content.error()); // an oversize file fails here, never held whole
-		else if (content->isEmpty())
-			showMessage(tr("The file is empty."));
-		else
-			showContent(*content);
-	});
 }
 
 void FileViewerWindow::showMessage(const QString& text)

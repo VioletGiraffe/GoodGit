@@ -55,6 +55,8 @@ public:
 signals:
 	// A click on the mark of a block moved to or from another file: the window owning the file list shows that file
 	void foreignEndActivated(const ForeignEnd& end);
+	// The window owning the change set shows it whole
+	void fullDiffRequested();
 
 private:
 	[[nodiscard]] QWidget* buildHunkNavigator();
