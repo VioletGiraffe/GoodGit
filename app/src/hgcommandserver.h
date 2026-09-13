@@ -61,8 +61,10 @@ public:
 	~HgCommandServer() override;
 
 	[[nodiscard]] const QString& bindRoot() const { return _bindRoot; }
+	[[nodiscard]] const QString& executable() const { return _executable; }
 	[[nodiscard]] bool helloSeen() const { return _helloSeen; }
-	[[nodiscard]] bool idle() const { return _helloSeen && !_dead && !_dying && !_currentJob; }
+	[[nodiscard]] bool retiring() const { return _retiring; }
+	[[nodiscard]] bool idle() const { return _helloSeen && !_dead && !_dying && !_retiring && !_currentJob; }
 	[[nodiscard]] Hg::ServerJob* currentJob() const { return _currentJob; }
 	[[nodiscard]] const QByteArray& ownStderr() const { return _ownStderr; }
 
@@ -77,6 +79,10 @@ public:
 	void requestExit();
 	void waitForExit(QDeadlineTimer deadline);
 
+	// Takes no further jobs and exits once the command in flight, if any, has delivered its result.
+	// The pool drops it on that exit without latching a failure.
+	void retire();
+
 	// Fails the current command; the pool respawns on demand
 	void killServer();
 
@@ -89,12 +95,14 @@ private:
 private:
 	HgServerPool& _pool;
 	const QString _bindRoot;
+	const QString _executable;
 	QProcess* _process = nullptr;
 	QByteArray _buffer;    // stdout bytes not yet consumed as chunks
 	QByteArray _ownStderr; // the server's own stderr (extension warnings, crash text), never a command's output
 	Hg::ServerJob* _currentJob = nullptr;
 	bool _helloSeen = false;
 	bool _dying = false; // killServer() ran; the finished signal has not arrived yet
+	bool _retiring = false;
 	bool _dead = false;
 };
 
@@ -102,7 +110,7 @@ private:
 // Jobs queue FIFO; a free server prefers a job for its own repository.
 // A server dying before its hello latches its cause: a launch failure (hg missing) routes everything
 // through plain processes, a pre-hello crash (broken repo config) routes only that repository's jobs there.
-// A settings change resets both latches: the executable path is a setting.
+// A settings change resets both latches and retires servers running another executable: the executable path is a setting.
 class HgServerPool final
 {
 public:
@@ -121,7 +129,7 @@ private:
 	friend class HgCommandServer;
 	friend class Hg::ServerJob;
 
-	HgServerPool(); // installs the settings hook that resets the failure latches
+	HgServerPool(); // installs the settings hook, see the class comment
 
 	void dispatch();
 	void removeQueued(Hg::ServerJob* job);

@@ -88,7 +88,8 @@ void ServerJob::cancel()
 
 HgCommandServer::HgCommandServer(const Vcs::Tool& tool, QString bindRoot, HgServerPool& pool) :
 	_pool{ pool },
-	_bindRoot{ std::move(bindRoot) }
+	_bindRoot{ std::move(bindRoot) },
+	_executable{ tool.executable }
 {
 	_process = new QProcess(this);
 	_process->setWorkingDirectory(_bindRoot);
@@ -133,6 +134,13 @@ void HgCommandServer::requestExit()
 void HgCommandServer::waitForExit(QDeadlineTimer deadline)
 {
 	_process->waitForFinished(int(deadline.remainingTime()));
+}
+
+void HgCommandServer::retire()
+{
+	_retiring = true;
+	// The command server exits at stdin EOF, after the command in flight: its output is still read and delivered
+	_process->closeWriteChannel();
 }
 
 void HgCommandServer::execute(Hg::ServerJob* job)
@@ -275,10 +283,20 @@ HgServerPool& HgServerPool::instance()
 
 HgServerPool::HgServerPool()
 {
-	// The executable path is a setting, so a settings change may have fixed what the latches remember
+	// The executable path is a setting, so a settings change may have fixed what the latches remember.
+	// Servers keep the executable they started with; dispatch() spawns with a queued job's tool.
 	QObject::connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, qApp, [this] {
 		_unavailable = false;
 		_failedRoots.clear();
+
+		const QString executable = Hg::executablePath();
+		for (Hg::ServerJob* job : _queue)
+			job->_tool.executable = executable;
+		for (const auto& server : _servers)
+		{
+			if (server->executable() != executable)
+				server->retire();
+		}
 	});
 }
 
@@ -374,6 +392,7 @@ void HgServerPool::serverDied(HgCommandServer* server, ProcessOutcome outcome, c
 	const QByteArray serverStderr = server->ownStderr();
 	const QString deadRoot = server->bindRoot();
 	const bool cameUp = server->helloSeen();
+	const bool retired = server->retiring();
 
 	// Called from the server's own signal handler, so it is deleted from the event loop
 	const auto owned = std::ranges::find_if(_servers, [server](const std::unique_ptr<HgCommandServer>& s) { return s.get() == server; });
@@ -383,9 +402,10 @@ void HgServerPool::serverDied(HgCommandServer* server, ProcessOutcome outcome, c
 		_servers.erase(owned);
 	}
 
-	if (cameUp)
+	if (cameUp || retired)
 	{
-		// A crash under a command already failed that command with its own diagnosis
+		// A crash under a command already failed that command with its own diagnosis.
+		// A retired server's exit diagnoses neither the executable nor the repository.
 		dispatch(); // respawns on demand if the queue calls for it
 		return;
 	}
