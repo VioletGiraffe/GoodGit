@@ -86,7 +86,7 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `updatecheck`, `com
 | `main` | Startup: on macOS the package managers' directories on PATH (see `invocation.md`), the application identity, the theme, the automatic update check, then the way in described in `repositories.md`. Ends the hg command servers once the event loop returns |
 | `appmenus` | The menus every window shares - File, Edit, Repository, Help: their actions need no repository. A commit window appends its own items to the Repository menu |
 | `welcomewindow` | The window shown with nothing to open: what the app needs, a folder chooser, the recent list. The one window without a repository |
-| `fileviewerwindow` | Read-only text in a window of its own, on qtutils `CLightningFastViewerWidget`: one file as of one commit, decoded where the bytes are text and a hex dump where they are not; or a change's whole diff, scrolled to the file the pane shows |
+| `fileviewerwindow` | Read-only text in a window of its own, on qtutils `CLightningFastViewerWidget` with a `CFindBar` under it: one file as of one commit, decoded where the bytes are text and a hex dump where they are not; or a change's whole diff, scrolled to the file the pane shows |
 | `updatecheck` | The interactive and the automatic update check, see `updates.md` |
 | `commandlinetool_mac` | macOS only: the `/usr/local/bin/gg` link, see `doc/BUILD.md` |
 | `stylesheet` | The application QSS with `@token@` placeholders filled from a `Theme`. Detail header of `theme.cpp` |

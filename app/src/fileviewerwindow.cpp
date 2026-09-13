@@ -6,6 +6,7 @@
 
 #include "appdialogs/csettingsnotifier.h"
 #include "string/stringutils.h"
+#include "widgets/cfindbar.h"
 #include "widgets/clabelelided.h"
 #include "widgets/clightningfastviewer.h"
 
@@ -115,6 +116,9 @@ FileViewerWindow::FileViewerWindow(const QString& title, const QString& headerTe
 	_stack->addWidget(_messageLabel);
 	_stack->addWidget(_viewer);
 	layout->addWidget(_stack, 1);
+	auto* findBar = new CFindBar{ _viewer };
+	findBar->setObjectName(QStringLiteral("findBar"));
+	layout->addWidget(findBar);
 	setCentralWidget(central);
 
 	const auto applyFontSettings = [this] {
