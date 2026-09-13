@@ -9,7 +9,7 @@
 #include "settings.h"
 #include "version.h"
 
-#include "appdialogs/csettingsdialog.h"
+#include "appdialogs/csettingsnotifier.h"
 #include "widgets/widgetutils.h"
 
 DISABLE_COMPILER_WARNINGS

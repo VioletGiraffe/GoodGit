@@ -1,7 +1,7 @@
 #include "consolelogview.h"
 #include "theme.h"
 
-#include "appdialogs/csettingsdialog.h"
+#include "appdialogs/csettingsnotifier.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QScrollBar>

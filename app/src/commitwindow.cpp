@@ -17,7 +17,7 @@
 #include "assert/advanced_assert.h"
 #include "dialogs/messagedialog.h"
 #include "hash/wheathash.hpp"
-#include "appdialogs/csettingsdialog.h"
+#include "appdialogs/csettingsnotifier.h"
 #include "string/stringutils.h"
 #include "widgets/clabelelided.h"
 #include "widgets/cpersistentwindow.h"

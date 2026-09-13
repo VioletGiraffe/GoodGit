@@ -4,7 +4,7 @@
 #include "settings.h"
 #include "theme.h"
 
-#include "appdialogs/csettingsdialog.h"
+#include "appdialogs/csettingsnotifier.h"
 #include "string/stringutils.h"
 #include "widgets/clabelelided.h"
 #include "widgets/clightningfastviewer.h"

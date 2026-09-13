@@ -7,7 +7,7 @@
 #include "settings.h"
 #include "theme.h"
 
-#include "appdialogs/csettingsdialog.h"
+#include "appdialogs/csettingsnotifier.h"
 #include "widgets/clabelelided.h"
 #include "widgets/cpersistentwindow.h"
 #include "widgets/widgetutils.h"

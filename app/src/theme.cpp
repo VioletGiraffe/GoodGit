@@ -3,7 +3,7 @@
 #include "stylesheet.h"
 
 #include "assert/advanced_assert.h"
-#include "appdialogs/csettingsdialog.h"
+#include "appdialogs/csettingsnotifier.h"
 #include "theme/cthemecontroller.h"
 #include "theme/cthemeiconhandler.h"
 #include "theme/ctintedsvgiconengine.h"
