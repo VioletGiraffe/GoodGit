@@ -55,8 +55,9 @@ must spell the same value: the update check compares `GG_VERSION` against the ta
   `GoodGit.dmg`.
 - **Linux**: build only, nothing packaged.
 
-A tag push creates the GitHub release with both artifacts and a changelog of the commits since the previous
-tag. Those releases are what the update check reads.
+A tag push creates a draft GitHub release with both artifacts and a changelog of the commits since the previous
+tag. The update check skips drafts: a release reaches users once published by hand, after editing the notes and
+setting the pre-release flag if it applies.
 
 ## Workspace scripts
 

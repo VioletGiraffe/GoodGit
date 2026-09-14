@@ -232,3 +232,4 @@ jobs:
         tag_name: ${{ github.ref }}
         name: ${{ github.ref_name }}
         body: ${{ steps.changelog.outputs.body }}
+        draft: true   # published by hand after editing the notes and setting the pre-release flag
