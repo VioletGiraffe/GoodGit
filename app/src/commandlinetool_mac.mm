@@ -1,6 +1,6 @@
 #include "commandlinetool_mac.h"
 
-#include "dialogs/messagebox.h"
+#include "dialogs/messagedialog.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QCoreApplication>
@@ -121,6 +121,6 @@ std::expected<QString, QString> installCommandLineTool()
 void installCommandLineToolAndReport(QWidget* dialogParent)
 {
 	const std::expected<QString, QString> result = installCommandLineTool();
-	MessageBox::notice(dialogParent, QStringLiteral("Command line tool"), result ? *result : result.error(), {},
+	MessageDialog::notice(dialogParent, QStringLiteral("Command line tool"), result ? *result : result.error(), {},
 		result ? QMessageBox::Information : QMessageBox::Warning);
 }
