@@ -96,7 +96,7 @@ std::vector<RecentRepository> list()
 
 	std::vector<RecentRepository> repositories;
 	repositories.reserve(size_t(stored.size()));
-	for (const QJsonValue& value : stored)
+	for (const auto value : stored)
 	{
 		const QJsonObject entry = value.toObject();
 		RecentRepository repository;

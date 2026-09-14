@@ -77,9 +77,9 @@ QString authorName(const QString& user)
 QString refsOf(const QJsonObject& record)
 {
 	QStringList refs;
-	for (const QJsonValue& bookmark : record.value(QLatin1String("bookmarks")).toArray())
+	for (const QJsonArray bookmarks = record.value(QLatin1String("bookmarks")).toArray(); const auto bookmark : bookmarks)
 		refs << bookmark.toString();
-	for (const QJsonValue& tag : record.value(QLatin1String("tags")).toArray())
+	for (const QJsonArray tags = record.value(QLatin1String("tags")).toArray(); const auto tag : tags)
 	{
 		if (tag.toString() != QLatin1String("tip"))
 			refs << tag.toString();
@@ -94,7 +94,7 @@ QString refsOf(const QJsonObject& record)
 QStringList nodeList(const QJsonValue& value)
 {
 	QStringList nodes;
-	for (const QJsonValue& node : value.toArray())
+	for (const QJsonArray nodeValues = value.toArray(); const auto node : nodeValues)
 		nodes << node.toString();
 	return nodes;
 }
@@ -138,7 +138,7 @@ std::vector<CommitFileChange> parseStatus(const QByteArray& statusOutput)
 	const QJsonArray records = jsonRecords(statusOutput);
 
 	QSet<QString> renameSources;
-	for (const QJsonValue& value : records)
+	for (const auto value : records)
 	{
 		const QString source = value.toObject().value(QLatin1String("source")).toString();
 		if (!source.isEmpty())
@@ -147,7 +147,7 @@ std::vector<CommitFileChange> parseStatus(const QByteArray& statusOutput)
 
 	std::vector<CommitFileChange> entries;
 	entries.reserve(size_t(records.size()));
-	for (const QJsonValue& value : records)
+	for (const auto value : records)
 	{
 		const QJsonObject record = value.toObject();
 		const QString status = record.value(QLatin1String("status")).toString();
@@ -180,7 +180,7 @@ std::vector<CommitFileChange> parseStatus(const QByteArray& statusOutput)
 WorktreeDirtiness parseDirtiness(const QByteArray& statusOutput)
 {
 	WorktreeDirtiness dirtiness;
-	for (const QJsonValue& value : jsonRecords(statusOutput))
+	for (const auto value : jsonRecords(statusOutput))
 	{
 		const QString status = value.toObject().value(QLatin1String("status")).toString();
 		if (status.isEmpty())
@@ -243,7 +243,7 @@ std::map<QString, LineCounts> parseDiffCounts(const QByteArray& diffOutput)
 QStringList parseUnresolvedPaths(const QByteArray& resolveOutput)
 {
 	QStringList paths;
-	for (const QJsonValue& value : jsonRecords(resolveOutput))
+	for (const auto value : jsonRecords(resolveOutput))
 	{
 		const QJsonObject record = value.toObject();
 		const QString status = record.value(QLatin1String("mergestatus")).toString();
@@ -261,7 +261,7 @@ std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput)
 
 	std::vector<CommitRecord> commits;
 	commits.reserve(size_t(records.size()));
-	for (const QJsonValue& value : records)
+	for (const auto value : records)
 	{
 		const QJsonObject record = value.toObject();
 
@@ -283,7 +283,7 @@ std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput)
 QStringList parseBranchNames(const QByteArray& branchesOutput)
 {
 	QStringList names;
-	for (const QJsonValue& value : jsonRecords(branchesOutput))
+	for (const auto value : jsonRecords(branchesOutput))
 		names << value.toObject().value(QLatin1String("branch")).toString();
 	return names;
 }
@@ -291,7 +291,7 @@ QStringList parseBranchNames(const QByteArray& branchesOutput)
 QStringList parsePathNames(const QByteArray& pathsOutput)
 {
 	QStringList names;
-	for (const QJsonValue& value : jsonRecords(pathsOutput))
+	for (const auto value : jsonRecords(pathsOutput))
 		names << value.toObject().value(QLatin1String("name")).toString();
 	return names;
 }
@@ -299,7 +299,7 @@ QStringList parsePathNames(const QByteArray& pathsOutput)
 std::vector<GrepMatch> parseGrepDiff(const QByteArray& grepOutput)
 {
 	std::map<QString, GrepMatch> byNode;
-	for (const QJsonValue& value : jsonRecords(grepOutput))
+	for (const auto value : jsonRecords(grepOutput))
 	{
 		const QJsonObject record = value.toObject();
 		const QString node = record.value(QLatin1String("node")).toString();
