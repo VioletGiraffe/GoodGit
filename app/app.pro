@@ -137,8 +137,6 @@ LIBS += -L$${BIN_DIR} -lautoupdater -lqtutils -lcpputils -lthin_io
 
 mac*|linux*|freebsd*{
 	PRE_TARGETDEPS += $${BIN_DIR}/libautoupdater.a $${BIN_DIR}/libqtutils.a $${BIN_DIR}/libcpputils.a $${BIN_DIR}/libthin_io.a
-
-	QMAKE_CXXFLAGS_WARN_ON += -Wno-missing-field-initializers
 }
 
 ###################################################

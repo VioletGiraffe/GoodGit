@@ -5,8 +5,9 @@
 qmake subdirs: `app` plus the first-party submodules `cpputils`, `cpp-template-utils`, `qtutils`, `thin_io` and
 `github-releases-autoupdater` (static libs). `thin_io` supplies one thing: the filesystem entry identity behind
 `sameDirectoryOnDisk`, which Qt does not expose. `github-releases-autoupdater` serves the update check
-(`updates.md`) and is why the app links Qt Network. Compiler configuration lives in
-`global.pri`, included by the app, the launcher, the tests and qtutils.
+(`updates.md`) and is why the app links Qt Network. Compiler configuration lives in `global.pri`, included by
+the app, the launcher and the tests; `cpputils`, `qtutils`, `thin_io` and `github-releases-autoupdater` include it
+if it exists.
 
 The `.sln`, `.vcxproj` and `Makefile*` files in the tree are qmake output (`qmake -tp vc -r` on Windows),
 git-ignored and never edited.

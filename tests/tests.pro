@@ -20,7 +20,6 @@ INCLUDEPATH += ../app/src ../cpputils ../cpp-template-utils
 
 DEFINES += FIXTURES_DIR=\\\"$$PWD/fixtures/\\\"
 
-mac*|linux*|freebsd*: QMAKE_CXXFLAGS_WARN_ON += -Wno-missing-field-initializers
 win32: QMAKE_CXXFLAGS += /Fd$${OBJECTS_DIR}   # the compiler's pdb, which would otherwise land beside this file
 
 HEADERS += \
