@@ -22,7 +22,7 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         submodules: 'recursive'
 
@@ -80,10 +80,11 @@ jobs:
 
     - name: Archive Installer
       if: success() && startsWith(matrix.os, 'windows')
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: GoodGit.exe
         path: GoodGit.exe
+        if-no-files-found: error
 
     - name: Windows - install cloc
       if: startsWith(matrix.os, 'windows')
@@ -152,10 +153,11 @@ jobs:
 
     - name: Archive DMG
       if: success() && startsWith(matrix.os, 'macos')
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: GoodGit.dmg
         path: GoodGit.dmg
+        if-no-files-found: error
 
     - name: Linux - set up gcc 14
       if: startsWith(matrix.os, 'ubuntu')
@@ -187,19 +189,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         fetch-depth: 0   # the changelog walks the history between this tag and the previous one
         fetch-tags: true
 
     - name: Download installer
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: GoodGit.exe
         path: .
 
     - name: Download DMG
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: GoodGit.dmg
         path: .
