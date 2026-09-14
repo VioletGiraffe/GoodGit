@@ -3,6 +3,8 @@
 #include "historymodels.h"
 #include "theme.h"
 
+#include "assert/advanced_assert.h"
+
 DISABLE_COMPILER_WARNINGS
 #include <QLineF>
 #include <QPainter>
@@ -78,9 +80,10 @@ QPointF nodeEdgeToward(QPointF node, QPointF other)
 
 void CommitGraphDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const
 {
+	assert_debug_only(dynamic_cast<const CommitLogModel*>(index.model())); // installed only on the commit log view
 	QStyledItemDelegate::paint(painter, option, index); // the row background, selection included
 
-	const GraphRow row = qvariant_cast<GraphRow>(index.data(CommitLogModel::GraphRole));
+	const GraphRow& row = static_cast<const CommitLogModel*>(index.model())->graphRowAt(index.row());
 	const int width = laneWidth(option);
 	const auto x = [&, inset = laneInset(width)](int lane) { return option.rect.left() + inset + lane * width; };
 	const qreal top = option.rect.top();

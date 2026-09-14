@@ -21,9 +21,8 @@ class CommitLogModel final : public QAbstractTableModel
 public:
 	// CommitColumn shows the revision number where the system has one, else the short sha (see CommitRecord::revision)
 	enum Column { GraphColumn = 0, CommitColumn, SubjectColumn, AuthorColumn, DateColumn, ColumnCount };
-	// For CommitGraphDelegate: this row's slice of the diagram, the lane count of the whole list, and
-	// whether the commit is unpushed
-	enum Role { GraphRole = Qt::UserRole, GraphLaneCountRole, UnpushedRole };
+	// For CommitGraphDelegate: the lane count of the whole list, and whether the commit is unpushed
+	enum Role { GraphLaneCountRole = Qt::UserRole, UnpushedRole };
 
 	explicit CommitLogModel(QObject* parent = nullptr);
 
@@ -52,6 +51,7 @@ public:
 
 	// Row indexes address the shown rows, with or without a search active
 	[[nodiscard]] const CommitRecord& commitAt(int row) const { return _commits[size_t(commitIndexAt(row))]; }
+	[[nodiscard]] const GraphRow& graphRowAt(int row) const;
 	// -1 if not listed: the walk may not have covered that line of history, or it may be older than the limit
 	[[nodiscard]] int rowOfSha(const QString& sha) const;
 	[[nodiscard]] int totalCount() const { return int(_commits.size()); } // rowCount() is the shown count
@@ -66,7 +66,6 @@ private:
 	void rebuildSearchGraph(); // over the current _graph and _visible; empty while no search is active
 	[[nodiscard]] int commitIndexAt(int row) const { return _visible[size_t(row)]; }
 	[[nodiscard]] const QString& displayedDateAt(size_t commitIndex) const;
-	[[nodiscard]] const GraphRow& graphRowAt(int row) const;
 
 private:
 	std::vector<CommitRecord> _commits;

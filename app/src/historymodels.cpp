@@ -355,8 +355,6 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 				: QStringLiteral("\nChanges a line containing the search text");
 		return tooltip;
 	}
-	case GraphRole:
-		return QVariant::fromValue(graphRowAt(index.row()));
 	case GraphLaneCountRole:
 		// The unfiltered width, so typing in the search box does not resize the column
 		return _graph.laneCount;

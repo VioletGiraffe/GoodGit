@@ -155,8 +155,8 @@ public:
 
 	void cancel()
 	{
-		if (*_current)
-			(*_current)->cancel();
+		if (Job* job = *_current; job != nullptr)
+			job->cancel();
 	}
 
 	// Backend side: the process now answering. Replaces the previous one, which has answered by then.

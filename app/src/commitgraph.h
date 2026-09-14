@@ -2,10 +2,6 @@
 
 #include "vcstypes.h"
 
-DISABLE_COMPILER_WARNINGS
-#include <QMetaType>
-RESTORE_COMPILER_WARNINGS
-
 #include <vector>
 
 // The lane diagram drawn beside a commit list. Built from the records' parent links alone, so one
@@ -51,5 +47,3 @@ struct CommitGraph
 // Merge lines are dropped: their far end is an arbitrary distance away.
 // `visible` holds ascending indexes into the commits the graph was built from.
 [[nodiscard]] CommitGraph filteredCommitGraph(const CommitGraph& full, const std::vector<int>& visible);
-
-Q_DECLARE_METATYPE(GraphRow)

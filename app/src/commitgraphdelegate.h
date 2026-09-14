@@ -6,7 +6,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QStyledItemDelegate>
 RESTORE_COMPILER_WARNINGS
 
-// Paints the commit graph column from the model's GraphRole. The width follows the model's lane count, so
+// Paints the commit graph column from CommitLogModel's graph rows. The width follows the model's lane count, so
 // it fits the whole list at once.
 class CommitGraphDelegate final : public QStyledItemDelegate
 {
