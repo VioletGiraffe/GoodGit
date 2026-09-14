@@ -14,7 +14,6 @@ class QueryRound
 {
 	struct End
 	{
-		explicit End(std::function<void()> then) : then(std::move(then)) {}
 		~End() { then(); }
 
 		std::function<void()> then;

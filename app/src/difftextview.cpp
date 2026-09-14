@@ -461,7 +461,7 @@ void DiffTextView::paintRemovedStrikes(const QRect& clip)
 			continue;
 
 		auto span = std::lower_bound(_spans.begin(), _spans.end(), block.blockNumber(),
-			[](const DiffSpan& span, int line) { return span.line < line; });
+			[](const DiffSpan& candidate, int line) { return candidate.line < line; });
 		if (span == _spans.end() || span->line != block.blockNumber())
 			continue;
 
