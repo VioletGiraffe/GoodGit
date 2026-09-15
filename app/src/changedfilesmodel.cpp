@@ -24,6 +24,22 @@ QColor stateColor(const FileEntry& entry)
 	return entry.contentBlocksPointer() ? t.stDeleted : t.stSubmodule;
 }
 
+int changeTypeRank(ChangeType type)
+{
+	// Conflicts first, the ordinary edits next, the untracked last
+	switch (type)
+	{
+	case ChangeType::Conflicted:  return 0;
+	case ChangeType::Modified:    return 1;
+	case ChangeType::Added:       return 2;
+	case ChangeType::Renamed:     return 3;
+	case ChangeType::TypeChanged: return 4;
+	case ChangeType::Deleted:     return 5;
+	case ChangeType::Untracked:   return 6;
+	}
+	return {};
+}
+
 } // namespace
 
 QString changeTypeText(ChangeType type)
@@ -57,20 +73,12 @@ QColor changeTypeColor(ChangeType type)
 	return {};
 }
 
-int changeTypeRank(ChangeType type)
+int fileListSortRank(ChangeType type, bool isSubmodule, bool blocksCommit)
 {
-	// Conflicts first, the ordinary edits next, the untracked last
-	switch (type)
-	{
-	case ChangeType::Conflicted:  return 0;
-	case ChangeType::Modified:    return 1;
-	case ChangeType::Added:       return 2;
-	case ChangeType::Renamed:     return 3;
-	case ChangeType::TypeChanged: return 4;
-	case ChangeType::Deleted:     return 5;
-	case ChangeType::Untracked:   return 6;
-	}
-	return {};
+	constexpr int SubmoduleRankOffset = 100; // past every changeTypeRank
+	if (blocksCommit)
+		return -1;
+	return isSubmodule ? SubmoduleRankOffset + changeTypeRank(type) : changeTypeRank(type);
 }
 
 QString lineCountText(const std::optional<LineCounts>& counts, bool added)
@@ -356,7 +364,7 @@ QVariant ChangedFilesModel::data(const QModelIndex& index, int role) const
 			return QBrush{ activeTheme().blockedRowTint() };
 		return {};
 	case SortRankRole:
-		return entry.isSubmodule && entry.contentBlocksPointer() ? BlockedSubmoduleRank : changeTypeRank(entry.type);
+		return fileListSortRank(entry.type, entry.isSubmodule, entry.isSubmodule && entry.contentBlocksPointer());
 	case SortPathRole:
 		return entry.path;
 	case Qt::ToolTipRole:

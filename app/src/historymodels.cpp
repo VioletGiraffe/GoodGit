@@ -454,7 +454,7 @@ QVariant CommitFilesModel::data(const QModelIndex& index, int role) const
 	case Qt::FontRole:
 		return fileListSharedRoleData(index.column(), role, entry.isSubmodule, entry.type);
 	case SortRankRole:
-		return changeTypeRank(entry.type);
+		return fileListSortRank(entry.type, entry.isSubmodule);
 	case SortPathRole:
 		return entry.path;
 	case Qt::ToolTipRole:

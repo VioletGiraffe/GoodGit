@@ -13,10 +13,11 @@ RESTORE_COMPILER_WARNINGS
 // Shared with the history window's file list, so a row looks the same in both
 [[nodiscard]] QString changeTypeText(ChangeType type);
 [[nodiscard]] QColor changeTypeColor(ChangeType type);
-// A change type's place when the list is ordered by status: lower first
-[[nodiscard]] int changeTypeRank(ChangeType type);
-// A submodule whose content blocks its pointer sorts ahead of every change type: it stops the commit
-inline constexpr int BlockedSubmoduleRank = -1;
+// A row's place when the list is ordered by status, lower first. Groups, each ordered by change type:
+//   blocked submodules - their content blocks the pointer, which stops the commit
+//   files
+//   the other submodules
+[[nodiscard]] int fileListSortRank(ChangeType type, bool isSubmodule, bool blocksCommit = false);
 
 // For the two line-count columns; a file without counts gets an empty cell rather than a zero
 [[nodiscard]] QString lineCountText(const std::optional<LineCounts>& counts, bool added);
