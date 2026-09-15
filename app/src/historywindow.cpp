@@ -761,8 +761,8 @@ void HistoryWindow::showFilesForCurrentCommit()
 	_changeSet.reset();
 	_changeSetPending = false;
 
-	const QModelIndex current = _logView->currentIndex();
-	if (!current.isValid() || current.row() >= _logModel.rowCount())
+	const std::optional<CommitRecord> commit = currentCommit();
+	if (!commit)
 	{
 		_filesModel.clear();
 		_fileCountLabel->clear();
@@ -771,14 +771,12 @@ void HistoryWindow::showFilesForCurrentCommit()
 		return;
 	}
 
-	const CommitRecord& commit = _logModel.commitAt(current.row());
-
-	const bool isMerge = commit.parents.size() > 1;
+	const bool isMerge = commit->parents.size() > 1;
 	// Both replaced before the queries go out, so neither outlives the commit it describes
 	_filesModel.clear();
-	_diffPane->showMessage({ .tag = shortSha(commit.sha) },
+	_diffPane->showMessage({ .tag = shortSha(commit->sha) },
 		isMerge ? tr("A merge commit has no diff of its own: its changes depend on which parent it is compared against.") : QString{});
-	showCommitBody(commit.body());
+	showCommitBody(commit->body());
 
 	if (isMerge)
 	{
@@ -787,7 +785,7 @@ void HistoryWindow::showFilesForCurrentCommit()
 	}
 
 	_fileCountLabel->setText(tr("Loading..."));
-	const QString sha = commit.sha;
+	const QString sha = commit->sha;
 	_filesQuery = _repo->commitFiles(sha, this, [this, sha](std::expected<std::vector<CommitFileChange>, QString> result) {
 		if (!result)
 		{
