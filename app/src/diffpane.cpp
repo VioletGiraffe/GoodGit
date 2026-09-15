@@ -89,6 +89,16 @@ void DiffPane::scrollDiffLineToTop(int diffLine)
 	_view->scrollDiffLineToTop(diffLine);
 }
 
+std::optional<int> DiffPane::topLine() const
+{
+	return _view->topLine();
+}
+
+void DiffPane::scrollLineToTop(int line)
+{
+	_view->scrollLineToTop(line);
+}
+
 void DiffPane::showSection(const ItemInfo& item, const ChangeSetDiff& set, int file, qint64 maxBytes, const QString& noContentText)
 {
 	const QStringView section = set.fileDiff(file);

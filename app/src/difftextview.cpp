@@ -294,9 +294,19 @@ void DiffTextView::goToNextHunk()
 		scrollLineToTop(*begun);
 }
 
+std::optional<int> DiffTextView::topLine() const
+{
+	if (_content != Content::Diff)
+		return {};
+	return firstVisibleBlock().blockNumber();
+}
+
 // A cursor is scrolled to by the least the viewport can move, so one reached from the bottom lands at the top
 void DiffTextView::scrollLineToTop(int line)
 {
+	if (line >= document()->blockCount())
+		return;
+
 	verticalScrollBar()->setValue(verticalScrollBar()->maximum());
 	setTextCursor(QTextCursor{ document()->findBlockByNumber(line) });
 	ensureCursorVisible();

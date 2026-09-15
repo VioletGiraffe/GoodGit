@@ -66,6 +66,9 @@ public:
 	void goToPreviousHunk();
 	void goToNextHunk();
 
+	// The line at the top of the viewport; empty unless a diff is shown
+	[[nodiscard]] std::optional<int> topLine() const;
+	// Does nothing for a line past the end
 	void scrollLineToTop(int line);
 	// A line of the diff read, as ForeignEnd::diffLine names one. Does nothing for a line not shown.
 	void scrollDiffLineToTop(int diffLine);

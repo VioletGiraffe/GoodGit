@@ -7,6 +7,8 @@ DISABLE_COMPILER_WARNINGS
 #include <QWidget>
 RESTORE_COMPILER_WARNINGS
 
+#include <optional>
+
 class QLabel;
 class QPushButton;
 class CLabelElided;
@@ -51,6 +53,10 @@ public:
 
 	// A line of the diff shown, as ForeignEnd::diffLine names one in the file it points into
 	void scrollDiffLineToTop(int diffLine);
+	// The view's line at its top, for scrollLineToTop(); empty unless a diff is shown
+	[[nodiscard]] std::optional<int> topLine() const;
+	// Does nothing for a line past the end
+	void scrollLineToTop(int line);
 
 signals:
 	// A click on the mark of a block moved to or from another file: the window owning the file list shows that file

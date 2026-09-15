@@ -829,6 +829,10 @@ void HistoryWindow::showDiffForCurrentFile()
 	_sizeQuery.cancel(); // its callback writes the header, which the next selection owns from here on
 	_fileAwaitsChangeSet = false;
 
+	// Every change of file passes through here, so a diff still shown is the last shown file's
+	if (const std::optional<int> topLine = _diffPane->topLine())
+		_lastShownFile.topLine = *topLine;
+
 	const std::optional<CommitFileChange> currentFile = fileEntryAt(_filesView->currentSourceIndex());
 	const std::optional<CommitRecord> commit = currentCommit();
 	if (!currentFile || !commit)
@@ -837,7 +841,8 @@ void HistoryWindow::showDiffForCurrentFile()
 	const CommitFileChange& entry = *currentFile;
 	const QString sha = commit->sha;
 	_currentItem = { entry.path, shortSha(sha) };
-	_lastShownFile = { sha, entry.path };
+	if (_lastShownFile.sha != sha || _lastShownFile.path != entry.path)
+		_lastShownFile = { sha, entry.path };
 
 	const QString noContentText = tr("No content changes (only the mode or the line endings differ, or a rename with identical content).");
 	_diffPane->showMessage(_currentItem, tr("Loading..."));
@@ -845,7 +850,10 @@ void HistoryWindow::showDiffForCurrentFile()
 	// A submodule row's diff is not the path's own, so the set never answers for it
 	const std::optional<int> section = !entry.isSubmodule && _changeSet ? _changeSet->fileIndex(entry.path) : std::nullopt;
 	if (section)
+	{
 		_diffPane->showSection(_currentItem, *_changeSet, *section, Settings::maxShownDiffBytes(), noContentText);
+		_diffPane->scrollLineToTop(_lastShownFile.topLine);
+	}
 	else if (!entry.isSubmodule && _changeSetPending)
 		_fileAwaitsChangeSet = true;
 	else
@@ -856,7 +864,10 @@ void HistoryWindow::showDiffForCurrentFile()
 			else if (diff->isEmpty())
 				_diffPane->showMessage(_currentItem, noContentText);
 			else
+			{
 				_diffPane->showDiff(_currentItem, parseUnifiedDiff(QString::fromUtf8(*diff)));
+				_diffPane->scrollLineToTop(_lastShownFile.topLine);
+			}
 		});
 	}
 

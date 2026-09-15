@@ -163,6 +163,7 @@ private:
 	{
 		QString sha;
 		QString path;
+		int topLine = 0; // of its diff, as the pane left it
 	};
 	ShownFile _lastShownFile;
 
