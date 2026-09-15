@@ -286,6 +286,10 @@ void HistoryWindow::buildUi()
 	connect(_filesView, &QWidget::customContextMenuRequested, this, &HistoryWindow::showFileContextMenu);
 	connect(_logView->selectionModel(), &QItemSelectionModel::currentChanged, this, &HistoryWindow::showFilesForCurrentCommit);
 	connect(_filesView->selectionModel(), &QItemSelectionModel::currentChanged, this, &HistoryWindow::showDiffForCurrentFile);
+	// A model reset clears the current row without emitting currentChanged.
+	// These run after the views' own reset handlers, which setModel connected first.
+	connect(&_logModel, &QAbstractItemModel::modelReset, this, &HistoryWindow::showFilesForCurrentCommit);
+	connect(&_filesModel, &QAbstractItemModel::modelReset, this, &HistoryWindow::showDiffForCurrentFile);
 	connect(_filesView, &FileListView::rowActivated, this, &HistoryWindow::onFileRowActivated);
 
 	new QShortcut(QKeySequence(Qt::Key_F5), this, [this] { reload(); });
@@ -419,7 +423,7 @@ void HistoryWindow::reload()
 		{
 			_logCapped = false;
 			_revealSha.clear();
-			_logModel.setCommits({}); // the reset clears the panes below through currentChanged
+			_logModel.setCommits({}); // the reset clears the panes below
 			_countLabel->clear();
 			_loadMoreButton->setVisible(false);
 			_diffPane->showMessage({}, result.error());
