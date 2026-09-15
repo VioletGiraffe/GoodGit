@@ -167,4 +167,4 @@ Each of these was assumed to be otherwise, and acted on or nearly acted on:
 - **The marker files are not a complete test for cherry-pick and revert.** The sequencer outlives
   `CHERRY_PICK_HEAD`; see Operations in progress.
 - `QFileInfo::canonicalFilePath()` resolves neither a junction, a `subst` drive, nor a second mount of one
-  volume in Qt 6.9.3. A Qt fact, not a git one, and the first thing a path-identity question runs into.
+  volume in Qt 6.11.2. A Qt fact, not a git one, and the first thing a path-identity question runs into.
