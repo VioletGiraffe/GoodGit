@@ -401,7 +401,8 @@ void DiffTextView::updateNumberWidths()
 	const int digitWidth = fontMetrics().horizontalAdvance(QLatin1Char('9'));
 	_oldNumberWidth = _maxOldLine == 0 ? 0 : digitCount(_maxOldLine) * digitWidth;
 	_newNumberWidth = _maxNewLine == 0 ? 0 : digitCount(_maxNewLine) * digitWidth;
-	_moveLaneWidth = digitWidth + MoveLanePadding;
+	// Odd: a bracket then spans an odd number of pixels, with a middle column for its line
+	_moveLaneWidth = (digitWidth + MoveLanePadding) | 1;
 }
 
 int DiffTextView::moveColumnWidth() const
@@ -647,8 +648,8 @@ void DiffTextView::paintMoveMarks(QPainter& painter, const QRect& clip)
 	const auto bottomOf = [&](int line) { return line < firstVisible ? -FarOff : line > lastVisible ? FarOff : lineRect(line).bottom(); };
 
 	const int columnLeft = _gutterWidth - GutterOuterMargin - _moveLaneCount * _moveLaneWidth;
-	const int tick = _moveLaneWidth - 4;       // a bracket's horizontal stroke, a margin either side of it in the lane
-	const int chevronHalfWidth = tick / 2 - 1; // within the bracket's opening
+	const int tick = _moveLaneWidth - 4;       // a bracket's horizontal stroke: with its caps, all of the lane but a 2 px gap on the right
+	const qreal chevronHalfWidth = tick / 2.0; // the base spans the tick, its ends on pixel edges
 	// Facing the lines it brackets, kept a pixel inside the block so the stroke's width stays within it
 	const auto drawBracket = [&](int x, qreal top, qreal bottom) {
 		painter.drawLine(QPointF(x, top + 1), QPointF(x, bottom - 1));
@@ -656,8 +657,10 @@ void DiffTextView::paintMoveMarks(QPainter& painter, const QRect& clip)
 		painter.drawLine(QPointF(x, bottom - 1), QPointF(x + tick, bottom - 1));
 	};
 	const qreal chevronHeight = chevronHalfWidth;
+	// `x` is the line's: an aliased 1 px line fills the pixel column right of its coordinate
 	const auto drawChevron = [&](int x, qreal baseY, qreal apexY) {
-		painter.drawPolygon(QPolygonF{ QPointF(x - chevronHalfWidth, baseY), QPointF(x + chevronHalfWidth, baseY), QPointF(x, apexY) });
+		const qreal centerX = x + 0.5;
+		painter.drawPolygon(QPolygonF{ QPointF(centerX - chevronHalfWidth, baseY), QPointF(centerX + chevronHalfWidth, baseY), QPointF(centerX, apexY) });
 	};
 	// A chevron past a bracket's end at `edgeY`, `gap` away from it, pointing the way the block went
 	const auto drawChevronBelow = [&](int x, qreal edgeY, int gap, bool pointsDown) {
