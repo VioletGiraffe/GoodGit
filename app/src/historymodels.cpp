@@ -411,6 +411,16 @@ void CommitFilesModel::clear()
 	endResetModel();
 }
 
+int CommitFilesModel::rowOfPath(const QString& path) const
+{
+	for (size_t row = 0; row < _entries.size(); ++row)
+	{
+		if (_entries[row].path == path)
+			return int(row);
+	}
+	return -1;
+}
+
 std::optional<LineCounts> CommitFilesModel::countsAt(int row) const
 {
 	const auto it = _lineCounts.find(_entries[size_t(row)].path);

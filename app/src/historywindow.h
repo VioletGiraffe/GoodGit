@@ -158,6 +158,14 @@ private:
 	bool _changeSetPending = false; // the query is out: a file waits for it instead of being diffed on its own
 	bool _fileAwaitsChangeSet = false; // the file shown is waiting, so the set's arrival shows it
 
+	// The file whose diff the pane showed last: a commit whose files are listed again returns to it
+	struct ShownFile
+	{
+		QString sha;
+		QString path;
+	};
+	ShownFile _lastShownFile;
+
 	// What the pane's header states about the file being shown. A member rather than a value each callback
 	// carries: the size arrives on its own query, and the diff must not restate a header without it.
 	DiffPane::ItemInfo _currentItem;

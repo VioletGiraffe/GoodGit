@@ -206,14 +206,11 @@ void HistoryWindow::buildUi()
 	_diffPane = new DiffPane;
 	// The other file's row shows its section at once, from the set the end came from, so the scroll lands
 	connect(_diffPane, &DiffPane::foreignEndActivated, this, [this](const ForeignEnd& end) {
-		for (int row = 0; row < _filesModel.rowCount(); ++row)
-		{
-			if (_filesModel.entryAt(row).path != end.path)
-				continue;
-			_filesView->setSelectedSourceRows({ row }, row);
-			_diffPane->scrollDiffLineToTop(end.diffLine);
+		const int row = _filesModel.rowOfPath(end.path);
+		if (row < 0)
 			return;
-		}
+		_filesView->setSelectedSourceRows({ row }, row);
+		_diffPane->scrollDiffLineToTop(end.diffLine);
 	});
 	connect(_diffPane, &DiffPane::fullDiffRequested, this, [this] {
 		const std::optional<CommitFileChange> file = fileEntryAt(_filesView->currentSourceIndex());
@@ -803,8 +800,10 @@ void HistoryWindow::showFilesForCurrentCommit()
 		const int fileCount = int(result->size());
 		_filesModel.setEntries(*std::move(result));
 		_fileCountLabel->setText(fileCount == 1 ? tr("1 file") : tr("%1 files").arg(fileCount));
-		if (const QModelIndex first = _filesView->firstShownSourceIndex(); first.isValid())
-			_filesView->setSelectedSourceRows({ first.row() }, first.row());
+		const int lastShownRow = sha == _lastShownFile.sha ? _filesModel.rowOfPath(_lastShownFile.path) : -1;
+		const int row = lastShownRow >= 0 ? lastShownRow : _filesView->firstShownSourceIndex().row(); // -1 for an empty list
+		if (row >= 0)
+			_filesView->setSelectedSourceRows({ row }, row);
 		else
 			_diffPane->showMessage({ .tag = shortSha(sha) }, tr("This commit changes no files."));
 	});
@@ -836,6 +835,7 @@ void HistoryWindow::showDiffForCurrentFile()
 	const CommitFileChange& entry = *currentFile;
 	const QString sha = commit->sha;
 	_currentItem = { entry.path, shortSha(sha) };
+	_lastShownFile = { sha, entry.path };
 
 	const QString noContentText = tr("No content changes (only the mode or the line endings differ, or a rename with identical content).");
 	_diffPane->showMessage(_currentItem, tr("Loading..."));

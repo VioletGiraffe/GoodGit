@@ -97,6 +97,7 @@ public:
 	void clear();
 
 	[[nodiscard]] const CommitFileChange& entryAt(int row) const { return _entries[size_t(row)]; }
+	[[nodiscard]] int rowOfPath(const QString& path) const; // -1 if not listed
 
 	int rowCount(const QModelIndex& parent = {}) const override;
 	int columnCount(const QModelIndex& parent = {}) const override;
