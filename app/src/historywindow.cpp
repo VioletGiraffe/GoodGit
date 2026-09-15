@@ -776,15 +776,13 @@ void HistoryWindow::showFilesForCurrentCommit()
 
 	const CommitRecord& commit = _logModel.commitAt(current.row());
 
+	const bool isMerge = commit.parents.size() > 1;
 	// Both replaced before the queries go out, so neither outlives the commit it describes
 	_filesModel.clear();
-	_diffPane->showMessage({ .tag = shortSha(commit.sha) }, {});
+	_diffPane->showMessage({ .tag = shortSha(commit.sha) },
+		isMerge ? tr("A merge commit has no diff of its own: its changes depend on which parent it is compared against.") : QString{});
 	showCommitBody(commit.body());
 
-	const bool isMerge = commit.parents.size() > 1;
-	_fileCountLabel->setToolTip(isMerge
-		? tr("A merge commit has no diff of its own: its changes depend on which parent it is compared against.")
-		: QString{});
 	if (isMerge)
 	{
 		_fileCountLabel->setText(tr("merge commit"));
@@ -807,6 +805,8 @@ void HistoryWindow::showFilesForCurrentCommit()
 		_fileCountLabel->setText(fileCount == 1 ? tr("1 file") : tr("%1 files").arg(fileCount));
 		if (const QModelIndex first = _filesView->firstShownSourceIndex(); first.isValid())
 			_filesView->setSelectedSourceRows({ first.row() }, first.row());
+		else
+			_diffPane->showMessage({ .tag = shortSha(sha) }, tr("This commit changes no files."));
 	});
 	// A separate query, so the rows may appear before their counts; a failure costs only the counts
 	_fileCountsQuery = _repo->commitFileCounts(sha, this, [this](std::expected<std::map<QString, LineCounts>, QString> counts) {
