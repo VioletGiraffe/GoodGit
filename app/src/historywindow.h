@@ -16,6 +16,7 @@ class QCheckBox;
 class QFrame;
 class QLabel;
 class QLineEdit;
+class QPlainTextEdit;
 class QPushButton;
 class QSplitter;
 class QTimer;
@@ -95,7 +96,8 @@ private:
 	void selectLoadedCommit();
 	void showFilesForCurrentCommit();
 	void showDiffForCurrentFile();
-	void showCommitMessage(const CommitRecord& commit);
+	// Hidden while the body is empty; sized to its lines up to a cap
+	void showCommitBody(const QString& body);
 
 private:
 	const std::unique_ptr<Repository> _repo;
@@ -125,6 +127,8 @@ private:
 
 	QSplitter* _splitter = nullptr;       // log above, the commit's detail below
 	QSplitter* _detailSplitter = nullptr; // file list beside the diff
+	QFrame* _bodyPane = nullptr;          // above _detailSplitter, hidden while the selected commit has no body
+	QPlainTextEdit* _bodyView = nullptr;
 	QTreeView* _logView = nullptr;
 	FileListView* _filesView = nullptr;
 	CLabelElided* _filePathLabel = nullptr; // shown only in a file history

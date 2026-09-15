@@ -25,7 +25,8 @@ win32: QMAKE_CXXFLAGS += /Fd$${OBJECTS_DIR}   # the compiler's pdb, which would 
 HEADERS += \
 	../app/src/movedblocks.h \
 	../app/src/textdiff.h \
-	../app/src/unifieddiff.h
+	../app/src/unifieddiff.h \
+	../app/src/vcstypes.h
 
 SOURCES += \
 	../app/src/movedblocks.cpp \
@@ -33,7 +34,8 @@ SOURCES += \
 	../app/src/unifieddiff.cpp \
 	main.cpp \
 	movedblocks_tests.cpp \
-	unifieddiff_tests.cpp
+	unifieddiff_tests.cpp \
+	vcstypes_tests.cpp
 
 # The app sources assert through cpputils: these compile in what that needs, without the whole static library
 include(../cpputils/assert/assert.pri)

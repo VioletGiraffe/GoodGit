@@ -31,6 +31,7 @@ QLabel#branchChip { background: @surface@; color: @text@; border: 1px solid @bor
 QLabel#aheadLabel { color: @accentText@; font-weight: 600; }
 QFrame#counterBar { background: @windowBg@; border-bottom: 1px solid @border@; }
 QFrame#diffHeader { background: @windowBg@; border-bottom: 1px solid @border@; }
+QFrame#commitBodyPane { border-bottom: 1px solid @border@; }
 QFrame#pushLogHeader { background: @windowBg@; border-top: 1px solid @border@; border-bottom: 1px solid @border@; }
 QFrame#dockHeader { background: @surfaceAlt@; border-bottom: 1px solid @border@; }
 QFrame#findBar { background: @windowBg@; border-top: 1px solid @border@; }

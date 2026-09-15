@@ -324,6 +324,9 @@ body {
 .c-subj { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .c-auth { flex: 0 0 96px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
 .c-date { flex: 0 0 232px; color: var(--dim); }
+/* The selected commit's message past its subject, sized to its lines. Absent where the message is only a subject. */
+.cbody { flex: 0 0 auto; background: var(--pane); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.cbody pre { margin: 0; padding: 4px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; line-height: 1.5; color: var(--text); white-space: pre-wrap; }
 
 /* ---------- search field ---------- */
 .field { background: var(--pane); border: 1px solid var(--btn-border); border-radius: 4px; padding: 4px 8px; color: var(--dim); font-size: 12.5px; }
@@ -435,6 +438,14 @@ const COMMITS = [
 	{ sha: 'b3dde3ed', subj: 'Bugfix: job completion callback must be async', date: '2026-08-14 03:18 (12 hours ago)' },
 	{ sha: 'a97c41e0', subj: 'Discard changes to the selected files', date: '2026-08-13 22:04 (17 hours ago)' },
 	{ sha: '4f0b2d18', subj: 'Peek at what the upstream has', date: '2026-08-13 20:41 (19 hours ago)' },
+];
+
+/* The selected commit's body: the first commit's message without its subject. */
+const COMMIT_BODY = [
+	'Both file lists gain two columns: the lines each change added and removed.',
+	'',
+	'The counts come from a query of their own, so the rows may show before them.',
+	'A row the diff has no count for leaves both cells empty.',
 ];
 
 /* One commit's files. No checkboxes here - a commit already made has nothing to check. */
@@ -621,7 +632,8 @@ const historyWindow_ = () => `<div class="win">
 				${COMMITS.map((c, i) => logrow(c, i === 0)).join('\n\t\t\t\t')}
 		</div>
 	</div>
-	<div class="row" style="border-top:1px solid var(--border)">
+	<div class="cbody"><pre>${esc(COMMIT_BODY.join('\n'))}</pre></div>
+	<div class="row">
 		<div class="col" style="flex:0 0 320px;border-right:1px solid var(--border)">
 			<div class="files col" style="flex:1">
 				<div class="bar"><span>${COMMIT_FILES.length} files</span><span class="grow"></span></div>

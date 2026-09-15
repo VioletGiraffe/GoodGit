@@ -17,6 +17,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QFontMetricsF>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -24,13 +25,16 @@ DISABLE_COMPILER_WARNINGS
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSettings>
 #include <QShortcut>
 #include <QSplitter>
+#include <QTextDocument>
 #include <QTimer>
 #include <QTreeView>
 #include <QVBoxLayout>
+#include <QtMath>
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
@@ -44,6 +48,7 @@ constexpr int SearchDebounceMs = 200; // a keystroke rescans every commit and re
 constexpr int FileListWidth = 320;
 constexpr int MaxFilePathLabelWidth = 420; // beyond this the path elides
 constexpr int PickaxeEditWidth = 320;
+constexpr int MaxShownBodyLines = 8; // a longer body scrolls
 constexpr int CascadeStep = 28;  // about a title bar, so the window underneath stays identifiable
 constexpr int CascadeLength = 8; // steps before the search gives up, which keeps the last one on screen
 constexpr qsizetype MaxShownPickaxeTerm = 24;
@@ -228,11 +233,32 @@ void HistoryWindow::buildUi()
 	else
 		_detailSplitter->setSizes({ FileListWidth, 860 });
 
+	_bodyPane = new QFrame;
+	_bodyPane->setObjectName(QStringLiteral("commitBodyPane"));
+	_bodyPane->setVisible(false);
+	auto* bodyLayout = new QVBoxLayout(_bodyPane);
+	bodyLayout->setContentsMargins(0, 0, 0, 1); // the pane's bottom border
+	_bodyView = new QPlainTextEdit;
+	_bodyView->setReadOnly(true);
+	_bodyView->setFont(monospaceFont());
+	bodyLayout->addWidget(_bodyView);
+	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] {
+		_bodyView->setFont(monospaceFont());
+		showCommitBody(_bodyView->toPlainText()); // the height follows the line spacing
+	});
+
+	auto* detailPane = new QWidget;
+	auto* detailLayout = new QVBoxLayout(detailPane);
+	detailLayout->setContentsMargins(0, 0, 0, 0);
+	detailLayout->setSpacing(0);
+	detailLayout->addWidget(_bodyPane);
+	detailLayout->addWidget(_detailSplitter, 1);
+
 	_splitter = new QSplitter(Qt::Vertical);
 	_splitter->setChildrenCollapsible(false);
 	_splitter->setHandleWidth(1);
 	_splitter->addWidget(logPane);
-	_splitter->addWidget(_detailSplitter);
+	_splitter->addWidget(detailPane);
 	_splitter->setStretchFactor(0, 1);
 	_splitter->setStretchFactor(1, 1);
 	if (const QByteArray state = QSettings{}.value(Settings::HistoryWindowSplitterKey).toByteArray(); !state.isEmpty())
@@ -743,16 +769,17 @@ void HistoryWindow::showFilesForCurrentCommit()
 	{
 		_filesModel.clear();
 		_fileCountLabel->clear();
+		showCommitBody({});
 		_diffPane->showMessage({}, {});
 		return;
 	}
 
 	const CommitRecord& commit = _logModel.commitAt(current.row());
 
-	// Both replaced before the queries go out, so neither outlives the commit it describes. The pane shows
-	// the message until a file is picked from the list.
+	// Both replaced before the queries go out, so neither outlives the commit it describes
 	_filesModel.clear();
-	showCommitMessage(commit);
+	_diffPane->showMessage({ .tag = shortSha(commit.sha) }, {});
+	showCommitBody(commit.body());
 
 	const bool isMerge = commit.parents.size() > 1;
 	_fileCountLabel->setToolTip(isMerge
@@ -778,6 +805,8 @@ void HistoryWindow::showFilesForCurrentCommit()
 		const int fileCount = int(result->size());
 		_filesModel.setEntries(*std::move(result));
 		_fileCountLabel->setText(fileCount == 1 ? tr("1 file") : tr("%1 files").arg(fileCount));
+		if (const QModelIndex first = _filesView->firstShownSourceIndex(); first.isValid())
+			_filesView->setSelectedSourceRows({ first.row() }, first.row());
 	});
 	// A separate query, so the rows may appear before their counts; a failure costs only the counts
 	_fileCountsQuery = _repo->commitFileCounts(sha, this, [this](std::expected<std::map<QString, LineCounts>, QString> counts) {
@@ -802,7 +831,7 @@ void HistoryWindow::showDiffForCurrentFile()
 	const std::optional<CommitFileChange> currentFile = fileEntryAt(_filesView->currentSourceIndex());
 	const std::optional<CommitRecord> commit = currentCommit();
 	if (!currentFile || !commit)
-		return; // no file picked: the pane keeps the commit message
+		return;
 
 	const CommitFileChange& entry = *currentFile;
 	const QString sha = commit->sha;
@@ -842,8 +871,14 @@ void HistoryWindow::showDiffForCurrentFile()
 	}
 }
 
-void HistoryWindow::showCommitMessage(const CommitRecord& commit)
+void HistoryWindow::showCommitBody(const QString& body)
 {
-	_diffPane->showMessage({ .tag = shortSha(commit.sha) }, commit.message);
+	_bodyView->setPlainText(body);
+	_bodyPane->setVisible(!body.isEmpty());
+
+	// Logical lines only: a body with wrapped lines scrolls
+	const int lineCount = std::min(int(body.count(QLatin1Char('\n'))) + 1, MaxShownBodyLines);
+	const qreal textHeight = lineCount * QFontMetricsF{ _bodyView->font() }.lineSpacing() + 2 * _bodyView->document()->documentMargin();
+	_bodyView->setFixedHeight(qCeil(textHeight) + 2 * _bodyView->frameWidth());
 }
 

@@ -304,6 +304,9 @@ body {
 .c-subj { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .c-auth { flex: 0 0 96px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
 .c-date { flex: 0 0 232px; color: var(--dim); }
+/* The selected commit's message past its subject, sized to its lines. Absent where the message is only a subject. */
+.cbody { flex: 0 0 auto; background: var(--pane); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.cbody pre { margin: 0; padding: 4px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; line-height: 1.5; color: var(--text); white-space: pre-wrap; }
 
 /* ---------- search field ---------- */
 .field { background: var(--pane); border: 1px solid var(--btn-border); border-radius: 4px; padding: 4px 8px; color: var(--dim); font-size: 12.5px; }
@@ -605,7 +608,11 @@ To github.com:VioletGiraffe/GoodGit.git
 					<span class="c-date">2026-08-13 20:41 (19 hours ago)</span></div>
 		</div>
 	</div>
-	<div class="row" style="border-top:1px solid var(--border)">
+	<div class="cbody"><pre>Both file lists gain two columns: the lines each change added and removed.
+
+The counts come from a query of their own, so the rows may show before them.
+A row the diff has no count for leaves both cells empty.</pre></div>
+	<div class="row">
 		<div class="col" style="flex:0 0 320px;border-right:1px solid var(--border)">
 			<div class="files col" style="flex:1">
 				<div class="bar"><span>12 files</span><span class="grow"></span></div>
@@ -736,7 +743,11 @@ To github.com:VioletGiraffe/GoodGit.git
 					<span class="c-date">2026-08-13 20:41 (19 hours ago)</span></div>
 		</div>
 	</div>
-	<div class="row" style="border-top:1px solid var(--border)">
+	<div class="cbody"><pre>Both file lists gain two columns: the lines each change added and removed.
+
+The counts come from a query of their own, so the rows may show before them.
+A row the diff has no count for leaves both cells empty.</pre></div>
+	<div class="row">
 		<div class="col" style="flex:0 0 320px;border-right:1px solid var(--border)">
 			<div class="files col" style="flex:1">
 				<div class="bar"><span>12 files</span><span class="grow"></span></div>

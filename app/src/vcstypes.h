@@ -73,6 +73,24 @@ struct CommitRecord
 	QString message; // the whole thing: subject line, blank line, body
 
 	[[nodiscard]] QString subject() const { return message.section(QLatin1Char('\n'), 0, 0); }
+	// Everything past the subject without the blank lines around it; the first line keeps its indentation
+	[[nodiscard]] QString body() const
+	{
+		const qsizetype subjectEnd = message.indexOf(QLatin1Char('\n'));
+		if (subjectEnd < 0)
+			return {};
+
+		qsizetype start = subjectEnd + 1;
+		qsizetype end = message.size();
+		while (end > start && message[end - 1].isSpace())
+			--end;
+		for (qsizetype i = start; i < end && message[i].isSpace(); ++i)
+		{
+			if (message[i] == QLatin1Char('\n'))
+				start = i + 1;
+		}
+		return message.sliced(start, end - start);
+	}
 };
 
 // The operation that owns HEAD, classified by how it must be finished and not by what its system calls it.
