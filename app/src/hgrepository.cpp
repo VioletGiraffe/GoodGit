@@ -1034,9 +1034,11 @@ Vcs::Query HgRepository::submodulePointerLog(const QString& repoRelativePath, co
 		context, Vcs::answering(std::move(onDone), Hg::textFromOutput)) };
 }
 
+// Read from disk, not from .hgsub: the history window calls this on a repository it never refreshes
 RepositoryLocation HgRepository::nestedRepositoryLocation(const QString& repoRelativePath) const
 {
-	return { isGitSubrepo(repoRelativePath) ? VcsKind::Git : VcsKind::Mercurial, QDir{ path() }.filePath(repoRelativePath) };
+	const QDir root{ QDir{ path() }.filePath(repoRelativePath) };
+	return { QFileInfo::exists(root.filePath(QStringLiteral(".git"))) ? VcsKind::Git : VcsKind::Mercurial, root.path() };
 }
 
 QString HgRepository::ignoreFileName() const

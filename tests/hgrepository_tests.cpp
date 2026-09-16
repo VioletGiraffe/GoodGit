@@ -197,6 +197,7 @@ TEST_CASE("An hg subrepo gets a row for modified files inside, and none for untr
 	scratch.write(QStringLiteral(".hgsub"), "sub = sub\n");
 	scratch.hg({ QStringLiteral("add"), QStringLiteral("-q"), QStringLiteral(".hgsub") });
 	scratch.hg({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("with a subrepo") });
+	CHECK(HgRepository{ scratch.root() }.nestedRepositoryLocation(QStringLiteral("sub")).kind == VcsKind::Mercurial);
 
 	SECTION("untracked files inside")
 	{
@@ -228,9 +229,8 @@ TEST_CASE("A git subrepo inside an hg repository is a git location, and its cont
 	scratch.hg({ QStringLiteral("add"), QStringLiteral("-q"), QStringLiteral(".hgsub") });
 	scratch.hg({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("with a git subrepo") });
 
-	HgRepository repository{ scratch.root() };
-	ScratchHgRepository::refresh(repository);
-	CHECK(repository.nestedRepositoryLocation(QStringLiteral("gsub")).kind == VcsKind::Git);
+	// No refresh: the history window opens nested repositories from a repository it never refreshes
+	CHECK(HgRepository{ scratch.root() }.nestedRepositoryLocation(QStringLiteral("gsub")).kind == VcsKind::Git);
 
 	scratch.write(QStringLiteral("gsub/inside.txt"), "changed\n");
 	const auto [files, state] = scratch.refreshed();
