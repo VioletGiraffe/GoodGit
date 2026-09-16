@@ -26,12 +26,14 @@ win32: QMAKE_CXXFLAGS += /Fd$${OBJECTS_DIR}   # the compiler's pdb, which would 
 
 HEADERS += \
 	../app/src/changedfilesmodel.h \
+	../app/src/commitgraph.h \
 	../app/src/fileicons.h \
 	../app/src/filelistdelegate.h \
 	../app/src/filelistview.h \
 	../app/src/gitparsers.h \
 	../app/src/gitprocess.h \
 	../app/src/gitrepository.h \
+	../app/src/hgparsers.h \
 	../app/src/movedblocks.h \
 	../app/src/queryround.h \
 	../app/src/repository.h \
@@ -45,23 +47,29 @@ HEADERS += \
 
 SOURCES += \
 	../app/src/changedfilesmodel.cpp \
+	../app/src/commitgraph.cpp \
 	../app/src/fileicons.cpp \
 	../app/src/filelistdelegate.cpp \
 	../app/src/filelistview.cpp \
 	../app/src/gitparsers.cpp \
 	../app/src/gitprocess.cpp \
 	../app/src/gitrepository.cpp \
+	../app/src/hgparsers.cpp \
 	../app/src/movedblocks.cpp \
 	../app/src/repository.cpp \
 	../app/src/textdiff.cpp \
 	../app/src/theme.cpp \
 	../app/src/unifieddiff.cpp \
 	../app/src/vcsprocess.cpp \
+	commitgraph_tests.cpp \
 	fileicons_tests.cpp \
 	filelist_tests.cpp \
+	gitparsers_tests.cpp \
 	gitrepository_tests.cpp \
+	hgparsers_tests.cpp \
 	main.cpp \
 	movedblocks_tests.cpp \
+	textdiff_tests.cpp \
 	unifieddiff_tests.cpp \
 	vcstypes_tests.cpp
 
