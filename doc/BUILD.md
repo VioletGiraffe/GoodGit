@@ -35,8 +35,9 @@ real changes are fixtures under `tests/fixtures/`.
 
 The tests run inside a `QApplication` on the platform's own plugin, so the models, views and icons behave as in
 the app; settings go to a throwaway INI file. A machine with no display runs them under `xvfb-run`, as CI does
-on Linux. The backend tests build scratch repositories with the `git` on PATH and refresh a `GitRepository` on
-them; git's global and system config are switched off for them.
+on Linux. The backend tests build scratch repositories with the `git` and `hg` on PATH, so both must be installed,
+and refresh the backend on them. They read no user or system config of either tool. The hg fixtures share one
+directory for the whole run: a command server keeps its working directory in the first repository it served.
 
 The smoke test is the app itself: `gg --smoke-test <repository>` checks the plugins only a deployment can lack
 (svg, TLS), opens the repository and exits 0 once its file list shows a row, or 1 with the reason on stderr.

@@ -1,0 +1,242 @@
+#include "compiler/compiler_warnings_control.h"
+
+DISABLE_COMPILER_WARNINGS
+#include "3rdparty/catch2/catch.hpp"
+RESTORE_COMPILER_WARNINGS
+
+#include "hgrepository.h"
+
+DISABLE_COMPILER_WARNINGS
+#include <QDir>
+#include <QEventLoop>
+#include <QFile>
+#include <QProcess>
+#include <QTemporaryDir>
+#include <QTimer>
+RESTORE_COMPILER_WARNINGS
+
+#include <algorithm>
+
+namespace {
+
+// Every hg fixture lives under one directory for the whole run: a command server keeps its working directory in
+// the first repository it served, which Windows then refuses to delete. main() ends the servers before this goes.
+[[nodiscard]] const QTemporaryDir& sharedRoot()
+{
+	static const QTemporaryDir root;
+	return root;
+}
+
+// A Mercurial repository built by running hg itself, reading only the configuration written here
+class ScratchHgRepository
+{
+public:
+	ScratchHgRepository()
+	{
+		REQUIRE(sharedRoot().isValid());
+		const QString hgrc = sharedRoot().filePath(QStringLiteral("hgrc"));
+		QFile config{ hgrc };
+		REQUIRE(config.open(QIODevice::WriteOnly | QIODevice::Truncate));
+		config.write("[ui]\nusername = GoodGit tests <tests@goodgit.invalid>\n[subrepos]\ngit:allowed = true\n");
+		config.close();
+		qputenv("HGRCPATH", hgrc.toUtf8());
+
+		const QString emptyGitConfig = sharedRoot().filePath(QStringLiteral("empty.gitconfig"));
+		REQUIRE(QFile{ emptyGitConfig }.open(QIODevice::WriteOnly));
+		qputenv("GIT_CONFIG_GLOBAL", emptyGitConfig.toUtf8());
+		qputenv("GIT_CONFIG_NOSYSTEM", "1");
+
+		static int repositoryCount = 0;
+		_root = sharedRoot().filePath(QStringLiteral("repository%1").arg(++repositoryCount));
+		REQUIRE(QDir{}.mkpath(_root));
+		run(QStringLiteral("hg"), { QStringLiteral("init") });
+	}
+
+	[[nodiscard]] const QString& root() const { return _root; }
+
+	void write(const QString& relativePath, const QByteArray& content) const
+	{
+		const QString path = QDir{ _root }.filePath(relativePath);
+		REQUIRE(QDir{}.mkpath(QFileInfo{ path }.absolutePath()));
+		QFile file{ path };
+		REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+		file.write(content);
+	}
+
+	void remove(const QString& relativePath) const { REQUIRE(QFile::remove(QDir{ _root }.filePath(relativePath))); }
+
+	// Runs in `relativeDirectory` under the root, and must succeed
+	void hg(const QStringList& arguments, const QString& relativeDirectory = {}) const { run(QStringLiteral("hg"), arguments, relativeDirectory); }
+	// For the commands expected to fail, such as a merge that stops on conflicts
+	void hgMayFail(const QStringList& arguments) const { run(QStringLiteral("hg"), arguments, {}, /*mustSucceed=*/false); }
+	void git(const QStringList& arguments, const QString& relativeDirectory = {}) const
+	{
+		run(QStringLiteral("git"), QStringList{ QStringLiteral("-c"), QStringLiteral("user.name=GoodGit tests"), QStringLiteral("-c"),
+			QStringLiteral("user.email=tests@goodgit.invalid") } + arguments, relativeDirectory);
+	}
+
+	void commitAll(const QString& message) const
+	{
+		hg({ QStringLiteral("addremove"), QStringLiteral("-q") });
+		hg({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), message });
+	}
+
+	// Refreshes `repository` once and requires the state to have been read
+	static void refresh(Repository& repository)
+	{
+		QEventLoop loop;
+		QObject::connect(&repository, &Repository::refreshed, &loop, &QEventLoop::quit);
+		QTimer::singleShot(60'000, &loop, &QEventLoop::quit);
+		repository.refresh();
+		loop.exec();
+		REQUIRE_FALSE(repository.refreshing());
+		INFO(repository.state().readFailure.toStdString());
+		REQUIRE(repository.state().known());
+	}
+
+	// The backend's rows and state after one refresh, sorted by path
+	[[nodiscard]] std::pair<std::vector<FileEntry>, RepoState> refreshed() const
+	{
+		HgRepository repository{ _root };
+		refresh(repository);
+
+		std::vector<FileEntry> files = repository.files();
+		std::ranges::sort(files, {}, &FileEntry::path);
+		return { std::move(files), repository.state() };
+	}
+
+private:
+	void run(const QString& program, const QStringList& arguments, const QString& relativeDirectory = {}, bool mustSucceed = true) const
+	{
+		QProcess process;
+		process.setWorkingDirectory(QDir{ _root }.filePath(relativeDirectory));
+		process.setProcessChannelMode(QProcess::MergedChannels);
+		process.start(program, arguments);
+		REQUIRE(process.waitForFinished(60'000));
+		INFO((program + QLatin1Char(' ') + arguments.join(QLatin1Char(' '))).toStdString() + '\n' + process.readAll().toStdString());
+		REQUIRE(process.exitStatus() == QProcess::NormalExit);
+		if (mustSucceed)
+			REQUIRE(process.exitCode() == 0);
+	}
+
+	QString _root;
+};
+
+[[nodiscard]] QStringList pathsOf(const std::vector<FileEntry>& files)
+{
+	QStringList paths;
+	for (const FileEntry& file : files)
+		paths.push_back(file.path);
+	return paths;
+}
+
+} // namespace
+
+TEST_CASE("hg status shapes: a move is one renamed row, removed and missing files are both deleted", "[hg]")
+{
+	const ScratchHgRepository scratch;
+	scratch.write(QStringLiteral("keep.txt"), "keep\n");
+	scratch.write(QStringLiteral("old.txt"), "moved\n");
+	scratch.write(QStringLiteral("removed.txt"), "removed\n");
+	scratch.write(QStringLiteral("missing.txt"), "missing\n");
+	scratch.commitAll(QStringLiteral("base"));
+
+	scratch.write(QStringLiteral("keep.txt"), "keep\nmore\n");
+	scratch.hg({ QStringLiteral("mv"), QStringLiteral("old.txt"), QStringLiteral("new.txt") });
+	scratch.hg({ QStringLiteral("rm"), QStringLiteral("removed.txt") });
+	scratch.remove(QStringLiteral("missing.txt"));
+	scratch.write(QStringLiteral("untracked.txt"), "new\n");
+
+	const auto [files, state] = scratch.refreshed();
+
+	REQUIRE(pathsOf(files) == QStringList{ QStringLiteral("keep.txt"), QStringLiteral("missing.txt"), QStringLiteral("new.txt"),
+		QStringLiteral("removed.txt"), QStringLiteral("untracked.txt") });
+	CHECK(files[0].type == ChangeType::Modified);
+	REQUIRE(files[0].lineCounts.has_value());
+	CHECK(files[0].lineCounts->added == 1);
+	CHECK(files[1].type == ChangeType::Deleted);
+	CHECK(files[2].type == ChangeType::Renamed);
+	CHECK(files[2].oldPath == QStringLiteral("old.txt"));
+	CHECK(files[3].type == ChangeType::Deleted);
+	CHECK(files[4].type == ChangeType::Untracked);
+}
+
+TEST_CASE("hg merge conflicts are rows, including a file modified here and deleted there, which has no status record", "[hg]")
+{
+	const ScratchHgRepository scratch;
+	scratch.write(QStringLiteral("both.txt"), "base\n");
+	scratch.write(QStringLiteral("deleted-there.txt"), "base\n");
+	scratch.commitAll(QStringLiteral("base"));
+
+	scratch.write(QStringLiteral("both.txt"), "theirs\n");
+	scratch.hg({ QStringLiteral("rm"), QStringLiteral("deleted-there.txt") });
+	scratch.hg({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("theirs") });
+
+	scratch.hg({ QStringLiteral("update"), QStringLiteral("-q"), QStringLiteral("0") });
+	scratch.write(QStringLiteral("both.txt"), "ours\n");
+	scratch.write(QStringLiteral("deleted-there.txt"), "ours\n");
+	scratch.hg({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("ours") });
+	// :fail leaves every conflict unresolved instead of prompting or picking a side; hg then exits 1
+	scratch.hgMayFail({ QStringLiteral("merge"), QStringLiteral("-q"), QStringLiteral("--tool"), QStringLiteral(":fail"), QStringLiteral("1") });
+
+	const auto [files, state] = scratch.refreshed();
+
+	CHECK(state.op == RepoOp::Merge);
+	REQUIRE(pathsOf(files) == QStringList{ QStringLiteral("both.txt"), QStringLiteral("deleted-there.txt") });
+	CHECK(files[0].type == ChangeType::Conflicted);
+	CHECK(files[1].type == ChangeType::Conflicted);
+}
+
+TEST_CASE("An hg subrepo gets a row for modified files inside, and none for untracked files alone", "[hg]")
+{
+	const ScratchHgRepository scratch;
+	scratch.write(QStringLiteral("sub/inside.txt"), "inside\n");
+	scratch.hg({ QStringLiteral("init") }, QStringLiteral("sub"));
+	scratch.hg({ QStringLiteral("addremove"), QStringLiteral("-q") }, QStringLiteral("sub"));
+	scratch.hg({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("inside") }, QStringLiteral("sub"));
+	scratch.write(QStringLiteral(".hgsub"), "sub = sub\n");
+	scratch.hg({ QStringLiteral("add"), QStringLiteral("-q"), QStringLiteral(".hgsub") });
+	scratch.hg({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("with a subrepo") });
+
+	SECTION("untracked files inside")
+	{
+		scratch.write(QStringLiteral("sub/untracked.txt"), "new\n");
+		CHECK(scratch.refreshed().first.empty());
+	}
+
+	SECTION("a modified tracked file inside")
+	{
+		scratch.write(QStringLiteral("sub/inside.txt"), "changed\n");
+		const auto [files, state] = scratch.refreshed();
+
+		REQUIRE(files.size() == 1);
+		CHECK(files[0].path == QStringLiteral("sub"));
+		CHECK(files[0].isSubmodule);
+		CHECK_FALSE(files[0].pointerMoved);
+		CHECK(files[0].content == SubmoduleContent::DirtyTracked);
+	}
+}
+
+TEST_CASE("A git subrepo inside an hg repository is a git location, and its content is read with git", "[hg]")
+{
+	const ScratchHgRepository scratch;
+	scratch.write(QStringLiteral("gsub/inside.txt"), "inside\n");
+	scratch.git({ QStringLiteral("init"), QStringLiteral("-q") }, QStringLiteral("gsub"));
+	scratch.git({ QStringLiteral("add"), QStringLiteral("inside.txt") }, QStringLiteral("gsub"));
+	scratch.git({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("inside") }, QStringLiteral("gsub"));
+	scratch.write(QStringLiteral(".hgsub"), "gsub = [git]gsub\n");
+	scratch.hg({ QStringLiteral("add"), QStringLiteral("-q"), QStringLiteral(".hgsub") });
+	scratch.hg({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("with a git subrepo") });
+
+	HgRepository repository{ scratch.root() };
+	ScratchHgRepository::refresh(repository);
+	CHECK(repository.nestedRepositoryLocation(QStringLiteral("gsub")).kind == VcsKind::Git);
+
+	scratch.write(QStringLiteral("gsub/inside.txt"), "changed\n");
+	const auto [files, state] = scratch.refreshed();
+
+	REQUIRE(files.size() == 1);
+	CHECK(files[0].path == QStringLiteral("gsub"));
+	CHECK(files[0].isSubmodule);
+	CHECK(files[0].content == SubmoduleContent::DirtyTracked);
+}

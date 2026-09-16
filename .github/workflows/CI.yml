@@ -41,6 +41,14 @@ jobs:
       with:
         arch: x64
 
+    # The backend tests run hg on real repositories
+    - name: Windows - install Mercurial
+      if: startsWith(matrix.os, 'windows')
+      shell: cmd
+      run: |
+        python -m pip install --quiet mercurial || exit /b 1
+        hg --version
+
     - name: Windows - tests (debug)
       if: startsWith(matrix.os, 'windows')
       shell: cmd
@@ -140,6 +148,12 @@ jobs:
         "{0:N2} KB  {1}" -f ($binary.Length / 1KB), $binary.Name
         Get-PeSectionSizes $binary.FullName | Format-Table Name, KB -AutoSize
 
+    - name: Mac - install Mercurial
+      if: startsWith(matrix.os, 'macos')
+      run: |
+        brew install mercurial
+        hg --version
+
     - name: Mac - tests (debug)
       if: startsWith(matrix.os, 'macos')
       run: scripts/run_tests.sh debug
@@ -186,6 +200,12 @@ jobs:
     - name: Linux - set up a virtual display
       if: startsWith(matrix.os, 'ubuntu')
       run: sudo apt install -qq xvfb libxcb-cursor0
+
+    - name: Linux - install Mercurial
+      if: startsWith(matrix.os, 'ubuntu')
+      run: |
+        sudo apt install -qq mercurial
+        hg --version
 
     - name: Linux - tests (debug)
       if: startsWith(matrix.os, 'ubuntu')

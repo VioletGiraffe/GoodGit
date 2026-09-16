@@ -33,7 +33,10 @@ HEADERS += \
 	../app/src/gitparsers.h \
 	../app/src/gitprocess.h \
 	../app/src/gitrepository.h \
+	../app/src/hgcommandserver.h \
 	../app/src/hgparsers.h \
+	../app/src/hgprocess.h \
+	../app/src/hgrepository.h \
 	../app/src/movedblocks.h \
 	../app/src/queryround.h \
 	../app/src/repository.h \
@@ -54,7 +57,10 @@ SOURCES += \
 	../app/src/gitparsers.cpp \
 	../app/src/gitprocess.cpp \
 	../app/src/gitrepository.cpp \
+	../app/src/hgcommandserver.cpp \
 	../app/src/hgparsers.cpp \
+	../app/src/hgprocess.cpp \
+	../app/src/hgrepository.cpp \
 	../app/src/movedblocks.cpp \
 	../app/src/repository.cpp \
 	../app/src/textdiff.cpp \
@@ -67,6 +73,7 @@ SOURCES += \
 	gitparsers_tests.cpp \
 	gitrepository_tests.cpp \
 	hgparsers_tests.cpp \
+	hgrepository_tests.cpp \
 	main.cpp \
 	movedblocks_tests.cpp \
 	textdiff_tests.cpp \

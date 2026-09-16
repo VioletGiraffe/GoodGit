@@ -1,6 +1,7 @@
 #define NO_TEST_MAIN
 #include "3rdparty/catch2/test_main.hpp"
 
+#include "hgprocess.h"
 #include "theme.h"
 
 DISABLE_COMPILER_WARNINGS
@@ -22,5 +23,8 @@ int main(int argc, char* argv[])
 	QApplication::setApplicationName(QStringLiteral("GoodGit tests"));
 
 	applyTheme(app);
-	return runCatchSession(argc, argv);
+	const int result = runCatchSession(argc, argv);
+	// Before static destruction, which removes the hg fixtures' directory the servers are working in
+	Hg::shutdown();
+	return result;
 }
