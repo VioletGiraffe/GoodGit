@@ -1,4 +1,5 @@
 #include "changedfilesmodel.h"
+#include "fileicons.h"
 #include "settings.h"
 #include "theme.h"
 
@@ -112,7 +113,7 @@ QVariant fileListHeaderData(int section, Qt::Orientation orientation, int role)
 	return {}; // the count columns carry no heading: the signs are in the counts, and neither column sorts
 }
 
-QVariant fileListSharedRoleData(int column, int role, bool folderIcon, ChangeType type)
+QVariant fileListSharedRoleData(int column, int role, const QString& path, bool isRepository, ChangeType type)
 {
 	switch (role)
 	{
@@ -121,8 +122,8 @@ QVariant fileListSharedRoleData(int column, int role, bool folderIcon, ChangeTyp
 			return int(Qt::AlignRight | Qt::AlignVCenter);
 		return {};
 	case Qt::DecorationRole:
-		if (column == StateColumn && folderIcon)
-			return submoduleIcon();
+		if (column == PathColumn)
+			return isRepository ? submoduleIcon() : fileTypeIcon(path);
 		return {};
 	case Qt::ForegroundRole:
 		if (column == AddedColumn || column == RemovedColumn)
@@ -340,7 +341,7 @@ QVariant ChangedFilesModel::data(const QModelIndex& index, int role) const
 
 	const Row& row = _rows[size_t(index.row())];
 	const FileEntry& entry = row.entry;
-	const bool folderIcon = entry.isSubmodule || entry.isUntrackedRepository;
+	const bool isRepository = entry.isSubmodule || entry.isUntrackedRepository;
 
 	switch (role)
 	{
@@ -360,11 +361,11 @@ QVariant ChangedFilesModel::data(const QModelIndex& index, int role) const
 	case Qt::ForegroundRole:
 		if (index.column() == StateColumn)
 			return QBrush{ stateColor(entry) };
-		return fileListSharedRoleData(index.column(), role, folderIcon, entry.type);
+		return fileListSharedRoleData(index.column(), role, entry.path, isRepository, entry.type);
 	case Qt::TextAlignmentRole:
 	case Qt::DecorationRole:
 	case Qt::FontRole:
-		return fileListSharedRoleData(index.column(), role, folderIcon, entry.type);
+		return fileListSharedRoleData(index.column(), role, entry.path, isRepository, entry.type);
 	case Qt::BackgroundRole:
 		if (entry.isSubmodule && entry.contentBlocksPointer())
 			return QBrush{ activeTheme().blockedRowTint() };

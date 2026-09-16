@@ -458,11 +458,11 @@ QVariant CommitFilesModel::data(const QModelIndex& index, int role) const
 	case Qt::ForegroundRole:
 		if (index.column() == StateColumn)
 			return QBrush{ changeTypeColor(entry.type) };
-		return fileListSharedRoleData(index.column(), role, entry.isSubmodule, entry.type);
+		return fileListSharedRoleData(index.column(), role, entry.path, entry.isSubmodule, entry.type);
 	case Qt::TextAlignmentRole:
 	case Qt::DecorationRole:
 	case Qt::FontRole:
-		return fileListSharedRoleData(index.column(), role, entry.isSubmodule, entry.type);
+		return fileListSharedRoleData(index.column(), role, entry.path, entry.isSubmodule, entry.type);
 	case SortRankRole:
 		return fileListSortRank(entry.type, entry.isSubmodule);
 	case SortPathRole:

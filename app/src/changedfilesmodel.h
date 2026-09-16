@@ -35,9 +35,10 @@ enum FileListRole { SortRankRole = Qt::UserRole, SortPathRole };
 // The headings both lists show, so their columns read the same
 [[nodiscard]] QVariant fileListHeaderData(int section, Qt::Orientation orientation, int role);
 
-// The roles both lists answer identically: alignment, folder icon, count-column colors, fonts.
+// The roles both lists answer identically: alignment, the path's icon, count-column colors, fonts.
 // Empty where the model answers for itself (the state-column foreground differs between them).
-[[nodiscard]] QVariant fileListSharedRoleData(int column, int role, bool folderIcon, ChangeType type);
+// `isRepository`: the row is a nested repository, shown with the folder glyph instead of a file type icon.
+[[nodiscard]] QVariant fileListSharedRoleData(int column, int role, const QString& path, bool isRepository, ChangeType type);
 
 // The checkable file list.
 // Row styling comes from the theme via item data roles; FileListDelegate paints what roles cannot express.

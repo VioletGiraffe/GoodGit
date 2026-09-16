@@ -55,6 +55,7 @@ HEADERS += \
 	src/diffpane.h \
 	src/difftextview.h \
 	src/externalapps.h \
+	src/fileicons.h \
 	src/filelistdelegate.h \
 	src/filelistview.h \
 	src/fileviewerwindow.h \
@@ -97,6 +98,7 @@ SOURCES += \
 	src/diffpane.cpp \
 	src/difftextview.cpp \
 	src/externalapps.cpp \
+	src/fileicons.cpp \
 	src/filelistdelegate.cpp \
 	src/filelistview.cpp \
 	src/fileviewerwindow.cpp \
@@ -144,8 +146,8 @@ mac*|linux*|freebsd*{
 ###################################################
 
 mac*{
-	LIBS += -framework AppKit
+	LIBS += -framework AppKit -framework UniformTypeIdentifiers
 
-	HEADERS += src/commandlinetool_mac.h
-	OBJECTIVE_SOURCES += src/commandlinetool_mac.mm
+	HEADERS += src/commandlinetool_mac.h src/fileicons_mac.h
+	OBJECTIVE_SOURCES += src/commandlinetool_mac.mm src/fileicons_mac.mm
 }
