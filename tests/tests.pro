@@ -46,6 +46,7 @@ SOURCES += \
 	../app/src/textdiff.cpp \
 	../app/src/theme.cpp \
 	../app/src/unifieddiff.cpp \
+	fileicons_tests.cpp \
 	filelist_tests.cpp \
 	main.cpp \
 	movedblocks_tests.cpp \

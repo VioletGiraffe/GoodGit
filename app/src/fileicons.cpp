@@ -5,11 +5,13 @@
 #endif
 
 DISABLE_COMPILER_WARNINGS
+#include <QApplication>
 #include <QDir>
 #include <QFileIconProvider>
 #include <QFileInfo>
 #include <QHash>
 #include <QPixmap>
+#include <QStyle>
 RESTORE_COMPILER_WARNINGS
 
 #include <array>
@@ -52,5 +54,8 @@ QIcon fileTypeIcon(const QString& path)
 		if (const QPixmap pixmap = fileTypePixmap(file, pixelSize); !pixmap.isNull())
 			icon.addPixmap(pixmap);
 	}
+	// No icon from the system: Linux without an icon theme has none for a missing file
+	if (icon.isNull())
+		icon = QApplication::style()->standardIcon(QStyle::SP_FileIcon);
 	return *iconsByType.insert(typeKey, icon);
 }
