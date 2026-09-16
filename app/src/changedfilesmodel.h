@@ -15,8 +15,9 @@ RESTORE_COMPILER_WARNINGS
 [[nodiscard]] QColor changeTypeColor(ChangeType type);
 // A row's place when the list is ordered by status, lower first. Groups, each ordered by change type:
 //   blocked submodules - their content blocks the pointer, which stops the commit
-//   files
+//   tracked files
 //   the other submodules
+//   untracked
 [[nodiscard]] int fileListSortRank(ChangeType type, bool isSubmodule, bool blocksCommit = false);
 
 // For the two line-count columns; a file without counts gets an empty cell rather than a zero

@@ -26,7 +26,7 @@ QColor stateColor(const FileEntry& entry)
 
 int changeTypeRank(ChangeType type)
 {
-	// Conflicts first, the ordinary edits next, the untracked last
+	// Conflicts first, the ordinary edits next
 	switch (type)
 	{
 	case ChangeType::Conflicted:  return 0;
@@ -75,10 +75,15 @@ QColor changeTypeColor(ChangeType type)
 
 int fileListSortRank(ChangeType type, bool isSubmodule, bool blocksCommit)
 {
-	constexpr int SubmoduleRankOffset = 100; // past every changeTypeRank
-	if (blocksCommit)
-		return -1;
-	return isSubmodule ? SubmoduleRankOffset + changeTypeRank(type) : changeTypeRank(type);
+	enum Group { BlockedSubmodules, TrackedFiles, TrackedSubmodules, Untracked };
+	constexpr int GroupStride = 10; // past every changeTypeRank
+
+	// Untracked is tested before the submodule flag, so an untracked nested repository sorts with the untracked
+	const Group group = blocksCommit ? BlockedSubmodules
+		: type == ChangeType::Untracked ? Untracked
+		: isSubmodule ? TrackedSubmodules : TrackedFiles;
+
+	return group * GroupStride + changeTypeRank(type);
 }
 
 QString lineCountText(const std::optional<LineCounts>& counts, bool added)
