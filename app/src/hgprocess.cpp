@@ -60,6 +60,16 @@ void shutdown()
 	HgServerPool::instance().shutdown();
 }
 
+void repositoryOpened(const QString& root)
+{
+	HgServerPool::instance().repositoryOpened(root);
+}
+
+void repositoryClosed(const QString& root)
+{
+	HgServerPool::instance().repositoryClosed(root);
+}
+
 QByteArray localBytes(const QString& text)
 {
 	QByteArray bytes;

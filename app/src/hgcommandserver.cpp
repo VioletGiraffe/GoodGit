@@ -17,6 +17,9 @@ RESTORE_COMPILER_WARNINGS
 namespace {
 
 constexpr int CancelGraceMs = 2000;
+constexpr int IdleRetireMs = 5 * 60 * 1000;
+// Short: closing a window is often followed by deleting or moving the folder, but a reopen soon after still finds the server warm
+constexpr int ClosedRetireMs = 5000;
 // The whole pool's budget for exiting at shutdown, not each server's: long enough for a commit in flight to finish
 constexpr int ShutdownWaitMs = 5000;
 // No hg command sends a frame this large; a length read out of a desynced stream almost always exceeds it
@@ -32,6 +35,12 @@ void appendBigEndianU32(QByteArray& buffer, quint32 value)
 {
 	const quint32 bigEndian = qToBigEndian(value);
 	buffer.append(reinterpret_cast<const char*>(&bigEndian), 4);
+}
+
+// Paths compare as spelled: a server's bound root is a job's working directory, built from its repository's root
+bool isInsideRoot(const QString& path, const QString& root)
+{
+	return path.startsWith(root) && (path.size() == root.size() || path.at(root.size()) == QLatin1Char('/'));
 }
 
 } // namespace
@@ -95,6 +104,10 @@ HgCommandServer::HgCommandServer(const Vcs::Tool& tool, QString bindRoot, HgServ
 	_process->setWorkingDirectory(_bindRoot);
 	_process->setProcessEnvironment(tool.environment);
 
+	_retireTimer = new QTimer(this);
+	_retireTimer->setSingleShot(true);
+	connect(_retireTimer, &QTimer::timeout, this, &HgCommandServer::retire);
+
 	connect(_process, &QProcess::readyReadStandardOutput, this, [this] {
 		_buffer += _process->readAllStandardOutput();
 		consumeChunks();
@@ -148,6 +161,8 @@ void HgCommandServer::execute(Hg::ServerJob* job)
 	assert_r(idle());
 	_currentJob = job;
 	job->_runningOn = this;
+	if (_pool.insideOpenRepository(_bindRoot))
+		_retireTimer->stop(); // a closed root's deadline keeps running
 
 	QStringList args = job->_args;
 	// Without -R the command runs on the bound repository whatever the cwd; without --cwd relative paths
@@ -175,6 +190,19 @@ void HgCommandServer::killServer()
 	_dying = true; // idle() must refuse new jobs until died() runs
 	_buffer.clear(); // consumeChunks may still be in its loop
 	_process->kill(); // died() runs from the finished signal
+}
+
+void HgCommandServer::bindRootClosed()
+{
+	_retireTimer->start(ClosedRetireMs);
+}
+
+void HgCommandServer::bindRootOpened()
+{
+	if (_currentJob)
+		_retireTimer->stop();
+	else
+		_retireTimer->start(IdleRetireMs);
 }
 
 void HgCommandServer::consumeChunks()
@@ -237,6 +265,9 @@ void HgCommandServer::handleChunk(char channel, const QByteArray& payload)
 			killServer(); // a result outside a command, or malformed; died() fails the command if one runs
 			return;
 		}
+		// Before the job's callback, which runs synchronously and may start the next command on this server
+		if (_pool.insideOpenRepository(_bindRoot))
+			_retireTimer->start(IdleRetireMs);
 		std::exchange(_currentJob, nullptr)->completed(qFromBigEndian<qint32>(payload.constData()));
 		_pool.serverFreed(this);
 		return;
@@ -258,6 +289,7 @@ void HgCommandServer::readHello(const QByteArray& payload)
 		return;
 	}
 	_helloSeen = true;
+	_retireTimer->start(_pool.insideOpenRepository(_bindRoot) ? IdleRetireMs : ClosedRetireMs);
 	_pool.serverReady(this);
 }
 
@@ -315,6 +347,38 @@ void HgServerPool::shutdown()
 
 	_servers.clear(); // the destructor kills whatever did not exit in time
 	_shutDown = true;
+}
+
+void HgServerPool::repositoryOpened(const QString& root)
+{
+	if (_openRepositoryCounts[root]++ > 0)
+		return;
+
+	for (const auto& server : _servers)
+	{
+		if (isInsideRoot(server->bindRoot(), root))
+			server->bindRootOpened();
+	}
+}
+
+void HgServerPool::repositoryClosed(const QString& root)
+{
+	const auto open = _openRepositoryCounts.find(root);
+	assert_and_return_r(open != _openRepositoryCounts.end(), );
+	if (--open->second > 0)
+		return;
+	_openRepositoryCounts.erase(open);
+
+	for (const auto& server : _servers)
+	{
+		if (isInsideRoot(server->bindRoot(), root) && !insideOpenRepository(server->bindRoot()))
+			server->bindRootClosed();
+	}
+}
+
+bool HgServerPool::insideOpenRepository(const QString& path) const
+{
+	return std::ranges::any_of(_openRepositoryCounts, [&path](const auto& open) { return isInsideRoot(path, open.first); });
 }
 
 Vcs::Job* HgServerPool::run(const Vcs::Tool& tool, const QString& workDir, QStringList args, const QObject* context,

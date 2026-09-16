@@ -274,6 +274,12 @@ struct HgRepository::RefreshRun
 HgRepository::HgRepository(QString rootPath, QObject* parent) :
 	Repository(std::move(rootPath), parent)
 {
+	Hg::repositoryOpened(path());
+}
+
+HgRepository::~HgRepository()
+{
+	Hg::repositoryClosed(path());
 }
 
 void HgRepository::startRefresh()

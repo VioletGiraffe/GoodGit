@@ -14,6 +14,7 @@ class HgRepository final : public Repository
 {
 public:
 	explicit HgRepository(QString rootPath, QObject* parent = nullptr);
+	~HgRepository() override;
 
 	[[nodiscard]] VcsKind kind() const override { return VcsKind::Mercurial; }
 	[[nodiscard]] RepoOp probeOperation() const override;
@@ -103,7 +104,7 @@ private:
 
 private:
 	// .hgsubstate and .hgsub, re-read at the start of every refresh: the recorded node per subrepo path, and
-	// each one's source, which names the kind a subrepo window opens on
+	// each one's source, which names the tool its queries run with
 	std::map<QString, QString> _subrepoNodes;
 	std::map<QString, QString> _subrepoSources;
 

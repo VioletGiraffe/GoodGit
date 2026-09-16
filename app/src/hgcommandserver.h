@@ -8,10 +8,12 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <deque>
+#include <map>
 #include <memory>
 #include <vector>
 
 class QProcess;
+class QTimer;
 class HgCommandServer;
 class HgServerPool;
 
@@ -86,6 +88,10 @@ public:
 	// Fails the current command; the pool respawns on demand
 	void killServer();
 
+	// The pool's notices that no open repository contains the bound root any more, or that one does again
+	void bindRootClosed();
+	void bindRootOpened();
+
 private:
 	void consumeChunks();
 	void handleChunk(char channel, const QByteArray& payload);
@@ -97,6 +103,8 @@ private:
 	const QString _bindRoot;
 	const QString _executable;
 	QProcess* _process = nullptr;
+	// Retires the server when it fires, see the pool's class comment
+	QTimer* _retireTimer = nullptr;
 	QByteArray _buffer;    // stdout bytes not yet consumed as chunks
 	QByteArray _ownStderr; // the server's own stderr (extension warnings, crash text), never a command's output
 	Hg::ServerJob* _currentJob = nullptr;
@@ -111,6 +119,9 @@ private:
 // A server dying before its hello latches its cause: a launch failure (hg missing) routes everything
 // through plain processes, a pre-hello crash (broken repo config) routes only that repository's jobs there.
 // A settings change resets both latches and retires servers running another executable: the executable path is a setting.
+// A server retires on its own, since it keeps its bound root in use (the cwd, which Windows will not delete or rename):
+//   bound inside an open repository - after IdleRetireMs without a command
+//   otherwise - ClosedRetireMs after the last repository containing it closed, commands or not
 class HgServerPool final
 {
 public:
@@ -125,6 +136,10 @@ public:
 	// killed. Queued commands are dropped undelivered. Only called once the event loop has returned.
 	void shutdown();
 
+	// Counted per root: several windows hold a repository object each for the same one
+	void repositoryOpened(const QString& root);
+	void repositoryClosed(const QString& root);
+
 private:
 	friend class HgCommandServer;
 	friend class Hg::ServerJob;
@@ -137,10 +152,13 @@ private:
 	void serverFreed(HgCommandServer* server);
 	void serverDied(HgCommandServer* server, ProcessOutcome outcome, const QString& launchError);
 
+	[[nodiscard]] bool insideOpenRepository(const QString& path) const;
+
 private:
 	static constexpr int MaxServers = 4;
 
 	std::vector<std::unique_ptr<HgCommandServer>> _servers;
+	std::map<QString, int> _openRepositoryCounts;
 	std::deque<Hg::ServerJob*> _queue;
 	// hg itself cannot launch: everything goes through plain processes until a settings change resets this
 	bool _unavailable = false;

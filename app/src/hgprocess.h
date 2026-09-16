@@ -32,6 +32,10 @@ ProcessResult runSync(const QString& workDir, QStringList args, int timeoutMs = 
 // event loop returns: nothing that could start a command is left by then.
 void shutdown();
 
+// Paired, one each per repository object: the command servers bound inside a root retire soon after its last one closes
+void repositoryOpened(const QString& root);
+void repositoryClosed(const QString& root);
+
 // The configured executable, or the default. For the one command started detached rather than through
 // run(), which alone applies the environment.
 [[nodiscard]] QString executablePath();
