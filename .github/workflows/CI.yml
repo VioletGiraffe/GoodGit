@@ -167,13 +167,18 @@ jobs:
         sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 50
         g++ --version
 
+    # The tests run a QApplication on the xcb platform plugin, which needs a display and libxcb-cursor0 (Qt 6.5+)
+    - name: Linux - set up a virtual display
+      if: startsWith(matrix.os, 'ubuntu')
+      run: sudo apt install -qq xvfb libxcb-cursor0
+
     - name: Linux - tests (debug)
       if: startsWith(matrix.os, 'ubuntu')
-      run: scripts/run_tests.sh debug
+      run: xvfb-run --auto-servernum scripts/run_tests.sh debug
 
     - name: Linux - tests (release)
       if: startsWith(matrix.os, 'ubuntu')
-      run: scripts/run_tests.sh
+      run: xvfb-run --auto-servernum scripts/run_tests.sh
 
     - name: Linux - build
       if: startsWith(matrix.os, 'ubuntu')

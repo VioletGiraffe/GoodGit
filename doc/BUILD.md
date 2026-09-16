@@ -29,9 +29,16 @@ platform icons and `Info.plist`.
 
 ## Tests
 
-`tests/tests.pro` is a Catch2 app built on its own, outside the subdirs project: it compiles the backend-
-and UI-free sources (`unifieddiff`, `textdiff`, `movedblocks`) straight from `app/src` against QtCore, with
-diffs captured from real changes as fixtures under `tests/fixtures/`.
+`tests/tests.pro` is a Catch2 app built on its own, outside the subdirs project: it compiles the sources under
+test straight from `app/src`, and the library modules they use through their `.pri` files. Diffs captured from
+real changes are fixtures under `tests/fixtures/`.
+
+The tests run inside a `QApplication` on the platform's own plugin, so the models, views and icons behave as in
+the app; settings go to a throwaway INI file. A machine with no display runs them under `xvfb-run`, as CI does
+on Linux.
+
+The build is incremental by timestamp only: after switching the Qt kit, delete `tests/build`, or objects compiled
+against the old headers link against the new libraries and crash.
 
 `scripts/run_tests.bat` (Windows) and `scripts/run_tests.sh` (macOS, Linux) build and run it (`debug` as the
 argument for the debug configuration); `scripts/debug_tests.bat` runs the built tests under cdb. The Qt kit is
