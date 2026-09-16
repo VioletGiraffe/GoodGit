@@ -27,9 +27,9 @@ jobs:
         submodules: 'recursive'
 
     - name: Install Qt
-      uses: jurplel/install-qt-action@v4.4
+      uses: jurplel/install-qt-action@v4
       with:
-        version: 6.11.*
+        version: 6.10.*
         target: desktop
         archives: 'qtbase icu qtsvg'
         cache: 'true'
