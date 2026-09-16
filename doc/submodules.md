@@ -21,9 +21,9 @@ discard. Paths the submodule's last commit does not have (files added there, a r
 of version control and stay on disk, and untracked files are untouched, as in the repository's own discard.
 
 A git repository inside the worktree that the parent does not track is an untracked row, not a submodule
-row: it has no pointer, and it keeps the untracked actions (add, ignore, delete). It shares the folder icon
-and opens a window or its history like a submodule. Adding it stages a bare gitlink with no `.gitmodules`
-entry, as `git add` does.
+row: it has no pointer. It shares the folder icon and opens a window or its history like a submodule. It can
+be ignored or deleted, never committed or added: that would stage a bare gitlink with no `.gitmodules` entry.
+Deleting it always asks first.
 
 Mercurial's subrepositories are the same rows, read from `.hgsub` and `.hgsubstate`. A submodule may be a
 git repository inside an hg parent, which is why `submoduleLocation()` answers with a kind and why

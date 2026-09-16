@@ -1432,13 +1432,13 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	const bool operationInProgress = _repo->state().operationInProgress();
 	// Only gates the writing actions; a stale row is still worth inspecting
 	const bool canAct = canActOnList();
-	bool anyUntracked = false, anyAdded = false, anyDeletable = false, anyDiscardable = false, anyConflicted = false;
+	bool anyAddable = false, anyAdded = false, anyDeletable = false, anyDiscardable = false, anyConflicted = false;
 	for (const FileEntry& entry : entries)
 	{
 		anyDiscardable |= discardable(entry);
 		if (entry.isSubmodule)
 			continue;
-		anyUntracked |= entry.type == ChangeType::Untracked;
+		anyAddable |= entry.type == ChangeType::Untracked && !entry.isUntrackedRepository;
 		anyAdded |= entry.type == ChangeType::Added;
 		anyConflicted |= entry.type == ChangeType::Conflicted;
 		anyDeletable |= entry.type != ChangeType::Deleted;
@@ -1455,7 +1455,7 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	markResolvedAction->setVisible(anyConflicted);
 	markResolvedAction->setEnabled(canAct);
 	QAction* addAction = menu.addAction(tr("Add"), this, &CommitWindow::addSelectionToIndex);
-	addAction->setVisible(anyUntracked);
+	addAction->setVisible(anyAddable);
 	addAction->setEnabled(canAct);
 
 	QAction* unAddAction = menu.addAction(tr("Un-add"), this, &CommitWindow::unAddSelection);
@@ -1612,10 +1612,12 @@ void CommitWindow::deleteSelection()
 {
 	// Submodules and already-deleted rows are skipped
 	QStringList untrackedPaths, addedPaths, trackedPaths;
+	bool anyRepository = false;
 	for (const FileEntry& entry : selectedEntries())
 	{
 		if (entry.isSubmodule || entry.type == ChangeType::Deleted)
 			continue;
+		anyRepository |= entry.isUntrackedRepository;
 		if (entry.type == ChangeType::Untracked)
 			untrackedPaths.push_back(entry.path);
 		else if (entry.type == ChangeType::Added)
@@ -1628,7 +1630,8 @@ void CommitWindow::deleteSelection()
 
 	// A single untracked file goes to the Recycle Bin unprompted, as it would from a file manager.
 	// Anything more asks first, and the dialog names the untracked files too: they are deleted with the rest.
-	if (!trackedPaths.isEmpty() || !addedPaths.isEmpty() || untrackedPaths.size() > 1)
+	// A repository always asks: it may hold unpushed commits
+	if (!trackedPaths.isEmpty() || !addedPaths.isEmpty() || untrackedPaths.size() > 1 || anyRepository)
 	{
 		const QStringList prompted = trackedPaths + addedPaths + untrackedPaths;
 		const auto answer = MessageDialog::question(this, tr("Delete files?"),
@@ -1855,7 +1858,7 @@ void CommitWindow::undoLastCommit()
 void CommitWindow::addSelectionToIndex()
 {
 	const QStringList paths = pathsWhere(selectedEntries(),
-		[](const FileEntry& entry) { return !entry.isSubmodule && entry.type == ChangeType::Untracked; });
+		[](const FileEntry& entry) { return !entry.isSubmodule && entry.type == ChangeType::Untracked && !entry.isUntrackedRepository; });
 	if (paths.isEmpty())
 		return;
 	beginMutation();

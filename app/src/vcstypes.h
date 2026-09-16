@@ -235,5 +235,9 @@ struct FileEntry
 	{
 		return content == SubmoduleContent::DirtyTracked || content == SubmoduleContent::Unknown;
 	}
-	[[nodiscard]] bool committable() const { return !isSubmodule || (pointerMoved && !contentBlocksPointer()); }
+	// An untracked repository would be committed as a gitlink with no .gitmodules entry
+	[[nodiscard]] bool committable() const
+	{
+		return !isUntrackedRepository && (!isSubmodule || (pointerMoved && !contentBlocksPointer()));
+	}
 };
