@@ -81,6 +81,18 @@ public:
 		hg({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), message });
 	}
 
+	// The backend's rows and state after one refresh, sorted by path
+	[[nodiscard]] std::pair<std::vector<FileEntry>, RepoState> refreshed() const
+	{
+		HgRepository repository{ _root };
+		refresh(repository);
+
+		std::vector<FileEntry> files = repository.files();
+		std::ranges::sort(files, {}, &FileEntry::path);
+		return { std::move(files), repository.state() };
+	}
+
+private:
 	// Refreshes `repository` once and requires the state to have been read
 	static void refresh(Repository& repository)
 	{
@@ -94,18 +106,6 @@ public:
 		REQUIRE(repository.state().known());
 	}
 
-	// The backend's rows and state after one refresh, sorted by path
-	[[nodiscard]] std::pair<std::vector<FileEntry>, RepoState> refreshed() const
-	{
-		HgRepository repository{ _root };
-		refresh(repository);
-
-		std::vector<FileEntry> files = repository.files();
-		std::ranges::sort(files, {}, &FileEntry::path);
-		return { std::move(files), repository.state() };
-	}
-
-private:
 	void run(const QString& program, const QStringList& arguments, const QString& relativeDirectory = {}, bool mustSucceed = true) const
 	{
 		QProcess process;
