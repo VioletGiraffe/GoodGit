@@ -1034,7 +1034,7 @@ Vcs::Query HgRepository::submodulePointerLog(const QString& repoRelativePath, co
 		context, Vcs::answering(std::move(onDone), Hg::textFromOutput)) };
 }
 
-RepositoryLocation HgRepository::submoduleLocation(const QString& repoRelativePath) const
+RepositoryLocation HgRepository::nestedRepositoryLocation(const QString& repoRelativePath) const
 {
 	return { isGitSubrepo(repoRelativePath) ? VcsKind::Git : VcsKind::Mercurial, QDir{ path() }.filePath(repoRelativePath) };
 }

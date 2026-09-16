@@ -150,7 +150,7 @@ struct RepoState
 	QStringList unpushedSubjects;
 
 	// Every submodule this repository declares, repo-relative and in path order - not only the ones with a
-	// file list row. Their kind is the backend's to answer, through submoduleLocation().
+	// file list row. Their kind is the backend's to answer, through nestedRepositoryLocation().
 	QStringList submodules;
 
 	// Why the last refresh could not establish this state; empty when it could. When set, everything above

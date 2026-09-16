@@ -26,7 +26,7 @@ be ignored or deleted, never committed or added: that would stage a bare gitlink
 Deleting it always asks first.
 
 Mercurial's subrepositories are the same rows, read from `.hgsub` and `.hgsubstate`. A submodule may be a
-git repository inside an hg parent, which is why `submoduleLocation()` answers with a kind and why
+git repository inside an hg parent, which is why `nestedRepositoryLocation()` answers with a kind and why
 per-submodule refresh queries go to whichever tool owns the directory. What is uncommitted inside a
 submodule is asked of the submodule itself, never of the parent's recursing `hg status`: that compares
 against the node `.hgsubstate` records rather than the submodule's own parent changeset, and so reports a

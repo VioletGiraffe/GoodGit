@@ -585,7 +585,7 @@ QString HistoryWindow::selectedSha() const
 void HistoryWindow::openSubmoduleHistory(const CommitFileChange& entry)
 {
 	// The gitlink names a commit the submodule holds, so a listing without it is out of date
-	showRepositoryHistory(_repo->submoduleLocation(entry.path))->revealCommit(entry.submoduleSha, RevealMiss::ReloadOnce);
+	showRepositoryHistory(_repo->nestedRepositoryLocation(entry.path))->revealCommit(entry.submoduleSha, RevealMiss::ReloadOnce);
 }
 
 void HistoryWindow::applySearch()

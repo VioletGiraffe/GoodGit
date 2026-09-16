@@ -1102,9 +1102,9 @@ Vcs::Query GitRepository::submodulePointerLog(const QString& repoRelativePath, c
 	return query;
 }
 
-RepositoryLocation GitRepository::submoduleLocation(const QString& repoRelativePath) const
+RepositoryLocation GitRepository::nestedRepositoryLocation(const QString& repoRelativePath) const
 {
-	return { VcsKind::Git, path() + QLatin1Char('/') + repoRelativePath }; // a git submodule is always a git repository
+	return { VcsKind::Git, path() + QLatin1Char('/') + repoRelativePath }; // git sees a nested repository only where it finds a .git
 }
 
 QString GitRepository::ignoreFileName() const

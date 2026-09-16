@@ -255,9 +255,9 @@ public:
 	// For a moved submodule pointer at a repo-relative path: the commits being pulled in, one line each
 	virtual Vcs::Query submodulePointerLog(const QString& repoRelativePath, const QObject* context, Vcs::Answer<QString> onDone) = 0;
 
-	// The location of the submodule's own repository, for opening a window on it. The
-	// parent names the kind: a nested repository need not be of the same kind.
-	[[nodiscard]] virtual RepositoryLocation submoduleLocation(const QString& repoRelativePath) const = 0;
+	// The location of the repository at a repo-relative path - a submodule, or an untracked repository - for opening a
+	// window on it. The parent names the kind: a nested repository need not be of the same kind.
+	[[nodiscard]] virtual RepositoryLocation nestedRepositoryLocation(const QString& repoRelativePath) const = 0;
 
 	// The ignore file at the repository root, and the patterns that would exclude `repoRelativePath` from
 	// it - most specific first, in that file's syntax

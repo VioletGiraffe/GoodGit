@@ -66,7 +66,7 @@ public:
 	Vcs::Query unpushedCommits(const QObject* context, Vcs::Answer<QSet<QString>> onDone) override;
 	Vcs::Query submodulePointerLog(const QString& repoRelativePath, const QObject* context, Vcs::Answer<QString> onDone) override;
 
-	[[nodiscard]] RepositoryLocation submoduleLocation(const QString& repoRelativePath) const override;
+	[[nodiscard]] RepositoryLocation nestedRepositoryLocation(const QString& repoRelativePath) const override;
 
 	[[nodiscard]] QString ignoreFileName() const override;
 	[[nodiscard]] std::vector<IgnorePattern> ignorePatternsFor(const QString& repoRelativePath) const override;

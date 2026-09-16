@@ -208,7 +208,7 @@ void setSubmodules(const Repository& repository)
 	std::vector<Submodule> submodules;
 	submodules.reserve(size_t(repository.state().submodules.size()));
 	for (const QString& path : repository.state().submodules)
-		submodules.push_back({ path, repository.submoduleLocation(path).kind });
+		submodules.push_back({ path, repository.nestedRepositoryLocation(path).kind });
 
 	const bool submodulesChanged = submodules != entry->submodules;
 	if (submodulesChanged)

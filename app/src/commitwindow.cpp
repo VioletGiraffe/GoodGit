@@ -1417,7 +1417,9 @@ void CommitWindow::abortOperation()
 
 void CommitWindow::openNestedRepositoryWindow(const FileEntry& entry)
 {
-	CommitWindow* window = openRepositoryWindow(_repo->submoduleLocation(entry.path));
+	CommitWindow* window = openRepositoryWindow(_repo->nestedRepositoryLocation(entry.path));
+	if (!window)
+		return;
 	// The window may already be open, and so already connected
 	connect(window, &CommitWindow::historyChanged, this, &CommitWindow::refreshRepository, Qt::UniqueConnection);
 }
@@ -1489,7 +1491,7 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	editAction->setVisible(singleFile && !first.isUntrackedRepository);
 
 	QAction* nestedHistoryAction = menu.addAction(tr("View commit history"), this, [this, entry = first] {
-		showRepositoryHistory(_repo->submoduleLocation(entry.path));
+		showRepositoryHistory(_repo->nestedRepositoryLocation(entry.path));
 	});
 	nestedHistoryAction->setVisible(single && (first.isSubmodule || first.isUntrackedRepository));
 
@@ -1803,7 +1805,7 @@ void CommitWindow::startSubmoduleContentDiscard(const QString& path, const Submo
 	beginMutation();
 	_repo->discardSubmoduleContent(path, plan, [this, path, done = mutationDone(tr("Discard failed"))](std::expected<void, QString> result) {
 		done(std::move(result));
-		if (CommitWindow* window = repositoryWindow(_repo->submoduleLocation(path).root))
+		if (CommitWindow* window = repositoryWindow(_repo->nestedRepositoryLocation(path).root))
 			window->refreshRepository(); // its rows are stale: its working tree was changed from here
 	});
 }
