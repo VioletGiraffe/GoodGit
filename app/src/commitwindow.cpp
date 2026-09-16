@@ -46,6 +46,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScreen>
+#include <QSet>
 #include <QSettings>
 #include <QShortcut>
 #include <QSplitter>
@@ -1614,12 +1615,13 @@ void CommitWindow::deleteSelection()
 {
 	// Submodules and already-deleted rows are skipped
 	QStringList untrackedPaths, addedPaths, trackedPaths;
-	bool anyRepository = false;
+	QSet<QString> repositoryPaths; // the only rows that are folders
 	for (const FileEntry& entry : selectedEntries())
 	{
 		if (entry.isSubmodule || entry.type == ChangeType::Deleted)
 			continue;
-		anyRepository |= entry.isUntrackedRepository;
+		if (entry.isUntrackedRepository)
+			repositoryPaths.insert(entry.path);
 		if (entry.type == ChangeType::Untracked)
 			untrackedPaths.push_back(entry.path);
 		else if (entry.type == ChangeType::Added)
@@ -1633,12 +1635,24 @@ void CommitWindow::deleteSelection()
 	// A single untracked file goes to the Recycle Bin unprompted, as it would from a file manager.
 	// Anything more asks first, and the dialog names the untracked files too: they are deleted with the rest.
 	// A repository always asks: it may hold unpushed commits
-	if (!trackedPaths.isEmpty() || !addedPaths.isEmpty() || untrackedPaths.size() > 1 || anyRepository)
+	if (!trackedPaths.isEmpty() || !addedPaths.isEmpty() || untrackedPaths.size() > 1 || !repositoryPaths.isEmpty())
 	{
-		const QStringList prompted = trackedPaths + addedPaths + untrackedPaths;
-		const auto answer = MessageDialog::question(this, tr("Delete files?"),
-			tr("Move %1 file(s) to the Recycle Bin?\n\n%2").arg(prompted.size()).arg(listedPaths(prompted)),
-			{ tr("Delete") });
+		QStringList prompted = trackedPaths + addedPaths + untrackedPaths;
+		for (QString& path : prompted)
+		{
+			if (repositoryPaths.contains(path))
+				path += QLatin1Char('/');
+		}
+		const qsizetype repositoryCount = repositoryPaths.size();
+		const qsizetype fileCount = prompted.size() - repositoryCount;
+		const QString files = fileCount == 1 ? tr("1 file") : tr("%1 files").arg(fileCount);
+		const QString repositories = repositoryCount == 1 ? tr("1 repository") : tr("%1 repositories").arg(repositoryCount);
+		const QString title = repositoryCount == 0 ? tr("Delete files?")
+			: fileCount == 0 ? (repositoryCount == 1 ? tr("Delete repository?") : tr("Delete repositories?"))
+			: tr("Delete files and repositories?");
+		const QString counted = repositoryCount == 0 ? files : fileCount == 0 ? repositories : tr("%1 and %2").arg(files, repositories);
+		const auto answer = MessageDialog::question(this, title,
+			tr("Move %1 to the Recycle Bin?\n\n%2").arg(counted, listedPaths(prompted)), { tr("Delete") });
 		if (answer != 0)
 			return;
 	}
@@ -1650,8 +1664,8 @@ void CommitWindow::deleteSelection()
 				continue;
 			// Never fall back to a permanent delete
 			MessageDialog::notice(this, tr("Delete failed"),
-				tr("Could not move '%1' to the Recycle Bin (the file may be locked, or the volume has no Recycle Bin).\n"
-				   "The remaining files were not deleted.").arg(path), {});
+				tr("Could not move '%1' to the Recycle Bin (it may be locked, or the volume has no Recycle Bin).\n"
+				   "The remaining items were not deleted.").arg(path), {});
 			break;
 		}
 		_repo->refresh();
