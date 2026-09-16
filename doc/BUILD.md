@@ -30,18 +30,19 @@ platform icons and `Info.plist`.
 ## Tests
 
 `tests/tests.pro` is a Catch2 app built on its own, outside the subdirs project: it compiles the sources under
-test straight from `app/src`, and the library modules they use through their `.pri` files. Diffs captured from
-real changes are fixtures under `tests/fixtures/`.
+test straight from `app/src`, and the library modules they use through their `.pri` files.
 
-The tests run inside a `QApplication` on the platform's own plugin, so the models, views and icons behave as in
-the app; settings go to a throwaway INI file. A machine with no display runs them under `xvfb-run`, as CI does
-on Linux. The backend tests build scratch repositories with the `git` and `hg` on PATH, so both must be installed,
-and refresh the backend on them. They read no user or system config of either tool. The hg fixtures share one
-directory for the whole run: a command server keeps its working directory in the first repository it served.
-
-The smoke test is the app itself: `gg --smoke-test <repository>` checks the plugins only a deployment can lack
-(svg, TLS), opens the repository and exits 0 once its file list shows a row, or 1 with the reason on stderr.
-CI runs it on each platform's deployed build against a fresh repository holding one untracked file.
+Kinds of tests:
+- **Pure logic**: the modules `ARCHITECTURE.md` lists as tested directly (parsers, diff alignment, moved blocks,
+  commit graph). Diffs captured from real changes are fixtures under `tests/fixtures/`.
+- **Models, views and icons**: run inside a `QApplication` on the platform's own plugin, so they behave as in the
+  app; settings go to a throwaway INI file. A machine with no display runs the tests under `xvfb-run`, as CI does on Linux.
+- **Backends**: scratch repositories built with the `git` and `hg` on PATH (both must be installed), and a backend
+  refreshed on them. They read no user or system config of either tool. The hg fixtures share one directory for the
+  whole run: a command server keeps its working directory in the repository it is bound to.
+- **Smoke test**: the app itself. `gg --smoke-test <repository>` checks the plugins only a deployment can lack
+  (svg, TLS), opens the repository and exits 0 once its file list shows a row, or 1 with the reason on stderr.
+  CI runs it on each platform's deployed build against a fresh repository holding one untracked file.
 
 Objects go under `tests/build/<Qt version>`: make rebuilds by timestamp only, and a new kit's headers can predate
 objects compiled against the old ones. On Windows the scripts build a generated `tests.vcxproj` with msbuild, which also
