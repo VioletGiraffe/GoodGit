@@ -1271,6 +1271,11 @@ void CommitWindow::showDiffForCurrentRow()
 		return;
 	}
 
+	if (entry.isUntrackedRepository)
+	{
+		_diffPane->showMessage({ entry.path, tr("repository") }, tr("An untracked repository inside this one.\nDouble-click to open it."));
+		return;
+	}
 	if (entry.type == ChangeType::Untracked)
 	{
 		showFileContents(entry);
@@ -1340,9 +1345,9 @@ void CommitWindow::onRowActivated(const QModelIndex& sourceIndex)
 		return;
 	const FileEntry entry = _filesModel.entryAt(sourceIndex.row());
 
-	if (entry.isSubmodule)
+	if (entry.isSubmodule || entry.isUntrackedRepository)
 	{
-		openSubmoduleWindow(entry);
+		openNestedRepositoryWindow(entry);
 		return;
 	}
 	if (entry.type == ChangeType::Deleted)
@@ -1410,7 +1415,7 @@ void CommitWindow::abortOperation()
 	_repo->abortOperation(mutationDone(tr("Abort failed"), /*changesHistory=*/true));
 }
 
-void CommitWindow::openSubmoduleWindow(const FileEntry& entry)
+void CommitWindow::openNestedRepositoryWindow(const FileEntry& entry)
 {
 	CommitWindow* window = openRepositoryWindow(_repo->submoduleLocation(entry.path));
 	// The window may already be open, and so already connected
@@ -1481,12 +1486,12 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	QAction* editAction = menu.addAction(tr("Edit"), this, [this, entry = first] {
 		openInTextEditor(absolutePath(entry), this);
 	});
-	editAction->setVisible(singleFile);
+	editAction->setVisible(singleFile && !first.isUntrackedRepository);
 
-	QAction* submoduleHistoryAction = menu.addAction(tr("View commit history"), this, [this, entry = first] {
+	QAction* nestedHistoryAction = menu.addAction(tr("View commit history"), this, [this, entry = first] {
 		showRepositoryHistory(_repo->submoduleLocation(entry.path));
 	});
-	submoduleHistoryAction->setVisible(single && first.isSubmodule);
+	nestedHistoryAction->setVisible(single && (first.isSubmodule || first.isUntrackedRepository));
 
 	QAction* fileHistoryAction = menu.addAction(tr("View file history"), this, [this, entry = first] {
 		// Nothing is committed at a rename's new path yet

@@ -226,6 +226,7 @@ struct FileEntry
 	std::optional<LineCounts> lineCounts;
 
 	bool isSubmodule = false;
+	bool isUntrackedRepository = false; // untracked rows only: the path is a directory holding its own repository
 	bool pointerMoved = false; // the recorded commit differs from HEAD's
 	SubmoduleContent content = SubmoduleContent::Clean;
 

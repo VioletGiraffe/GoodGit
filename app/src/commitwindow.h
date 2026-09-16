@@ -24,7 +24,7 @@ class FileListView;
 class MessageEdit;
 class CLabelElided;
 
-// One window = one repository. Submodule rows open another instance of this window.
+// One window = one repository. Submodule and untracked repository rows open another instance of this window.
 class CommitWindow final : public QMainWindow
 {
 	Q_OBJECT
@@ -133,7 +133,7 @@ private:
 	// The file in its default application; failure is reported - a row can outlive its file
 	void openEntryExternally(const FileEntry& entry);
 	void onRowActivated(const QModelIndex& sourceIndex);
-	void openSubmoduleWindow(const FileEntry& entry);
+	void openNestedRepositoryWindow(const FileEntry& entry);
 	void showContextMenu(const QPoint& pos);
 	void showParentCommitContextMenu(const QPoint& pos);
 

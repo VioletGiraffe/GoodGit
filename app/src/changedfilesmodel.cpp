@@ -112,7 +112,7 @@ QVariant fileListHeaderData(int section, Qt::Orientation orientation, int role)
 	return {}; // the count columns carry no heading: the signs are in the counts, and neither column sorts
 }
 
-QVariant fileListSharedRoleData(int column, int role, bool isSubmodule, ChangeType type)
+QVariant fileListSharedRoleData(int column, int role, bool folderIcon, ChangeType type)
 {
 	switch (role)
 	{
@@ -121,7 +121,7 @@ QVariant fileListSharedRoleData(int column, int role, bool isSubmodule, ChangeTy
 			return int(Qt::AlignRight | Qt::AlignVCenter);
 		return {};
 	case Qt::DecorationRole:
-		if (column == StateColumn && isSubmodule)
+		if (column == StateColumn && folderIcon)
 			return submoduleIcon();
 		return {};
 	case Qt::ForegroundRole:
@@ -340,6 +340,7 @@ QVariant ChangedFilesModel::data(const QModelIndex& index, int role) const
 
 	const Row& row = _rows[size_t(index.row())];
 	const FileEntry& entry = row.entry;
+	const bool folderIcon = entry.isSubmodule || entry.isUntrackedRepository;
 
 	switch (role)
 	{
@@ -359,11 +360,11 @@ QVariant ChangedFilesModel::data(const QModelIndex& index, int role) const
 	case Qt::ForegroundRole:
 		if (index.column() == StateColumn)
 			return QBrush{ stateColor(entry) };
-		return fileListSharedRoleData(index.column(), role, entry.isSubmodule, entry.type);
+		return fileListSharedRoleData(index.column(), role, folderIcon, entry.type);
 	case Qt::TextAlignmentRole:
 	case Qt::DecorationRole:
 	case Qt::FontRole:
-		return fileListSharedRoleData(index.column(), role, entry.isSubmodule, entry.type);
+		return fileListSharedRoleData(index.column(), role, folderIcon, entry.type);
 	case Qt::BackgroundRole:
 		if (entry.isSubmodule && entry.contentBlocksPointer())
 			return QBrush{ activeTheme().blockedRowTint() };
@@ -373,6 +374,8 @@ QVariant ChangedFilesModel::data(const QModelIndex& index, int role) const
 	case SortPathRole:
 		return entry.path;
 	case Qt::ToolTipRole:
+		if (entry.isUntrackedRepository)
+			return QStringLiteral("A repository this one does not track. Double-click to open it.");
 		if (!entry.isSubmodule)
 			return pathText(entry);
 		if (entry.content == SubmoduleContent::Unknown)
@@ -409,6 +412,8 @@ Qt::ItemFlags ChangedFilesModel::flags(const QModelIndex& index) const
 
 QString ChangedFilesModel::stateText(const FileEntry& entry)
 {
+	if (entry.isUntrackedRepository)
+		return QStringLiteral("Untracked repository");
 	if (!entry.isSubmodule)
 		return changeTypeText(entry.type);
 

@@ -681,8 +681,12 @@ std::vector<FileEntry> GitRepository::filesFromRun(const RefreshRun& run) const
 			files.push_back({ .path = conflictedPath, .type = ChangeType::Conflicted });
 	}
 
+	// ls-files does not descend into a directory holding a repository: it lists the directory, with a trailing slash
 	for (const QString& path : run.untracked)
-		files.push_back({ .path = path, .type = ChangeType::Untracked });
+	{
+		const bool isRepository = path.endsWith(QLatin1Char('/'));
+		files.push_back({ .path = isRepository ? path.chopped(1) : path, .type = ChangeType::Untracked, .isUntrackedRepository = isRepository });
+	}
 
 	// Submodules with an unmoved pointer but blocking content get a row too, so the state is visible and the
 	// row double-clickable. Untracked-only content does not earn a row.

@@ -53,6 +53,8 @@ Other format facts:
   be rejoined rather than treated as a field.
 - `--no-ahead-behind` prints `+? -?` where the counts would be, so presence must come from parsing the
   numbers and not from the key being there.
+- `ls-files --others` without `--directory` lists untracked files one by one, but stops at a directory holding
+  a repository and lists the directory itself with a trailing slash: the only mark of an untracked repository.
 - `diff --name-status HEAD` never reports `U` during a merge. A UU path shows as `M`; a UD path, whose
   worktree content equals HEAD, does not appear at all. The unmerged index entries are the only complete
   record of which paths are conflicted.
