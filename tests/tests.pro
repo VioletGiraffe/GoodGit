@@ -14,15 +14,15 @@ Release:OUTPUT_DIR=release/
 Debug:OUTPUT_DIR=debug/
 
 DESTDIR = bin/$${OUTPUT_DIR}
-OBJECTS_DIR = build/$${OUTPUT_DIR}
-MOC_DIR = build/$${OUTPUT_DIR}
-RCC_DIR = build/$${OUTPUT_DIR}
+# Keyed by Qt version: make rebuilds by timestamp only, and a new kit's headers can predate the old objects
+BUILD_DIR = build/$$[QT_VERSION]/$${OUTPUT_DIR}
+OBJECTS_DIR = $${BUILD_DIR}
+MOC_DIR = $${BUILD_DIR}
+RCC_DIR = $${BUILD_DIR}
 
 INCLUDEPATH += ../app/src ../cpputils ../cpp-template-utils ../qtutils ../thin_io/src
 
 DEFINES += FIXTURES_DIR=\\\"$$PWD/fixtures/\\\"
-
-win32: QMAKE_CXXFLAGS += /Fd$${OBJECTS_DIR}   # the compiler's pdb, which would otherwise land beside this file
 
 HEADERS += \
 	../app/src/changedfilesmodel.h \

@@ -43,8 +43,9 @@ The smoke test is the app itself: `gg --smoke-test <repository>` checks the plug
 (svg, TLS), opens the repository and exits 0 once its file list shows a row, or 1 with the reason on stderr.
 CI runs it on each platform's deployed build against a fresh repository holding one untracked file.
 
-The build is incremental by timestamp only: after switching the Qt kit, delete `tests/build`, or objects compiled
-against the old headers link against the new libraries and crash.
+Objects go under `tests/build/<Qt version>`: make rebuilds by timestamp only, and a new kit's headers can predate
+objects compiled against the old ones. On Windows the scripts build a generated `tests.vcxproj` with msbuild, which also
+rebuilds on a changed compiler command line.
 
 `scripts/run_tests.bat` (Windows) and `scripts/run_tests.sh` (macOS, Linux) build and run it (`debug` as the
 argument for the debug configuration); `scripts/debug_tests.bat` runs the built tests under cdb. The Qt kit is
