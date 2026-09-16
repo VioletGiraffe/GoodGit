@@ -35,7 +35,12 @@ real changes are fixtures under `tests/fixtures/`.
 
 The tests run inside a `QApplication` on the platform's own plugin, so the models, views and icons behave as in
 the app; settings go to a throwaway INI file. A machine with no display runs them under `xvfb-run`, as CI does
-on Linux.
+on Linux. The backend tests build scratch repositories with the `git` on PATH and refresh a `GitRepository` on
+them; git's global and system config are switched off for them.
+
+The smoke test is the app itself: `gg --smoke-test <repository>` checks the plugins only a deployment can lack
+(svg, TLS), opens the repository and exits 0 once its file list shows a row, or 1 with the reason on stderr.
+CI runs it on each platform's deployed build against a fresh repository holding one untracked file.
 
 The build is incremental by timestamp only: after switching the Qt kit, delete `tests/build`, or objects compiled
 against the old headers link against the new libraries and crash.

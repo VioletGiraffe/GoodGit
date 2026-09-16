@@ -3,6 +3,7 @@
 #include "repositoryfactory.h"
 #include "repositorywindows.h"
 #include "settings.h"
+#include "smoketest.h"
 #include "theme.h"
 #include "updatecheck.h"
 
@@ -65,11 +66,15 @@ int main(int argc, char* argv[])
 	QApplication::setOrganizationName(QStringLiteral("GoodGit"));
 	QApplication::setApplicationName(QStringLiteral("GoodGit"));
 	QApplication::setWindowIcon(QIcon{ QStringLiteral(":/goodgit.svg") });
-	applyTheme(app);
-	checkForUpdatesIfDue();   // not in a window constructor: one window per repository would mean one check per window
 
 	// Not argv, which on Windows arrives in the local codepage and mangles anything outside it
 	const QStringList arguments = QApplication::arguments();
+
+	if (arguments.size() == 3 && arguments[1] == QLatin1String(SmokeTestOption))
+		return startSmokeTest(app, arguments[2]) ? runApplication() : 1;
+
+	applyTheme(app);
+	checkForUpdatesIfDue();   // not in a window constructor: one window per repository would mean one check per window
 
 	// No fallback for an explicit path: used as a command line tool, the app fails like one
 	if (arguments.size() > 1)

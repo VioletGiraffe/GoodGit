@@ -78,6 +78,14 @@ jobs:
 
         "%programfiles(x86)%\Inno Setup 6\iscc" installer.iss
 
+    - name: Windows - smoke test
+      if: startsWith(matrix.os, 'windows')
+      shell: cmd
+      run: |
+        git init -q "%RUNNER_TEMP%\smoke-repository" || exit /b 1
+        echo smoke> "%RUNNER_TEMP%\smoke-repository\untracked.txt"
+        dist\gg.exe --smoke-test "%RUNNER_TEMP%\smoke-repository"
+
     - name: Archive Installer
       if: success() && startsWith(matrix.os, 'windows')
       uses: actions/upload-artifact@v7
@@ -151,6 +159,13 @@ jobs:
       if: startsWith(matrix.os, 'macos')
       run: ./scripts/create_dmg.sh $QT_ROOT_DIR
 
+    - name: Mac - smoke test
+      if: startsWith(matrix.os, 'macos')
+      run: |
+        git init -q "$RUNNER_TEMP/smoke-repository"
+        echo smoke > "$RUNNER_TEMP/smoke-repository/untracked.txt"
+        bin/release/GoodGit.app/Contents/MacOS/gg --smoke-test "$RUNNER_TEMP/smoke-repository"
+
     - name: Archive DMG
       if: success() && startsWith(matrix.os, 'macos')
       uses: actions/upload-artifact@v7
@@ -185,6 +200,13 @@ jobs:
       run: |
         $QT_ROOT_DIR/bin/qmake -r CONFIG+=release
         make -j4
+
+    - name: Linux - smoke test
+      if: startsWith(matrix.os, 'ubuntu')
+      run: |
+        git init -q "$RUNNER_TEMP/smoke-repository"
+        echo smoke > "$RUNNER_TEMP/smoke-repository/untracked.txt"
+        xvfb-run --auto-servernum bin/release/gg --smoke-test "$RUNNER_TEMP/smoke-repository"
 
   create-release:
     needs: build

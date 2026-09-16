@@ -46,7 +46,7 @@ Dependencies point one way, top to bottom:
   `textdiff`, `movedblocks`, `commitgraph`.
 
 Nothing above `Repository` names a backend; nothing below it knows which window shows an answer. Beside the
-stack: `settings`, `theme` and `stylesheet`, `externalapps`, `updatecheck`, `commandlinetool_mac`, `version`.
+stack: `settings`, `theme` and `stylesheet`, `externalapps`, `updatecheck`, `commandlinetool_mac`, `smoketest`, `version`.
 
 ## Components (app/src/)
 
@@ -90,6 +90,7 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `updatecheck`, `com
 | `fileviewerwindow` | Read-only text in a window of its own, on qtutils `CLightningFastViewerWidget` with a `CFindBar` under it: one file as of one commit, decoded where the bytes are text and a hex dump where they are not; or a change's whole diff, scrolled to the file the pane shows |
 | `updatecheck` | The interactive and the automatic update check, see `updates.md` |
 | `commandlinetool_mac` | macOS only: the `/usr/local/bin/gg` link, see `doc/BUILD.md` |
+| `smoketest` | `gg --smoke-test <repository>`: the launch mode CI runs on the deployed build, see `doc/BUILD.md` |
 | `stylesheet` | The application QSS with `@token@` placeholders filled from a `Theme`. Detail header of `theme.cpp` |
 | `version` | `GG_VERSION`, the one place the version is written; `app.pro` and the installer read it from here, see `doc/BUILD.md` |
 

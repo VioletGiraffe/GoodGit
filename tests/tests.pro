@@ -18,7 +18,7 @@ OBJECTS_DIR = build/$${OUTPUT_DIR}
 MOC_DIR = build/$${OUTPUT_DIR}
 RCC_DIR = build/$${OUTPUT_DIR}
 
-INCLUDEPATH += ../app/src ../cpputils ../cpp-template-utils ../qtutils
+INCLUDEPATH += ../app/src ../cpputils ../cpp-template-utils ../qtutils ../thin_io/src
 
 DEFINES += FIXTURES_DIR=\\\"$$PWD/fixtures/\\\"
 
@@ -29,11 +29,17 @@ HEADERS += \
 	../app/src/fileicons.h \
 	../app/src/filelistdelegate.h \
 	../app/src/filelistview.h \
+	../app/src/gitparsers.h \
+	../app/src/gitprocess.h \
+	../app/src/gitrepository.h \
 	../app/src/movedblocks.h \
+	../app/src/queryround.h \
+	../app/src/repository.h \
 	../app/src/settings.h \
 	../app/src/textdiff.h \
 	../app/src/theme.h \
 	../app/src/unifieddiff.h \
+	../app/src/vcsprocess.h \
 	../app/src/vcstypes.h \
 	../qtutils/appdialogs/csettingsnotifier.h
 
@@ -42,12 +48,18 @@ SOURCES += \
 	../app/src/fileicons.cpp \
 	../app/src/filelistdelegate.cpp \
 	../app/src/filelistview.cpp \
+	../app/src/gitparsers.cpp \
+	../app/src/gitprocess.cpp \
+	../app/src/gitrepository.cpp \
 	../app/src/movedblocks.cpp \
+	../app/src/repository.cpp \
 	../app/src/textdiff.cpp \
 	../app/src/theme.cpp \
 	../app/src/unifieddiff.cpp \
+	../app/src/vcsprocess.cpp \
 	fileicons_tests.cpp \
 	filelist_tests.cpp \
+	gitrepository_tests.cpp \
 	main.cpp \
 	movedblocks_tests.cpp \
 	unifieddiff_tests.cpp \
@@ -65,3 +77,8 @@ mac*{
 include(../cpputils/assert/assert.pri)
 include(../cpputils/debugger/debugger.pri)
 include(../qtutils/theme/theme.pri)
+
+# thin_io has no .pri: its sources, as thin_io.pro selects them
+SOURCES += ../thin_io/src/filesystem_error.cpp
+win*: SOURCES += $$files(../thin_io/src/*_win.cpp)
+else: SOURCES += $$files(../thin_io/src/*_linux.cpp)

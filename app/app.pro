@@ -78,6 +78,7 @@ HEADERS += \
 	src/repositorywindows.h \
 	src/settings.h \
 	src/settingspages.h \
+	src/smoketest.h \
 	src/stylesheet.h \
 	src/textdiff.h \
 	src/theme.h \
@@ -120,6 +121,7 @@ SOURCES += \
 	src/repositoryfactory.cpp \
 	src/repositorywindows.cpp \
 	src/settingspages.cpp \
+	src/smoketest.cpp \
 	src/textdiff.cpp \
 	src/theme.cpp \
 	src/unifieddiff.cpp \
