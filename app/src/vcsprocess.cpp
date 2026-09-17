@@ -72,7 +72,11 @@ QString outputTooLargeText(qint64 limit)
 
 namespace Vcs {
 
-static constexpr int MaxConcurrentProcesses = 24;
+// One thread starts every process, so throughput flattens near the logical processor count: measured flat
+// from 16 up on a 16-thread machine, for batches of 173 git queries (scripts/perf/git_throughput.ps1).
+// Not derived from the processor count: a machine-dependent cap would make an ordering bug reproduce on one
+// machine and not another.
+static constexpr int MaxConcurrentProcesses = 16;
 
 // The process transport: one QProcess per job, capped by JobQueue
 class ProcessJob final : public Job
