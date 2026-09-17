@@ -41,6 +41,20 @@ int changeTypeRank(ChangeType type)
 	return {};
 }
 
+// The check state a row not present at the previous refresh starts in
+bool newRowChecked(ChangeType type, const QString& policy)
+{
+	if (type == ChangeType::Added)
+		return true; // staged already, whatever the policy says
+
+	if (policy == QLatin1String(Settings::NewRowCheckPolicyAll))
+		return true;
+	if (policy == QLatin1String(Settings::NewRowCheckPolicyNone))
+		return false;
+
+	return type != ChangeType::Untracked;
+}
+
 } // namespace
 
 QString changeTypeText(ChangeType type)
@@ -160,11 +174,16 @@ ChangedFilesModel::ChangedFilesModel(QObject* parent) :
 
 void ChangedFilesModel::setEntries(const std::vector<FileEntry>& entries, bool mergeMode)
 {
-	std::unordered_map<QString, bool> previousChecks;
+	struct PreviousRow
+	{
+		bool checked;
+		ChangeType type;
+	};
+	std::unordered_map<QString, PreviousRow> previousRows;
 	for (const Row& row : _rows)
 	{
 		if (row.entry.committable()) // a non-committable row's unchecked state is the block, not a user choice
-			previousChecks[row.entry.path] = row.checked;
+			previousRows[row.entry.path] = { row.checked, row.entry.type };
 	}
 
 	const QString newRowCheckPolicy = QSettings{}.value(Settings::NewRowCheckPolicyKey).toString();
@@ -181,19 +200,16 @@ void ChangedFilesModel::setEntries(const std::vector<FileEntry>& entries, bool m
 			row.forced = entry.type != ChangeType::Untracked;
 			if (row.forced)
 				row.checked = true;
-			else if (const auto it = previousChecks.find(entry.path); it != previousChecks.end())
-				row.checked = it->second;
+			else if (const auto it = previousRows.find(entry.path); it != previousRows.end())
+				row.checked = it->second.checked;
 		}
 		else if (!entry.committable())
 			row.checked = false;
-		else if (const auto it = previousChecks.find(entry.path); it != previousChecks.end())
-			row.checked = it->second;
-		else if (newRowCheckPolicy == QLatin1String(Settings::NewRowCheckPolicyAll))
-			row.checked = true;
-		else if (newRowCheckPolicy == QLatin1String(Settings::NewRowCheckPolicyNone))
-			row.checked = false;
+		else if (const auto it = previousRows.find(entry.path); it != previousRows.end())
+			// Becoming Added checks the row whatever it was before: adding a file is a decision to commit it
+			row.checked = it->second.checked || (entry.type == ChangeType::Added && it->second.type != ChangeType::Added);
 		else
-			row.checked = entry.type != ChangeType::Untracked;
+			row.checked = newRowChecked(entry.type, newRowCheckPolicy);
 
 		_rows.push_back(std::move(row));
 	}

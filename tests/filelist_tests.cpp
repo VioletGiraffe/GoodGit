@@ -7,10 +7,12 @@ RESTORE_COMPILER_WARNINGS
 #include "changedfilesmodel.h"
 #include "fileicons.h"
 #include "filelistview.h"
+#include "settings.h"
 #include "theme.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QIcon>
+#include <QSettings>
 RESTORE_COMPILER_WARNINGS
 
 namespace {
@@ -105,4 +107,39 @@ TEST_CASE("Merge mode forces the tracked rows on and leaves an untracked reposit
 	CHECK_FALSE(model.isUserCheckable(0));
 	CHECK_FALSE(model.isChecked(1));
 	CHECK_FALSE(model.index(1, StateColumn).data(Qt::CheckStateRole).isValid());
+}
+
+TEST_CASE("Becoming Added checks the row, and unchecking it afterwards survives the next refresh", "[filelist]")
+{
+	const std::vector<FileEntry> added{ fileRow(QStringLiteral("new.txt"), ChangeType::Added) };
+
+	ChangedFilesModel model;
+	model.setEntries({ fileRow(QStringLiteral("new.txt"), ChangeType::Untracked) }, /*mergeMode=*/false);
+	model.setRowChecked(0, false); // whatever the new-row setting made it
+
+	model.setEntries(added, /*mergeMode=*/false);
+	CHECK(model.isChecked(0));
+
+	model.setRowChecked(0, false);
+	model.setEntries(added, /*mergeMode=*/false);
+	CHECK_FALSE(model.isChecked(0)); // Added at the previous refresh too, so the unchecking was a choice
+}
+
+TEST_CASE("A row first seen as Added is checked even where new rows start unchecked", "[filelist]")
+{
+	QSettings settings;
+	const QVariant previousPolicy = settings.value(Settings::NewRowCheckPolicyKey);
+	settings.setValue(Settings::NewRowCheckPolicyKey, QLatin1String(Settings::NewRowCheckPolicyNone));
+
+	ChangedFilesModel model;
+	model.setEntries({ fileRow(QStringLiteral("added.txt"), ChangeType::Added), fileRow(QStringLiteral("edited.txt"), ChangeType::Modified) },
+		/*mergeMode=*/false);
+
+	CHECK(model.isChecked(0));
+	CHECK_FALSE(model.isChecked(1));
+
+	if (previousPolicy.isValid())
+		settings.setValue(Settings::NewRowCheckPolicyKey, previousPolicy);
+	else
+		settings.remove(Settings::NewRowCheckPolicyKey);
 }

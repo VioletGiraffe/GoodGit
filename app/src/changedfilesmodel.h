@@ -51,6 +51,7 @@ public:
 
 	// Rebuilds the rows. Check state is carried over by path; new rows follow the NewRowCheckPolicy setting.
 	// A row that was not committable counts as new: its unchecked state was the block, not a choice.
+	// An Added row is checked whatever those say, unless it was already Added at the previous refresh.
 	// In merge mode all tracked rows are forced on and not user-changeable.
 	void setEntries(const std::vector<FileEntry>& entries, bool mergeMode);
 

@@ -3,7 +3,9 @@
 Triggered by startup, F5, and the app's own state-changing actions; **never** by window activation, and
 there is no file watcher. The list may be stale by design: **the checked rows are the commit pathspec,
 verbatim**, and a stale list produces ordinary VCS errors through the normal failure path, not silent
-re-scans. Check state survives a refresh by path; the state a newly listed row starts with is a setting.
+re-scans. Check state survives a refresh by path; the state a newly listed row starts with is a setting. A
+row that has just become Added is the exception: adding a file is a decision to commit it, so the row is
+checked whatever it was before and whatever the setting says.
 
 A confirmation dialog spins a nested event loop that a refresh can complete inside, and an operation or a
 commit can land outside the app - from a second instance, or from a shell - with no refresh seeing it. Every
