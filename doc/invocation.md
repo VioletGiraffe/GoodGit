@@ -14,6 +14,11 @@ fails instead of hanging on an invisible prompt; Git Credential Manager's own GU
 --pathspec-file-nul` via stdin), never on argv, which Windows caps near 32 KB. The commit message goes
 through a temp file, never `-m`: it is the one argument with no bound on its length.
 
+Every child is started detached, with no console of its own: Windows would otherwise give each one a console
+and a `conhost.exe` to go with it, which nothing here reads or writes (see `doc/perf.md`). A helper that wants
+a terminal then fails rather than hanging on a console nobody can type into, which is what a hidden console
+amounts to.
+
 No git version is checked up front. A git older than 2.25 fails every command passing `--pathspec-from-file`
 (commit, stage, un-stage, discard) with a usage error, which `gitprocess` prefixes with the minimum version;
 everything else keeps working.

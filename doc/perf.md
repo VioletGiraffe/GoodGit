@@ -8,10 +8,11 @@ repositories to measure.
 |---|---|
 | `git_throughput.ps1` | how many git processes in flight are worth launching: wall time of a batch of read-only queries at a ladder of concurrency caps. `MaxConcurrentProcesses` in `vcsprocess` is chosen with it |
 | `git_command_cost.ps1` | what a single git command costs, split into process startup and the work itself, over a ladder from `--version` to `status`. Comparing two builds shows a regression between git versions |
-| `cpu_topology.ps1` | which logical processors are the slow cores, for reading the results on a hybrid CPU and for building the affinity masks the other two take |
+| `conhost_cost.ps1` | what a child process's console costs: `CREATE_NO_WINDOW`, which Qt asks for, against `DETACHED_PROCESS`. Why `vcsprocess` starts every child detached |
+| `cpu_topology.ps1` | which logical processors are the slow cores, for reading the results on a hybrid CPU and for building the affinity masks the others take |
 
-Both harnesses launch git the way the app does - `CreateProcess` with no window, output drained, the
-read-only invariants on the command line - so process startup counts as it does in the app.
+The harnesses launch git the way the app does - `CreateProcess`, output redirected, the read-only invariants
+on the command line - so process startup counts as it does in the app.
 
 ## Reading the results
 
@@ -39,6 +40,11 @@ On a 16-thread desktop CPU with repositories on NVMe SSDs, against git 2.55 and 
   stub that sets `MSYSTEM`, `HOME` and `PATH` before running `mingw64\bin\git.exe`. Going around it means
   taking over that environment: without `usr\bin` on `PATH`, LFS filters, `ssh` and hooks fail, and a
   read-only query can spawn a filter too. Rejected for that reason, not for the measurement.
+- **A child's console costs a `conhost.exe` process**, and Qt's `CREATE_NO_WINDOW` hides that console instead
+  of doing without one. Starting the child detached saves ~30% of a query's latency where the child is git
+  itself, and nothing where it is the Git for Windows wrapper: the wrapper's own child, a console program
+  started by a process that has no console, then allocates one instead. One process per query is saved either
+  way.
 - **Per-command cost dominates small repositories.** `git --version`, which touches nothing, takes ~20 ms of
   the ~30 ms a `status` of a small repository costs.
 - **git 2.55 costs ~6 ms more per command than 2.37**, independently of the working directory, reported
