@@ -16,6 +16,8 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
+#include <expected>
+#include <optional>
 
 namespace {
 
@@ -77,6 +79,53 @@ public:
 	[[nodiscard]] std::pair<std::vector<FileEntry>, RepoState> refreshed() const
 	{
 		GitRepository repository{ root() };
+		refresh(repository);
+
+		std::vector<FileEntry> files = repository.files();
+		std::ranges::sort(files, {}, &FileEntry::path);
+		return { std::move(files), repository.state() };
+	}
+
+	// One commit made the way the window makes it, over a refreshed repository: the commit's diff baseline
+	// comes from the state
+	void commitThroughBackend(const QString& message, const QStringList& pathspec) const
+	{
+		// The backend runs git without the -c arguments the fixture's own commands carry
+		git({ QStringLiteral("config"), QStringLiteral("user.name"), QStringLiteral("GoodGit tests") });
+		git({ QStringLiteral("config"), QStringLiteral("user.email"), QStringLiteral("tests@goodgit.invalid") });
+
+		GitRepository repository{ root() };
+		refresh(repository);
+
+		QEventLoop loop;
+		QTimer::singleShot(60'000, &loop, &QEventLoop::quit);
+		std::optional<QString> failure;
+		repository.commit(message, pathspec, {}, [&](std::expected<void, QString> result) {
+			failure = result ? QString{} : result.error();
+			loop.quit();
+		});
+		loop.exec();
+
+		REQUIRE(failure.has_value()); // the timer fired instead of the commit answering
+		INFO(failure->toStdString());
+		REQUIRE(failure->isEmpty());
+	}
+
+	// What the index holds beyond HEAD, as `<letter>\t<path>` lines in path order
+	[[nodiscard]] QString stagedAgainstHead() const
+	{
+		return gitOutput({ QStringLiteral("diff"), QStringLiteral("--cached"), QStringLiteral("--name-status"), QStringLiteral("HEAD") });
+	}
+
+	[[nodiscard]] QString stagedContent(const QString& relativePath) const
+	{
+		return gitOutput({ QStringLiteral("show"), QStringLiteral(":") + relativePath });
+	}
+
+private:
+	// Runs one refresh to completion, so the caller can go on using the same repository object
+	static void refresh(GitRepository& repository)
+	{
 		QEventLoop loop;
 		QObject::connect(&repository, &Repository::refreshed, &loop, &QEventLoop::quit);
 		QTimer::singleShot(60'000, &loop, &QEventLoop::quit);
@@ -85,13 +134,16 @@ public:
 		REQUIRE_FALSE(repository.refreshing());
 		INFO(repository.state().readFailure.toStdString());
 		REQUIRE(repository.state().known());
-
-		std::vector<FileEntry> files = repository.files();
-		std::ranges::sort(files, {}, &FileEntry::path);
-		return { std::move(files), repository.state() };
 	}
 
-private:
+	[[nodiscard]] QString gitOutput(const QStringList& arguments) const
+	{
+		const auto [exitCode, output] = runGit(arguments, {});
+		INFO(output.toStdString());
+		REQUIRE(exitCode == 0);
+		return output;
+	}
+
 	[[nodiscard]] std::pair<int, QString> runGit(const QStringList& arguments, const QString& relativeDirectory) const
 	{
 		QProcess process;
@@ -218,4 +270,35 @@ TEST_CASE("Both sides of a merge conflict are conflicted rows, including a path 
 	REQUIRE(pathsOf(files) == QStringList{ QStringLiteral("both.txt"), QStringLiteral("deleted-there.txt") });
 	CHECK(files[0].type == ChangeType::Conflicted);
 	CHECK(files[1].type == ChangeType::Conflicted);
+}
+
+TEST_CASE("A commit puts back the staging it had to clear: an added file, a partly staged blob, a deletion", "[git]")
+{
+	const ScratchRepository scratch;
+	scratch.write(QStringLiteral("committed.txt"), "one\n");
+	scratch.write(QStringLiteral("partly.txt"), "first\n");
+	scratch.write(QStringLiteral("doomed.txt"), "doomed\n");
+	scratch.commitAll(QStringLiteral("initial"));
+
+	// Staged by something else, and none of it in the commit below: a new file, one version of a file the
+	// working tree has moved on from (what `add -p` leaves behind), and a deletion
+	scratch.write(QStringLiteral("added.txt"), "brand new\n");
+	scratch.git({ QStringLiteral("add"), QStringLiteral("added.txt") });
+	scratch.write(QStringLiteral("partly.txt"), "second\n");
+	scratch.git({ QStringLiteral("add"), QStringLiteral("partly.txt") });
+	scratch.write(QStringLiteral("partly.txt"), "third\n");
+	scratch.git({ QStringLiteral("rm"), QStringLiteral("-q"), QStringLiteral("doomed.txt") });
+
+	scratch.write(QStringLiteral("committed.txt"), "two\n");
+	scratch.commitThroughBackend(QStringLiteral("only committed.txt"), { QStringLiteral("committed.txt") });
+
+	CHECK(scratch.stagedAgainstHead() == QStringLiteral("A\tadded.txt\nD\tdoomed.txt\nM\tpartly.txt\n"));
+	CHECK(scratch.stagedContent(QStringLiteral("partly.txt")) == QStringLiteral("second\n"));
+
+	const auto [files, state] = scratch.refreshed();
+	REQUIRE(pathsOf(files) == QStringList{ QStringLiteral("added.txt"), QStringLiteral("doomed.txt"), QStringLiteral("partly.txt") });
+	CHECK(files[0].type == ChangeType::Added);
+	CHECK(files[1].type == ChangeType::Deleted);
+	CHECK(files[2].type == ChangeType::Modified);
+	CHECK(state.headSubject == QStringLiteral("only committed.txt"));
 }

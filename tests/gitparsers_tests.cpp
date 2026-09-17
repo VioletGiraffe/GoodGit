@@ -113,19 +113,29 @@ TEST_CASE("Raw rows mark gitlinks as submodules, with the commit on the side tha
 	CHECK(entries[3].submoduleSha.isEmpty());
 }
 
-TEST_CASE("Staged raw rows carry both modes and the index object", "[gitparsers]")
+TEST_CASE("Staged raw rows carry both modes, the index object and the status letter", "[gitparsers]")
 {
 	const std::vector<Git::StagedEntry> entries = Git::parseStagedRawZ(nulTerminated({
 		":100644 100755 3333333333333333333333333333333333333333 4444444444444444444444444444444444444444 M", "script.sh",
 		":000000 100644 0000000000000000000000000000000000000000 5555555555555555555555555555555555555555 A", "new.txt",
+		":100644 000000 6666666666666666666666666666666666666666 0000000000000000000000000000000000000000 D", "gone.txt",
+		":100644 000000 7777777777777777777777777777777777777777 0000000000000000000000000000000000000000 U", "conflicted.txt",
 	}));
 
-	REQUIRE(entries.size() == 2);
+	REQUIRE(entries.size() == 4);
 	CHECK(entries[0].path == QStringLiteral("script.sh"));
 	CHECK(entries[0].treeMode == "100644");
 	CHECK(entries[0].indexMode == "100755");
 	CHECK(entries[0].indexSha == "4444444444444444444444444444444444444444");
+	CHECK(entries[0].status == "M");
 	CHECK(entries[1].treeMode == "000000");
+	CHECK(entries[1].status == "A");
+
+	// The letter is all that tells an unmerged path from a deletion: the modes and the object are the same
+	CHECK(entries[3].treeMode == entries[2].treeMode);
+	CHECK(entries[3].indexMode == entries[2].indexMode);
+	CHECK(entries[2].status == "D");
+	CHECK(entries[3].status == "U");
 }
 
 TEST_CASE("Line counts: a rename is keyed by its new path, a binary file has none", "[gitparsers]")

@@ -19,9 +19,9 @@ Deliberate consequences:
 - Untracked files are added as part of the commit, and the add is rolled back if the commit fails, so the
   Untracked/Added states shown never lie. Mercurial needs no rollback: `commit -A` adds inside the commit's
   own transaction.
-- What another tool staged outside the checked paths does not survive a commit. Only a file mode is
-  restored, since nothing else is lost: every other entry's content is still on disk. What is lost is the
-  staging itself, including any hunk-level selection made with `git add -p`.
+- What another tool staged outside the checked paths is cleared for the commit and written back after it,
+  object and mode, so a newly added file stays Added and a hunk-level selection made with `git add -p`
+  survives. An unmerged path is the one entry not written back, and committing is refused while one exists.
 - Discarding is the same delta run backwards (`git restore --source=HEAD --staged --worktree`). Untracked
   files are outside it (git aborts the whole command on an unknown path), and an added file is only
   un-added, since restore would delete it.

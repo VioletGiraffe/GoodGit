@@ -63,6 +63,8 @@ struct StagedEntry
 	QByteArray treeMode;
 	QByteArray indexMode;
 	QByteArray indexSha;
+	// The status letter. "U" is an unmerged path, whose modes and object are those of a staged deletion
+	QByteArray status;
 };
 
 // Input: `diff --cached --raw --no-abbrev --no-renames -z <tree>` output.

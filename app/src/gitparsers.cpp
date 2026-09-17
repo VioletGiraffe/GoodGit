@@ -215,7 +215,7 @@ std::vector<StagedEntry> parseStagedRawZ(const QByteArray& diffOutput)
 			break;
 
 		entries.push_back({ .path = pathFromOutput(tokens[i + 1]), .treeMode = fields[0],
-			.indexMode = fields[1], .indexSha = fields[3] });
+			.indexMode = fields[1], .indexSha = fields[3], .status = fields[4] });
 	}
 	return entries;
 }

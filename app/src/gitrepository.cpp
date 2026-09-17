@@ -41,14 +41,15 @@ void rollBackAddThenReport(const QString& workDir, const QObject* context, const
 // `resetPaths`: staged entries the commit must not carry.
 // `addPaths`: `pathspec` minus the paths the index already records as deleted - `git add` fails on a path
 // that is in neither the working tree nor the index.
-// `savedModes`: `update-index --index-info` records for cleared entries whose mode re-adding from the working
-// tree would lose (with core.filemode off, only the index records a mode).
-// Entries only added or deleted in the index are not saved: their content is on disk either way.
+// `savedEntries`: `update-index --index-info` records that put the cleared entries back as they were, so
+// staging made outside this commit survives it - a new file's entry, the blob `add -p` staged part of, and a
+// mode re-adding from the working tree would lose (with core.filemode off, only the index records a mode).
+// A record of mode 000000 removes the entry, putting a staged deletion back.
 struct CommitIndexPlan
 {
 	QStringList resetPaths;
 	QStringList addPaths;
-	QByteArray savedModes;
+	QByteArray savedEntries;
 };
 
 CommitIndexPlan plannedIndexChange(const std::vector<Git::StagedEntry>& staged, const QStringList& pathspec)
@@ -68,8 +69,9 @@ CommitIndexPlan plannedIndexChange(const std::vector<Git::StagedEntry>& staged, 
 			continue;
 
 		plan.resetPaths << entry.path;
-		if (entry.treeMode != entry.indexMode && entry.treeMode != "000000" && entry.indexMode != "000000")
-			plan.savedModes += entry.indexMode + ' ' + entry.indexSha + '\t' + Git::pathBytes(entry.path) + '\0';
+		// An unmerged path reads here as a staged deletion, and putting it back as one would drop the conflict
+		if (entry.status != "U")
+			plan.savedEntries += entry.indexMode + ' ' + entry.indexSha + '\t' + Git::pathBytes(entry.path) + '\0';
 	}
 
 	plan.addPaths.removeIf([&stagedDeletions](const QString& path) { return stagedDeletions.contains(path); });
@@ -722,8 +724,8 @@ void GitRepository::commit(const QString& message, const QStringList& pathspec, 
 		const CommitIndexPlan plan = plannedIndexChange(Git::parseStagedRawZ(stagedResult.out), pathspec);
 
 		// Every step from the reset on ends here, with whichever result ended the commit
-		const auto restoreThenReport = [this, untrackedPaths, savedModes = plan.savedModes, report](const ProcessResult& result) {
-			if (savedModes.isEmpty())
+		const auto restoreThenReport = [this, untrackedPaths, savedEntries = plan.savedEntries, report](const ProcessResult& result) {
+			if (savedEntries.isEmpty())
 			{
 				rollBackAddThenReport(path(), this, untrackedPaths, result, report);
 				return;
@@ -731,7 +733,7 @@ void GitRepository::commit(const QString& message, const QStringList& pathspec, 
 			Git::run(path(), { QStringLiteral("update-index"), QStringLiteral("-z"), QStringLiteral("--index-info") }, this,
 				[this, untrackedPaths, result, report](const ProcessResult&) {
 					rollBackAddThenReport(path(), this, untrackedPaths, result, report);
-				}, savedModes);
+				}, savedEntries);
 		};
 
 		const auto runCommit = [this, messageFile, restoreThenReport] {
