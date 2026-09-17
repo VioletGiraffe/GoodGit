@@ -72,17 +72,21 @@ QString outputTooLargeText(qint64 limit)
 
 namespace Vcs {
 
+namespace {
+
 // One thread starts every process, so throughput flattens near the logical processor count: measured flat
 // from 16 up on a 16-thread machine, for batches of 173 git queries (scripts/perf/git_throughput.ps1).
 // Not derived from the processor count: a machine-dependent cap would make an ordering bug reproduce on one
 // machine and not another.
-static constexpr int MaxConcurrentProcesses = 16;
+constexpr int MaxConcurrentProcesses = 16;
 
-// Windows attaches a console to every child, and each console is a conhost.exe process of its own: ~12 ms of
-// a query's latency, for a console no channel of ours goes through (scripts/perf/conhost_cost.ps1).
-// Qt asks for CREATE_NO_WINDOW, which hides that console rather than doing without one.
-// A detached child cannot read a terminal: with GIT_TERMINAL_PROMPT=0 and every channel redirected, a
-// helper that wants one fails where it would otherwise have hung on a console nobody can type into.
+// Windows attaches a console to every child, and each console costs a conhost.exe process: one more process
+// per query, for a console none of our channels go through - they are all redirected. Qt asks for
+// CREATE_NO_WINDOW, which hides that console rather than doing without one.
+// Saves ~30% of a query's latency where the child is git itself, and nothing where it is the Git for Windows
+// wrapper, whose own child allocates the console instead (scripts/perf/conhost_cost.ps1).
+// A detached child cannot read a terminal: with every channel redirected and GIT_TERMINAL_PROMPT=0, a helper
+// that wants one fails instead of hanging on a console nobody can type into.
 void suppressConsoleAllocation([[maybe_unused]] QProcess& process)
 {
 #ifdef Q_OS_WIN
@@ -92,6 +96,8 @@ void suppressConsoleAllocation([[maybe_unused]] QProcess& process)
 	});
 #endif
 }
+
+} // namespace
 
 // The process transport: one QProcess per job, capped by JobQueue
 class ProcessJob final : public Job
