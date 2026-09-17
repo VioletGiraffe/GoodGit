@@ -78,6 +78,21 @@ namespace Vcs {
 // machine and not another.
 static constexpr int MaxConcurrentProcesses = 16;
 
+// Windows attaches a console to every child, and each console is a conhost.exe process of its own: ~12 ms of
+// a query's latency, for a console no channel of ours goes through (scripts/perf/conhost_cost.ps1).
+// Qt asks for CREATE_NO_WINDOW, which hides that console rather than doing without one.
+// A detached child cannot read a terminal: with GIT_TERMINAL_PROMPT=0 and every channel redirected, a
+// helper that wants one fails where it would otherwise have hung on a console nobody can type into.
+void suppressConsoleAllocation([[maybe_unused]] QProcess& process)
+{
+#ifdef Q_OS_WIN
+	process.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments* args) {
+		constexpr unsigned long CreateNoWindow = 0x08000000, DetachedProcess = 0x00000008;
+		args->flags = (args->flags & ~CreateNoWindow) | DetachedProcess;
+	});
+#endif
+}
+
 // The process transport: one QProcess per job, capped by JobQueue
 class ProcessJob final : public Job
 {
@@ -209,6 +224,7 @@ void Job::collectError(const QByteArray& chunk)
 void ProcessJob::start()
 {
 	_process = new QProcess(this);
+	suppressConsoleAllocation(*_process);
 	_process->setWorkingDirectory(_workDir);
 	_process->setProcessEnvironment(_tool.environment);
 
@@ -255,6 +271,7 @@ void ProcessJob::start()
 ProcessResult runSync(const Tool& tool, const QString& workDir, QStringList args, int timeoutMs)
 {
 	QProcess process;
+	suppressConsoleAllocation(process);
 	process.setWorkingDirectory(workDir);
 	process.setProcessEnvironment(tool.environment);
 	process.start(tool.executable, args);
