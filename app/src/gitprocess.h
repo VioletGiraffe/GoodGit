@@ -3,8 +3,6 @@
 #include "queryround.h"
 #include "vcsprocess.h"
 
-#include <optional>
-
 // Every git invocation goes through here. The job contract is Vcs::run's.
 // Invariants applied to every call (doc/ARCHITECTURE.md): `-c core.quotepath=false`, GIT_TERMINAL_PROMPT=0,
 // and `--no-optional-locks` on read-only queries.
@@ -25,10 +23,5 @@ Vcs::Job* run(const QString& workDir, QStringList args, const QObject* context, 
 // before the next line: the repository root at startup, before the event loop exists, and the plan a
 // destructive action shows the user before it runs.
 ProcessResult runSync(const QString& workDir, QStringList args, int timeoutMs = 10000);
-
-// The message for a git older than these invocations need, otherwise nullopt.
-// Also nullopt when no version can be read: only a version known to be too old is reported.
-// `workDir`: any existing directory - `--version` needs no repository.
-[[nodiscard]] std::optional<QString> versionProblem(const QString& workDir);
 
 } // namespace Git

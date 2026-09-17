@@ -3,7 +3,6 @@
 
 DISABLE_COMPILER_WARNINGS
 #include <QSettings>
-#include <QVersionNumber>
 RESTORE_COMPILER_WARNINGS
 
 namespace {
@@ -24,6 +23,25 @@ Vcs::Tool gitTool()
 	return { Git::executablePath(), QStringLiteral("git"), std::move(environment) };
 }
 
+// For a command passing --pathspec-from-file, which arrived in git 2.25.
+// A usage error gets the likely cause prepended: a supported git never rejects the app's fixed argument lists.
+// Prepended, not appended: git follows the error with its usage listing.
+Vcs::Callback explainingUnsupportedVersion(Vcs::Callback callback)
+{
+	return [callback = std::move(callback)](const ProcessResult& result) {
+		constexpr int UsageErrorExitCode = 129;
+		if (result.outcome != ProcessOutcome::Exited || result.exitCode != UsageErrorExitCode)
+		{
+			callback(result);
+			return;
+		}
+
+		ProcessResult explained = result;
+		explained.err.prepend(QObject::tr("This git is probably too old: GoodGit requires git 2.25 or newer.").toUtf8() + "\n\n");
+		callback(explained);
+	};
+}
+
 } // namespace
 
 namespace Git {
@@ -39,6 +57,8 @@ QString executablePath()
 Vcs::Job* run(const QString& workDir, QStringList args, const QObject* context, Vcs::Callback callback,
 	QByteArray stdinData, bool readOnlyQuery)
 {
+	if (args.contains(QStringLiteral("--pathspec-from-file=-")))
+		callback = explainingUnsupportedVersion(std::move(callback));
 	applyInvariants(args, readOnlyQuery);
 	return Vcs::run(gitTool(), workDir, std::move(args), context, std::move(callback), std::move(stdinData));
 }
@@ -54,22 +74,6 @@ QueryRound::Launcher readOnlyQueries(const QObject* context)
 	return [context](const QString& workDir, QStringList args, Vcs::Callback onResult) {
 		run(workDir, std::move(args), context, std::move(onResult), {}, /*readOnlyQuery=*/true);
 	};
-}
-
-std::optional<QString> versionProblem(const QString& workDir)
-{
-	// --pathspec-from-file and --pathspec-file-nul, which staging, un-staging and discarding all pass, arrived in git 2.25
-	const QVersionNumber minimum{ 2, 25 };
-
-	const ProcessResult result = runSync(workDir, { QStringLiteral("--version") });
-	// "git version 2.37.1.windows.1": fromString reads the leading numbers and ignores a vendor's extra fields
-	const QStringList fields = QString::fromUtf8(result.out).trimmed().split(QLatin1Char(' '), Qt::SkipEmptyParts);
-	const QVersionNumber version = fields.size() >= 3 ? QVersionNumber::fromString(fields[2]) : QVersionNumber{};
-	if (version.isNull() || version >= minimum)
-		return {};
-
-	return QObject::tr("This git is version %1, but %2 or newer is required.\n\nStaging and discarding changes pass the file list to git in a form older versions reject.")
-		.arg(version.toString(), minimum.toString());
 }
 
 } // namespace Git

@@ -14,6 +14,10 @@ fails instead of hanging on an invisible prompt; Git Credential Manager's own GU
 --pathspec-file-nul` via stdin), never on argv, which Windows caps near 32 KB. The commit message goes
 through a temp file, never `-m`: it is the one argument with no bound on its length.
 
+No git version is checked up front. A git older than 2.25 fails every command passing `--pathspec-from-file`
+(commit, stage, un-stage, discard) with a usage error, which `gitprocess` prefixes with the minimum version;
+everything else keeps working.
+
 `hgprocess` applies `HGPLAIN=1`, `--config ui.interactive=False` and `--config diff.nobinary=True`, and
 deliberately does **not** disable the user's extensions: a repository may need one (largefiles, lfs) to be
 readable at all. `nobinary` is what makes hg's `--git` diffs safe to ask for: without it a binary file

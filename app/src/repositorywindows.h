@@ -17,8 +17,8 @@ struct RepositoryLocation;
 
 [[nodiscard]] CommitWindow* repositoryWindow(const QString& root);
 
-// The window already open on it, raised, or a new one. Records the open.
-CommitWindow* openRepositoryWindow(const RepositoryLocation& location, QWidget* dialogParent = nullptr);
+// The window already open on it, raised, or a new one; never null. Records the open.
+CommitWindow* openRepositoryWindow(const RepositoryLocation& location);
 
 // Opens the repository containing `path`, whichever kind claims it. Reports a path that none does.
 CommitWindow* openRepositoryWindowAt(const QString& path, QWidget* dialogParent);

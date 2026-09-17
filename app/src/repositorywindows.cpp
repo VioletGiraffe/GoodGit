@@ -1,6 +1,5 @@
 #include "repositorywindows.h"
 #include "commitwindow.h"
-#include "gitprocess.h"
 #include "recentrepositories.h"
 #include "repositoryfactory.h"
 #include "theme.h"
@@ -146,21 +145,10 @@ CommitWindow* repositoryWindow(const QString& root)
 	return nullptr;
 }
 
-CommitWindow* openRepositoryWindow(const RepositoryLocation& location, QWidget* dialogParent)
+CommitWindow* openRepositoryWindow(const RepositoryLocation& location)
 {
-	// Two windows on one repository would commit the same changes through both.
-	// Looked up before the version probe: an already-open repository passed it when it opened.
+	// Two windows on one repository would commit the same changes through both
 	CommitWindow* window = repositoryWindow(location.root);
-
-	if (!window && location.kind == VcsKind::Git)
-	{
-		if (const std::optional<QString> problem = Git::versionProblem(location.root))
-		{
-			MessageDialog::notice(dialogParent, QApplication::applicationName(), *problem, {}, QMessageBox::Critical);
-			return nullptr;
-		}
-	}
-
 	RecentRepositories::recordOpen(location);
 
 	if (window)
@@ -179,7 +167,7 @@ CommitWindow* openRepositoryWindowAt(const QString& path, QWidget* dialogParent)
 {
 	const std::expected<RepositoryLocation, std::vector<ProcessResult>> location = findRepository(path);
 	if (location)
-		return openRepositoryWindow(*location, dialogParent);
+		return openRepositoryWindow(*location);
 
 	MessageDialog::notice(dialogParent, QApplication::applicationName(), noRepositoryMessage(path, location.error()), {}, QMessageBox::Critical);
 	return nullptr;
@@ -200,14 +188,14 @@ CommitWindow* openSubmoduleRepositoryWindow(const QString& root, QWidget* dialog
 				.arg(QDir::toNativeSeparators(root)), {});
 		return nullptr;
 	}
-	return openRepositoryWindow(*location, dialogParent);
+	return openRepositoryWindow(*location);
 }
 
 CommitWindow* openRecentRepository(const QString& root, QWidget* dialogParent)
 {
 	const std::expected<RepositoryLocation, std::vector<ProcessResult>> location = findRepository(root);
 	if (location)
-		return openRepositoryWindow(*location, dialogParent);
+		return openRepositoryWindow(*location);
 
 	// Keep is the default: an unmounted drive looks exactly like a deleted repository
 	const std::optional<int> answer = MessageDialog::question(dialogParent, QApplication::applicationName(),

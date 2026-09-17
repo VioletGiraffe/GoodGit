@@ -85,7 +85,10 @@ int main(int argc, char* argv[])
 	// The current directory is only the first guess: started from a shortcut it is wherever that pointed,
 	// and the last repository worked on is the better guess then
 	if (const std::expected<RepositoryLocation, std::vector<ProcessResult>> location = findRepository(QDir::currentPath()))
-		return openRepositoryWindow(*location) ? runApplication() : 1;
+	{
+		openRepositoryWindow(*location);
+		return runApplication();
+	}
 
 	const std::vector<RecentRepository> recent = RecentRepositories::list();
 	// The welcome screen also stands in where the repository to reopen is gone: a deleted folder, a drive not mounted yet

@@ -1419,8 +1419,6 @@ void CommitWindow::abortOperation()
 void CommitWindow::openNestedRepositoryWindow(const FileEntry& entry)
 {
 	CommitWindow* window = openRepositoryWindow(_repo->nestedRepositoryLocation(entry.path));
-	if (!window)
-		return;
 	// The window may already be open, and so already connected
 	connect(window, &CommitWindow::historyChanged, this, &CommitWindow::refreshRepository, Qt::UniqueConnection);
 }

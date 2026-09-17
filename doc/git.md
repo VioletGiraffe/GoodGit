@@ -11,8 +11,7 @@ Verified against git 2.37.1.windows.1. Version floors are named where one is kno
 ## Version floors
 
 `--pathspec-from-file=-` and `--pathspec-file-nul` arrived in 2.25 (January 2020), and set the floor the
-README states. A vendor appends its own fields to the reported version - `git version 2.37.1.windows.1` -
-so only the leading numbers are the version.
+README states. An older git rejects the option with a usage error before doing anything: exit code 129, in any locale.
 
 ## Paths
 
