@@ -26,6 +26,8 @@ RESTORE_COMPILER_WARNINGS
 #include <algorithm>
 #include <optional>
 
+#include "startuphack.h" // THROWAWAY
+
 namespace {
 
 // "Not a repository" if at least one tool answered, "could not check" if none could be run
@@ -168,6 +170,7 @@ CommitWindow* openRepositoryWindow(const RepositoryLocation& location, QWidget* 
 	else
 	{
 		window = new CommitWindow{ location };
+		StartupHack::cloakUntilFirstPaint(window); // THROWAWAY
 		window->show();
 	}
 

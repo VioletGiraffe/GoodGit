@@ -2,12 +2,14 @@
 #ifdef Q_OS_MACOS
 #include "commandlinetool_mac.h"
 #endif
+#include "init_logging.h"
 #include "settingspages.h"
 #include "updatecheck.h"
 #include "version.h"
 
 #include "appdialogs/caboutdialog.h"
 #include "appdialogs/csettingsdialog.h"
+#include "appdialogs/reportbugdialog.h"
 #ifdef _DEBUG
 #include "ui/widget-gallery/cwidgetgallery.h"
 #endif
@@ -16,6 +18,8 @@ DISABLE_COMPILER_WARNINGS
 #include <QApplication>
 #include <QMenu>
 #include <QMenuBar>
+#include <QString>
+#include <QUrl>
 RESTORE_COMPILER_WARNINGS
 
 namespace {
@@ -67,6 +71,9 @@ void addHelpMenu(QMenuBar& menuBar, QWidget* dialogParent)
 {
 	QMenu* menu = menuBar.addMenu(QObject::tr("&Help"));
 	menu->addAction(QObject::tr("Check for &Updates..."), dialogParent, [dialogParent] { checkForUpdatesInteractively(dialogParent); });
+	menu->addAction(QObject::tr("Report a &Bug..."), dialogParent, [dialogParent] {
+		ReportBugDialog::show(dialogParent, applicationLog(), QUrl{ QStringLiteral("https://github.com/" GG_GITHUB_REPOSITORY "/issues") });
+	});
 #ifdef _DEBUG
 	menu->addSeparator();
 	// Not tr(): debug-only functionality is never translated

@@ -1,4 +1,5 @@
 #include "hgprocess.h"
+#include "init_logging.h"
 #include "recentrepositories.h"
 #include "repositoryfactory.h"
 #include "repositorywindows.h"
@@ -55,6 +56,7 @@ extern "C" __declspec(dllexport) int ggMain(int argc, char* argv[], const wchar_
 int main(int argc, char* argv[])
 #endif
 {
+	const ScopedApplicationLog applicationLogScope; // first: QApplication logs from its constructor to its destructor
 #ifdef Q_OS_WIN
 	// The Qt plugins deploy beside this dll. The default library paths name the exe's directory and the Qt prefix.
 	QApplication::addLibraryPath(QString::fromWCharArray(libraryDirectory));

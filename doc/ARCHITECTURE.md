@@ -46,7 +46,7 @@ Dependencies point one way, top to bottom:
   `textdiff`, `movedblocks`, `commitgraph`.
 
 Nothing above `Repository` names a backend; nothing below it knows which window shows an answer. Beside the
-stack: `settings`, `theme` and `stylesheet`, `externalapps`, `updatecheck`, `commandlinetool_mac`, `smoketest`, `version`.
+stack: `settings`, `theme` and `stylesheet`, `externalapps`, `init_logging`, `updatecheck`, `commandlinetool_mac`, `smoketest`, `version`.
 
 ## Components (app/src/)
 
@@ -84,7 +84,8 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `updatecheck`, `com
 | `settings` | Every storage key with its default. Values are read and written where consumed, through `QSettings` in the platform's native store under the identity GoodGit/GoodGit; qtutils `CSettingsNotifier` makes open windows re-apply fonts and cached layout after the settings dialog stores them. Window geometry is qtutils `CPersistenceEnabler`, one key per window kind shared by every repository, as the splitter positions are. Commit message drafts are the one per-repository setting: a group named by a hash of the root path |
 | `settingspages` | The Preferences pages (Main, Theme & Font) for qtutils `CSettingsDialog`. Theme choices go through `CThemeController` |
 | `externalapps` | Programs outside the application. The platform file manager: opening a directory in it, showing a file selected in it, and the action texts naming it as each platform does. The configured text editor: its command line with `%path%` substituted, reporting one that will not start |
-| `main` | Startup: on macOS the package managers' directories on PATH (see `invocation.md`), the application identity, the theme, the automatic update check, then the way in described in `repositories.md`. Ends the hg command servers once the event loop returns |
+| `init_logging` | The in-memory application log, qtutils `CLoggerInMemory`: fed by the Qt message handler and by failed assertions, shown by Help > Report a Bug. Nothing is written to disk |
+| `main` | Startup: the application log, on macOS the package managers' directories on PATH (see `invocation.md`), the application identity, the theme, the automatic update check, then the way in described in `repositories.md`. Ends the hg command servers once the event loop returns |
 | `appmenus` | The menus every window shares - File, Edit, Repository, Help: their actions need no repository. A commit window appends its own items to the Repository menu |
 | `welcomewindow` | The window shown with nothing to open: what the app needs, a folder chooser, the recent list. The one window without a repository |
 | `fileviewerwindow` | Read-only text in a window of its own, on qtutils `CLightningFastViewerWidget` with a `CFindBar` under it: one file as of one commit, decoded where the bytes are text and a hex dump where they are not; or a change's whole diff, scrolled to the file the pane shows |
@@ -92,7 +93,7 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `updatecheck`, `com
 | `commandlinetool_mac` | macOS only: the `/usr/local/bin/gg` link, see `doc/BUILD.md` |
 | `smoketest` | `gg --smoke-test <repository>`: the launch mode CI runs on the deployed build, see `doc/BUILD.md` |
 | `stylesheet` | The application QSS with `@token@` placeholders filled from a `Theme`. Detail header of `theme.cpp` |
-| `version` | `GG_VERSION`, the one place the version is written; `app.pro` and the installer read it from here, see `doc/BUILD.md` |
+| `version` | `GG_VERSION`, the one place the version is written; `app.pro` and the installer read it from here, see `doc/BUILD.md`. `GG_GITHUB_REPOSITORY`: home of the releases and the issue tracker |
 
 ## Window kinds
 

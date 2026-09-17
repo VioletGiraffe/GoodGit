@@ -15,11 +15,6 @@ namespace {
 
 constexpr int64_t SecondsPerDay = 24 * 60 * 60;
 
-QString repositoryName()
-{
-	return QStringLiteral("VioletGiraffe/GoodGit");
-}
-
 void recordCheckTime()
 {
 	QSettings{}.setValue(Settings::LastUpdateCheckTimestampKey, QDateTime::currentDateTime());
@@ -30,7 +25,7 @@ void recordCheckTime()
 void checkForUpdatesInteractively(QWidget* parent)
 {
 	recordCheckTime();
-	CUpdaterDialog{ parent, repositoryName(), QStringLiteral(GG_VERSION) }.exec();
+	CUpdaterDialog{ parent, QStringLiteral(GG_GITHUB_REPOSITORY), QStringLiteral(GG_VERSION) }.exec();
 }
 
 void checkForUpdatesIfDue()
@@ -47,6 +42,6 @@ void checkForUpdatesIfDue()
 
 	recordCheckTime();
 	// Parentless: the check starts before any window is up
-	auto* dialog = new CUpdaterDialog{ nullptr, repositoryName(), QStringLiteral(GG_VERSION), true };
+	auto* dialog = new CUpdaterDialog{ nullptr, QStringLiteral(GG_GITHUB_REPOSITORY), QStringLiteral(GG_VERSION), true };
 	QObject::connect(dialog, &QDialog::finished, dialog, &QDialog::deleteLater);
 }
