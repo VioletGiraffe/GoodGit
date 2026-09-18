@@ -1,8 +1,11 @@
 #include "gitparsers.h"
 
 DISABLE_COMPILER_WARNINGS
+#include <QHash>
 #include <QList>
 RESTORE_COMPILER_WARNINGS
+
+#include <algorithm>
 
 namespace Git {
 
@@ -340,6 +343,115 @@ std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput)
 		commits.push_back(std::move(commit));
 	}
 	return commits;
+}
+
+namespace {
+
+// Calls `onRecord` with the US-separated fields of every line that has exactly `fieldCount` of them
+template <typename OnRecord>
+void forEachRefRecord(const QByteArray& forEachRefOutput, qsizetype fieldCount, OnRecord onRecord)
+{
+	for (const QByteArray& line : forEachRefOutput.split('\n'))
+	{
+		const QList<QByteArray> fields = line.split('\x1f');
+		if (fields.size() == fieldCount)
+			onRecord(fields);
+	}
+}
+
+QString withoutPrefix(const QByteArray& refName, QByteArrayView prefix)
+{
+	return QString::fromUtf8(refName.startsWith(prefix) ? refName.sliced(prefix.size()) : refName);
+}
+
+} // namespace
+
+std::vector<LocalBranchRef> parseLocalBranchRefs(const QByteArray& forEachRefOutput)
+{
+	std::vector<LocalBranchRef> branches;
+	forEachRefRecord(forEachRefOutput, 5, [&branches](const QList<QByteArray>& fields) {
+		// track: "ahead N, behind M", either half alone, "gone", or empty when in sync or without an upstream
+		const QByteArray& track = fields[3];
+		const int unpushed = track.startsWith("ahead ") ? track.sliced(6).split(',').front().toInt() : 0;
+		branches.push_back({ .name = withoutPrefix(fields[0], "refs/heads/"), .sha = QString::fromUtf8(fields[1]),
+			.upstream = QString::fromUtf8(fields[2]), .unpushedCommits = unpushed, .checkedOutElsewhere = fields[4] == "1" });
+	});
+	return branches;
+}
+
+std::vector<RemoteBranchRef> parseRemoteBranchRefs(const QByteArray& forEachRefOutput)
+{
+	std::vector<RemoteBranchRef> branches;
+	forEachRefRecord(forEachRefOutput, 3, [&branches](const QList<QByteArray>& fields) {
+		if (fields[2].isEmpty())
+			branches.push_back({ .ref = QString::fromUtf8(fields[0]), .name = withoutPrefix(fields[0], "refs/remotes/"),
+				.sha = QString::fromUtf8(fields[1]) });
+	});
+	return branches;
+}
+
+ReattachOptions reattachOptions(const QString& headSha, const std::vector<LocalBranchRef>& localBranches,
+	const std::vector<RemoteBranchRef>& remotesContainingHead)
+{
+	QHash<QString, QString> containingRemoteNames; // by full ref name
+	for (const RemoteBranchRef& remote : remotesContainingHead)
+		containingRemoteNames.insert(remote.ref, remote.name);
+
+	ReattachOptions options;
+	QHash<QString, QString> upstreamsByLocalName; // full ref names, empty for no upstream
+	for (const LocalBranchRef& local : localBranches)
+	{
+		upstreamsByLocalName.insert(local.name, local.upstream);
+		const auto upstream = containingRemoteNames.constFind(local.upstream);
+		if (local.sha != headSha && upstream == containingRemoteNames.cend())
+			continue; // unrelated to HEAD
+
+		if (local.checkedOutElsewhere)
+			options.obstacles.push_back({ .reason = ReattachObstacle::Reason::CheckedOutElsewhere, .branch = local.name });
+		else if (local.sha == headSha)
+			options.candidates.push_back({ .kind = ReattachCandidate::Kind::AtHead, .branch = local.name });
+		else if (local.unpushedCommits == 0)
+			options.candidates.push_back({ .kind = ReattachCandidate::Kind::Move, .branch = local.name, .upstream = *upstream, .branchSha = local.sha });
+		else
+			options.obstacles.push_back({ .reason = ReattachObstacle::Reason::Unpushed, .branch = local.name, .upstream = *upstream,
+				.unpushedCommits = local.unpushedCommits });
+	}
+
+	for (const RemoteBranchRef& remote : remotesContainingHead)
+	{
+		// The local name is the remote's own name for the branch: what follows the remote's name
+		const QString localName = remote.name.mid(remote.name.indexOf(QLatin1Char('/')) + 1);
+		const auto localUpstream = upstreamsByLocalName.constFind(localName);
+		if (localUpstream == upstreamsByLocalName.cend())
+			options.candidates.push_back({ .kind = ReattachCandidate::Kind::Create, .branch = localName, .upstream = remote.name });
+		else if (*localUpstream != remote.ref) // a branch tracking it was judged above
+			options.obstacles.push_back({ .reason = ReattachObstacle::Reason::NameTaken, .branch = localName, .upstream = remote.name });
+	}
+
+	std::ranges::stable_sort(options.candidates, {}, &ReattachCandidate::kind);
+	return options;
+}
+
+QStringList reattachCountArgs(const ReattachCandidate& candidate)
+{
+	// A Move counts from the sha it was decided on, which is what it will replace
+	const QString ref = candidate.kind == ReattachCandidate::Kind::Move ? candidate.branchSha
+		: QStringLiteral("refs/remotes/") + candidate.upstream;
+	return { QStringLiteral("rev-list"), QStringLiteral("--left-right"), QStringLiteral("--count"), ref + QStringLiteral("...HEAD") };
+}
+
+std::optional<std::pair<int, int>> parseLeftRightCount(const QByteArray& output)
+{
+	const QList<QByteArray> fields = output.trimmed().split('\t');
+	if (fields.size() != 2)
+		return {};
+
+	bool leftRead = false, rightRead = false;
+	const int left = fields[0].toInt(&leftRead);
+	const int right = fields[1].toInt(&rightRead);
+	if (!leftRead || !rightRead)
+		return {};
+	return std::pair{ left, right };
 }
 
 WorktreeDirtiness parsePorcelainDirtiness(const QByteArray& statusOutput)

@@ -154,9 +154,8 @@ reports "Cherry-pick currently in progress", and `cherry-pick --continue` still 
 ## Probing git locally
 
 A shell profile or an agent harness may already export the variable under test. `GIT_EDITOR=true` makes
-every editor-dependent command look as though it needs no editor, and `GIT_ALLOW_PROTOCOL` restricts which
-transports a remote may use. Clear them per command - `env -u GIT_EDITOR git ...` - before concluding
-anything about either.
+every editor-dependent command look as though it needs no editor. Clear it per command - `env -u GIT_EDITOR
+git ...` - before concluding anything about editor behavior.
 
 ## Corrections
 

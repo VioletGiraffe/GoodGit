@@ -10,6 +10,8 @@ RESTORE_COMPILER_WARNINGS
 
 #include <expected>
 #include <map>
+#include <optional>
+#include <utility>
 #include <vector>
 
 // Parsers for the git outputs the app consumes. UI- and process-free so they can be tested directly.
@@ -102,6 +104,53 @@ struct GitlinkEntry
 // Input: `ls-tree -r -z <rev>` output - that revision's gitlinks, as opposed to the index's above. A push
 // publishes what the commits record, not what is staged.
 [[nodiscard]] std::vector<GitlinkEntry> parseGitlinkEntries(const QByteArray& lsTreeOutput);
+
+// One local branch, as the reattachment offer reads it
+struct LocalBranchRef
+{
+	QString name;     // without refs/heads/
+	QString sha;
+	QString upstream; // the full ref name; empty if none
+	int unpushedCommits = 0; // commits the upstream lacks; 0 also without an upstream, or with one that is gone
+	bool checkedOutElsewhere = false; // in another worktree, whose HEAD moving the branch would change
+};
+
+// One remote-tracking branch
+struct RemoteBranchRef
+{
+	QString ref;  // the full ref name
+	QString name; // without refs/remotes/: "origin/master"
+	QString sha;
+};
+
+// The `for-each-ref --format` values the two parsers below read: fields separated by US (0x1f), one ref per
+// line. A ref name holds neither; the worktree path could, so only its presence is printed.
+inline constexpr char LocalBranchRefFormat[] =
+	"%(refname)%1f%(objectname)%1f%(upstream)%1f%(upstream:track,nobracket)%1f%(if)%(worktreepath)%(then)1%(end)";
+inline constexpr char RemoteBranchRefFormat[] = "%(refname)%1f%(objectname)%1f%(symref)";
+
+// Input: `for-each-ref --format=<LocalBranchRefFormat> refs/heads` output
+[[nodiscard]] std::vector<LocalBranchRef> parseLocalBranchRefs(const QByteArray& forEachRefOutput);
+// Input: `for-each-ref --format=<RemoteBranchRefFormat> refs/remotes` output. A symbolic ref such as
+// origin/HEAD is skipped: it names another listed branch.
+[[nodiscard]] std::vector<RemoteBranchRef> parseRemoteBranchRefs(const QByteArray& forEachRefOutput);
+
+struct ReattachOptions
+{
+	std::vector<ReattachCandidate> candidates; // in Kind order, their commit counts not yet filled
+	std::vector<ReattachObstacle> obstacles;
+};
+
+// The ways off a detached HEAD at `headSha`, and the branches that nearly qualify.
+// `remotesContainingHead`: the remote-tracking branches whose history has HEAD.
+[[nodiscard]] ReattachOptions reattachOptions(const QString& headSha, const std::vector<LocalBranchRef>& localBranches,
+	const std::vector<RemoteBranchRef>& remotesContainingHead);
+
+// The query filling a Move or Create candidate's commit counts, read by parseLeftRightCount into refOnly, headOnly
+[[nodiscard]] QStringList reattachCountArgs(const ReattachCandidate& candidate);
+// Input: `rev-list --left-right --count A...B` output: the commits only A has, then the commits only B has.
+// Empty on anything else.
+[[nodiscard]] std::optional<std::pair<int, int>> parseLeftRightCount(const QByteArray& output);
 
 // Input: `status --porcelain -z` output (v1 format)
 [[nodiscard]] WorktreeDirtiness parsePorcelainDirtiness(const QByteArray& statusOutput);

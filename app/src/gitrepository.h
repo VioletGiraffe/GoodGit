@@ -51,9 +51,7 @@ public:
 		std::function<void(SubmoduleDiscardPlan)> onDone) const override;
 	void discardSubmoduleContent(const QString& repoRelativePath, const SubmoduleDiscardPlan& plan, Vcs::Answer<void> onDone) override;
 
-	void checkoutBranch(const QString& branch, Vcs::Answer<void> onDone) override;
-	void createTrackingBranch(const QString& localName, const QString& remoteBranch, Vcs::Answer<void> onDone) override;
-	void localBranchExists(const QString& name, const QObject* context, std::function<void(bool)> onDone) override;
+	void reattachHead(const ReattachCandidate& candidate, Vcs::Answer<void> onDone) override;
 
 	Vcs::Query diffFile(const FileEntry& entry, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) override;
 	Vcs::Query workingTreeDiff(qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) override;

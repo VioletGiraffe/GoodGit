@@ -41,10 +41,24 @@ ships with hg but is off by default, so the command enables it for itself.
 
 ## Detached HEAD
 
-Reattachment happens at commit time and only when the working tree would not move: a single local branch
-tip at HEAD is checked out silently, several are offered as a choice, and a remote-tracking tip at HEAD
-whose local name is free becomes a tracking branch. Everything else refuses with an explanation, and the
-header strip announces the applicable case before the user commits. The same code path serves the main
+A detached HEAD is put back on a branch only where the working tree stays put and no commit is orphaned.
+The candidates, computed on refresh:
+
+| Kind | Condition | Action |
+|---|---|---|
+| At HEAD | a local branch's tip is HEAD | check it out |
+| Move | a local branch with nothing unpushed, its upstream containing HEAD | move it to HEAD, check it out |
+| Create | a remote-tracking branch containing HEAD, its local name free | create it at HEAD, tracking that branch |
+
+A branch checked out in another worktree is never a candidate. A move loses nothing: every commit the
+branch leaves behind is on its upstream. It covers a submodule update's detached HEAD, older or newer
+than the local branch.
+
+The header strip describes the candidates and offers them on a button; several are offered as a choice.
+Committing takes only a candidate whose ref already points at HEAD, silently if there is one; moving a
+branch needs the button. With no such candidate committing is blocked. With no candidate at all, the strip
+names the branches that nearly qualify and what rules each out: unpushed commits, another worktree, or a
+local branch of the needed name tracking something else. The same code path serves the main
 repository and submodules. Mercurial has no detached state, so the flow is never entered there.
 
 The operations that detach HEAD themselves - bisect and rebase - are the exception: committing is refused

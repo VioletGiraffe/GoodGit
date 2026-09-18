@@ -185,11 +185,9 @@ public:
 	// Only called with a plan that carries no refusal.
 	virtual void discardSubmoduleContent(const QString& repoRelativePath, const SubmoduleDiscardPlan& plan, Vcs::Answer<void> onDone) = 0;
 
-	virtual void checkoutBranch(const QString& branch, Vcs::Answer<void> onDone) = 0;
-	// Creates `localName` tracking `remoteBranch` (e.g. "origin/master") at HEAD, without moving the working tree
-	virtual void createTrackingBranch(const QString& localName, const QString& remoteBranch, Vcs::Answer<void> onDone) = 0;
-	// Not an Answer: the query failing means there is no branch of that name
-	virtual void localBranchExists(const QString& name, const QObject* context, std::function<void(bool)> onDone) = 0;
+	// Puts a detached HEAD on the candidate's branch, as its Kind describes; the working tree does not move.
+	// Only called with a candidate from RepoState::reattachCandidates.
+	virtual void reattachHead(const ReattachCandidate& candidate, Vcs::Answer<void> onDone) = 0;
 
 	// Read-only queries. Each parses its output before answering. The query dies with `context`, so pass
 	// the object that will display the answer - not the Repository, which outlives any one view of it.

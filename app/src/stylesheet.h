@@ -40,7 +40,8 @@ QWidget#messageHeader QLabel, QFrame#pushLogHeader QLabel, QFrame#dockHeader QLa
 
 /* ---------- status strips ---------- */
 QLabel#errorStrip { background: @errBg@; color: @errFg@; }
-QLabel#warningStrip { background: @warnBg@; color: @warnFg@; }
+QFrame#warningStrip { background: @warnBg@; }
+QFrame#warningStrip QLabel { color: @warnFg@; }
 
 /* ---------- file list ---------- */
 QTreeView { background: @surface@; border: none; outline: none; }
@@ -66,7 +67,7 @@ QPushButton:hover { background: @buttonHover@; }
 QPushButton:pressed { background: @buttonPressed@; }
 QPushButton:disabled { background: @surfaceAlt@; color: @textDim@; }
 QFrame#repoBar QPushButton, QFrame#counterBar QPushButton, QFrame#pushLogHeader QPushButton,
-QFrame#dockHeader QPushButton, QFrame#diffHeader QPushButton { padding: 3px 9px; }
+QFrame#dockHeader QPushButton, QFrame#diffHeader QPushButton, QFrame#warningStrip QPushButton { padding: 3px 9px; }
 QPushButton#commitButton, QPushButton#commitPushButton { padding: 8px 14px; }
 QPushButton#commitButton { background: @accent@; color: @accentFg@; border-color: @accent@; font-weight: 600; }
 QPushButton#commitButton:hover { background: @accentHover@; }

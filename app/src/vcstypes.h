@@ -9,6 +9,7 @@ RESTORE_COMPILER_WARNINGS
 
 #include <optional>
 #include <stdint.h>
+#include <vector>
 
 // The VCS-neutral types the windows and models work with and every backend answers in
 
@@ -125,6 +126,44 @@ enum class UndoRefusal : uint8_t
 	UpstreamGone,        // whether the commit was pushed cannot be checked against a ref that is gone
 };
 
+// A branch a detached HEAD can be put on without moving the working tree or orphaning a commit
+struct ReattachCandidate
+{
+	enum class Kind : uint8_t
+	{
+		AtHead, // an existing branch whose tip is HEAD: checked out
+		Move,   // an existing branch with nothing unpushed, its upstream containing HEAD: moved to HEAD, then checked out
+		Create, // a remote-tracking branch containing HEAD, its local name free: created at HEAD, tracking it
+	};
+
+	Kind kind = Kind::AtHead;
+	QString branch;    // the local branch, existing or to be created
+	QString upstream;  // Move, Create: the remote-tracking branch that contains HEAD
+	QString branchSha; // Move: the tip being replaced; the move fails if the branch no longer points there
+	// Commits the ref has that HEAD lacks, and the reverse. The ref is the branch for Move, the upstream for Create.
+	int refOnlyCommits = 0;
+	int headOnlyCommits = 0;
+
+	// The ref it attaches through already points at HEAD: no existing branch moves
+	[[nodiscard]] bool tipIsHead() const { return refOnlyCommits == 0 && headOnlyCommits == 0; }
+};
+
+// A branch that would be a ReattachCandidate but for one thing
+struct ReattachObstacle
+{
+	enum class Reason : uint8_t
+	{
+		Unpushed,            // its upstream contains HEAD, but it has commits the upstream lacks
+		CheckedOutElsewhere, // at HEAD or its upstream containing HEAD, but checked out in another worktree
+		NameTaken,           // a remote-tracking branch contains HEAD, but the local branch of its name tracks something else
+	};
+
+	Reason reason = Reason::Unpushed;
+	QString branch;          // the local branch
+	QString upstream;        // Unpushed, NameTaken: the remote-tracking branch that contains HEAD
+	int unpushedCommits = 0; // Unpushed
+};
+
 struct RepoState
 {
 	QString branch;      // empty when detached
@@ -142,9 +181,9 @@ struct RepoState
 	RepoOp op = RepoOp::None;
 	OperationHint opHint; // meaningful only while `op` is set
 
-	// Filled only when detached: branch tips that equal HEAD, for the reattachment logic
-	QStringList localBranchesAtHead;
-	QStringList remoteBranchesAtHead;
+	// Filled only when detached; candidates in Kind order
+	std::vector<ReattachCandidate> reattachCandidates;
+	std::vector<ReattachObstacle> reattachObstacles;
 
 	// Subjects of the commits the upstream has not seen, newest first; capped, `ahead` holds the true count
 	QStringList unpushedSubjects;

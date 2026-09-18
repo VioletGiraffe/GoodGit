@@ -127,7 +127,7 @@ whole or not at all.
 
 Three asymmetries the boundary deliberately does not hide:
 
-- **`RepoState` carries shapes not every system has**: `detached`, the branch tips at HEAD, `upstream`,
+- **`RepoState` carries shapes not every system has**: `detached`, the reattach candidates, `upstream`,
   ahead/behind. A backend without them leaves them empty, and the header and the reattachment flow have
   nothing to show, exactly as on a repository that merely lacks them. Mercurial is that case: no detached
   state, one remote rather than a per-branch upstream.

@@ -414,8 +414,11 @@ struct GitRepository::RefreshRun
 	QStringList untracked;
 	QStringList submodules; // repo-relative paths of the gitlink entries
 	std::map<QString, SubmoduleContent> submoduleContent; // only the submodules that were queried at all
-	QStringList localBranchesAtHead;
-	QStringList remoteBranchesAtHead;
+	// Detached only: the two listings the options are selected from, then the options with their counts
+	std::vector<Git::LocalBranchRef> localBranches;
+	std::vector<Git::RemoteBranchRef> remotesContainingHead;
+	int refListingsPending = 2;
+	Git::ReattachOptions reattachOptions;
 	QStringList unpushedSubjects;
 	QStringList conflicted; // paths with unmerged index entries
 	int headParentCount = 0;
@@ -511,8 +514,8 @@ void GitRepository::startRefresh()
 		});
 }
 
-// The unborn fallback, the detached-HEAD branch tips, per-submodule dirtiness, the unpushed subjects. All
-// independent of each other.
+// The unborn fallback, the detached-HEAD reattach candidates, per-submodule dirtiness, the unpushed subjects.
+// All independent of each other.
 void GitRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run)
 {
 	QueryRound round{ Git::readOnlyQueries(this), [self = QPointer<GitRepository>{ this }] {
@@ -544,18 +547,53 @@ void GitRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run
 
 	if (run->header.head == QLatin1String("(detached)"))
 	{
-		for (const char* refRoot : { "refs/heads", "refs/remotes" })
-		{
-			const bool local = qstrcmp(refRoot, "refs/heads") == 0;
-			round.launch(path(), { QStringLiteral("for-each-ref"), QStringLiteral("--points-at"), QStringLiteral("HEAD"),
-					QStringLiteral("--format=%(refname:short)"), QString::fromLatin1(refRoot) },
-				[run, local](const ProcessResult& r) {
-					QStringList names = Git::parseLineList(r.out);
-					if (!local)
-						names.removeIf([](const QString& n) { return n.endsWith(QLatin1String("/HEAD")); });
-					(local ? run->localBranchesAtHead : run->remoteBranchesAtHead) = names;
+		// Called by each listing as it answers; the last one selects the options and counts the candidates within this round.
+		// Every failure fails the run: the strip states what the listings found, and an unread one would read as nothing found.
+		auto selectAndCountCandidates = [run, round, workDir = path()]() mutable {
+			if (--run->refListingsPending > 0 || !run->failure.isEmpty())
+				return;
+
+			run->reattachOptions = Git::reattachOptions(run->header.oid, run->localBranches, run->remotesContainingHead);
+			std::vector<ReattachCandidate>& candidates = run->reattachOptions.candidates;
+			for (size_t i = 0; i < candidates.size(); ++i)
+			{
+				if (candidates[i].kind == ReattachCandidate::Kind::AtHead)
+					continue; // zero both ways
+
+				round.launch(workDir, Git::reattachCountArgs(candidates[i]), [run, i](const ProcessResult& r) {
+					if (!r.ok)
+						return run->noteFailure(r);
+					const std::optional<std::pair<int, int>> counts = Git::parseLeftRightCount(r.out);
+					if (!counts)
+					{
+						if (run->failure.isEmpty())
+							run->failure = QObject::tr("Unexpected commit count: %1").arg(QString::fromUtf8(r.out.trimmed()));
+						return;
+					}
+					run->reattachOptions.candidates[i].refOnlyCommits = counts->first;
+					run->reattachOptions.candidates[i].headOnlyCommits = counts->second;
 				});
-		}
+			}
+		};
+
+		round.launch(path(), { QStringLiteral("for-each-ref"), QStringLiteral("--format=") + QLatin1String(Git::LocalBranchRefFormat),
+				QStringLiteral("refs/heads") },
+			[run, selectAndCountCandidates](const ProcessResult& r) mutable {
+				if (r.ok)
+					run->localBranches = Git::parseLocalBranchRefs(r.out);
+				else
+					run->noteFailure(r);
+				selectAndCountCandidates();
+			});
+		round.launch(path(), { QStringLiteral("for-each-ref"), QStringLiteral("--contains"), QStringLiteral("HEAD"),
+				QStringLiteral("--format=") + QLatin1String(Git::RemoteBranchRefFormat), QStringLiteral("refs/remotes") },
+			[run, selectAndCountCandidates](const ProcessResult& r) mutable {
+				if (r.ok)
+					run->remotesContainingHead = Git::parseRemoteBranchRefs(r.out);
+				else
+					run->noteFailure(r);
+				selectAndCountCandidates();
+			});
 	}
 
 	for (const QString& subPath : run->submodules)
@@ -610,8 +648,8 @@ RepoState GitRepository::stateFromRun(const RefreshRun& run) const
 	state.behind = run.header.behind;
 	// Not on an unborn HEAD: the ab field is absent there for want of a commit, not of the upstream ref
 	state.upstreamGone = !state.unborn && !run.header.upstream.isEmpty() && !run.header.aheadBehindKnown;
-	state.localBranchesAtHead = run.localBranchesAtHead;
-	state.remoteBranchesAtHead = run.remoteBranchesAtHead;
+	state.reattachCandidates = run.reattachOptions.candidates;
+	state.reattachObstacles = run.reattachOptions.obstacles;
 	state.unpushedSubjects = run.unpushedSubjects;
 	state.submodules = run.submodules; // ls-files lists the index, which is ordered by path
 
@@ -943,22 +981,36 @@ void GitRepository::discardSubmoduleContent(const QString& repoRelativePath, con
 	Git::discardAllUncommitted(path() + QLatin1Char('/') + repoRelativePath, plan, this, std::move(onDone));
 }
 
-void GitRepository::checkoutBranch(const QString& branch, Vcs::Answer<void> onDone)
+// switch rather than checkout: it takes only a branch name, never a path or a ref it would detach at
+void GitRepository::reattachHead(const ReattachCandidate& candidate, Vcs::Answer<void> onDone)
 {
-	Git::run(path(), { QStringLiteral("checkout"), branch }, this, Vcs::reporting(std::move(onDone)));
-}
+	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
+	// `second` runs only after `first` succeeded; whichever result ends the pair is reported
+	const auto runInTurn = [this, report](QStringList first, QStringList second) {
+		Git::run(path(), std::move(first), this, [this, second = std::move(second), report](const ProcessResult& result) {
+			if (result.ok)
+				Git::run(path(), second, this, report);
+			else
+				report(result);
+		});
+	};
 
-void GitRepository::createTrackingBranch(const QString& localName, const QString& remoteBranch, Vcs::Answer<void> onDone)
-{
-	Git::run(path(), { QStringLiteral("checkout"), QStringLiteral("-b"), localName, QStringLiteral("--track"), remoteBranch },
-		this, Vcs::reporting(std::move(onDone)));
-}
-
-void GitRepository::localBranchExists(const QString& name, const QObject* context, std::function<void(bool)> onDone)
-{
-	Git::run(path(), { QStringLiteral("show-ref"), QStringLiteral("--verify"), QStringLiteral("--quiet"),
-		QStringLiteral("refs/heads/") + name }, context,
-		[onDone = std::move(onDone)](const ProcessResult& result) { onDone(result.ok); }, {}, /*readOnlyQuery=*/true);
+	switch (candidate.kind)
+	{
+	case ReattachCandidate::Kind::AtHead:
+		Git::run(path(), { QStringLiteral("switch"), candidate.branch }, this, report);
+		return;
+	case ReattachCandidate::Kind::Move:
+		// The old value makes the update fail if the branch moved after the state was read
+		runInTurn({ QStringLiteral("update-ref"), QStringLiteral("refs/heads/") + candidate.branch, QStringLiteral("HEAD"), candidate.branchSha },
+			{ QStringLiteral("switch"), candidate.branch });
+		return;
+	case ReattachCandidate::Kind::Create:
+		// Not `switch -c <branch> --track <upstream>`: that starts the branch at the upstream's tip, moving the working tree
+		runInTurn({ QStringLiteral("switch"), QStringLiteral("-c"), candidate.branch },
+			{ QStringLiteral("branch"), QStringLiteral("--set-upstream-to=refs/remotes/") + candidate.upstream });
+		return;
+	}
 }
 
 QString GitRepository::diffBase() const

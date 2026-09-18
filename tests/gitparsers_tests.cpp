@@ -204,3 +204,82 @@ TEST_CASE("An object size is a number or an error, never a zero", "[gitparsers]"
 	CHECK(Git::parseObjectSize("1234\n") == 1234);
 	CHECK_FALSE(Git::parseObjectSize("fatal: path 'x' does not exist in 'HEAD'\n").has_value());
 }
+
+TEST_CASE("Branch listings: unpushed counts, a worktree elsewhere, and a symbolic remote ref skipped", "[gitparsers]")
+{
+	const std::vector<Git::LocalBranchRef> locals = Git::parseLocalBranchRefs(
+		"refs/heads/behind\x1f" "aaa\x1f" "refs/remotes/origin/main\x1f" "behind 3\x1f\n"
+		"refs/heads/gone\x1f" "bbb\x1f" "refs/remotes/origin/gone\x1f" "gone\x1f\n"
+		"refs/heads/feature/x\x1f" "ccc\x1f" "refs/remotes/origin/feature/x\x1f" "ahead 2, behind 1\x1f\n"
+		"refs/heads/wt\x1f" "ddd\x1f\x1f\x1f" "1\n");
+	REQUIRE(locals.size() == 4);
+	CHECK(locals[0].name == QStringLiteral("behind"));
+	CHECK(locals[0].upstream == QStringLiteral("refs/remotes/origin/main"));
+	CHECK(locals[0].unpushedCommits == 0);
+	CHECK(locals[1].unpushedCommits == 0);
+	CHECK(locals[2].name == QStringLiteral("feature/x"));
+	CHECK(locals[2].unpushedCommits == 2);
+	CHECK(locals[3].checkedOutElsewhere);
+	CHECK(locals[3].upstream.isEmpty());
+
+	const std::vector<Git::RemoteBranchRef> remotes = Git::parseRemoteBranchRefs(
+		"refs/remotes/origin/HEAD\x1f" "aaa\x1f" "refs/remotes/origin/main\n"
+		"refs/remotes/origin/main\x1f" "aaa\x1f\n");
+	REQUIRE(remotes.size() == 1);
+	CHECK(remotes[0].ref == QStringLiteral("refs/remotes/origin/main"));
+	CHECK(remotes[0].name == QStringLiteral("origin/main"));
+}
+
+TEST_CASE("Reattach options: candidates that neither move the working tree nor orphan a commit, and what rules the near misses out", "[gitparsers]")
+{
+	const QString head = QStringLiteral("head");
+	const QString originMain = QStringLiteral("refs/remotes/origin/main");
+	const std::vector<Git::LocalBranchRef> locals = {
+		{ .name = QStringLiteral("unpushed"), .sha = QStringLiteral("u"), .upstream = originMain, .unpushedCommits = 2 },
+		{ .name = QStringLiteral("main"), .sha = QStringLiteral("m"), .upstream = originMain },
+		{ .name = QStringLiteral("here"), .sha = head },
+		{ .name = QStringLiteral("elsewhere"), .sha = head, .checkedOutElsewhere = true },
+		{ .name = QStringLiteral("stale"), .sha = QStringLiteral("s"), .upstream = QStringLiteral("refs/remotes/origin/old") }, // unrelated
+	};
+	const std::vector<Git::RemoteBranchRef> remotes = {
+		{ .ref = originMain, .name = QStringLiteral("origin/main"), .sha = QStringLiteral("o") },
+		{ .ref = QStringLiteral("refs/remotes/origin/elsewhere"), .name = QStringLiteral("origin/elsewhere"), .sha = head },
+		{ .ref = QStringLiteral("refs/remotes/fork/topic/y"), .name = QStringLiteral("fork/topic/y"), .sha = head },
+	};
+
+	const Git::ReattachOptions options = Git::reattachOptions(head, locals, remotes);
+	const std::vector<ReattachCandidate>& candidates = options.candidates;
+	REQUIRE(candidates.size() == 3);
+	CHECK(candidates[0].kind == ReattachCandidate::Kind::AtHead);
+	CHECK(candidates[0].branch == QStringLiteral("here"));
+	CHECK(candidates[1].kind == ReattachCandidate::Kind::Move);
+	CHECK(candidates[1].branch == QStringLiteral("main"));
+	CHECK(candidates[1].upstream == QStringLiteral("origin/main"));
+	CHECK(candidates[1].branchSha == QStringLiteral("m"));
+	CHECK(candidates[2].kind == ReattachCandidate::Kind::Create);
+	CHECK(candidates[2].branch == QStringLiteral("topic/y"));
+	CHECK(candidates[2].upstream == QStringLiteral("fork/topic/y"));
+
+	const std::vector<ReattachObstacle>& obstacles = options.obstacles;
+	REQUIRE(obstacles.size() == 3);
+	CHECK(obstacles[0].reason == ReattachObstacle::Reason::Unpushed);
+	CHECK(obstacles[0].branch == QStringLiteral("unpushed"));
+	CHECK(obstacles[0].upstream == QStringLiteral("origin/main"));
+	CHECK(obstacles[0].unpushedCommits == 2);
+	CHECK(obstacles[1].reason == ReattachObstacle::Reason::CheckedOutElsewhere);
+	CHECK(obstacles[1].branch == QStringLiteral("elsewhere"));
+	// origin/main has 'main' tracking it, judged on its own; 'elsewhere' tracks nothing
+	CHECK(obstacles[2].reason == ReattachObstacle::Reason::NameTaken);
+	CHECK(obstacles[2].branch == QStringLiteral("elsewhere"));
+	CHECK(obstacles[2].upstream == QStringLiteral("origin/elsewhere"));
+
+	CHECK(Git::reattachCountArgs(candidates[1]).last() == QStringLiteral("m...HEAD"));
+	CHECK(Git::reattachCountArgs(candidates[2]).last() == QStringLiteral("refs/remotes/fork/topic/y...HEAD"));
+}
+
+TEST_CASE("A left-right count is two numbers or nothing", "[gitparsers]")
+{
+	CHECK(Git::parseLeftRightCount("2\t0\n") == std::pair{ 2, 0 });
+	CHECK_FALSE(Git::parseLeftRightCount("fatal: ambiguous argument\n").has_value());
+	CHECK_FALSE(Git::parseLeftRightCount("").has_value());
+}

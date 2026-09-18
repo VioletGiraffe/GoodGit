@@ -280,14 +280,6 @@ std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput)
 	return commits;
 }
 
-QStringList parseBranchNames(const QByteArray& branchesOutput)
-{
-	QStringList names;
-	for (const auto value : jsonRecords(branchesOutput))
-		names << value.toObject().value(QLatin1String("branch")).toString();
-	return names;
-}
-
 QStringList parsePathNames(const QByteArray& pathsOutput)
 {
 	QStringList names;

@@ -779,22 +779,9 @@ void HgRepository::discardSubmoduleContent(const QString& repoRelativePath, cons
 		plan.restored + plan.keptOnDisk, std::move(onDone));
 }
 
-void HgRepository::checkoutBranch(const QString& branch, Vcs::Answer<void> onDone)
+void HgRepository::reattachHead(const ReattachCandidate& /*candidate*/, Vcs::Answer<void> onDone)
 {
-	Hg::run(path(), { QStringLiteral("update"), branch }, this, Vcs::reporting(std::move(onDone)));
-}
-
-void HgRepository::createTrackingBranch(const QString& /*localName*/, const QString& /*remoteBranch*/, Vcs::Answer<void> onDone)
-{
-	Vcs::answerLater(this, std::move(onDone), std::unexpected(QObject::tr("Mercurial has no remote branches to create a local branch from.")));
-}
-
-void HgRepository::localBranchExists(const QString& name, const QObject* context, std::function<void(bool)> onDone)
-{
-	Hg::run(path(), { QStringLiteral("branches"), QStringLiteral("-T"), QStringLiteral("json") }, context,
-		[name, onDone = std::move(onDone)](const ProcessResult& result) {
-			onDone(result.ok && Hg::parseBranchNames(result.out).contains(name));
-		});
+	Vcs::answerLater(this, std::move(onDone), std::unexpected(QObject::tr("Mercurial has no detached state to leave.")));
 }
 
 Vcs::Query HgRepository::diffFile(const FileEntry& entry, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone)

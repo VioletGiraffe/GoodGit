@@ -57,6 +57,7 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
+#include <iterator>
 
 namespace {
 
@@ -66,6 +67,7 @@ constexpr int FirstRunDiffPaneWidth = 440; // what the diff keeps while the left
 // The left pane's preferred width follows the repository and branch names, which are unbounded
 constexpr int MaxInitialLeftPaneWidth = 1000;
 constexpr int MaxListedPathsInDialog = 20;
+constexpr size_t MaxListedReattachObstacles = 3; // the strip is one paragraph
 constexpr int MaxIncomingCommits = 200; // a glance, not a history window
 constexpr int IncomingPopupWidth = 560;
 constexpr int IncomingPopupHeight = 320;
@@ -93,6 +95,76 @@ void setStripTextOrHide(QLabel* strip, const QString& text)
 {
 	strip->setText(text);
 	strip->setVisible(!text.isEmpty());
+}
+
+// Where the candidate's branch stands against HEAD, as a sentence
+QString reattachDescription(const ReattachCandidate& candidate)
+{
+	const QString refOnly = QString::number(candidate.refOnlyCommits);
+	const QString headOnly = QString::number(candidate.headOnlyCommits);
+	switch (candidate.kind)
+	{
+	case ReattachCandidate::Kind::AtHead:
+		return CommitWindow::tr("'%1' points here.").arg(candidate.branch);
+	case ReattachCandidate::Kind::Move:
+		if (candidate.refOnlyCommits == 0)
+			return CommitWindow::tr("'%1' is %2 commit(s) behind here, and %3 contains this commit.").arg(candidate.branch, headOnly, candidate.upstream);
+		if (candidate.headOnlyCommits == 0)
+			return CommitWindow::tr("'%1' is %2 commit(s) ahead of here, and %3 has all of them.").arg(candidate.branch, refOnly, candidate.upstream);
+		return CommitWindow::tr("'%1' has %2 commit(s) this one lacks and lacks %3 of its; %4 contains both.")
+			.arg(candidate.branch, refOnly, headOnly, candidate.upstream);
+	case ReattachCandidate::Kind::Create:
+		if (candidate.refOnlyCommits == 0)
+			return CommitWindow::tr("%1 points here, and there is no local '%2' yet.").arg(candidate.upstream, candidate.branch);
+		return CommitWindow::tr("%1 contains this commit, %2 commit(s) further on, and there is no local '%3' yet.")
+			.arg(candidate.upstream, refOnly, candidate.branch);
+	}
+	return {};
+}
+
+// Why no branch is a candidate, as sentences
+QString reattachObstaclesText(const std::vector<ReattachObstacle>& obstacles)
+{
+	if (obstacles.empty())
+		return CommitWindow::tr("No local branch points here, and no remote branch contains this commit.");
+
+	QStringList sentences;
+	for (size_t i = 0; i < std::min(obstacles.size(), MaxListedReattachObstacles); ++i)
+	{
+		const ReattachObstacle& obstacle = obstacles[i];
+		switch (obstacle.reason)
+		{
+		case ReattachObstacle::Reason::Unpushed:
+			sentences.push_back(CommitWindow::tr("'%1' has %2 commit(s) that %3 lacks.")
+				.arg(obstacle.branch, QString::number(obstacle.unpushedCommits), obstacle.upstream));
+			break;
+		case ReattachObstacle::Reason::CheckedOutElsewhere:
+			sentences.push_back(CommitWindow::tr("'%1' is checked out in another worktree.").arg(obstacle.branch));
+			break;
+		case ReattachObstacle::Reason::NameTaken:
+			sentences.push_back(CommitWindow::tr("%1 contains this commit, but the local '%2' does not track it.").arg(obstacle.upstream, obstacle.branch));
+			break;
+		}
+	}
+	if (obstacles.size() > MaxListedReattachObstacles)
+		sentences.push_back(CommitWindow::tr("%1 more branch(es) are ruled out as well.").arg(obstacles.size() - MaxListedReattachObstacles));
+	return sentences.join(QLatin1Char(' '));
+}
+
+// The candidate as an action, for a button or a dialog option
+QString reattachActionText(const ReattachCandidate& candidate)
+{
+	switch (candidate.kind)
+	{
+	case ReattachCandidate::Kind::AtHead:
+		return CommitWindow::tr("Check out '%1'").arg(candidate.branch);
+	case ReattachCandidate::Kind::Move:
+		return candidate.refOnlyCommits == 0 ? CommitWindow::tr("Fast-forward '%1' here").arg(candidate.branch)
+			: CommitWindow::tr("Move '%1' here").arg(candidate.branch);
+	case ReattachCandidate::Kind::Create:
+		return CommitWindow::tr("Create '%1' tracking %2").arg(candidate.branch, candidate.upstream);
+	}
+	return {};
 }
 
 // Untracked files have nothing to restore to. A submodule with changes inside would be checked out over.
@@ -290,10 +362,9 @@ QWidget* CommitWindow::buildLeftPane()
 	// First: the other strips describe a state this one says could not be read
 	_readFailureStrip = makeStrip("errorStrip");
 	_opStrip = makeStrip("errorStrip");
-	_detachedStrip = makeStrip("warningStrip");
 	leftLayout->addWidget(_readFailureStrip);
 	leftLayout->addWidget(_opStrip);
-	leftLayout->addWidget(_detachedStrip);
+	leftLayout->addWidget(buildDetachedStrip());
 
 	leftLayout->addWidget(buildCounterBar());
 
@@ -345,6 +416,23 @@ QWidget* CommitWindow::buildRepoBar()
 	connect(_pushButton, &QPushButton::clicked, this, &CommitWindow::startPush);
 	connect(historyButton, &QPushButton::clicked, this, &CommitWindow::showHistoryWindow);
 	return repoBar;
+}
+
+QWidget* CommitWindow::buildDetachedStrip()
+{
+	_detachedStrip = new QFrame;
+	_detachedStrip->setObjectName(QStringLiteral("warningStrip"));
+	auto* stripLayout = new QHBoxLayout(_detachedStrip);
+	stripLayout->setContentsMargins(6, 6, 6, 6);
+	_detachedLabel = new QLabel;
+	_detachedLabel->setWordWrap(true);
+	_reattachButton = new QPushButton;
+	stripLayout->addWidget(_detachedLabel, 1);
+	stripLayout->addWidget(_reattachButton);
+	_detachedStrip->setVisible(false);
+
+	connect(_reattachButton, &QPushButton::clicked, this, &CommitWindow::reattachHeadFromStrip);
+	return _detachedStrip;
 }
 
 QWidget* CommitWindow::buildCounterBar()
@@ -747,20 +835,39 @@ void CommitWindow::updateStrips()
 		opText += tr(" %1 file(s) are still conflicted and must be marked resolved first.").arg(unresolved);
 	setStripTextOrHide(_opStrip, opText);
 
-	QString detachedText;
 	// A bisect and a rebase detach HEAD as a matter of course; the op strip explains, and no commit will reattach
-	if (state.detached && !state.opBlocksCommit())
+	const bool showDetached = state.detached && !state.opBlocksCommit();
+	_detachedStrip->setVisible(showDetached);
+	if (!showDetached)
+		return;
+
+	const std::vector<ReattachCandidate>& candidates = state.reattachCandidates;
+	_reattachButton->setVisible(!candidates.empty());
+	if (candidates.empty())
 	{
-		if (state.localBranchesAtHead.size() == 1)
-			detachedText = tr("Not on a branch. '%1' points here and will be checked out when you commit.").arg(state.localBranchesAtHead.front());
-		else if (state.localBranchesAtHead.size() > 1)
-			detachedText = tr("Not on a branch. Several branches point here; you will be asked which one to check out when you commit.");
-		else if (!state.remoteBranchesAtHead.isEmpty())
-			detachedText = tr("Not on a branch. HEAD matches %1; a local branch tracking it will be created when you commit.").arg(state.remoteBranchesAtHead.front());
-		else
-			detachedText = tr("Not on a branch, and no branch points at this commit. Committing is blocked - check out a branch first.");
+		_detachedLabel->setText(tr("Not on a branch, and no branch can take this commit without moving the working tree or "
+			"dropping commits. %1 Committing is blocked - check out a branch first.").arg(reattachObstaclesText(state.reattachObstacles)));
+		return;
 	}
-	setStripTextOrHide(_detachedStrip, detachedText);
+
+	const QString offer = candidates.size() == 1 ? reattachDescription(candidates.front())
+		: tr("%1 branches can take this commit without moving the working tree.").arg(candidates.size());
+	_reattachButton->setText(candidates.size() == 1 ? reattachActionText(candidates.front()) : tr("Choose a branch..."));
+
+	// What reattachHeadForCommit() chooses from
+	std::vector<ReattachCandidate> takenAtCommit;
+	std::ranges::copy_if(candidates, std::back_inserter(takenAtCommit), &ReattachCandidate::tipIsHead);
+	QString onCommit;
+	if (takenAtCommit.empty())
+		onCommit = tr("Committing is blocked until HEAD is on a branch.");
+	else if (takenAtCommit.size() > 1)
+		onCommit = tr("Committing asks which branch to put HEAD on.");
+	else if (takenAtCommit.front().kind == ReattachCandidate::Kind::AtHead)
+		onCommit = tr("Committing checks out '%1' first.").arg(takenAtCommit.front().branch);
+	else
+		onCommit = tr("Committing creates '%1' tracking %2 first.").arg(takenAtCommit.front().branch, takenAtCommit.front().upstream);
+
+	_detachedLabel->setText(tr("Not on a branch. %1 %2").arg(offer, onCommit));
 }
 
 void CommitWindow::updateControlStates()
@@ -784,7 +891,7 @@ void CommitWindow::updateControlStates()
 				lineCountColor(false).name(), lineCountText(lineTotals, false))
 		: QString{});
 
-	const bool detachedAndStuck = state.detached && state.localBranchesAtHead.isEmpty() && state.remoteBranchesAtHead.isEmpty();
+	const bool detachedAndStuck = state.detached && std::ranges::none_of(state.reattachCandidates, &ReattachCandidate::tipIsHead);
 	const bool canCommit = checkedCount > 0 && !_messageEdit->toPlainText().trimmed().isEmpty()
 		&& !detachedAndStuck && !state.opBlocksCommit() && canActOnList();
 	_commitButton->setEnabled(canCommit);
@@ -799,6 +906,7 @@ void CommitWindow::updateControlStates()
 	const bool canChangeHistory = canActOnList() && !_pushInFlight;
 	// undoLastCommit() reports every refusal, so nothing else disables this
 	_uncommitAction->setEnabled(canChangeHistory);
+	_reattachButton->setEnabled(canChangeHistory);
 	_abortAction->setEnabled(state.operationInProgress() && canChangeHistory);
 	// A continue command is named exactly where continueOperation() can run it, and every such command refuses
 	// while a conflict is still unresolved
@@ -931,7 +1039,7 @@ void CommitWindow::startCommit(bool pushAfterwards)
 		confirmUntrackedThenCommit(pushAfterwards, stamp);
 		return;
 	}
-	reattachHead([this, pushAfterwards, stamp](bool reattached) {
+	reattachHeadForCommit([this, pushAfterwards, stamp](bool reattached) {
 		if (reattached)
 			confirmUntrackedThenCommit(pushAfterwards, stamp);
 		else
@@ -957,86 +1065,61 @@ void CommitWindow::confirmUntrackedThenCommit(bool pushAfterwards, StateStamp de
 	doCommit(pushAfterwards, decisionStamp);
 }
 
-// Reattachment rule (doc/ARCHITECTURE.md): only ever attach to a branch whose tip is exactly HEAD, so the
-// working tree never moves. Anything else refuses.
-void CommitWindow::reattachHead(std::function<void(bool reattached)> onDone)
+// Takes only a candidate whose ref already points at HEAD: moving a branch is left to the strip's button
+void CommitWindow::reattachHeadForCommit(std::function<void(bool reattached)> onDone)
 {
-	// `state` is a reference into the live Repository; every branch below that passed through a dialog or an
-	// asynchronous query re-checks the stamp before acting on what was read from it
-	const StateStamp stamp = stateStamp();
-	const RepoState& state = _repo->state();
-
-	// The completion for either write below: `errorTitle` on failure, then onDone either way
-	const auto reportFailureThenDone = [this, onDone](const QString& errorTitle) {
-		return [this, onDone, errorTitle](std::expected<void, QString> result) {
-			if (!result)
-				showError(errorTitle, result.error());
-			onDone(result.has_value());
-		};
-	};
-	const auto checkoutAndGo = [this, reportFailureThenDone](const QString& branch) {
-		_repo->checkoutBranch(branch, reportFailureThenDone(tr("Failed to check out the branch")));
-	};
-
-	if (state.localBranchesAtHead.size() == 1)
+	std::vector<ReattachCandidate> candidates = _repo->state().reattachCandidates;
+	std::erase_if(candidates, [](const ReattachCandidate& candidate) { return !candidate.tipIsHead(); });
+	if (candidates.empty())
 	{
-		checkoutAndGo(state.localBranchesAtHead.front());
+		assert_unconditional_r("Committing is disabled on a detached HEAD without such a candidate");
+		onDone(false);
 		return;
 	}
 
-	if (state.localBranchesAtHead.size() > 1)
+	const std::optional<ReattachCandidate> chosen = chooseReattachCandidate(std::move(candidates), stateStamp());
+	if (!chosen)
 	{
-		const auto answer = MessageDialog::question(this, tr("Not on a branch"),
-			tr("Several branches point at the current commit. Which one should be checked out for this commit?"),
-			state.localBranchesAtHead);
-		if (answer && !stateMovedSince(stamp))
-			checkoutAndGo(state.localBranchesAtHead[*answer]);
-		else
-			onDone(false);
+		onDone(false);
 		return;
 	}
+	_repo->reattachHead(*chosen, [this, onDone](std::expected<void, QString> result) {
+		if (!result)
+			showError(tr("Could not put HEAD on a branch"), result.error());
+		onDone(result.has_value());
+	});
+}
 
-	if (!state.remoteBranchesAtHead.isEmpty())
-	{
-		QString remoteBranch = state.remoteBranchesAtHead.front();
-		if (state.remoteBranchesAtHead.size() > 1)
-		{
-			const auto answer = MessageDialog::question(this, tr("Not on a branch"),
-				tr("HEAD matches several remote branches. Which one should the new local branch track?"),
-				state.remoteBranchesAtHead);
-			if (!answer || stateMovedSince(stamp))
-			{
-				onDone(false);
-				return;
-			}
-			remoteBranch = state.remoteBranchesAtHead[*answer];
-		}
-
-		const QString localName = remoteBranch.mid(remoteBranch.indexOf(QLatin1Char('/')) + 1);
-		_repo->localBranchExists(localName, this, [this, stamp, localName, remoteBranch, onDone, reportFailureThenDone](bool exists) {
-			if (exists)
-			{
-				// Checking it out would move the working tree
-				MessageDialog::notice(this, tr("Cannot reattach"),
-					tr("HEAD matches %1, but the local branch '%2' already exists and points elsewhere.\n"
-					   "Committing is blocked - resolve the branch state first.").arg(remoteBranch, localName), {});
-				onDone(false);
-				return;
-			}
-			if (stateMovedSince(stamp))
-			{
-				onDone(false);
-				return;
-			}
-			_repo->createTrackingBranch(localName, remoteBranch, reportFailureThenDone(tr("Failed to create the branch")));
-		});
+void CommitWindow::reattachHeadFromStrip()
+{
+	if (writeInFlight())
 		return;
-	}
 
-	MessageDialog::notice(this, tr("Cannot commit"),
-		tr("Not on a branch, and no branch points at this commit.\n"
-		   "A commit made here could not be pushed. Check out a branch first."), {});
-	onDone(false);
+	const std::optional<ReattachCandidate> chosen = chooseReattachCandidate(_repo->state().reattachCandidates, stateStamp());
+	if (!chosen)
+		return;
+
+	beginMutation();
+	_repo->reattachHead(*chosen, mutationDone(tr("Could not put HEAD on a branch"), /*changesHistory=*/true));
+}
+
+std::optional<ReattachCandidate> CommitWindow::chooseReattachCandidate(std::vector<ReattachCandidate> candidates, const StateStamp& stamp)
+{
+	assert_and_return_r(!candidates.empty(), {});
+	if (candidates.size() == 1)
+		return candidates.front();
+
+	QStringList descriptions, actions;
+	for (const ReattachCandidate& candidate : candidates)
+	{
+		descriptions.push_back(reattachDescription(candidate));
+		actions.push_back(reattachActionText(candidate));
+	}
+	const std::optional<int> answer = MessageDialog::question(this, tr("Not on a branch"),
+		tr("Which branch should HEAD be put on?\n\n%1").arg(descriptions.join(QLatin1Char('\n'))), actions);
+	if (!answer || stateMovedSince(stamp))
+		return {};
+	return candidates[size_t(*answer)];
 }
 
 void CommitWindow::doCommit(bool pushAfterwards, StateStamp decisionStamp)

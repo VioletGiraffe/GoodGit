@@ -47,5 +47,4 @@ On a 16-thread desktop CPU with repositories on NVMe SSDs, against git 2.55 and 
   way.
 - **Per-command cost dominates small repositories.** `git --version`, which touches nothing, takes ~20 ms of
   the ~30 ms a `status` of a small repository costs.
-- **git 2.55 costs ~6 ms more per command than 2.37**, independently of the working directory, reported
-  upstream.
+- **git 2.55 costs ~6 ms more per command than 2.37**, independently of the working directory.

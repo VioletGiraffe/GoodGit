@@ -56,6 +56,7 @@ private:
 	// Each returns the widget it built, its child widgets connected
 	[[nodiscard]] QWidget* buildLeftPane();
 	[[nodiscard]] QWidget* buildRepoBar();
+	[[nodiscard]] QWidget* buildDetachedStrip();
 	[[nodiscard]] QWidget* buildCounterBar();
 	[[nodiscard]] QWidget* buildMessageHeader();
 	[[nodiscard]] QWidget* buildMessageArea();
@@ -109,7 +110,11 @@ private:
 	void startCommit(bool pushAfterwards);
 	void confirmUntrackedThenCommit(bool pushAfterwards, StateStamp decisionStamp);
 	// Always calls back, refusal included: the caller is mid-commit and has to end its flow either way
-	void reattachHead(std::function<void(bool reattached)> onDone);
+	void reattachHeadForCommit(std::function<void(bool reattached)> onDone);
+	// The detached strip's button: any candidate, a branch moving included
+	void reattachHeadFromStrip();
+	// The only candidate, or the one picked from several. Empty when the dialog is dismissed or the state moved meanwhile.
+	[[nodiscard]] std::optional<ReattachCandidate> chooseReattachCandidate(std::vector<ReattachCandidate> candidates, const StateStamp& stamp);
 	void doCommit(bool pushAfterwards, StateStamp decisionStamp);
 	// Runs the steps the repository plans one after another, logged as one console session. The first
 	// failure ends the push.
@@ -181,7 +186,9 @@ private:
 	QAction* _abortAction = nullptr;
 	QLabel* _readFailureStrip = nullptr;
 	QLabel* _opStrip = nullptr;
-	QLabel* _detachedStrip = nullptr;
+	QWidget* _detachedStrip = nullptr;
+	QLabel* _detachedLabel = nullptr;
+	QPushButton* _reattachButton = nullptr;
 	QCheckBox* _checkAllBox = nullptr;
 	QLabel* _lineTotalsLabel = nullptr;
 	FileListView* _filesView = nullptr;

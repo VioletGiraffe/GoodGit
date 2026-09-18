@@ -17,6 +17,7 @@ RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 #include <expected>
+#include <functional>
 #include <optional>
 
 namespace {
@@ -96,19 +97,29 @@ public:
 
 		GitRepository repository{ root() };
 		refresh(repository);
+		requireWriteSucceeds([&](Vcs::Answer<void> onDone) { repository.commit(message, pathspec, {}, std::move(onDone)); });
+	}
 
-		QEventLoop loop;
-		QTimer::singleShot(60'000, &loop, &QEventLoop::quit);
-		std::optional<QString> failure;
-		repository.commit(message, pathspec, {}, [&](std::expected<void, QString> result) {
-			failure = result ? QString{} : result.error();
-			loop.quit();
-		});
-		loop.exec();
+	// Takes a candidate the way the window's strip button does
+	void reattachThroughBackend(const ReattachCandidate& candidate) const
+	{
+		GitRepository repository{ root() };
+		requireWriteSucceeds([&](Vcs::Answer<void> onDone) { repository.reattachHead(candidate, std::move(onDone)); });
+	}
 
-		REQUIRE(failure.has_value()); // the timer fired instead of the commit answering
-		INFO(failure->toStdString());
-		REQUIRE(failure->isEmpty());
+	// main tracks origin/main, whose ref the caller writes. Nothing is ever fetched: the upstream config and the
+	// remote-tracking refs are all the branch listings read.
+	void setUpstreamOfMainToOriginMain() const
+	{
+		git({ QStringLiteral("config"), QStringLiteral("remote.origin.url"), QStringLiteral("https://example.invalid/r.git") });
+		git({ QStringLiteral("config"), QStringLiteral("remote.origin.fetch"), QStringLiteral("+refs/heads/*:refs/remotes/origin/*") });
+		git({ QStringLiteral("config"), QStringLiteral("branch.main.remote"), QStringLiteral("origin") });
+		git({ QStringLiteral("config"), QStringLiteral("branch.main.merge"), QStringLiteral("refs/heads/main") });
+	}
+
+	[[nodiscard]] QString sha(const QString& revision) const
+	{
+		return gitOutput({ QStringLiteral("rev-parse"), revision }).trimmed();
 	}
 
 	// What the index holds beyond HEAD, as `<letter>\t<path>` lines in path order
@@ -134,6 +145,23 @@ private:
 		REQUIRE_FALSE(repository.refreshing());
 		INFO(repository.state().readFailure.toStdString());
 		REQUIRE(repository.state().known());
+	}
+
+	// Runs one write to completion and requires it to succeed
+	static void requireWriteSucceeds(const std::function<void(Vcs::Answer<void>)>& startWrite)
+	{
+		QEventLoop loop;
+		QTimer::singleShot(60'000, &loop, &QEventLoop::quit);
+		std::optional<QString> failure;
+		startWrite([&](std::expected<void, QString> result) {
+			failure = result ? QString{} : result.error();
+			loop.quit();
+		});
+		loop.exec();
+
+		REQUIRE(failure.has_value()); // the timer fired instead of the write answering
+		INFO(failure->toStdString());
+		REQUIRE(failure->isEmpty());
 	}
 
 	[[nodiscard]] QString gitOutput(const QStringList& arguments) const
@@ -301,4 +329,72 @@ TEST_CASE("A commit puts back the staging it had to clear: an added file, a part
 	CHECK(files[1].type == ChangeType::Deleted);
 	CHECK(files[2].type == ChangeType::Modified);
 	CHECK(state.headSubject == QStringLiteral("only committed.txt"));
+}
+
+TEST_CASE("A detached HEAD on its upstream's line is offered its branch moved, or a new one, without the working tree moving", "[git]")
+{
+	const ScratchRepository scratch;
+	for (const char* content : { "1\n", "2\n", "3\n", "4\n" })
+	{
+		scratch.write(QStringLiteral("file.txt"), content);
+		scratch.commitAll(QString::fromLatin1(content).trimmed());
+	}
+	scratch.setUpstreamOfMainToOriginMain();
+	scratch.git({ QStringLiteral("update-ref"), QStringLiteral("refs/remotes/origin/main"), QStringLiteral("HEAD") });
+	scratch.git({ QStringLiteral("update-ref"), QStringLiteral("refs/remotes/origin/feature"), QStringLiteral("HEAD~1") });
+	// What a submodule update leaves: HEAD at a commit the upstream has, the local branch behind it
+	const QString detachedAt = scratch.sha(QStringLiteral("HEAD~2"));
+	scratch.git({ QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("--detach"), detachedAt });
+	scratch.git({ QStringLiteral("update-ref"), QStringLiteral("refs/heads/main"), scratch.sha(QStringLiteral("HEAD~1")) });
+
+	const RepoState detached = scratch.refreshed().second;
+	REQUIRE(detached.detached);
+	REQUIRE(detached.reattachCandidates.size() == 2);
+	const ReattachCandidate& move = detached.reattachCandidates[0];
+	CHECK(move.kind == ReattachCandidate::Kind::Move);
+	CHECK(move.branch == QStringLiteral("main"));
+	CHECK(move.upstream == QStringLiteral("origin/main"));
+	CHECK(move.refOnlyCommits == 0);
+	CHECK(move.headOnlyCommits == 1);
+	const ReattachCandidate& create = detached.reattachCandidates[1];
+	CHECK(create.kind == ReattachCandidate::Kind::Create);
+	CHECK(create.branch == QStringLiteral("feature"));
+	CHECK(create.upstream == QStringLiteral("origin/feature"));
+	CHECK(create.refOnlyCommits == 1);
+	CHECK(create.headOnlyCommits == 0);
+
+	// The whole case runs once per index, each over a repository of its own
+	const ReattachCandidate taken = detached.reattachCandidates[GENERATE(size_t{ 0 }, size_t{ 1 })];
+	scratch.reattachThroughBackend(taken);
+
+	const auto [files, attached] = scratch.refreshed();
+	CHECK(files.empty());
+	CHECK_FALSE(attached.detached);
+	CHECK(attached.branch == taken.branch);
+	CHECK(attached.headSha == detachedAt);
+	CHECK(attached.upstream == taken.upstream);
+	CHECK(attached.behind == (taken.kind == ReattachCandidate::Kind::Move ? 2 : 1));
+	CHECK(attached.reattachCandidates.empty());
+}
+
+TEST_CASE("A branch with unpushed commits is not offered, and the state says why", "[git]")
+{
+	const ScratchRepository scratch;
+	for (const char* content : { "1\n", "2\n", "3\n" })
+	{
+		scratch.write(QStringLiteral("file.txt"), content);
+		scratch.commitAll(QString::fromLatin1(content).trimmed());
+	}
+	scratch.setUpstreamOfMainToOriginMain();
+	// main is one commit past origin/main, which contains the detached HEAD
+	scratch.git({ QStringLiteral("update-ref"), QStringLiteral("refs/remotes/origin/main"), QStringLiteral("HEAD~1") });
+	scratch.git({ QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("--detach"), QStringLiteral("HEAD~2") });
+
+	const RepoState state = scratch.refreshed().second;
+	CHECK(state.reattachCandidates.empty());
+	REQUIRE(state.reattachObstacles.size() == 1);
+	CHECK(state.reattachObstacles[0].reason == ReattachObstacle::Reason::Unpushed);
+	CHECK(state.reattachObstacles[0].branch == QStringLiteral("main"));
+	CHECK(state.reattachObstacles[0].upstream == QStringLiteral("origin/main"));
+	CHECK(state.reattachObstacles[0].unpushedCommits == 1);
 }
