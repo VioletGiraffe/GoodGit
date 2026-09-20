@@ -11,13 +11,18 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG=release
-[ "${1:-}" = debug ] && CONFIG=debug
-if [ $# -gt 0 ]; then shift; fi
+if [ "${1:-}" = debug ]; then
+	CONFIG=debug
+	shift
+fi
 
 [ -z "${QT_ROOT_DIR:-}" ] && [ -f "${SCRIPT_DIR}/local-env.sh" ] && . "${SCRIPT_DIR}/local-env.sh"
 if [ -z "${QT_ROOT_DIR:-}" ]; then
-	for kit in "${HOME}"/Qt/6.*/macos "${HOME}"/Qt/6.*/gcc_64; do
-		[ -x "${kit}/bin/qmake" ] && QT_ROOT_DIR="${kit}"
+	# Sorted per version component, so that the newest kit wins: in plain text order 6.9 follows 6.10
+	for version_dir in $(ls -d "${HOME}"/Qt/6.* 2>/dev/null | sort -t. -k1,1n -k2,2n -k3,3n); do
+		for kit in "${version_dir}/macos" "${version_dir}/gcc_64"; do
+			[ -x "${kit}/bin/qmake" ] && QT_ROOT_DIR="${kit}"
+		done
 	done
 fi
 
