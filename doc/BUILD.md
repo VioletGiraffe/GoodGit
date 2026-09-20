@@ -50,9 +50,9 @@ rebuilds on a changed compiler command line.
 
 `scripts/run_tests.bat` (Windows) and `scripts/run_tests.sh` (macOS, Linux) build and run it (`debug` as the
 argument for the debug configuration); `scripts/debug_tests.bat` runs the built tests under cdb. The Qt kit is
-`QT_ROOT_DIR` if set, else the git-ignored `scripts/local-env.bat` / `local-env.sh`, else the default install
-location (`C:\Qt\6.*`, `~/Qt/6.*`); the shell script also falls back to a `qmake6` or `qmake` on PATH. CI runs
-the tests on all three platforms.
+`QT_ROOT_DIR` if set, else the git-ignored `scripts/local-env.bat` / `local-env.sh`; the shell script also falls
+back to a `qmake6` or `qmake` on PATH. Failing that the scripts stop with an explanation. CI runs the tests on all
+three platforms.
 
 ## Version
 

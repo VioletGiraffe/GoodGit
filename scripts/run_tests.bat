@@ -31,7 +31,8 @@ for /f "usebackq delims=" %%s in (`dir /s /b /a-d "%SCRIPT_DIR%..\.qmake.stash" 
 :: msbuild, not nmake: it also rebuilds what the compiler command line changed for, such as the Qt include paths
 msbuild tests.vcxproj /nologo /m /v:minimal /p:Configuration=%CONFIG% /p:Platform=x64 || goto :fail
 popd
-"%SCRIPT_DIR%..\tests\bin\%CONFIG%\tests.exe" %1 %2 %3 %4 %5
+:: --warn NoTests: a filter that matches nothing exits 0 otherwise, so a broken one would pass silently
+"%SCRIPT_DIR%..\tests\bin\%CONFIG%\tests.exe" %1 %2 %3 %4 %5 --warn NoTests
 exit /b %errorlevel%
 
 :fail

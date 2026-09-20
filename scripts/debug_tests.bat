@@ -25,4 +25,5 @@ if not exist "%TESTS_EXE%" (
 
 set "COMMANDS=%~1"
 if defined QT_NATVIS set "COMMANDS=.nvload %QT_NATVIS%; %COMMANDS%"
-"%CDB%" -G -lines -c "%COMMANDS%" "%TESTS_EXE%" %2 %3 %4 %5 %6 %7 %8 %9
+:: --warn NoTests: a filter that matches nothing exits 0 otherwise, so a broken one would pass silently
+"%CDB%" -G -lines -c "%COMMANDS%" "%TESTS_EXE%" %2 %3 %4 %5 %6 %7 %8 %9 --warn NoTests
