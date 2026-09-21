@@ -11,14 +11,14 @@ checked paths, adds the checked ones, commits, and restores what the clearing de
 the index rather than committing from the working tree because only the index records a file mode when
 `core.filemode` is off (git's default on Windows). An unborn repository is not a special mode: the empty
 tree stands in for HEAD and everything else is unchanged. Mercurial has no index; `hg status` answers the
-same delta and `hg commit -A <checked paths>` commits it, with the null revision as an unborn repository's
-parent.
+same delta, and an `addremove` of the checked files followed by `hg commit <checked paths>` commits it, with
+the null revision as an unborn repository's parent.
 
 Deliberate consequences:
 
 - Untracked files are added as part of the commit, and the add is rolled back if the commit fails, so the
-  Untracked/Added states shown never lie. Mercurial needs no rollback: `commit -A` adds inside the commit's
-  own transaction.
+  Untracked/Added states shown never lie.
+- Only the checked rows change state: a checked subrepo commits its pointer, never the unknown files inside it.
 - What another tool staged outside the checked paths is cleared for the commit and written back after it,
   object and mode, so a newly added file stays Added and a hunk-level selection made with `git add -p`
   survives. An unmerged path is the one entry not written back, and committing is refused while one exists.

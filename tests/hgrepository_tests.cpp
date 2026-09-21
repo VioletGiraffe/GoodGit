@@ -16,6 +16,8 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
+#include <expected>
+#include <optional>
 
 namespace {
 
@@ -69,6 +71,10 @@ public:
 	void hg(const QStringList& arguments, const QString& relativeDirectory = {}) const { run(QStringLiteral("hg"), arguments, relativeDirectory); }
 	// For the commands expected to fail, such as a merge that stops on conflicts
 	void hgMayFail(const QStringList& arguments) const { run(QStringLiteral("hg"), arguments, {}, /*mustSucceed=*/false); }
+	[[nodiscard]] QString hgOutput(const QStringList& arguments, const QString& relativeDirectory = {}) const
+	{
+		return run(QStringLiteral("hg"), arguments, relativeDirectory);
+	}
 	void git(const QStringList& arguments, const QString& relativeDirectory = {}) const
 	{
 		run(QStringLiteral("git"), QStringList{ QStringLiteral("-c"), QStringLiteral("user.name=GoodGit tests"), QStringLiteral("-c"),
@@ -79,6 +85,37 @@ public:
 	{
 		hg({ QStringLiteral("addremove"), QStringLiteral("-q") });
 		hg({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), message });
+	}
+
+	// An hg subrepo at `relativePath` holding one committed inside.txt, recorded by a commit here
+	void addSubrepo(const QString& relativePath) const
+	{
+		write(relativePath + QStringLiteral("/inside.txt"), "inside\n");
+		hg({ QStringLiteral("init") }, relativePath);
+		hg({ QStringLiteral("addremove"), QStringLiteral("-q") }, relativePath);
+		hg({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("inside") }, relativePath);
+		write(QStringLiteral(".hgsub"), (relativePath + QStringLiteral(" = ") + relativePath + QLatin1Char('\n')).toUtf8());
+		hg({ QStringLiteral("add"), QStringLiteral("-q"), QStringLiteral(".hgsub") });
+		hg({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("with a subrepo") });
+	}
+
+	// One commit made the way the window makes it, over a refreshed repository. Empty on success, else the error.
+	[[nodiscard]] QString commitThroughBackend(const QStringList& pathspec, const QStringList& untrackedPaths) const
+	{
+		HgRepository repository{ _root };
+		refresh(repository);
+
+		QEventLoop loop;
+		QTimer::singleShot(60'000, &loop, &QEventLoop::quit);
+		std::optional<QString> failure;
+		repository.commit(QStringLiteral("through the backend"), pathspec, untrackedPaths, [&](std::expected<void, QString> result) {
+			failure = result ? QString{} : result.error();
+			loop.quit();
+		});
+		loop.exec();
+
+		REQUIRE(failure.has_value()); // the timer fired instead of the commit answering
+		return *failure;
 	}
 
 	// The backend's rows and state after one refresh, sorted by path
@@ -106,17 +143,20 @@ private:
 		REQUIRE(repository.state().known());
 	}
 
-	void run(const QString& program, const QStringList& arguments, const QString& relativeDirectory = {}, bool mustSucceed = true) const
+	// Returns the merged output
+	QString run(const QString& program, const QStringList& arguments, const QString& relativeDirectory = {}, bool mustSucceed = true) const
 	{
 		QProcess process;
 		process.setWorkingDirectory(QDir{ _root }.filePath(relativeDirectory));
 		process.setProcessChannelMode(QProcess::MergedChannels);
 		process.start(program, arguments);
 		REQUIRE(process.waitForFinished(60'000));
-		INFO((program + QLatin1Char(' ') + arguments.join(QLatin1Char(' '))).toStdString() + '\n' + process.readAll().toStdString());
+		const QString output = QString::fromUtf8(process.readAll());
+		INFO((program + QLatin1Char(' ') + arguments.join(QLatin1Char(' '))).toStdString() + '\n' + output.toStdString());
 		REQUIRE(process.exitStatus() == QProcess::NormalExit);
 		if (mustSucceed)
 			REQUIRE(process.exitCode() == 0);
+		return output;
 	}
 
 	QString _root;
@@ -190,13 +230,7 @@ TEST_CASE("hg merge conflicts are rows, including a file modified here and delet
 TEST_CASE("An hg subrepo gets a row for modified files inside, and none for untracked files alone", "[hg]")
 {
 	const ScratchHgRepository scratch;
-	scratch.write(QStringLiteral("sub/inside.txt"), "inside\n");
-	scratch.hg({ QStringLiteral("init") }, QStringLiteral("sub"));
-	scratch.hg({ QStringLiteral("addremove"), QStringLiteral("-q") }, QStringLiteral("sub"));
-	scratch.hg({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("inside") }, QStringLiteral("sub"));
-	scratch.write(QStringLiteral(".hgsub"), "sub = sub\n");
-	scratch.hg({ QStringLiteral("add"), QStringLiteral("-q"), QStringLiteral(".hgsub") });
-	scratch.hg({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("with a subrepo") });
+	scratch.addSubrepo(QStringLiteral("sub"));
 	CHECK(HgRepository{ scratch.root() }.nestedRepositoryLocation(QStringLiteral("sub")).kind == VcsKind::Mercurial);
 
 	SECTION("untracked files inside")
@@ -216,6 +250,53 @@ TEST_CASE("An hg subrepo gets a row for modified files inside, and none for untr
 		CHECK_FALSE(files[0].pointerMoved);
 		CHECK(files[0].content == SubmoduleContent::DirtyTracked);
 	}
+}
+
+TEST_CASE("An hg commit of a subrepo row records its pointer and leaves the unknown files inside untracked", "[hg]")
+{
+	const ScratchHgRepository scratch;
+	scratch.addSubrepo(QStringLiteral("sub"));
+	scratch.write(QStringLiteral("sub/inside.txt"), "changed\n");
+	scratch.hg({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("moves the pointer") }, QStringLiteral("sub"));
+	scratch.write(QStringLiteral("sub/unknown.txt"), "new\n");
+
+	REQUIRE(scratch.commitThroughBackend({ QStringLiteral("sub") }, {}).isEmpty());
+
+	CHECK(scratch.hgOutput({ QStringLiteral("status") }, QStringLiteral("sub")) == QStringLiteral("? unknown.txt\n"));
+	CHECK(scratch.hgOutput({ QStringLiteral("status") }).isEmpty());
+	CHECK(scratch.refreshed().first.empty()); // the pointer is recorded
+}
+
+TEST_CASE("An hg commit records a missing file's removal, and keeps a forgotten file removed", "[hg]")
+{
+	const ScratchHgRepository scratch;
+	scratch.write(QStringLiteral("missing.txt"), "missing\n");
+	scratch.write(QStringLiteral("forgotten.txt"), "forgotten\n");
+	scratch.commitAll(QStringLiteral("base"));
+	scratch.remove(QStringLiteral("missing.txt"));
+	scratch.hg({ QStringLiteral("forget"), QStringLiteral("forgotten.txt") });
+	scratch.write(QStringLiteral("new.txt"), "new\n");
+
+	REQUIRE(scratch.commitThroughBackend({ QStringLiteral("forgotten.txt"), QStringLiteral("missing.txt"), QStringLiteral("new.txt") },
+		{ QStringLiteral("new.txt") }).isEmpty());
+
+	CHECK(scratch.hgOutput({ QStringLiteral("files"), QStringLiteral("-r"), QStringLiteral(".") }) == QStringLiteral("new.txt\n"));
+	CHECK(scratch.hgOutput({ QStringLiteral("status") }) == QStringLiteral("? forgotten.txt\n"));
+}
+
+TEST_CASE("A failed hg commit leaves the checked untracked files untracked, here and in a listed subrepo", "[hg]")
+{
+	const ScratchHgRepository scratch;
+	scratch.addSubrepo(QStringLiteral("sub"));
+	// hg refuses to commit a pointer while the subrepo has uncommitted changes
+	scratch.write(QStringLiteral("sub/inside.txt"), "changed\n");
+	scratch.write(QStringLiteral("sub/unknown.txt"), "new\n");
+	scratch.write(QStringLiteral("new.txt"), "new\n");
+
+	CHECK_FALSE(scratch.commitThroughBackend({ QStringLiteral("new.txt"), QStringLiteral("sub") }, { QStringLiteral("new.txt") }).isEmpty());
+
+	CHECK(scratch.hgOutput({ QStringLiteral("status") }) == QStringLiteral("? new.txt\n"));
+	CHECK(scratch.hgOutput({ QStringLiteral("status") }, QStringLiteral("sub")) == QStringLiteral("M inside.txt\n? unknown.txt\n"));
 }
 
 TEST_CASE("A git subrepo inside an hg repository is a git location, and its content is read with git", "[hg]")

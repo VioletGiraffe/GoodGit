@@ -164,8 +164,10 @@ touching the user's configuration. Which tool `extdiff` starts is the user's `[e
 - **hg has no per-branch upstream.** A push contacts `default-push` where configured, else `default`. No
   configured path is an answer - nowhere to push to - not a failure.
 - hg keeps no remote-tracking state, so what a remote holds must be read from the remote.
-- `commit -A` adds new and removes missing files **within the pathspec**; a missing file cannot otherwise be
-  committed by name. Unscoped, `-A` sweeps in every unknown file.
+- A missing file cannot be committed by name until its removal is recorded (`addremove`, `remove --after`).
+- `addremove` (and `commit -A`) adds every unknown file its pattern reaches: unscoped, the whole tree; a listed
+  subrepo, all of it, recursively.
+- `addremove` also re-adds a forgotten file: removed, but still on disk.
 - `revert` leaves a `.orig` copy of every reverted file unless `-C` is passed.
 - Reverting a path the parent changeset does not have only takes it out of tracking.
 

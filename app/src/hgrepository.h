@@ -98,6 +98,9 @@ private:
 	// Runs `args` with the listfile pattern for `paths` appended, holding the pathspec file until the command
 	// is done. A failure to create the file answers `onDone` without running anything.
 	void runWithPathspec(const QString& workDir, QStringList args, const QStringList& paths, Vcs::Answer<void> onDone);
+	// A commit failing at any step would leave the untracked paths added, and their rows would read Added instead of
+	// Untracked. `result` is what gets reported, not the un-add's.
+	void rollBackAddThenReport(const QStringList& untrackedPaths, const ProcessResult& result, const Vcs::Callback& report);
 
 private:
 	// .hgsubstate and .hgsub, re-read at the start of every refresh: the recorded node per subrepo path, and

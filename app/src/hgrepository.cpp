@@ -554,7 +554,17 @@ void HgRepository::runWithPathspec(const QString& workDir, QStringList args, con
 	Hg::run(workDir, std::move(args), this, [pathspecFile, report](const ProcessResult& result) { report(result); });
 }
 
-void HgRepository::commit(const QString& message, const QStringList& pathspec, const QStringList& /*untrackedPaths*/, Vcs::Answer<void> onDone)
+void HgRepository::rollBackAddThenReport(const QStringList& untrackedPaths, const ProcessResult& result, const Vcs::Callback& report)
+{
+	if (result.ok || untrackedPaths.isEmpty())
+	{
+		report(result);
+		return;
+	}
+	unAdd(untrackedPaths, [report, result](std::expected<void, QString>) { report(result); });
+}
+
+void HgRepository::commit(const QString& message, const QStringList& pathspec, const QStringList& untrackedPaths, Vcs::Answer<void> onDone)
 {
 	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
 	const auto messageFile = Vcs::openMessageFile(Hg::localBytes(message), this, report);
@@ -564,13 +574,40 @@ void HgRepository::commit(const QString& message, const QStringList& pathspec, c
 	if (!pathspecFile)
 		return;
 
-	// -A: adds the new and removes the missing files within the pathspec. A missing file cannot otherwise be
-	// committed by name.
-	// No separate add step for the untracked paths, and no rollback: a failed commit rolls its own -A back with
-	// the rest of the transaction.
-	Hg::run(path(), { QStringLiteral("commit"), QStringLiteral("-l"), messageFile->fileName(),
-			QStringLiteral("-A"), listfilePattern(pathspecFile) }, this,
-		[messageFile, pathspecFile, report](const ProcessResult& result) { report(result); });
+	const auto runCommit = [this, messageFile, pathspecFile, untrackedPaths, report] {
+		Hg::run(path(), { QStringLiteral("commit"), QStringLiteral("-l"), messageFile->fileName(), listfilePattern(pathspecFile) }, this,
+			[this, messageFile, pathspecFile, untrackedPaths, report](const ProcessResult& result) {
+				rollBackAddThenReport(untrackedPaths, result, report);
+			});
+	};
+
+	// Subrepo paths go to the commit only, which records their pointers: addremove recurses into a listed subrepo
+	// and adds every unknown file there
+	QStringList filePaths;
+	for (const QString& checkedPath : pathspec)
+	{
+		if (!_subrepoSources.contains(checkedPath))
+			filePaths << checkedPath;
+	}
+	if (filePaths.isEmpty())
+	{
+		runCommit();
+		return;
+	}
+	const auto filePathsFile = openPathspecFile(filePaths, report);
+	if (!filePathsFile)
+		return;
+
+	// Adds the untracked files and records the missing ones as removed: a missing file cannot be committed by name.
+	// -I: a forgotten file is removed but still on disk, and addremove would add it back.
+	Hg::run(path(), { QStringLiteral("addremove"), QStringLiteral("-I"), QStringLiteral("set:unknown() or missing()"),
+			listfilePattern(filePathsFile) }, this,
+		[this, filePathsFile, runCommit, untrackedPaths, report](const ProcessResult& result) {
+			if (result.ok)
+				runCommit();
+			else
+				rollBackAddThenReport(untrackedPaths, result, report);
+		});
 }
 
 void HgRepository::commitMergeState(const QString& message, const QStringList& untrackedPaths, Vcs::Answer<void> onDone)
@@ -585,14 +622,7 @@ void HgRepository::commitMergeState(const QString& message, const QStringList& u
 		// unknown file rather than the ticked ones.
 		Hg::run(path(), { QStringLiteral("commit"), QStringLiteral("-l"), messageFile->fileName() }, this,
 			[this, messageFile, untrackedPaths, report](const ProcessResult& result) {
-				// A failed commit would leave the untracked paths added, and their rows would read Added instead
-				// of Untracked. The commit's result is what gets reported.
-				if (result.ok || untrackedPaths.isEmpty())
-				{
-					report(result);
-					return;
-				}
-				unAdd(untrackedPaths, [report, result](std::expected<void, QString>) { report(result); });
+				rollBackAddThenReport(untrackedPaths, result, report);
 			});
 	};
 
@@ -605,11 +635,11 @@ void HgRepository::commitMergeState(const QString& message, const QStringList& u
 	if (!pathspecFile)
 		return;
 	Hg::run(path(), { QStringLiteral("add"), listfilePattern(pathspecFile) }, this,
-		[pathspecFile, runCommit, report](const ProcessResult& result) {
+		[this, pathspecFile, runCommit, untrackedPaths, report](const ProcessResult& result) {
 			if (result.ok)
 				runCommit();
 			else
-				report(result);
+				rollBackAddThenReport(untrackedPaths, result, report);
 		});
 }
 
