@@ -34,7 +34,7 @@ callback whole. A job may additionally stream chunks to a sink (`Job::streamTo`)
 returns to the event loop or the first chunks are missed. Push is the one command that streams, and the one
 that carries `--progress`: into a pipe git prints nothing until it finishes, and the meter arrives as carriage
 returns rewriting one line, which `ConsoleLogView` renders as a terminal would and `errorText()` collapses for
-dialogs.
+dialogs. hg's push has its own meter and stdout-buffering settings (see `hg.md`).
 
 Line-endings-only changes are hidden from the shown diffs and the line counts by default
 (`--ignore-cr-at-eol`, `-Z` for hg); a setting shows them instead and flips both together so the counts

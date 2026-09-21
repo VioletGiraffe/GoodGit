@@ -691,9 +691,13 @@ void HgRepository::planPush(Vcs::Answer<std::vector<PushStep>> onDone)
 Vcs::Job* HgRepository::runPushStep(const PushStep& step, bool /*setUpstream*/, Vcs::Callback onDone)
 {
 	// Its own process: a push must not run on a shared server (see Hg::Transport)
-	// The meter is all the log gets while the push runs: hg's status text sits in its stdout buffer until exit
-	return Hg::run(step.workDir, { QStringLiteral("--config"), QStringLiteral("progress.assume-tty=True"), QStringLiteral("push"),
-		QStringLiteral("-r"), QStringLiteral(".") }, this, tolerantOfEmptyResult(std::move(onDone)), {}, Hg::Transport::Process);
+	// Status text goes to stderr: hg flushes it per write, while stdout waits in a buffer until exit
+	// Meter delays are shortened: a push of many subrepos is a series of short topics
+	return Hg::run(step.workDir, { QStringLiteral("--config"), QStringLiteral("ui.message-output=stderr"),
+		QStringLiteral("--config"), QStringLiteral("progress.assume-tty=True"),
+		QStringLiteral("--config"), QStringLiteral("progress.delay=0.5"),
+		QStringLiteral("--config"), QStringLiteral("progress.changedelay=0.3"),
+		QStringLiteral("push"), QStringLiteral("-r"), QStringLiteral(".") }, this, tolerantOfEmptyResult(std::move(onDone)), {}, Hg::Transport::Process);
 }
 
 std::optional<QString> HgRepository::missingUpstreamName(const PushStep& /*step*/, const ProcessResult& /*failure*/) const

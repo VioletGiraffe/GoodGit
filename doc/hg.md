@@ -15,6 +15,8 @@ Verified against Mercurial 7.2.2 on Windows. Version floors are named where one 
   the process exits, so a long command's log arrives all at once. Only stderr is flushed per write.
 - The progress meter is the exception: it prints to stderr, and needs both `HGPLAINEXCEPT=progress` (HGPLAIN
   suppresses it) and `progress.assume-tty=True` (a pipe is not a tty).
+- The push, whose log streams, passes `ui.message-output=stderr` so its status text arrives live, and shortens
+  the meter's `progress.delay` and `progress.changedelay` (seconds, floats).
 - The user's extensions must **not** be disabled: a repository may need one (largefiles, lfs) to be readable
   at all.
 - Every invocation pays Python startup, so a refresh batches its queries rather than chaining them.
