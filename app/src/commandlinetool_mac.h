@@ -8,19 +8,8 @@ RESTORE_COMPILER_WARNINGS
 
 #include <expected>
 
-class QWidget;
+enum class Elevated { Ran, Cancelled };
 
-// Whether /usr/local/bin/gg is absent or dangling: the two states installCommandLineTool() can fix. A link
-// that resolves counts as present, wherever it points - another copy of GoodGit, or another program entirely.
-[[nodiscard]] bool commandLineToolLinkMissingOrBroken();
-
-// Points /usr/local/bin/gg at this executable.
-// /usr/local/bin is on the default PATH but not user-writable on every Mac; where it is not, macOS asks for
-// administrator credentials through its own dialog.
-// Both the value and the error are messages for the user. The value also covers the outcomes where nothing
-// was done: already installed, or cancelled.
-[[nodiscard]] std::expected<QString, QString> installCommandLineTool();
-
-// Installs and shows the message over `dialogParent`. Every outcome is a message, the ones that did nothing
-// included.
-void installCommandLineToolAndReport(QWidget* dialogParent);
+// Creates `linkPath` and its directory as root, pointing at `target` and replacing a link already there.
+// Blocks until the macOS credentials dialog is dismissed. The error is a message for the user.
+[[nodiscard]] std::expected<Elevated, QString> createLinkAsAdministrator(const QString& target, const QString& linkPath);

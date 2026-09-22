@@ -149,6 +149,11 @@ mac*|linux*|freebsd*{
 #    Platform-specific sources, compiler options and libs
 ###################################################
 
+unix {
+	HEADERS += src/commandlinetool.h
+	SOURCES += src/commandlinetool.cpp
+}
+
 mac*{
 	LIBS += -framework AppKit -framework UniformTypeIdentifiers
 

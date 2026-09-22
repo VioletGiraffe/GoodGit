@@ -1,6 +1,6 @@
 #include "appmenus.h"
-#ifdef Q_OS_MACOS
-#include "commandlinetool_mac.h"
+#ifdef Q_OS_UNIX
+#include "commandlinetool.h"
 #endif
 #include "init_logging.h"
 #include "settingspages.h"
@@ -41,7 +41,7 @@ QAction* addFileMenu(QMenuBar& menuBar, QWidget* dialogParent)
 		[dialogParent] { browseForRepository(dialogParent); });
 	openRepositoryAction->setShortcut(QKeySequence::Open);
 	menu->addSeparator();
-#ifdef Q_OS_MACOS
+#ifdef Q_OS_UNIX
 	menu->addAction(QObject::tr("Install 'gg' Command Line Tool..."), dialogParent,
 		[dialogParent] { installCommandLineToolAndReport(dialogParent); });
 	menu->addSeparator();

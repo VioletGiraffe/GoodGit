@@ -48,7 +48,7 @@ Dependencies point one way, top to bottom:
   `textdiff`, `movedblocks`, `commitgraph`.
 
 Nothing above `Repository` names a backend; nothing below it knows which window shows an answer. Beside the
-stack: `settings`, `theme` and `stylesheet`, `externalapps`, `init_logging`, `updatecheck`, `commandlinetool_mac`, `smoketest`, `version`.
+stack: `settings`, `theme` and `stylesheet`, `externalapps`, `init_logging`, `updatecheck`, `commandlinetool`, `smoketest`, `version`.
 
 ## Components (app/src/)
 
@@ -92,7 +92,7 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `init_logging`, `up
 | `welcomewindow` | The window shown with nothing to open: what the app needs, a folder chooser, the recent list. The one window without a repository |
 | `fileviewerwindow` | Read-only text in a window of its own, on qtutils `CLightningFastViewerWidget` with a `CFindBar` under it: one file as of one commit, decoded where the bytes are text and a hex dump where they are not; or a change's whole diff, scrolled to the file the pane shows |
 | `updatecheck` | The interactive and the automatic update check, see `updates.md` |
-| `commandlinetool_mac` | macOS only: the `/usr/local/bin/gg` link, see `doc/BUILD.md` |
+| `commandlinetool` | macOS and Linux: the `gg` link on PATH, see `doc/BUILD.md`. `commandlinetool_mac` creates it with administrator credentials |
 | `smoketest` | `gg --smoke-test <repository>`: the launch mode CI runs on the deployed build, see `doc/BUILD.md` |
 | `stylesheet` | The application QSS with `@token@` placeholders filled from a `Theme`. Detail header of `theme.cpp` |
 | `version` | `GG_VERSION`, the one place the version is written; `app.pro` and the installer read it from here, see `doc/BUILD.md`. `GG_GITHUB_REPOSITORY`: home of the releases and the issue tracker |

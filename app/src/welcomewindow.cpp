@@ -1,6 +1,6 @@
 #include "welcomewindow.h"
-#ifdef Q_OS_MACOS
-#include "commandlinetool_mac.h"
+#ifdef Q_OS_UNIX
+#include "commandlinetool.h"
 #endif
 #include "appmenus.h"
 #include "recentrepositories.h"
@@ -89,7 +89,7 @@ WelcomeWindow::WelcomeWindow()
 	introLayout->addWidget(introLabel);
 	introLayout->addLayout(buttonRow);
 
-#ifdef Q_OS_MACOS
+#ifdef Q_OS_UNIX
 	if (commandLineToolLinkMissingOrBroken())
 	{
 		auto* toolLabel = new QLabel(tr("The 'gg' command line tool opens a repository from a terminal."));

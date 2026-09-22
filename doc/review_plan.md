@@ -58,7 +58,7 @@ repositorywindows, welcomewindow, fileviewerwindow.
 
 - Each async callback vs. the error/empty result the callee can deliver; indexing assuming non-empty
 - Window lifetime vs. in-flight operations; ownership in repositorywindows; close/quit mid-operation
-- externalapps + commandlinetool_mac: user-controlled paths (spaces, unicode), tool not installed
+- externalapps + commandlinetool: user-controlled paths (spaces, unicode), tool not installed
 - main/welcomewindow startup: nonexistent path argument, file instead of dir
 
 ## F. Reuse + simplification

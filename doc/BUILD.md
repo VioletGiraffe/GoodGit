@@ -22,10 +22,11 @@ platform icons and `Info.plist`.
   the Qt DLLs deployed into `lib` are not offered to every process's DLL search; the launcher reaches them
   with `SetDllDirectory` on its own process. It also passes `lib` to `ggMain`: Qt looks for the deployed
   plugins in the executable's directory, which is not where they are. The installer adds that directory to PATH.
-- **macOS**: File > Install 'gg' Command Line Tool (also offered on the welcome window) points `/usr/local/bin/gg` at
-  the running bundle's executable (`commandlinetool_mac`). macOS asks for administrator credentials where that
-  directory is not user-writable.
-- **Linux**: nothing; the binary is `bin/<config>/gg`.
+- **macOS and Linux**: File > Install 'gg' Command Line Tool (also offered on the welcome window) points a `gg` link at
+  the running executable (`commandlinetool`):
+  - macOS: `/usr/local/bin/gg`. macOS asks for administrator credentials where that directory is not user-writable.
+  - Linux: `~/.local/bin/gg`. Whether that directory is on PATH varies by distribution and shell; the result message
+    says when it is not.
 
 ## Tests
 
