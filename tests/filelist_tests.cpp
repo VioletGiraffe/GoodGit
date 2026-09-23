@@ -54,14 +54,14 @@ namespace {
 
 } // namespace
 
-TEST_CASE("Status order: blocked submodules, tracked files, tracked submodules, then everything untracked", "[filelist]")
+TEST_CASE("Status order: blocked submodules, tracked submodules, tracked files, then everything untracked", "[filelist]")
 {
 	ChangedFilesModel model;
 	// The paths sort against the expected order, so only the status rank can produce it
 	model.setEntries({
 		untrackedRepositoryRow(QStringLiteral("a-repo")),
 		fileRow(QStringLiteral("b.txt"), ChangeType::Untracked),
-		movedSubmoduleRow(QStringLiteral("c-sub")),
+		movedSubmoduleRow(QStringLiteral("y-sub")),
 		fileRow(QStringLiteral("d.txt"), ChangeType::Deleted),
 		fileRow(QStringLiteral("e.txt"), ChangeType::Modified),
 		fileRow(QStringLiteral("f.txt"), ChangeType::Conflicted),
@@ -71,8 +71,8 @@ TEST_CASE("Status order: blocked submodules, tracked files, tracked submodules, 
 	FileListView view;
 	view.setModel(&model);
 
-	const QStringList expected{ QStringLiteral("z-blocked"), QStringLiteral("f.txt"), QStringLiteral("e.txt"), QStringLiteral("d.txt"),
-		QStringLiteral("c-sub"), QStringLiteral("a-repo"), QStringLiteral("b.txt") };
+	const QStringList expected{ QStringLiteral("z-blocked"), QStringLiteral("y-sub"), QStringLiteral("f.txt"), QStringLiteral("e.txt"),
+		QStringLiteral("d.txt"), QStringLiteral("a-repo"), QStringLiteral("b.txt") };
 	CHECK(shownPaths(view) == expected);
 }
 

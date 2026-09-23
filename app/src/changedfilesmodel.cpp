@@ -90,7 +90,7 @@ QColor changeTypeColor(ChangeType type)
 
 int fileListSortRank(ChangeType type, bool isSubmodule, bool blocksCommit)
 {
-	enum Group { BlockedSubmodules, TrackedFiles, TrackedSubmodules, Untracked };
+	enum Group { BlockedSubmodules, TrackedSubmodules, TrackedFiles, Untracked };
 	constexpr int GroupStride = 10; // past every changeTypeRank
 
 	// Untracked is tested before the submodule flag, so an untracked nested repository sorts with the untracked
