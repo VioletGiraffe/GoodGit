@@ -30,8 +30,9 @@ platform icons and `Info.plist`.
 
 ## Tests
 
-`tests/tests.pro` is a Catch2 app built on its own, outside the subdirs project: it compiles the sources under
-test straight from `app/src`, and the library modules they use through their `.pri` files.
+`tests/tests.pro` is a subdirs project of its own, outside `GoodGit.pro`: it builds the `thin_io` static library, then
+`tests/unittests.pro`, a Catch2 app. That app compiles the sources under test straight from `app/src`, the library
+modules they use through their `.pri` files, and links `thin_io` as the app does.
 
 Kinds of tests:
 - **Pure logic**: the modules `ARCHITECTURE.md` lists as tested directly (parsers, diff alignment, moved blocks,
@@ -46,7 +47,7 @@ Kinds of tests:
   CI runs it on each platform's deployed build against a fresh repository holding one untracked file.
 
 Objects go under `tests/build/<Qt version>`: make rebuilds by timestamp only, and a new kit's headers can predate
-objects compiled against the old ones. On Windows the scripts build a generated `tests.vcxproj` with msbuild, which also
+objects compiled against the old ones. On Windows the scripts build a generated `tests.sln` with msbuild, which also
 rebuilds on a changed compiler command line.
 
 `scripts/run_tests.bat` (Windows) and `scripts/run_tests.sh` (macOS, Linux) build and run it (`debug` as the

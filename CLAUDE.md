@@ -6,7 +6,7 @@ code: current structure and rationale only, no history, no implementation detail
 
 Read `doc/conventions.md` before writing code.
 
-`scripts/run_tests.bat` (`run_tests.sh` on macOS and Linux) builds and runs the unit tests; run it after changing any source `tests/tests.pro` compiles.
+`scripts/run_tests.bat` (`run_tests.sh` on macOS and Linux) builds and runs the unit tests; run it after changing any source `tests/tests.pro` builds.
 Run it locally with the `debug` argument (release is the default): release defines `NDEBUG`, which compiles out the asserts guarding invariants. CI runs both.
 A run's output goes to a log file in the scratchpad, never into context; surface only the exit code and the informative lines:
 

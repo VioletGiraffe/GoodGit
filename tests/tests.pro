@@ -1,100 +1,10 @@
-# Tests for the app's code, built on their own: not part of GoodGit.pro. They run in a QApplication, so they need a
-# display: xvfb-run where there is none.
-# Run from anywhere: the fixtures are found through the source tree.
+# The unit tests, built on their own: not part of GoodGit.pro.
+# The static libraries the tests link are built first, then the tests themselves (unittests.pro).
 
-TEMPLATE = app
-TARGET = tests
-CONFIG += console
-CONFIG -= app_bundle
-QT = core gui widgets svg   # svg: the theme's tinted glyphs
+TEMPLATE = subdirs
 
-include(../global.pri)
+SUBDIRS += thin_io unittests
 
-Release:OUTPUT_DIR=release/
-Debug:OUTPUT_DIR=debug/
-
-DESTDIR = bin/$${OUTPUT_DIR}
-# Keyed by Qt version: make rebuilds by timestamp only, and a new kit's headers can predate the old objects
-BUILD_DIR = build/$$[QT_VERSION]/$${OUTPUT_DIR}
-OBJECTS_DIR = $${BUILD_DIR}
-MOC_DIR = $${BUILD_DIR}
-RCC_DIR = $${BUILD_DIR}
-
-INCLUDEPATH += ../app/src ../cpputils ../cpp-template-utils ../qtutils ../thin_io/src
-
-DEFINES += FIXTURES_DIR=\\\"$$PWD/fixtures/\\\"
-
-HEADERS += \
-	../app/src/changedfilesmodel.h \
-	../app/src/commitgraph.h \
-	../app/src/fileicons.h \
-	../app/src/filelistdelegate.h \
-	../app/src/filelistview.h \
-	../app/src/gitparsers.h \
-	../app/src/gitprocess.h \
-	../app/src/gitrepository.h \
-	../app/src/hgcommandserver.h \
-	../app/src/hgparsers.h \
-	../app/src/hgprocess.h \
-	../app/src/hgrepository.h \
-	../app/src/movedblocks.h \
-	../app/src/queryround.h \
-	../app/src/repository.h \
-	../app/src/settings.h \
-	../app/src/textdiff.h \
-	../app/src/theme.h \
-	../app/src/unifieddiff.h \
-	../app/src/vcsprocess.h \
-	../app/src/vcstypes.h \
-	../qtutils/appdialogs/csettingsnotifier.h \
-	repositorytestutils.h
-
-SOURCES += \
-	../app/src/changedfilesmodel.cpp \
-	../app/src/commitgraph.cpp \
-	../app/src/fileicons.cpp \
-	../app/src/filelistdelegate.cpp \
-	../app/src/filelistview.cpp \
-	../app/src/gitparsers.cpp \
-	../app/src/gitprocess.cpp \
-	../app/src/gitrepository.cpp \
-	../app/src/hgcommandserver.cpp \
-	../app/src/hgparsers.cpp \
-	../app/src/hgprocess.cpp \
-	../app/src/hgrepository.cpp \
-	../app/src/movedblocks.cpp \
-	../app/src/repository.cpp \
-	../app/src/textdiff.cpp \
-	../app/src/theme.cpp \
-	../app/src/unifieddiff.cpp \
-	../app/src/vcsprocess.cpp \
-	commitgraph_tests.cpp \
-	fileicons_tests.cpp \
-	filelist_tests.cpp \
-	gitparsers_tests.cpp \
-	gitrepository_tests.cpp \
-	hgparsers_tests.cpp \
-	hgrepository_tests.cpp \
-	main.cpp \
-	movedblocks_tests.cpp \
-	textdiff_tests.cpp \
-	unifieddiff_tests.cpp \
-	vcstypes_tests.cpp
-
-RESOURCES += ../app/res/theme.qrc
-
-mac*{
-	LIBS += -framework AppKit -framework UniformTypeIdentifiers
-	HEADERS += ../app/src/fileicons_mac.h
-	OBJECTIVE_SOURCES += ../app/src/fileicons_mac.mm
-}
-
-# The app sources use these library modules: compiled in here, without the whole static libraries
-include(../cpputils/assert/assert.pri)
-include(../cpputils/debugger/debugger.pri)
-include(../qtutils/theme/theme.pri)
-
-# thin_io has no .pri: its sources, as thin_io.pro selects them
-SOURCES += ../thin_io/src/filesystem_error.cpp
-win*: SOURCES += $$files(../thin_io/src/*_win.cpp)
-else: SOURCES += $$files(../thin_io/src/*_linux.cpp)
+thin_io.file = ../thin_io/thin_io.pro
+unittests.file = unittests.pro
+unittests.depends = thin_io

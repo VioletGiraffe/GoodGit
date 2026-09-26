@@ -28,6 +28,7 @@ dist/
 Makefile
 Makefile.Debug
 Makefile.Release
+Makefile.unittests*
 .qmake.stash
 
 .DS_Store

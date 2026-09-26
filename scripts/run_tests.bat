@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-:: Builds tests\tests.pro and runs it. Exit code: the test run's, or 2 when the environment is incomplete.
+:: Builds tests\tests.pro and runs the tests. Exit code: the test run's, or 2 when the environment is incomplete.
 :: The Qt kit comes from qt_kit.bat (QT_ROOT_DIR); the MSVC environment is set up through vswhere unless cl
 :: is already on PATH, as it is on CI. An argument of "debug" builds and runs the debug configuration, for
 :: debug_tests.bat.
@@ -27,9 +27,9 @@ pushd "%SCRIPT_DIR%..\tests" || exit /b 2
 :: A kept .qmake.stash pins the toolchain probed when it was written, so every run probes the current one instead.
 :: One is written per subproject build directory, and qmake also searches upward, so the sweep covers the repository.
 for /f "usebackq delims=" %%s in (`dir /s /b /a-d "%SCRIPT_DIR%..\.qmake.stash" 2^>nul`) do del /q "%%s"
-"%QT_ROOT_DIR%\bin\qmake.exe" -tp vc tests.pro || goto :fail
+"%QT_ROOT_DIR%\bin\qmake.exe" -tp vc -r tests.pro || goto :fail
 :: msbuild, not nmake: it also rebuilds what the compiler command line changed for, such as the Qt include paths
-msbuild tests.vcxproj /nologo /m /v:minimal /p:Configuration=%CONFIG% /p:Platform=x64 || goto :fail
+msbuild tests.sln /nologo /m /v:minimal /p:Configuration=%CONFIG% /p:Platform=x64 || goto :fail
 popd
 :: --warn NoTests: a filter that matches nothing exits 0 otherwise, so a broken one would pass silently
 "%SCRIPT_DIR%..\tests\bin\%CONFIG%\tests.exe" %1 %2 %3 %4 %5 --warn NoTests

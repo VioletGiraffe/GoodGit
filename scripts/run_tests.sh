@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Builds tests/tests.pro and runs it. Exit code: the test run's, or 2 when the environment is incomplete.
+# Builds tests/tests.pro and runs the tests. Exit code: the test run's, or 2 when the environment is incomplete.
 # The Qt kit is resolved in order: QT_ROOT_DIR as already set (what jurplel/install-qt-action exports on CI);
 # local-env.sh beside this script, git-ignored, where a developer sets it for their machine; a qmake6 or qmake
 # already on PATH (a distribution's Qt).
@@ -37,7 +37,7 @@ cd "${SCRIPT_DIR}/../tests" || exit 2
 # A kept .qmake.stash pins the toolchain probed when it was written, so every run probes the current one instead.
 # One is written per subproject build directory, and qmake also searches upward, so the sweep covers the repository.
 find "${SCRIPT_DIR}/.." -name .qmake.stash -delete
-"${QMAKE}" tests.pro CONFIG+="${CONFIG}" || exit 1
+"${QMAKE}" -r tests.pro CONFIG+="${CONFIG}" || exit 1
 make -j"$(getconf _NPROCESSORS_ONLN)" || exit 1
 # --warn NoTests: a filter that matches nothing exits 0 otherwise, so a broken one would pass silently
 exec "bin/${CONFIG}/tests" "$@" --warn NoTests
