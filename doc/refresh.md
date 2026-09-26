@@ -1,10 +1,18 @@
 # Refresh
 
-Triggered by startup, F5, the app's own state-changing actions, and Undo Last Commit before it decides
-(`committing.md`); **never** by window activation, and
-there is no file watcher. The list may be stale by design: **the checked rows are the commit pathspec,
-verbatim**, and a stale list produces ordinary VCS errors through the normal failure path, not silent
-re-scans. Check state survives a refresh by path; the state a newly listed row starts with is a setting. A
+Triggered by startup, F5, the app's own state-changing actions, Undo Last Commit before it decides
+(`committing.md`), and a window's first activation after the user returns from another application. There
+is no file watcher.
+
+- **Return from another application, not window activation**: a dialog closing reactivates its window, and a
+  refresh landing inside a write flow's next dialog would fail its `StateStamp` check (below). Switching
+  between the app's own windows changes nothing a refresh would read.
+- **Deferred while a write or push runs**: the refresh waits for the window's next activation.
+
+The list may be stale by design: **the checked rows are the commit pathspec, verbatim**, and a stale list
+produces ordinary VCS errors through the normal failure path, not silent re-scans. A refresh showing the same
+row again keeps its text up until replaced, at the same scroll position. Check state survives a refresh by
+path; the state a newly listed row starts with is a setting. A
 row that has just become Added is the exception: adding a file is a decision to commit it, so the row is
 checked whatever it was before and whatever the setting says.
 

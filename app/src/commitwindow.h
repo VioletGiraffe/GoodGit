@@ -210,6 +210,13 @@ private:
 	std::vector<PushStep> _pushSteps; // the running push's plan
 
 	Vcs::Query _diffQuery; // whatever fills the diff pane: a file's diff, or a submodule's incoming commits
+	// The row whose text the pane showed last: a refresh showing it again returns to the same place
+	struct ShownRow
+	{
+		QString path;
+		int topLine = 0; // of its text, as the pane left it
+	};
+	ShownRow _lastShownRow;
 	// The working tree's whole diff, once per refresh: a row's diff is cut out of it, the message completion
 	// word pool reads it, and a block moved between files is found across it. Absent where the query failed
 	// or the diff passed its cap; a row is then diffed on its own.

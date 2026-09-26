@@ -69,6 +69,8 @@ private:
 	// Re-reads which commit the working tree is on, for the diagram's current-commit ring and the history
 	// drawn above it
 	void refreshCurrentCommitMark();
+	// Re-reads the unpushed marks, and reloads if the history fingerprint moved since the listing shown was read
+	void reloadIfHistoryChanged();
 	void applySearch();
 	void updateCountLabel();
 	void showPickaxePopup();
@@ -144,6 +146,10 @@ private:
 	DiffPane* _diffPane = nullptr;
 
 	Vcs::Query _logQuery;
+	// Repository::historyFingerprint() as of the listing shown; empty where it could not be read
+	QString _listedFingerprint;
+	Vcs::Query _listedFingerprintQuery;
+	Vcs::Query _returnCheckQuery; // reloadIfHistoryChanged()'s
 	Vcs::Query _pickaxeQuery;
 	Vcs::Query _unpushedQuery;
 	Vcs::Query _currentCommitQuery;

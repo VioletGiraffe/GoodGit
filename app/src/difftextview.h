@@ -66,7 +66,7 @@ public:
 	void goToPreviousHunk();
 	void goToNextHunk();
 
-	// The line at the top of the viewport; empty unless a diff is shown
+	// The line at the top of the viewport; empty while a message is shown
 	[[nodiscard]] std::optional<int> topLine() const;
 	// Does nothing for a line past the end
 	void scrollLineToTop(int line);

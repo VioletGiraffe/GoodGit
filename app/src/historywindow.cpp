@@ -125,6 +125,11 @@ HistoryWindow::HistoryWindow(const RepositoryLocation& location, const QString& 
 	// One geometry for every history window
 	enablePersistence(this, QStringLiteral("HistoryWindow"));
 
+	WidgetUtils::callOnReturnFromOtherApp(this, [this] {
+		reloadIfHistoryChanged();
+		return true;
+	});
+
 	reload();
 }
 
@@ -387,6 +392,16 @@ void HistoryWindow::startPickaxeQuery()
 	});
 }
 
+void HistoryWindow::reloadIfHistoryChanged()
+{
+	refreshUnpushedMarks(); // a push can publish commits without moving any ref the fingerprint covers
+	_returnCheckQuery.cancel();
+	_returnCheckQuery = _repo->historyFingerprint(this, [this](std::expected<QString, QString> fingerprint) {
+		if (!fingerprint || *fingerprint != _listedFingerprint)
+			reload();
+	});
+}
+
 void HistoryWindow::reload()
 {
 	_logQuery.cancel(); // including a pending full-depth phase
@@ -397,6 +412,11 @@ void HistoryWindow::reload()
 
 	refreshUnpushedMarks();
 	refreshCurrentCommitMark();
+	// Read in parallel with the walk: a change landing between the two reads goes unseen until the next change
+	_listedFingerprintQuery.cancel();
+	_listedFingerprintQuery = _repo->historyFingerprint(this, [this](std::expected<QString, QString> fingerprint) {
+		_listedFingerprint = std::move(fingerprint).value_or(QString{});
+	});
 	_logLoaded = false;
 	_fullLoadPending = false;
 	_missedRevealSha.clear();

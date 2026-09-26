@@ -53,7 +53,7 @@ public:
 
 	// A line of the diff shown, as ForeignEnd::diffLine names one in the file it points into
 	void scrollDiffLineToTop(int diffLine);
-	// The view's line at its top, for scrollLineToTop(); empty unless a diff is shown
+	// The view's line at its top, for scrollLineToTop(); empty while a message is shown
 	[[nodiscard]] std::optional<int> topLine() const;
 	// Does nothing for a line past the end
 	void scrollLineToTop(int line);

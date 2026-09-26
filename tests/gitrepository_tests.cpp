@@ -88,6 +88,25 @@ public:
 		return { std::move(files), repository.state() };
 	}
 
+	// Requires the query to succeed
+	[[nodiscard]] QString historyFingerprint() const
+	{
+		GitRepository repository{ root() };
+		QEventLoop loop;
+		QTimer::singleShot(60'000, &loop, &QEventLoop::quit);
+		std::optional<std::expected<QString, QString>> answer;
+		const Vcs::Query query = repository.historyFingerprint(&loop, [&](std::expected<QString, QString> result) {
+			answer = std::move(result);
+			loop.quit();
+		});
+		loop.exec();
+
+		REQUIRE(answer.has_value()); // the timer fired instead of the query answering
+		INFO((*answer ? QString{} : answer->error()).toStdString());
+		REQUIRE(answer->has_value());
+		return **answer;
+	}
+
 	// One commit made the way the window makes it, over a refreshed repository: the commit's diff baseline
 	// comes from the state
 	void commitThroughBackend(const QString& message, const QStringList& pathspec) const
@@ -342,6 +361,28 @@ TEST_CASE("The state carries HEAD's whole message, and a root commit's parent co
 	CHECK(state.headMessage == QStringLiteral("subject\n\nbody line one\nbody line two"));
 	CHECK(state.headSubject() == QStringLiteral("subject"));
 	CHECK(state.headParentCount == 0);
+}
+
+TEST_CASE("The history fingerprint moves with a new branch, a checkout and a commit, and stays put otherwise", "[git]")
+{
+	const ScratchRepository scratch;
+	scratch.write(QStringLiteral("file.txt"), "content\n");
+	scratch.commitAll(QStringLiteral("base"));
+
+	const QString base = scratch.historyFingerprint();
+	CHECK(scratch.historyFingerprint() == base);
+
+	scratch.git({ QStringLiteral("branch"), QStringLiteral("side") });
+	const QString branched = scratch.historyFingerprint();
+	CHECK(branched != base);
+
+	scratch.git({ QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("side") }); // the same commit
+	const QString checkedOut = scratch.historyFingerprint();
+	CHECK(checkedOut != branched);
+
+	scratch.write(QStringLiteral("file.txt"), "changed\n");
+	scratch.commitAll(QStringLiteral("second"));
+	CHECK(scratch.historyFingerprint() != checkedOut);
 }
 
 TEST_CASE("A refresh callback runs after the first run started after the request, the running one coalescing it", "[git]")

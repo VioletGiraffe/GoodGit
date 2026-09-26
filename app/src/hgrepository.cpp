@@ -896,6 +896,15 @@ Vcs::Query HgRepository::commitsAddingOrRemovingText(const LogQuery& query, cons
 		tolerantOfEmptyResult(Vcs::answering(std::move(onDone), changedOccurrences)));
 }
 
+Vcs::Query HgRepository::historyFingerprint(const QObject* context, Vcs::Answer<QString> onDone)
+{
+	// Every head and the checkout, plus whatever a bookmark or tag names, with those names: a new changeset,
+	// a strip or an amend moves a head. A branch name is fixed per changeset.
+	return runQuery(path(), { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("heads(all()) or . or bookmark() or tag()"),
+		QStringLiteral("-T"), QStringLiteral("{node} {bookmarks} {tags}\n") }, context,
+		Vcs::answering(std::move(onDone), Vcs::outputAsTrimmedText));
+}
+
 Vcs::Query HgRepository::currentCommit(const QObject* context, Vcs::Answer<QString> onDone)
 {
 	return runQuery(path(), { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("."),

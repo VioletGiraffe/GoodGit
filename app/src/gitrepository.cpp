@@ -1061,6 +1061,14 @@ Vcs::Query GitRepository::commitsAddingOrRemovingText(const LogQuery& query, con
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), shaSet));
 }
 
+Vcs::Query GitRepository::historyFingerprint(const QObject* context, Vcs::Answer<QString> onDone)
+{
+	// The tips a pathless walk starts from, each with the ref names the listing shows on it
+	QStringList args{ QStringLiteral("log"), QStringLiteral("--no-walk"), QStringLiteral("--format=%H %D") };
+	appendRevisionScope(args, LogQuery{});
+	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Vcs::outputAsTrimmedText));
+}
+
 Vcs::Query GitRepository::currentCommit(const QObject* context, Vcs::Answer<QString> onDone)
 {
 	return runQuery(path(), { QStringLiteral("rev-parse"), QStringLiteral("HEAD") },

@@ -129,6 +129,25 @@ public:
 		return { std::move(files), repository.state() };
 	}
 
+	// Requires the query to succeed
+	[[nodiscard]] QString historyFingerprint() const
+	{
+		HgRepository repository{ _root };
+		QEventLoop loop;
+		QTimer::singleShot(60'000, &loop, &QEventLoop::quit);
+		std::optional<std::expected<QString, QString>> answer;
+		const Vcs::Query query = repository.historyFingerprint(&loop, [&](std::expected<QString, QString> result) {
+			answer = std::move(result);
+			loop.quit();
+		});
+		loop.exec();
+
+		REQUIRE(answer.has_value()); // the timer fired instead of the query answering
+		INFO((*answer ? QString{} : answer->error()).toStdString());
+		REQUIRE(answer->has_value());
+		return **answer;
+	}
+
 private:
 	// Refreshes `repository` once and requires the state to have been read
 	static void refresh(Repository& repository)
@@ -181,6 +200,24 @@ TEST_CASE("The hg state carries the working directory parent's whole message", "
 	const RepoState state = scratch.refreshed().second;
 	CHECK(state.headMessage == QStringLiteral("subject\n\nbody line one\nbody line two"));
 	CHECK(state.headSubject() == QStringLiteral("subject"));
+}
+
+TEST_CASE("The hg history fingerprint moves with a bookmark and a commit, and stays put otherwise", "[hg]")
+{
+	const ScratchHgRepository scratch;
+	scratch.write(QStringLiteral("file.txt"), "content\n");
+	scratch.commitAll(QStringLiteral("base"));
+
+	const QString base = scratch.historyFingerprint();
+	CHECK(scratch.historyFingerprint() == base);
+
+	scratch.hg({ QStringLiteral("bookmark"), QStringLiteral("mark") });
+	const QString bookmarked = scratch.historyFingerprint();
+	CHECK(bookmarked != base);
+
+	scratch.write(QStringLiteral("file.txt"), "changed\n");
+	scratch.commitAll(QStringLiteral("second"));
+	CHECK(scratch.historyFingerprint() != bookmarked);
 }
 
 TEST_CASE("hg status shapes: a move is one renamed row, removed and missing files are both deleted", "[hg]")

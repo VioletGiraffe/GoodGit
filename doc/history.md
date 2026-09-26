@@ -13,6 +13,10 @@ commit on a parallel branch, and `--skip` re-walks the skipped commits anyway, w
 costs. The alternative would be streaming one `log` process, which `vcsprocess` has no incremental-read path
 for.
 
+F5 reloads unconditionally. A return from another application (`refresh.md`) re-reads the unpushed marks and
+reloads only if `Repository::historyFingerprint()` - the listed refs and the checkout - moved since the listing
+was read: a reload re-walks the whole limit and re-centres the view.
+
 The repo-wide walk covers **every ref** - git's `--branches --tags --remotes HEAD` (not `--all`, which adds
 `refs/stash` and `refs/notes`), Mercurial's plain `log` - so commits above the checkout, on other branches,
 and fetched but unmerged are listed. A **file history is the exception, rooted at the checkout**: the rename

@@ -259,6 +259,12 @@ CommitWindow::CommitWindow(const RepositoryLocation& location) :
 	enablePersistence(this, QStringLiteral("CommitWindow"), CPersistenceEnabler::Delayed{ true }, CPersistenceEnabler::SetDefaultSize{ false });
 
 	connect(_repo.get(), &Repository::refreshed, this, &CommitWindow::onRefreshed);
+	WidgetUtils::callOnReturnFromOtherApp(this, [this] {
+		if (writeInFlight())
+			return false; // a refresh landing in a write flow's dialogs fails its StateStamp check
+		_repo->refresh();
+		return true;
+	});
 
 	// Every history window on this repository follows this window's writes, including those it did not open
 	connect(this, &CommitWindow::historyChanged, this, [this] {
@@ -330,7 +336,7 @@ void CommitWindow::buildMenuBar()
 	// Everything: the dock that would show a scan's finds can be hidden
 	QMenu* repositoryMenu = addRepositoryMenu(*menuBar(), this, openRepositoryAction, ScanReport::Everything);
 	repositoryMenu->addSeparator();
-	repositoryMenu->addAction(tr("&Refresh"), _repo.get(), &Repository::refresh)->setShortcut(QKeySequence::Refresh);
+	repositoryMenu->addAction(tr("&Refresh"), this, [this] { _repo->refresh(); })->setShortcut(QKeySequence::Refresh);
 	_checkIncomingAction = repositoryMenu->addAction(tr("Check for &Incoming Changes"), this, &CommitWindow::checkForIncomingChanges);
 	_checkIncomingAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_I));
 	_checkIncomingAction->setToolTip(tr("Fetch and list the commits on the upstream that this branch does not have yet"));
@@ -1331,6 +1337,10 @@ void CommitWindow::showDiffForCurrentRow()
 	_diffQuery.cancel();
 	_rowAwaitsChangeSet = false;
 
+	// Every change of row passes through here, so text still shown is the last shown row's
+	if (const std::optional<int> topLine = _diffPane->topLine())
+		_lastShownRow.topLine = *topLine;
+
 	const std::optional<FileEntry> current = currentEntry();
 	if (!current)
 	{
@@ -1339,6 +1349,10 @@ void CommitWindow::showDiffForCurrentRow()
 	}
 
 	const FileEntry& entry = *current;
+	// A refresh shows the same row again: its text stays up until replaced, at the reader's place
+	const bool sameRowShown = entry.path == _lastShownRow.path && _diffPane->topLine();
+	if (entry.path != _lastShownRow.path)
+		_lastShownRow = { entry.path };
 
 	if (entry.isSubmodule)
 	{
@@ -1368,11 +1382,13 @@ void CommitWindow::showDiffForCurrentRow()
 
 	const DiffPane::ItemInfo info{ entry.path, workingTreeTag(), workingTreeSizeLabel(absolutePath(entry)) };
 	const QString noContentText = tr("No content changes (only the mode or the line endings differ, or the file matches HEAD).");
-	_diffPane->showMessage(info, tr("Loading..."));
+	if (!sameRowShown)
+		_diffPane->showMessage(info, tr("Loading..."));
 
 	if (const std::optional<int> section = _changeSet ? _changeSet->fileIndex(entry.path) : std::nullopt)
 	{
 		_diffPane->showSection(info, *_changeSet, *section, Settings::maxShownDiffBytes(), noContentText);
+		_diffPane->scrollLineToTop(_lastShownRow.topLine);
 		return;
 	}
 	if (_changeSetPending)
@@ -1387,7 +1403,12 @@ void CommitWindow::showDiffForCurrentRow()
 		else if (diff->isEmpty())
 			_diffPane->showMessage(info, noContentText);
 		else
+		{
+			if (const std::optional<int> topLine = _diffPane->topLine())
+				_lastShownRow.topLine = *topLine; // scrolled while the query ran
 			_diffPane->showDiff(info, parseUnifiedDiff(QString::fromUtf8(*diff)));
+			_diffPane->scrollLineToTop(_lastShownRow.topLine);
+		}
 	});
 }
 
@@ -1421,6 +1442,7 @@ void CommitWindow::showFileContents(const FileEntry& entry)
 	}
 
 	_diffPane->showFileText(info, *text);
+	_diffPane->scrollLineToTop(_lastShownRow.topLine);
 }
 
 void CommitWindow::onRowActivated(const QModelIndex& sourceIndex)

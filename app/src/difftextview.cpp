@@ -296,7 +296,7 @@ void DiffTextView::goToNextHunk()
 
 std::optional<int> DiffTextView::topLine() const
 {
-	if (_content != Content::Diff)
+	if (_content == Content::Message)
 		return {};
 	return firstVisibleBlock().blockNumber();
 }
