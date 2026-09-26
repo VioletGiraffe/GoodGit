@@ -223,8 +223,11 @@ private:
 	// word pool reads it, and a block moved between files is found across it. Absent where the query failed
 	// or the diff passed its cap; a row is then diffed on its own.
 	std::optional<ChangeSetDiff> _changeSet;
+	uint64_t _changeSetHash = 0; // of the bytes _changeSet was built from
 	Vcs::Query _changeSetQuery;
-	bool _changeSetPending = false; // the query is out: a row waits for it instead of being diffed on its own
+	// The query is out: a row waits for it instead of being diffed on its own. The set is the previous
+	// refresh's meanwhile, so nothing reads it.
+	bool _changeSetPending = false;
 	bool _rowAwaitsChangeSet = false; // the row shown is waiting, so the set's arrival shows it
 	// Held for a whole writing flow, dialogs and the asynchronous reattach included, not just while a process
 	// runs: two flows would meet at index.lock, and the second would commit a pathspec the first already took

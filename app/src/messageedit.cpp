@@ -3,6 +3,7 @@
 #include "theme.h"
 
 #include "appdialogs/csettingsnotifier.h"
+#include "hash/wheathash.hpp"
 
 DISABLE_COMPILER_WARNINGS
 #include <QAbstractItemView>
@@ -96,7 +97,6 @@ QStringList completionWordsFor(const QStringList& changedPaths, QByteArray diff,
 	}
 
 	diff.truncate(MaxDiffBytesForWords);
-	// Wontfix: split copies the capped diff into lines on every refresh; a skip-when-unchanged check is not worth the complication
 	for (const QByteArray& rawLine : diff.split('\n'))
 	{
 		if (words.size() >= MaxWords)
@@ -168,6 +168,11 @@ void MessageEdit::setCompletionSources(const QStringList& changedPaths, QByteArr
 	// A word no longer than the prefix that opens the popup is already typed out by the time it opens.
 	// Ctrl+Space waits for no prefix, so with the auto-popup off the floor is two letters.
 	const int minLetters = _autoPopup ? _minPrefixLength + 1 : 2;
+	CompletionSources sources{ changedPaths, wheathash64(diff.constData(), uint64_t(diff.size())), minLetters };
+	if (sources == _completionSources)
+		return;
+	_completionSources = std::move(sources);
+
 	QStringList words = completionWordsFor(changedPaths, std::move(diff), minLetters);
 	// Sorted once, so that each block putExactCaseMatchesFirst produces is alphabetical
 	std::sort(words.begin(), words.end(),

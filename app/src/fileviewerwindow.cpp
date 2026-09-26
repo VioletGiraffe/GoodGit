@@ -58,9 +58,9 @@ void FileViewerWindow::showChangeSetDiff(const std::optional<ChangeSetDiff>& set
 	const QString& repositoryName, const QString& tag, QWidget* parent)
 {
 	auto* window = new FileViewerWindow(tr("Diff - %1 @ %2").arg(repositoryName, tag), repositoryName, tag, parent);
-	if (!set || set->text().isEmpty())
+	if (pending || !set || set->text().isEmpty())
 	{
-		window->showMessage(set ? tr("The diff is empty.") : pending ? tr("The diff is still loading.") : tr("The whole diff is not available."));
+		window->showMessage(pending ? tr("The diff is still loading.") : set ? tr("The diff is empty.") : tr("The whole diff is not available."));
 		window->show();
 		return;
 	}

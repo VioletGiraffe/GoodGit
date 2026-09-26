@@ -4,7 +4,11 @@
 
 DISABLE_COMPILER_WARNINGS
 #include <QPlainTextEdit>
+#include <QStringList>
 RESTORE_COMPILER_WARNINGS
+
+#include <cstdint>
+#include <optional>
 
 class QCompleter;
 class QStringListModel;
@@ -17,7 +21,8 @@ public:
 	explicit MessageEdit(QWidget* parent = nullptr);
 
 	// Rebuilds the pool: every changed path in every spelling, plus identifier-shaped words from `diff`.
-	// The shortest word it keeps follows the completion settings as they stood at this call
+	// The shortest word it keeps follows the completion settings as they stood at this call.
+	// Keeps the pool when the paths, the diff and that setting all match the last call.
 	void setCompletionSources(const QStringList& changedPaths, QByteArray diff);
 
 	// Wide enough for the subject guide column, which the base's font-independent placeholder hint ignores
@@ -43,6 +48,16 @@ private:
 	QStringListModel* _completerModel = nullptr;
 	// The pool, sorted case-insensitively. Each prefix reorders a copy into the model; this order stays pristine
 	QStringList _completionWords;
+	// What the pool was built from
+	struct CompletionSources
+	{
+		QStringList changedPaths;
+		uint64_t diffHash = 0;
+		int minLetters = 0;
+
+		bool operator==(const CompletionSources&) const = default;
+	};
+	std::optional<CompletionSources> _completionSources; // empty until the first build
 	// Cached: each is a registry read, and paintEvent and keyPressEvent both run per keystroke
 	int _guideColumn = 0;
 	bool _autoPopup = true;

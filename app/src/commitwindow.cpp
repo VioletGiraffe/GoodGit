@@ -712,25 +712,36 @@ void CommitWindow::onRefreshed()
 		});
 	}
 
-	// The path half of the completion pool needs no query, so it goes in before one is started
 	QStringList changedPaths;
 	for (const FileEntry& file : _repo->files())
 		changedPaths.push_back(file.path);
-	_messageEdit->setCompletionSources(changedPaths, {});
 
-	// Cancelled, or refreshes in quick succession would leave the set built by whichever finished last
+	// Cancelled, or refreshes in quick succession would leave the set built by whichever finished last.
+	// Not reset: an unchanged diff keeps the set.
 	_changeSetQuery.cancel();
-	_changeSet.reset();
 	_changeSetPending = true;
 	_changeSetQuery = _repo->workingTreeDiff(Settings::MaxChangeSetDiffBytes, this, [this, changedPaths](std::expected<QByteArray, QString> diff) {
 		_changeSetPending = false;
-		// A failed diff leaves the pool as the paths set above
-		if (diff)
+		_messageEdit->setCompletionSources(changedPaths, diff ? *diff : QByteArray{}); // a failed diff leaves the paths alone
+
+		const uint64_t diffHash = diff ? wheathash64(diff->constData(), uint64_t(diff->size())) : 0;
+		const bool diffUnchanged = diff && _changeSet && diffHash == _changeSetHash;
+		if (!diffUnchanged)
 		{
-			_messageEdit->setCompletionSources(changedPaths, *diff);
-			_changeSet.emplace(QString::fromUtf8(*diff));
+			_changeSet.reset();
+			if (diff)
+			{
+				_changeSet.emplace(QString::fromUtf8(*diff));
+				_changeSetHash = diffHash;
+			}
 		}
-		if (_rowAwaitsChangeSet)
+
+		if (!_rowAwaitsChangeSet)
+			return;
+		// Text still shown is the waiting row's own, from the same bytes
+		if (diffUnchanged && _diffPane->topLine())
+			_rowAwaitsChangeSet = false;
+		else
 			showDiffForCurrentRow();
 	});
 
@@ -1394,15 +1405,15 @@ void CommitWindow::showDiffForCurrentRow()
 	if (!sameRowShown)
 		_diffPane->showMessage(info, tr("Loading..."));
 
+	if (_changeSetPending) // the set from before the refresh is still held, possibly stale
+	{
+		_rowAwaitsChangeSet = true;
+		return;
+	}
 	if (const std::optional<int> section = _changeSet ? _changeSet->fileIndex(entry.path) : std::nullopt)
 	{
 		_diffPane->showSection(info, *_changeSet, *section, Settings::maxShownDiffBytes(), noContentText);
 		_diffPane->scrollLineToTop(_lastShownRow.topLine);
-		return;
-	}
-	if (_changeSetPending)
-	{
-		_rowAwaitsChangeSet = true;
 		return;
 	}
 

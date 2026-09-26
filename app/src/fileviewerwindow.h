@@ -27,7 +27,7 @@ public:
 	FileViewerWindow(Repository& repo, const QString& sha, const QString& repoRelativePath, QWidget* parent);
 
 	// A change's whole diff in a new window, scrolled to `currentPath`'s section where the set has one.
-	// A message instead where there is no set or it is empty; `pending`: the set is still loading.
+	// A message instead where there is no set or it is empty, or while `pending`: a set held then may be stale.
 	static void showChangeSetDiff(const std::optional<ChangeSetDiff>& set, bool pending, const QString& currentPath,
 		const QString& repositoryName, const QString& tag, QWidget* parent);
 
