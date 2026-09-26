@@ -5,20 +5,16 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include "gitrepository.h"
+#include "repositorytestutils.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QEventLoop>
-#include <QFile>
-#include <QProcess>
 #include <QTemporaryDir>
 #include <QTimer>
 RESTORE_COMPILER_WARNINGS
 
-#include <algorithm>
-#include <expected>
-#include <functional>
-#include <optional>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -31,10 +27,7 @@ public:
 	ScratchRepository()
 	{
 		REQUIRE(_directory.isValid());
-		const QString emptyConfig = _directory.filePath(QStringLiteral("empty.gitconfig"));
-		REQUIRE(QFile{ emptyConfig }.open(QIODevice::WriteOnly));
-		qputenv("GIT_CONFIG_GLOBAL", emptyConfig.toUtf8());
-		qputenv("GIT_CONFIG_NOSYSTEM", "1");
+		useEmptyGitConfig(_directory.filePath(QStringLiteral("empty.gitconfig")));
 
 		QDir{}.mkpath(root());
 		git({ QStringLiteral("init"), QStringLiteral("-q"), QStringLiteral("-b"), QStringLiteral("main") });
@@ -42,14 +35,7 @@ public:
 
 	[[nodiscard]] QString root() const { return _directory.filePath(QStringLiteral("repository")); }
 
-	void write(const QString& relativePath, const QByteArray& content) const
-	{
-		const QString path = QDir{ root() }.filePath(relativePath);
-		REQUIRE(QDir{}.mkpath(QFileInfo{ path }.absolutePath()));
-		QFile file{ path };
-		REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
-		file.write(content);
-	}
+	void write(const QString& relativePath, const QByteArray& content) const { writeFile(root(), relativePath, content); }
 
 	// Runs in `relativeDirectory` under the root, and must succeed
 	void git(const QStringList& arguments, const QString& relativeDirectory = {}) const
@@ -81,30 +67,14 @@ public:
 	[[nodiscard]] std::pair<std::vector<FileEntry>, RepoState> refreshed() const
 	{
 		GitRepository repository{ root() };
-		refresh(repository);
-
-		std::vector<FileEntry> files = repository.files();
-		std::ranges::sort(files, {}, &FileEntry::path);
-		return { std::move(files), repository.state() };
+		return refreshedRowsAndState(repository);
 	}
 
 	// Requires the query to succeed
 	[[nodiscard]] QString historyFingerprint() const
 	{
 		GitRepository repository{ root() };
-		QEventLoop loop;
-		QTimer::singleShot(60'000, &loop, &QEventLoop::quit);
-		std::optional<std::expected<QString, QString>> answer;
-		const Vcs::Query query = repository.historyFingerprint(&loop, [&](std::expected<QString, QString> result) {
-			answer = std::move(result);
-			loop.quit();
-		});
-		loop.exec();
-
-		REQUIRE(answer.has_value()); // the timer fired instead of the query answering
-		INFO((*answer ? QString{} : answer->error()).toStdString());
-		REQUIRE(answer->has_value());
-		return **answer;
+		return requireSuccess(awaitAnswer<QString>([&](Vcs::Answer<QString> onDone) { repository.historyFingerprint(&repository, std::move(onDone)); }));
 	}
 
 	// One commit made the way the window makes it, over a refreshed repository: the commit's diff baseline
@@ -116,15 +86,15 @@ public:
 		git({ QStringLiteral("config"), QStringLiteral("user.email"), QStringLiteral("tests@goodgit.invalid") });
 
 		GitRepository repository{ root() };
-		refresh(repository);
-		requireWriteSucceeds([&](Vcs::Answer<void> onDone) { repository.commit(message, pathspec, {}, std::move(onDone)); });
+		refreshToCompletion(repository);
+		requireSuccess(awaitAnswer<void>([&](Vcs::Answer<void> onDone) { repository.commit(message, pathspec, {}, std::move(onDone)); }));
 	}
 
 	// Takes a candidate the way the window's strip button does
 	void reattachThroughBackend(const ReattachCandidate& candidate) const
 	{
 		GitRepository repository{ root() };
-		requireWriteSucceeds([&](Vcs::Answer<void> onDone) { repository.reattachHead(candidate, std::move(onDone)); });
+		requireSuccess(awaitAnswer<void>([&](Vcs::Answer<void> onDone) { repository.reattachHead(candidate, std::move(onDone)); }));
 	}
 
 	// main tracks origin/main, whose ref the caller writes. Nothing is ever fetched: the upstream config and the
@@ -154,36 +124,6 @@ public:
 	}
 
 private:
-	// Runs one refresh to completion, so the caller can go on using the same repository object
-	static void refresh(GitRepository& repository)
-	{
-		QEventLoop loop;
-		QObject::connect(&repository, &Repository::refreshed, &loop, &QEventLoop::quit);
-		QTimer::singleShot(60'000, &loop, &QEventLoop::quit);
-		repository.refresh();
-		loop.exec();
-		REQUIRE_FALSE(repository.refreshing());
-		INFO(repository.state().readFailure.toStdString());
-		REQUIRE(repository.state().known());
-	}
-
-	// Runs one write to completion and requires it to succeed
-	static void requireWriteSucceeds(const std::function<void(Vcs::Answer<void>)>& startWrite)
-	{
-		QEventLoop loop;
-		QTimer::singleShot(60'000, &loop, &QEventLoop::quit);
-		std::optional<QString> failure;
-		startWrite([&](std::expected<void, QString> result) {
-			failure = result ? QString{} : result.error();
-			loop.quit();
-		});
-		loop.exec();
-
-		REQUIRE(failure.has_value()); // the timer fired instead of the write answering
-		INFO(failure->toStdString());
-		REQUIRE(failure->isEmpty());
-	}
-
 	[[nodiscard]] QString gitOutput(const QStringList& arguments) const
 	{
 		const auto [exitCode, output] = runGit(arguments, {});
@@ -194,26 +134,13 @@ private:
 
 	[[nodiscard]] std::pair<int, QString> runGit(const QStringList& arguments, const QString& relativeDirectory) const
 	{
-		QProcess process;
-		process.setWorkingDirectory(QDir{ root() }.filePath(relativeDirectory));
-		process.setProcessChannelMode(QProcess::MergedChannels);
 		const QStringList identity{ QStringLiteral("-c"), QStringLiteral("user.name=GoodGit tests"), QStringLiteral("-c"),
 			QStringLiteral("user.email=tests@goodgit.invalid") };
-		process.start(QStringLiteral("git"), identity + arguments);
-		REQUIRE(process.waitForFinished(60'000));
-		return { process.exitStatus() == QProcess::NormalExit ? process.exitCode() : -1, QString::fromUtf8(process.readAll()) };
+		return runProcess(QStringLiteral("git"), identity + arguments, QDir{ root() }.filePath(relativeDirectory));
 	}
 
 	QTemporaryDir _directory;
 };
-
-[[nodiscard]] QStringList pathsOf(const std::vector<FileEntry>& files)
-{
-	QStringList paths;
-	for (const FileEntry& file : files)
-		paths.push_back(file.path);
-	return paths;
-}
 
 } // namespace
 

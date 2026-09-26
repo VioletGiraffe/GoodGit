@@ -46,7 +46,8 @@ HEADERS += \
 	../app/src/unifieddiff.h \
 	../app/src/vcsprocess.h \
 	../app/src/vcstypes.h \
-	../qtutils/appdialogs/csettingsnotifier.h
+	../qtutils/appdialogs/csettingsnotifier.h \
+	repositorytestutils.h
 
 SOURCES += \
 	../app/src/changedfilesmodel.cpp \

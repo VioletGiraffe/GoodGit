@@ -5,19 +5,17 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include "hgrepository.h"
+#include "repositorytestutils.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QDir>
-#include <QEventLoop>
 #include <QFile>
-#include <QProcess>
 #include <QTemporaryDir>
-#include <QTimer>
 RESTORE_COMPILER_WARNINGS
 
-#include <algorithm>
 #include <expected>
-#include <optional>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -36,17 +34,10 @@ public:
 	ScratchHgRepository()
 	{
 		REQUIRE(sharedRoot().isValid());
-		const QString hgrc = sharedRoot().filePath(QStringLiteral("hgrc"));
-		QFile config{ hgrc };
-		REQUIRE(config.open(QIODevice::WriteOnly | QIODevice::Truncate));
-		config.write("[ui]\nusername = GoodGit tests <tests@goodgit.invalid>\n[subrepos]\ngit:allowed = true\n");
-		config.close();
-		qputenv("HGRCPATH", hgrc.toUtf8());
+		writeFile(sharedRoot().path(), QStringLiteral("hgrc"), "[ui]\nusername = GoodGit tests <tests@goodgit.invalid>\n[subrepos]\ngit:allowed = true\n");
+		qputenv("HGRCPATH", sharedRoot().filePath(QStringLiteral("hgrc")).toUtf8());
 
-		const QString emptyGitConfig = sharedRoot().filePath(QStringLiteral("empty.gitconfig"));
-		REQUIRE(QFile{ emptyGitConfig }.open(QIODevice::WriteOnly));
-		qputenv("GIT_CONFIG_GLOBAL", emptyGitConfig.toUtf8());
-		qputenv("GIT_CONFIG_NOSYSTEM", "1");
+		useEmptyGitConfig(sharedRoot().filePath(QStringLiteral("empty.gitconfig")));
 
 		static int repositoryCount = 0;
 		_root = sharedRoot().filePath(QStringLiteral("repository%1").arg(++repositoryCount));
@@ -56,14 +47,7 @@ public:
 
 	[[nodiscard]] const QString& root() const { return _root; }
 
-	void write(const QString& relativePath, const QByteArray& content) const
-	{
-		const QString path = QDir{ _root }.filePath(relativePath);
-		REQUIRE(QDir{}.mkpath(QFileInfo{ path }.absolutePath()));
-		QFile file{ path };
-		REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
-		file.write(content);
-	}
+	void write(const QString& relativePath, const QByteArray& content) const { writeFile(_root, relativePath, content); }
 
 	void remove(const QString& relativePath) const { REQUIRE(QFile::remove(QDir{ _root }.filePath(relativePath))); }
 
@@ -103,91 +87,41 @@ public:
 	[[nodiscard]] QString commitThroughBackend(const QStringList& pathspec, const QStringList& untrackedPaths) const
 	{
 		HgRepository repository{ _root };
-		refresh(repository);
-
-		QEventLoop loop;
-		QTimer::singleShot(60'000, &loop, &QEventLoop::quit);
-		std::optional<QString> failure;
-		repository.commit(QStringLiteral("through the backend"), pathspec, untrackedPaths, [&](std::expected<void, QString> result) {
-			failure = result ? QString{} : result.error();
-			loop.quit();
+		refreshToCompletion(repository);
+		const std::expected<void, QString> result = awaitAnswer<void>([&](Vcs::Answer<void> onDone) {
+			repository.commit(QStringLiteral("through the backend"), pathspec, untrackedPaths, std::move(onDone));
 		});
-		loop.exec();
-
-		REQUIRE(failure.has_value()); // the timer fired instead of the commit answering
-		return *failure;
+		return result ? QString{} : result.error();
 	}
 
 	// The backend's rows and state after one refresh, sorted by path
 	[[nodiscard]] std::pair<std::vector<FileEntry>, RepoState> refreshed() const
 	{
 		HgRepository repository{ _root };
-		refresh(repository);
-
-		std::vector<FileEntry> files = repository.files();
-		std::ranges::sort(files, {}, &FileEntry::path);
-		return { std::move(files), repository.state() };
+		return refreshedRowsAndState(repository);
 	}
 
 	// Requires the query to succeed
 	[[nodiscard]] QString historyFingerprint() const
 	{
 		HgRepository repository{ _root };
-		QEventLoop loop;
-		QTimer::singleShot(60'000, &loop, &QEventLoop::quit);
-		std::optional<std::expected<QString, QString>> answer;
-		const Vcs::Query query = repository.historyFingerprint(&loop, [&](std::expected<QString, QString> result) {
-			answer = std::move(result);
-			loop.quit();
-		});
-		loop.exec();
-
-		REQUIRE(answer.has_value()); // the timer fired instead of the query answering
-		INFO((*answer ? QString{} : answer->error()).toStdString());
-		REQUIRE(answer->has_value());
-		return **answer;
+		return requireSuccess(awaitAnswer<QString>([&](Vcs::Answer<QString> onDone) { repository.historyFingerprint(&repository, std::move(onDone)); }));
 	}
 
 private:
-	// Refreshes `repository` once and requires the state to have been read
-	static void refresh(Repository& repository)
-	{
-		QEventLoop loop;
-		QObject::connect(&repository, &Repository::refreshed, &loop, &QEventLoop::quit);
-		QTimer::singleShot(60'000, &loop, &QEventLoop::quit);
-		repository.refresh();
-		loop.exec();
-		REQUIRE_FALSE(repository.refreshing());
-		INFO(repository.state().readFailure.toStdString());
-		REQUIRE(repository.state().known());
-	}
-
 	// Returns the merged output
 	QString run(const QString& program, const QStringList& arguments, const QString& relativeDirectory = {}, bool mustSucceed = true) const
 	{
-		QProcess process;
-		process.setWorkingDirectory(QDir{ _root }.filePath(relativeDirectory));
-		process.setProcessChannelMode(QProcess::MergedChannels);
-		process.start(program, arguments);
-		REQUIRE(process.waitForFinished(60'000));
-		const QString output = QString::fromUtf8(process.readAll());
+		const auto [exitCode, output] = runProcess(program, arguments, QDir{ _root }.filePath(relativeDirectory));
 		INFO((program + QLatin1Char(' ') + arguments.join(QLatin1Char(' '))).toStdString() + '\n' + output.toStdString());
-		REQUIRE(process.exitStatus() == QProcess::NormalExit);
+		REQUIRE(exitCode != -1); // crashed
 		if (mustSucceed)
-			REQUIRE(process.exitCode() == 0);
+			REQUIRE(exitCode == 0);
 		return output;
 	}
 
 	QString _root;
 };
-
-[[nodiscard]] QStringList pathsOf(const std::vector<FileEntry>& files)
-{
-	QStringList paths;
-	for (const FileEntry& file : files)
-		paths.push_back(file.path);
-	return paths;
-}
 
 } // namespace
 
