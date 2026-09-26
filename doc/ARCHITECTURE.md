@@ -82,7 +82,7 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `init_logging`, `up
 | `textdiff` | Two lines aligned as sequences of tokens: how alike they are, and the interleaving that holds both |
 | `movedblocks` | The blocks a diff removed in one place and added in another, edited on the way or not, many-to-many. See `diff.md` |
 | `difftextview` | The read-only view under the pane's header: banded added and removed lines, merged lines with their marks, moved blocks bracketed and joined, a gutter of old and new line numbers. See `diff.md` |
-| `diffpane` | The pane both windows show one file's text in: path and tag header, hunk navigation, and three content kinds - a diff, a file's own contents, a message. See `diff.md` |
+| `diffpane` | The pane both windows show one file's text in: path and tag header, hunk navigation, a toggle between the processed and the raw diff, and three content kinds - a diff, a file's own contents, a message. See `diff.md` |
 | `settings` | Every storage key with its default. Values are read and written where consumed, through `QSettings` in the platform's native store under the identity GoodGit/GoodGit; qtutils `CSettingsNotifier` makes open windows re-apply fonts and cached layout after the settings dialog stores them. Window geometry is qtutils `CPersistenceEnabler`, one key per window kind shared by every repository, as the splitter positions are. Commit message drafts are the one per-repository setting: a group named by a hash of the root path |
 | `settingspages` | The Preferences pages (Main, Theme & Font) for qtutils `CSettingsDialog`. Theme choices go through `CThemeController` |
 | `externalapps` | Programs outside the application. The platform file manager: opening a directory in it, showing a file selected in it, and the action texts naming it as each platform does. The configured text editor: its command line with `%path%` substituted, reporting one that will not start |
@@ -90,7 +90,7 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `init_logging`, `up
 | `main` | Startup: the application log, on macOS the package managers' directories on PATH (see `invocation.md`), the application identity, the theme, the automatic update check, then the way in described in `repositories.md`. Ends the hg command servers once the event loop returns |
 | `appmenus` | The menus every window shares - File, Edit, Repository, Help: their actions need no repository. A commit window appends its own items to the Repository menu |
 | `welcomewindow` | The window shown with nothing to open: what the app needs, a folder chooser, the recent list. The one window without a repository |
-| `fileviewerwindow` | Read-only text in a window of its own, on qtutils `CLightningFastViewerWidget` with a `CFindBar` under it: one file as of one commit, decoded where the bytes are text and a hex dump where they are not; or a change's whole diff, scrolled to the file the pane shows |
+| `fileviewerwindow` | Read-only text in a window of its own, on qtutils `CLightningFastViewerWidget` with a `CFindBar` under it: one file as of one commit, decoded where the bytes are text and a hex dump where they are not |
 | `updatecheck` | The interactive and the automatic update check, see `updates.md` |
 | `commandlinetool` | macOS and Linux: the `gg` link on PATH, see `doc/BUILD.md`. `commandlinetool_mac` creates it with administrator credentials |
 | `smoketest` | `gg --smoke-test <repository>`: the launch mode CI runs on the deployed build, see `doc/BUILD.md` |
@@ -103,7 +103,7 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `init_logging`, `up
 |---|---|---|---|---|
 | `CommitWindow` | owns one | one per repository; a second request raises it | stored, one key for the kind | `openRepositoryWindow()` only; a submodule row opens one on the submodule |
 | `HistoryWindow` | owns one of its own | one per commit window for the whole history, kept and re-shown; a file or submodule history is a new window each time | stored, one key for the kind | the commit window, or another history window (a submodule row, a file's history) |
-| `FileViewerWindow` | a file borrows the opener's, in the constructor only; a diff none | never deduplicated; cascaded from the opener, several are meant to sit side by side | none | a history window's file row; with Shift, the parent commit's version. A whole diff: Full diff in either window's diff pane |
+| `FileViewerWindow` | borrows the opener's, in the constructor only | never deduplicated; cascaded from the opener, several are meant to sit side by side | none | a history window's file row; with Shift, the parent commit's version |
 | `WelcomeWindow` | none | at most one | none | startup with nothing to open, View > Show Welcome Screen; closed by any open |
 | Preferences (qtutils `CSettingsDialog`) | none | modal | none | the Edit menu |
 

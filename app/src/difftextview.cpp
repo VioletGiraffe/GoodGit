@@ -615,7 +615,7 @@ QString DiffTextView::moveMarkTooltip(const MarkHit& hit) const
 
 void DiffTextView::scrollDiffLineToTop(int diffLine)
 {
-	if (diffLine >= 0 && size_t(diffLine) < _shownLine.size() && _shownLine[size_t(diffLine)] >= 0)
+	if (diffLine >= 0 && size_t(diffLine) < _shownLine.size())
 		scrollLineToTop(_shownLine[size_t(diffLine)]);
 }
 

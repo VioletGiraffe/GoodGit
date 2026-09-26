@@ -9,6 +9,9 @@ RESTORE_COMPILER_WARNINGS
 
 #include "unifieddiff.h"
 
+#include <algorithm>
+#include <vector>
+
 namespace {
 
 QString fixture(const char* name)
@@ -93,6 +96,48 @@ TEST_CASE("One edit becomes one line carrying both sides", "[unifieddiff]")
 	CHECK(parsed.spans[1].length == 3);
 	CHECK(!parsed.spans[1].removed);
 	CHECK(parsed.moves.empty());
+}
+
+TEST_CASE("Every line read maps to the line shown for it, a merged line to both its halves", "[unifieddiff]")
+{
+	const ParsedDiff parsed = parseUnifiedDiff(joined({
+		"@@ -1,4 +1,3 @@",
+		" context",
+		"-old line to edit here",
+		"-completely unrelated removed text",
+		"+new line to edit here",
+		" context",
+	}));
+
+	REQUIRE(parsed.lines.size() == 5);
+	CHECK(parsed.lines[2].kind == DiffLineKind::Edited);
+	CHECK(parsed.lines[3].kind == DiffLineKind::Removed); // unpaired, shown after the pair
+	CHECK(parsed.shownLine == std::vector<int>{ 0, 1, 2, 3, 2, 4 });
+}
+
+TEST_CASE("The raw rendering shows every line read as it stands", "[unifieddiff]")
+{
+	const QStringList diff{
+		"@@ -1,4 +1,3 @@",
+		" context",
+		"-old line to edit here",
+		"-completely unrelated removed text",
+		"+new line to edit here",
+		" context",
+	};
+	const ParsedDiff parsed = parseRawUnifiedDiff(joined(diff));
+
+	CHECK(parsed.text == diff.join(QLatin1Char('\n')));
+	REQUIRE(parsed.lines.size() == 6);
+	CHECK(countOfKind(parsed, DiffLineKind::Edited) == 0);
+	CHECK(parsed.lines[2].oldLine == 2);
+	CHECK(parsed.lines[4].newLine == 2);
+	CHECK(parsed.spans.empty());
+	CHECK(parsed.shownLine == std::vector<int>{ 0, 1, 2, 3, 4, 5 });
+
+	const ParsedDiff moved = parseRawUnifiedDiff(fixture("block_moved_up.diff"));
+	CHECK(moved.moves.empty());
+	CHECK(std::none_of(moved.lines.begin(), moved.lines.end(), [](const DiffLine& line) { return line.moved; }));
 }
 
 TEST_CASE("A block moved within a file: the installer steps of CI.yml moved above the metrics", "[unifieddiff]")
@@ -423,7 +468,8 @@ TEST_CASE("A block moved between two files is a move in either, its far end name
 
 		CHECK(parsed.moves.empty());
 		CHECK(parsed.lines[9].kind == DiffLineKind::Edited);
-		CHECK(parsed.shownLine[10] == -1); // merged into the line before it
+		CHECK(parsed.shownLine[9] == 9);
+		CHECK(parsed.shownLine[10] == 9); // merged into the line before it
 		CHECK(parsed.shownLine[11] == 10);
 	}
 }

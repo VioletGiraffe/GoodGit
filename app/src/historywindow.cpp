@@ -219,10 +219,6 @@ void HistoryWindow::buildUi()
 		_filesView->setSelectedSourceRows({ row }, row);
 		_diffPane->scrollDiffLineToTop(end.diffLine);
 	});
-	connect(_diffPane, &DiffPane::fullDiffRequested, this, [this] {
-		const std::optional<CommitFileChange> file = fileEntryAt(_filesView->currentSourceIndex());
-		FileViewerWindow::showChangeSetDiff(_changeSet, _changeSetPending, file ? file->path : QString{}, _repo->name(), shortSha(selectedSha()), this);
-	});
 
 	_detailSplitter = new QSplitter(Qt::Horizontal);
 	_detailSplitter->setChildrenCollapsible(false);
@@ -932,7 +928,7 @@ void HistoryWindow::showDiffForCurrentFile()
 				_diffPane->showMessage(_currentItem, noContentText);
 			else
 			{
-				_diffPane->showDiff(_currentItem, parseUnifiedDiff(QString::fromUtf8(*diff)));
+				_diffPane->showDiff(_currentItem, QString::fromUtf8(*diff));
 				_diffPane->scrollLineToTop(_lastShownFile.topLine);
 			}
 		});

@@ -17,13 +17,14 @@ DISABLE_COMPILER_WARNINGS
 #include <QKeySequence>
 #include <QLabel>
 #include <QPoint>
-#include <QRegularExpression>
 #include <QSettings>
 #include <QSizePolicy>
 #include <QStackedWidget>
 #include <QTextDocument>
 #include <QVBoxLayout>
 RESTORE_COMPILER_WARNINGS
+
+#include <optional>
 
 namespace {
 
@@ -52,35 +53,6 @@ FileViewerWindow::FileViewerWindow(Repository& repo, const QString& sha, const Q
 		else
 			showContent(*content);
 	});
-}
-
-void FileViewerWindow::showChangeSetDiff(const std::optional<ChangeSetDiff>& set, bool pending, const QString& currentPath,
-	const QString& repositoryName, const QString& tag, QWidget* parent)
-{
-	auto* window = new FileViewerWindow(tr("Diff - %1 @ %2").arg(repositoryName, tag), repositoryName, tag, parent);
-	if (pending || !set || set->text().isEmpty())
-	{
-		window->showMessage(pending ? tr("The diff is still loading.") : set ? tr("The diff is empty.") : tr("The whole diff is not available."));
-		window->show();
-		return;
-	}
-
-	window->_viewer->setText(set->text());
-	window->_stack->setCurrentWidget(window->_viewer);
-	// Shown before scrolling: the viewer indexes its lines on its first resize
-	window->show();
-
-	const std::optional<int> file = set->fileIndex(currentPath);
-	if (!file)
-		return;
-
-	// The section's "diff --git" line, matched whole: a later file's content may hold the same text
-	const QStringView section = set->fileDiff(*file);
-	const QRegularExpression headerLine{ QStringLiteral("^") + QRegularExpression::escape(section.left(section.indexOf(QLatin1Char('\n'))))
-		+ QStringLiteral("$"), QRegularExpression::MultilineOption };
-	// Searched backward from the end: the viewer scrolls a match above the view to its top row
-	window->_viewer->moveToEnd();
-	window->_viewer->find(headerLine, QTextDocument::FindBackward | QTextDocument::FindCaseSensitively);
 }
 
 FileViewerWindow::FileViewerWindow(const QString& title, const QString& headerText, const QString& tag, QWidget* parent) :

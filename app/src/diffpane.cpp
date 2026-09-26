@@ -6,6 +6,7 @@
 #include "vcsprocess.h"
 
 #include "appdialogs/csettingsnotifier.h"
+#include "assert/advanced_assert.h"
 #include "widgets/clabelelided.h"
 
 DISABLE_COMPILER_WARNINGS
@@ -19,6 +20,9 @@ DISABLE_COMPILER_WARNINGS
 #include <QSizePolicy>
 #include <QVBoxLayout>
 RESTORE_COMPILER_WARNINGS
+
+#include <algorithm>
+#include <vector>
 
 QString formattedFileSize(qint64 bytes)
 {
@@ -49,12 +53,14 @@ DiffPane::DiffPane(QWidget* parent) :
 	headerLayout->addWidget(_sizeLabel, 1);
 	headerLayout->addWidget(_tagLabel);
 	headerLayout->addWidget(buildHunkNavigator());
-	auto* fullDiffButton = new QPushButton{ tr("Full diff") };
-	fullDiffButton->setToolTip(tr("Every file's diff as the command printed it, in a separate window"));
-	fullDiffButton->setFocusPolicy(Qt::NoFocus); // the file list keeps the keyboard
+	_rawDiffButton = new QPushButton{ tr("Raw Diff") };
+	_rawDiffButton->setToolTip(tr("The diff as the command printed it: no merged lines, no moves"));
+	_rawDiffButton->setCheckable(true);
+	_rawDiffButton->setEnabled(false);
+	_rawDiffButton->setFocusPolicy(Qt::NoFocus); // the file list keeps the keyboard
 	headerLayout->addSpacing(12); // set off from the hunk navigation
-	headerLayout->addWidget(fullDiffButton);
-	connect(fullDiffButton, &QPushButton::clicked, this, &DiffPane::fullDiffRequested);
+	headerLayout->addWidget(_rawDiffButton);
+	connect(_rawDiffButton, &QPushButton::toggled, this, &DiffPane::setRawDiffShown);
 	layout->addWidget(header);
 
 	_view = new DiffTextView;
@@ -77,10 +83,37 @@ DiffPane::DiffPane(QWidget* parent) :
 	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, applyFontSettings);
 }
 
-void DiffPane::showDiff(const ItemInfo& item, ParsedDiff parsed)
+void DiffPane::showDiff(const ItemInfo& item, QStringView diff)
+{
+	showRenderings(item, parseUnifiedDiff(diff), parseRawUnifiedDiff(diff));
+}
+
+void DiffPane::showRenderings(const ItemInfo& item, ParsedDiff processed, ParsedDiff raw)
 {
 	setHeader(item);
-	_view->showDiff(std::move(parsed));
+	_diff = Renderings{ std::move(processed), std::move(raw) };
+	_rawDiffButton->setEnabled(true);
+	_view->showDiff(_rawDiffButton->isChecked() ? _diff->raw : _diff->processed);
+	updateHunkNavigator();
+}
+
+void DiffPane::clearRenderings()
+{
+	_diff.reset();
+	_rawDiffButton->setEnabled(false);
+}
+
+void DiffPane::setRawDiffShown(bool raw)
+{
+	const std::optional<int> top = _view->topLine();
+	assert_and_return_r(_diff && top, ); // the button is disabled while no diff is shown
+
+	// The first line read the top line is shown for, which the other rendering shows too
+	const std::vector<int>& shownLine = raw ? _diff->processed.shownLine : _diff->raw.shownLine;
+	const int diffLine = int(std::find(shownLine.begin(), shownLine.end(), *top) - shownLine.begin());
+
+	_view->showDiff(raw ? _diff->raw : _diff->processed);
+	_view->scrollDiffLineToTop(diffLine);
 	updateHunkNavigator();
 }
 
@@ -109,12 +142,13 @@ void DiffPane::showSection(const ItemInfo& item, const ChangeSetDiff& set, int f
 	else if (!diffHasContent(section))
 		showMessage(item, noContentText);
 	else
-		showDiff(item, parseUnifiedDiff(set, file));
+		showRenderings(item, parseUnifiedDiff(set, file), parseRawUnifiedDiff(section));
 }
 
 void DiffPane::showFileText(const ItemInfo& item, const QString& text)
 {
 	setHeader(item);
+	clearRenderings();
 	_view->showFileText(text);
 	updateHunkNavigator();
 }
@@ -122,6 +156,7 @@ void DiffPane::showFileText(const ItemInfo& item, const QString& text)
 void DiffPane::showMessage(const ItemInfo& item, const QString& text)
 {
 	setHeader(item);
+	clearRenderings();
 	_view->showMessage(text);
 	updateHunkNavigator();
 }

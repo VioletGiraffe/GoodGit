@@ -167,10 +167,12 @@ std::vector<SplitLine> splitLines(QStringView diff)
 	return lines;
 }
 
-void appendLine(ParsedDiff& parsed, const DiffLine& line, QStringView text)
+// `source`: the line read it is shown for
+void appendLine(ParsedDiff& parsed, int source, const DiffLine& line, QStringView text)
 {
 	if (!parsed.lines.empty())
 		parsed.text += QLatin1Char('\n');
+	parsed.shownLine[size_t(source)] = int(parsed.lines.size());
 	parsed.lines.push_back(line);
 	parsed.text += text;
 }
@@ -235,14 +237,15 @@ void appendPair(ParsedDiff& parsed, const std::vector<DiffLine>& lines, const st
 
 	if (merged.changeCount <= maxInlineChanges(std::max(removedText.size(), addedText.size())))
 	{
-		appendLine(parsed, DiffLine{ DiffLineKind::Edited, lines[size_t(removedIndex)].oldLine,
+		appendLine(parsed, removedIndex, DiffLine{ DiffLineKind::Edited, lines[size_t(removedIndex)].oldLine,
 			lines[size_t(addedIndex)].newLine }, merged.text);
+		parsed.shownLine[size_t(addedIndex)] = parsed.shownLine[size_t(removedIndex)];
 		appendSpans(parsed, merged.spans);
 		return;
 	}
 
-	appendLine(parsed, lines[size_t(removedIndex)], removedText);
-	appendLine(parsed, lines[size_t(addedIndex)], addedText);
+	appendLine(parsed, removedIndex, lines[size_t(removedIndex)], removedText);
+	appendLine(parsed, addedIndex, lines[size_t(addedIndex)], addedText);
 }
 
 // The lines [begin, end) past their marker character: it is not content, and the two sides never carry the same one
@@ -266,9 +269,9 @@ void appendRun(ParsedDiff& parsed, const std::vector<DiffLine>& lines, const std
 	int i = removedBegin, j = addedBegin;
 	const auto appendUnpairedUpTo = [&](int removedIndex, int addedIndex) {
 		for (; i < removedIndex; ++i)
-			appendLine(parsed, lines[size_t(i)], texts[size_t(i)]);
+			appendLine(parsed, i, lines[size_t(i)], texts[size_t(i)]);
 		for (; j < addedIndex; ++j)
-			appendLine(parsed, lines[size_t(j)], texts[size_t(j)]);
+			appendLine(parsed, j, lines[size_t(j)], texts[size_t(j)]);
 	};
 
 	for (const LinePair& pair : pairs)
@@ -332,8 +335,9 @@ struct FileMove
 };
 
 // Renders the lines read into the lines shown, the moves given standing as read: they are found first, or
-// the pairing would merge a moved line with whatever was added in the block's place
-ParsedDiff render(const ScannedDiff& scanned, std::vector<FileMove> moves)
+// the pairing would merge a moved line with whatever was added in the block's place.
+// Without `mergeEdits` every line read is shown as it stands.
+ParsedDiff render(const ScannedDiff& scanned, std::vector<FileMove> moves, bool mergeEdits)
 {
 	const std::vector<SplitLine>& splits = scanned.splits;
 	const std::vector<DiffLine>& lines = scanned.lines;
@@ -349,11 +353,11 @@ ParsedDiff render(const ScannedDiff& scanned, std::vector<FileMove> moves)
 	ParsedDiff parsed;
 	parsed.text.reserve(scanned.textSize);
 	parsed.lines.reserve(lines.size());
-	parsed.shownLine.assign(lines.size(), -1);
-	std::vector<int>& shownLine = parsed.shownLine;
+	parsed.shownLine.resize(lines.size());
+	const std::vector<int>& shownLine = parsed.shownLine;
 	// A line that can join a run's pairing: a continuation has no marker char, and a moved line is spoken for
 	const auto pairable = [&](int k, DiffLineKind kind) {
-		return lines[size_t(k)].kind == kind && !splits[size_t(k)].continuation && !moved[size_t(k)];
+		return mergeEdits && lines[size_t(k)].kind == kind && !splits[size_t(k)].continuation && !moved[size_t(k)];
 	};
 
 	const int count = int(lines.size());
@@ -361,8 +365,7 @@ ParsedDiff render(const ScannedDiff& scanned, std::vector<FileMove> moves)
 	{
 		if (!pairable(i, DiffLineKind::Removed))
 		{
-			shownLine[size_t(i)] = int(parsed.lines.size());
-			appendLine(parsed, lines[size_t(i)], texts[size_t(i)]);
+			appendLine(parsed, i, lines[size_t(i)], texts[size_t(i)]);
 			++i;
 			continue;
 		}
@@ -386,7 +389,7 @@ ParsedDiff render(const ScannedDiff& scanned, std::vector<FileMove> moves)
 
 		appendRun(parsed, lines, texts, i, removedEnd, addedBegin, addedEnd);
 		if (addedBegin != removedEnd)
-			appendLine(parsed, lines[size_t(removedEnd)], texts[size_t(removedEnd)]);
+			appendLine(parsed, removedEnd, lines[size_t(removedEnd)], texts[size_t(removedEnd)]);
 		i = addedEnd;
 	}
 
@@ -396,11 +399,6 @@ ParsedDiff render(const ScannedDiff& scanned, std::vector<FileMove> moves)
 		const MovedBlock& block = move.block;
 		const int removedFirst = block.removedCount > 0 ? shownLine[size_t(block.removedFirst)] : 0;
 		const int addedFirst = block.addedCount > 0 ? shownLine[size_t(block.addedFirst)] : 0;
-		if (removedFirst < 0 || addedFirst < 0)
-		{
-			assert_unconditional_r("A moved block's line was merged into a pair");
-			continue; // leaves the lines undecorated
-		}
 
 		DiffMove shown;
 		shown.removedFirst = removedFirst;
@@ -571,7 +569,12 @@ ParsedDiff parseUnifiedDiff(QStringView diff)
 	std::vector<FileMove> moves;
 	for (MovedBlock& block : detectMovedBlocks(changeLinesOf(scanned)))
 		moves.push_back(FileMove{ std::move(block), std::nullopt });
-	return render(scanned, std::move(moves));
+	return render(scanned, std::move(moves), true);
+}
+
+ParsedDiff parseRawUnifiedDiff(QStringView diff)
+{
+	return render(scanDiff(diff), {}, false);
 }
 
 ChangeSetDiff::ChangeSetDiff(QString text) :
@@ -696,7 +699,7 @@ ParsedDiff parseUnifiedDiff(const ChangeSetDiff& set, int file)
 		moves.push_back(std::move(move));
 	}
 
-	return render(scanDiff(set.fileDiff(file)), std::move(moves));
+	return render(scanDiff(set.fileDiff(file)), std::move(moves), true);
 }
 
 bool diffHasContent(QStringView diff)

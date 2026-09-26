@@ -70,7 +70,7 @@ public:
 	[[nodiscard]] std::optional<int> topLine() const;
 	// Does nothing for a line past the end
 	void scrollLineToTop(int line);
-	// A line of the diff read, as ForeignEnd::diffLine names one. Does nothing for a line not shown.
+	// A line of the diff read, as ForeignEnd::diffLine names one. Does nothing for a line past the end.
 	void scrollDiffLineToTop(int diffLine);
 
 	// Called by the gutter widget, which owns nothing but its paint and mouse events

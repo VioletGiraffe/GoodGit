@@ -77,7 +77,7 @@ struct ParsedDiff
 	std::vector<DiffLine> lines; // one per line of `text`
 	std::vector<DiffSpan> spans; // ascending by line
 	std::vector<DiffMove> moves; // ascending by the added range's place in the diff, the set's where there is one
-	std::vector<int> shownLine;  // by line of the diff read: the line shown for it, -1 for one merged into a pair
+	std::vector<int> shownLine;  // by line of the diff read: the line shown for it, a merged line for both its halves
 };
 
 // A whole change's diff, every file's in one text, cut into the files' sections. Finds the blocks moved
@@ -118,6 +118,8 @@ private:
 [[nodiscard]] ParsedDiff parseUnifiedDiff(QStringView diff);
 // One section, its moves those of the set that touch it
 [[nodiscard]] ParsedDiff parseUnifiedDiff(const ChangeSetDiff& set, int file);
+// The diff's own lines, one shown per line read: nothing merged, no moves
+[[nodiscard]] ParsedDiff parseRawUnifiedDiff(QStringView diff);
 
 // Whether a diff carries a content change - a hunk, or a binary notice. A mode-only or a line-ending-only
 // change prints headers alone.
