@@ -5,6 +5,7 @@ TEMPLATE = subdirs
 
 SUBDIRS += thin_io unittests
 
-thin_io.file = ../thin_io/thin_io.pro
+# .subdir, not .file: with .file, qmake -r writes Makefile.thin_io while the subdirs Makefile runs Makefile
+thin_io.subdir = ../thin_io
 unittests.file = unittests.pro
 unittests.depends = thin_io
