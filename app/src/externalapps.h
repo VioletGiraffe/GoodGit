@@ -14,6 +14,8 @@ class QWidget;
 
 [[nodiscard]] QString openInFileManagerActionText();
 [[nodiscard]] QString showInFileManagerActionText();
+// Where QFile::moveToTrash() puts a file, named as the platform's file manager shows it
+[[nodiscard]] QString trashName();
 
 // Opens a file manager window on `directory`
 void openInFileManager(const QString& directory);

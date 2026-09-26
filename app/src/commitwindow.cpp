@@ -1620,7 +1620,7 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	addCopyPathActions(menu, paths, _repo->path());
 	menu.addSeparator();
 
-	QAction* deleteAction = menu.addAction(tr("Delete to Recycle Bin"), this, &CommitWindow::deleteSelection);
+	QAction* deleteAction = menu.addAction(tr("Delete to %1").arg(trashName()), this, &CommitWindow::deleteSelection);
 	deleteAction->setVisible(anyDeletable);
 	deleteAction->setEnabled(canAct);
 	// Display only: the view's event filter handles the key. WidgetShortcut on an action belonging to no
@@ -1729,7 +1729,7 @@ void CommitWindow::deleteSelection()
 	if (untrackedPaths.isEmpty() && addedPaths.isEmpty() && trackedPaths.isEmpty())
 		return;
 
-	// A single untracked file goes to the Recycle Bin unprompted, as it would from a file manager.
+	// A single untracked file goes to the trash unprompted, as it would from a file manager.
 	// Anything more asks first, and the dialog names the untracked files too: they are deleted with the rest.
 	// A repository always asks: it may hold unpushed commits
 	if (!trackedPaths.isEmpty() || !addedPaths.isEmpty() || untrackedPaths.size() > 1 || !repositoryPaths.isEmpty())
@@ -1749,7 +1749,7 @@ void CommitWindow::deleteSelection()
 			: tr("Delete files and repositories?");
 		const QString counted = repositoryCount == 0 ? files : fileCount == 0 ? repositories : tr("%1 and %2").arg(files, repositories);
 		const auto answer = MessageDialog::question(this, title,
-			tr("Move %1 to the Recycle Bin?\n\n%2").arg(counted, listedPaths(prompted)), { tr("Delete") });
+			tr("Move %1 to the %2?\n\n%3").arg(counted, trashName(), listedPaths(prompted)), { tr("Delete") });
 		if (answer != 0)
 			return;
 	}
@@ -1761,8 +1761,8 @@ void CommitWindow::deleteSelection()
 				continue;
 			// Never fall back to a permanent delete
 			MessageDialog::notice(this, tr("Delete failed"),
-				tr("Could not move '%1' to the Recycle Bin (it may be locked, or the volume has no Recycle Bin).\n"
-				   "The remaining items were not deleted.").arg(path), {});
+				tr("Could not move '%1' to the %2 (it may be locked, or the volume has no %2).\n"
+				   "The remaining items were not deleted.").arg(path, trashName()), {});
 			break;
 		}
 		_repo->refresh();

@@ -34,6 +34,15 @@ QString showInFileManagerActionText()
 #endif
 }
 
+QString trashName()
+{
+#ifdef Q_OS_WIN
+	return QStringLiteral("Recycle Bin");
+#else
+	return QStringLiteral("Trash");
+#endif
+}
+
 void openInFileManager(const QString& directory)
 {
 	QDesktopServices::openUrl(QUrl::fromLocalFile(directory));
