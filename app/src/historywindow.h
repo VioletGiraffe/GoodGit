@@ -81,6 +81,8 @@ private:
 	void openFileHistory(const QString& filePath);
 	// One file's content as of one commit, in a separate window
 	void openFileViewer(const QString& sha, const QString& repoRelativePath);
+	// The same content, written to a file the user picks; the whole file is held in memory until written
+	void saveFileRevisionAs(const QString& sha, const QString& repoRelativePath);
 	// A submodule row opens its own repository's history at the commit the pointer names; a file row opens
 	// the viewer, on the parent commit where Shift is held
 	void onFileRowActivated(const QModelIndex& sourceIndex, Qt::KeyboardModifiers modifiers);

@@ -5,9 +5,12 @@
 #include "assert/advanced_assert.h"
 
 DISABLE_COMPILER_WARNINGS
+#include <QClipboard>
+#include <QDir>
 #include <QGuiApplication>
 #include <QHeaderView>
 #include <QItemSelectionModel>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QSortFilterProxyModel>
 #include <QStyleOption>
@@ -165,4 +168,18 @@ void FileListView::setSelectedSourceRows(const std::vector<int>& rows, int curre
 	// After setCurrentIndex, which selects the row it lands on
 	if (!selection.isEmpty())
 		selectionModel()->select(selection, QItemSelectionModel::ClearAndSelect);
+}
+
+void addCopyPathActions(QMenu& menu, const QStringList& repoRelativePaths, const QString& repositoryRoot)
+{
+	menu.addAction(FileListView::tr("Copy relative path"), &menu, [repoRelativePaths] {
+		QGuiApplication::clipboard()->setText(repoRelativePaths.join(QLatin1Char('\n')));
+	});
+	// Only the full path is nativized: the relative one is pasted into an ignore file, a message or a command, which take forward slashes
+	menu.addAction(FileListView::tr("Copy full path"), &menu, [repoRelativePaths, root = QDir{ repositoryRoot }] {
+		QStringList fullPaths;
+		for (const QString& path : repoRelativePaths)
+			fullPaths.push_back(QDir::toNativeSeparators(root.filePath(path)));
+		QGuiApplication::clipboard()->setText(fullPaths.join(QLatin1Char('\n')));
+	});
 }

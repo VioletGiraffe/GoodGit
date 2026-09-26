@@ -3,11 +3,13 @@
 #include "compiler/compiler_warnings_control.h"
 
 DISABLE_COMPILER_WARNINGS
+#include <QStringList>
 #include <QTreeView>
 RESTORE_COMPILER_WARNINGS
 
 #include <vector>
 
+class QMenu;
 class QSortFilterProxyModel;
 
 // The file list both windows show: the commit window's pending changes, and one commit's files in the
@@ -39,3 +41,6 @@ signals:
 private:
 	QSortFilterProxyModel* const _proxy;
 };
+
+// Adds the file lists' Copy relative path and Copy full path actions; several paths are copied one per line
+void addCopyPathActions(QMenu& menu, const QStringList& repoRelativePaths, const QString& repositoryRoot);

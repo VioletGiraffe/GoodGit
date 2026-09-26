@@ -50,6 +50,9 @@ inline constexpr qlonglong MaxChangeSetDiffBytes = 128LL * 1024LL * 1024LL;
 inline constexpr const char* MaxViewedFileBytesKey = "MaxViewedFileBytes";
 inline constexpr qlonglong MaxViewedFileBytesDefault = 256LL * 1024LL * 1024LL;
 
+// Where the next "Save file ... as" dialog starts: the folder the last one wrote to, the home folder until then
+inline constexpr const char* LastSaveDirectoryKey = "LastSaveDirectory";
+
 inline constexpr const char* ShowLineEndingOnlyChangesKey = "ShowLineEndingOnlyChanges";
 inline constexpr bool ShowLineEndingOnlyChangesDefault = false;
 

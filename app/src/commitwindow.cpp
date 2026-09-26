@@ -1613,17 +1613,11 @@ void CommitWindow::showContextMenu(const QPoint& pos)
 	});
 
 	showInFileManagerAction->setVisible(singleFile); // a deleted path has nothing to reveal
-	// Only the full path is nativized: the relative one is pasted into an ignore file, a message or a command,
-	// which take forward slashes.
-	const auto copyPaths = [this, entries](bool full) {
-		QStringList paths;
-		for (const FileEntry& entry : entries)
-			paths.push_back(full ? QDir::toNativeSeparators(absolutePath(entry)) : entry.path);
-		QApplication::clipboard()->setText(paths.join(QLatin1Char('\n')));
-	};
 
-	menu.addAction(tr("Copy relative path"), this, [copyPaths] { copyPaths(false); });
-	menu.addAction(tr("Copy full path"), this, [copyPaths] { copyPaths(true); });
+	QStringList paths;
+	for (const FileEntry& entry : entries)
+		paths.push_back(entry.path);
+	addCopyPathActions(menu, paths, _repo->path());
 	menu.addSeparator();
 
 	QAction* deleteAction = menu.addAction(tr("Delete to Recycle Bin"), this, &CommitWindow::deleteSelection);

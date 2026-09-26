@@ -8,6 +8,7 @@
 #include "theme.h"
 
 #include "appdialogs/csettingsnotifier.h"
+#include "dialogs/messagedialog.h"
 #include "widgets/clabelelided.h"
 #include "widgets/cpersistentwindow.h"
 #include "widgets/widgetutils.h"
@@ -17,6 +18,9 @@ DISABLE_COMPILER_WARNINGS
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QDir>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QFontMetricsF>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -27,6 +31,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QMenu>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QSaveFile>
 #include <QSettings>
 #include <QShortcut>
 #include <QSplitter>
@@ -718,9 +723,15 @@ void HistoryWindow::showCommitContextMenu(const QPoint& pos)
 		return;
 
 	// Read before exec() spins an event loop, in which a finishing log query could reset the model
-	const QString sha = _logModel.commitAt(index.row()).sha;
+	const CommitRecord commit = _logModel.commitAt(index.row());
+	const QString subject = commit.subject();
+	const QString& sha = commit.sha;
 
 	QMenu menu{ this };
+	QAction* copyTitleAction = menu.addAction(tr("Copy commit title"), this, [subject] { QApplication::clipboard()->setText(subject); });
+	copyTitleAction->setEnabled(!subject.isEmpty());
+	QAction* copyMessageAction = menu.addAction(tr("Copy message"), this, [message = commit.message] { QApplication::clipboard()->setText(message); });
+	copyMessageAction->setEnabled(!commit.message.isEmpty());
 	menu.addAction(tr("Copy long hash"), this, [sha] { QApplication::clipboard()->setText(sha); });
 	menu.addAction(tr("Copy short hash"), this, [sha] { QApplication::clipboard()->setText(shortSha(sha)); });
 	menu.exec(_logView->viewport()->mapToGlobal(pos));
@@ -761,7 +772,19 @@ void HistoryWindow::showFileContextMenu(const QPoint& pos)
 		atParentCommit->setShortcut(Qt::SHIFT | Qt::Key_Return);
 		atParentCommit->setShortcutContext(Qt::WidgetShortcut);
 		atParentCommit->setShortcutVisibleInContextMenu(true);
+
+		menu.addSeparator();
+		QAction* saveAtThisCommit = menu.addAction(tr("Save file at this commit as..."), this,
+			[this, sha = targets.thisSha, path = entry.path] { saveFileRevisionAs(sha, path); });
+		saveAtThisCommit->setEnabled(!targets.thisSha.isEmpty());
+
+		QAction* saveAtParentCommit = menu.addAction(tr("Save file at parent commit as..."), this,
+			[this, sha = targets.parentSha, path = targets.pathInParent] { saveFileRevisionAs(sha, path); });
+		saveAtParentCommit->setEnabled(!targets.parentSha.isEmpty());
 	}
+
+	menu.addSeparator();
+	addCopyPathActions(menu, { entry.path }, _repo->path());
 	menu.exec(_filesView->viewport()->mapToGlobal(pos));
 }
 
@@ -775,6 +798,33 @@ void HistoryWindow::openFileViewer(const QString& sha, const QString& repoRelati
 {
 	auto* window = new FileViewerWindow(*_repo, sha, repoRelativePath, this);
 	window->show();
+}
+
+void HistoryWindow::saveFileRevisionAs(const QString& sha, const QString& repoRelativePath)
+{
+	const QString fileName = repoRelativePath.section(QLatin1Char('/'), -1);
+	// Never the repository folder by default: accepting the proposed name there would overwrite the working copy
+	const QString startDirectory = QSettings{}.value(Settings::LastSaveDirectoryKey, QDir::homePath()).toString();
+	const QString target = QFileDialog::getSaveFileName(this, tr("Save %1 @ %2").arg(fileName, shortSha(sha)), QDir{ startDirectory }.filePath(fileName));
+	if (target.isEmpty())
+		return;
+	QSettings{}.setValue(Settings::LastSaveDirectoryKey, QFileInfo{ target }.absolutePath());
+
+	// Not QApplication::setOverrideCursor(): the callback that restores the cursor is skipped once the window closes
+	setCursor(Qt::BusyCursor);
+	_repo->fileAtRevision(sha, repoRelativePath, /*maxBytes=*/0, this, [this, target](std::expected<QByteArray, QString> content) {
+		unsetCursor();
+		const QString failureTitle = tr("Failed to save the file");
+		if (!content)
+		{
+			MessageDialog::notice(this, failureTitle, failureTitle + QLatin1Char('.'), content.error());
+			return;
+		}
+
+		QSaveFile file{ target };
+		if (!file.open(QIODevice::WriteOnly) || file.write(*content) != content->size() || !file.commit())
+			MessageDialog::notice(this, failureTitle, failureTitle + QLatin1Char('.'), QDir::toNativeSeparators(target) + QStringLiteral(": ") + file.errorString());
+	});
 }
 
 void HistoryWindow::showFilesForCurrentCommit()
