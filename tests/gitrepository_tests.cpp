@@ -19,6 +19,7 @@ RESTORE_COMPILER_WARNINGS
 #include <expected>
 #include <functional>
 #include <optional>
+#include <vector>
 
 namespace {
 
@@ -328,7 +329,42 @@ TEST_CASE("A commit puts back the staging it had to clear: an added file, a part
 	CHECK(files[0].type == ChangeType::Added);
 	CHECK(files[1].type == ChangeType::Deleted);
 	CHECK(files[2].type == ChangeType::Modified);
-	CHECK(state.headSubject == QStringLiteral("only committed.txt"));
+	CHECK(state.headSubject() == QStringLiteral("only committed.txt"));
+}
+
+TEST_CASE("The state carries HEAD's whole message, and a root commit's parent count is zero", "[git]")
+{
+	const ScratchRepository scratch;
+	scratch.write(QStringLiteral("file.txt"), "content\n");
+	scratch.commitAll(QStringLiteral("subject\n\nbody line one\nbody line two\n"));
+
+	const RepoState state = scratch.refreshed().second;
+	CHECK(state.headMessage == QStringLiteral("subject\n\nbody line one\nbody line two"));
+	CHECK(state.headSubject() == QStringLiteral("subject"));
+	CHECK(state.headParentCount == 0);
+}
+
+TEST_CASE("A refresh callback runs after the first run started after the request, the running one coalescing it", "[git]")
+{
+	const ScratchRepository scratch;
+	scratch.write(QStringLiteral("file.txt"), "content\n");
+	scratch.commitAll(QStringLiteral("base"));
+
+	GitRepository repository{ scratch.root() };
+	QEventLoop loop;
+	QTimer::singleShot(60'000, &loop, &QEventLoop::quit);
+	int completedRuns = 0;
+	QObject::connect(&repository, &Repository::refreshed, &loop, [&] { ++completedRuns; });
+
+	std::vector<int> runsSeenByCallbacks;
+	repository.refresh([&] { runsSeenByCallbacks.push_back(completedRuns); });
+	repository.refresh([&] {
+		runsSeenByCallbacks.push_back(completedRuns);
+		loop.quit();
+	});
+	loop.exec();
+
+	CHECK(runsSeenByCallbacks == std::vector<int>{ 1, 2 });
 }
 
 TEST_CASE("A detached HEAD on its upstream's line is offered its branch moved, or a new one, without the working tree moving", "[git]")

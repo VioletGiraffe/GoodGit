@@ -172,6 +172,17 @@ private:
 
 } // namespace
 
+TEST_CASE("The hg state carries the working directory parent's whole message", "[hg]")
+{
+	const ScratchHgRepository scratch;
+	scratch.write(QStringLiteral("file.txt"), "content\n");
+	scratch.commitAll(QStringLiteral("subject\n\nbody line one\nbody line two\n"));
+
+	const RepoState state = scratch.refreshed().second;
+	CHECK(state.headMessage == QStringLiteral("subject\n\nbody line one\nbody line two"));
+	CHECK(state.headSubject() == QStringLiteral("subject"));
+}
+
 TEST_CASE("hg status shapes: a move is one renamed row, removed and missing files are both deleted", "[hg]")
 {
 	const ScratchHgRepository scratch;

@@ -408,7 +408,7 @@ QString escapedForGitIgnore(const QString& text)
 struct GitRepository::RefreshRun
 {
 	Git::BranchHeader header;
-	QString headSubject;
+	QString headMessage;
 	std::vector<CommitFileChange> diffEntries;
 	std::map<QString, LineCounts> changeCounts; // by path; only the tracked changes have one
 	QStringList untracked;
@@ -478,19 +478,18 @@ void GitRepository::startRefresh()
 			else
 				run->noteFailure(r); // an unread header would parse as "on a branch, born"
 		});
-	// HEAD's subject for the message header, and its parent count for the undo action.
+	// HEAD's message for the message header and the undo action, and its parent count for the undo action.
 	// Fails on an unborn branch, by design.
-	// Parents first: %s is a single line and %P is not, so a root commit's empty %P would otherwise be
-	// indistinguishable from a missing subject.
-	round.launch(path(), { QStringLiteral("log"), QStringLiteral("-1"), QStringLiteral("--format=%P%n%s") },
+	// Parents first: %P is always one line, possibly empty, and the message is everything after it.
+	round.launch(path(), { QStringLiteral("log"), QStringLiteral("-1"), QStringLiteral("--format=%P%n%B") },
 		[run](const ProcessResult& r) {
-			const QList<QByteArray> lines = r.out.split('\n');
-			if (lines.size() < 2)
+			const qsizetype parentsEnd = r.out.indexOf('\n');
+			if (parentsEnd < 0)
 				return;
 
-			const QByteArray parents = lines[0].simplified();
+			const QByteArray parents = r.out.first(parentsEnd).simplified();
 			run->headParentCount = parents.isEmpty() ? 0 : int(parents.count(' ')) + 1;
-			run->headSubject = QString::fromUtf8(lines[1]).trimmed();
+			run->headMessage = QString::fromUtf8(r.out.sliced(parentsEnd + 1)).trimmed();
 		});
 	round.launch(path(), trackedChangesArgs(QStringLiteral("HEAD")),
 		[run](const ProcessResult& r) {
@@ -639,7 +638,7 @@ RepoState GitRepository::stateFromRun(const RefreshRun& run) const
 	RepoState state;
 	state.unborn = run.header.oid == QLatin1String("(initial)");
 	state.headSha = state.unborn ? QString{} : run.header.oid;
-	state.headSubject = run.headSubject;
+	state.headMessage = run.headMessage;
 	state.headParentCount = run.headParentCount;
 	state.detached = run.header.head == QLatin1String("(detached)");
 	state.branch = state.detached ? QString{} : run.header.head;

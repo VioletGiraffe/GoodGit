@@ -413,7 +413,7 @@ RepoState HgRepository::stateFromRun(const RefreshRun& run) const
 	RepoState state;
 	state.unborn = head.sha.isEmpty() || head.sha == QLatin1String(Hg::NullNode);
 	state.headSha = state.unborn ? QString{} : head.sha;
-	state.headSubject = state.unborn ? QString{} : head.subject();
+	state.headMessage = state.unborn ? QString{} : head.message.trimmed();
 	state.headParentCount = int(head.parents.size()); // the parser already drops a root changeset's null parent
 	// The named branch (`default` unless another was created); bookmarks are not read, and hg has no detached state
 	state.branch = run.workingDir.branch;

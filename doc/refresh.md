@@ -1,6 +1,7 @@
 # Refresh
 
-Triggered by startup, F5, and the app's own state-changing actions; **never** by window activation, and
+Triggered by startup, F5, the app's own state-changing actions, and Undo Last Commit before it decides
+(`committing.md`); **never** by window activation, and
 there is no file watcher. The list may be stale by design: **the checked rows are the commit pathspec,
 verbatim**, and a stale list produces ordinary VCS errors through the normal failure path, not silent
 re-scans. Check state survives a refresh by path; the state a newly listed row starts with is a setting. A

@@ -107,15 +107,20 @@ QString Repository::name() const
 	return repositoryDisplayName(_rootPath);
 }
 
-void Repository::refresh()
+void Repository::refresh(std::function<void()> onDone)
 {
 	if (_refreshing)
 	{
 		_refreshPending = true;
+		if (onDone)
+			_pendingRefreshCallbacks.push_back(std::move(onDone));
 		return;
 	}
 
 	_refreshing = true;
+	_runningRefreshCallbacks = std::exchange(_pendingRefreshCallbacks, {});
+	if (onDone)
+		_runningRefreshCallbacks.push_back(std::move(onDone));
 	startRefresh();
 }
 
@@ -131,6 +136,8 @@ void Repository::completeRefresh(RepoState state, std::vector<FileEntry> files)
 		_state.readFailure = std::move(state.readFailure); // the rest stays from the last successful run
 
 	_refreshing = false;
+	// Taken before any slot or callback runs: one that starts a refresh fills the list for its own run
+	const std::vector<std::function<void()>> completedRunCallbacks = std::exchange(_runningRefreshCallbacks, {});
 	emit refreshed();
 
 	if (_refreshPending)
@@ -138,4 +145,7 @@ void Repository::completeRefresh(RepoState state, std::vector<FileEntry> files)
 		_refreshPending = false;
 		refresh();
 	}
+
+	for (const std::function<void()>& callback : completedRunCallbacks)
+		callback();
 }

@@ -129,6 +129,9 @@ private:
 
 	void showHistoryWindow();
 	void undoLastCommit();
+	// Only called once undoLastCommit()'s refresh has completed: every refusal is decided on that state.
+	// The undone commit's message goes into the message box if the box is blank.
+	void confirmThenUndoLastCommit();
 	void continueOperation();
 	void abortOperation();
 

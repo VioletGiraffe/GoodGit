@@ -581,7 +581,7 @@ void CommitWindow::showParentCommitContextMenu(const QPoint& pos)
 	// Copied before exec() spins an event loop, in which a finishing refresh could replace the state
 	const RepoState& state = _repo->state();
 	const QString sha = state.headSha;
-	const QString subject = state.headSubject;
+	const QString subject = state.headSubject();
 	if (sha.isEmpty())
 		return;
 
@@ -804,7 +804,7 @@ void CommitWindow::updateHeader()
 		? tr("The upstream branch no longer exists on the remote - deleted or pruned. Pushing recreates it.")
 		: unpushedTooltip);
 
-	const QString parentSubject = subjectOrPlaceholder(state.headSubject);
+	const QString parentSubject = subjectOrPlaceholder(state.headSubject());
 	_parentCommitLabel->setText(state.unborn ? QString{} : tr("Parent: %1").arg(parentSubject));
 	_parentCommitLabel->setToolTip(state.unborn ? QString{} : QStringLiteral("%1 %2").arg(shortHeadSha, parentSubject));
 
@@ -1907,10 +1907,24 @@ void CommitWindow::startSubmoduleContentDiscard(const QString& path, const Submo
 
 void CommitWindow::undoLastCommit()
 {
-	// A push in flight blocks this too: the refusal below is computed from pre-push state, and undoing the
+	// A push in flight blocks this too: the refusal is computed from pre-push state, and undoing the
 	// commit a running push is publishing is the rewrite AlreadyPushed exists to prevent
 	if (writeInFlight())
 		return;
+
+	// Decided on a fresh state: nothing refreshes on window activation, and a commit or push made outside the
+	// app since the last refresh changes the refusal and the message restored
+	beginMutation();
+	_repo->refresh([this] {
+		endMutation();
+		confirmThenUndoLastCommit();
+	});
+}
+
+void CommitWindow::confirmThenUndoLastCommit()
+{
+	if (!canActOnList())
+		return; // the refresh could not read the state; the read failure strip says why
 
 	const RepoState& state = _repo->state();
 	const UndoRefusal refusal = state.lastCommitUndoRefusal();
@@ -1943,13 +1957,20 @@ void CommitWindow::undoLastCommit()
 	const StateStamp stamp = stateStamp();
 	const auto answer = MessageDialog::question(this, tr("Undo the last commit?"),
 		tr("'%1' will be undone. Its changes return to this list as uncommitted changes; the working tree "
-			"is not modified.").arg(subjectOrPlaceholder(state.headSubject)),
+			"is not modified.").arg(subjectOrPlaceholder(state.headSubject())),
 		{ tr("Undo commit") });
 	if (answer != 0 || stateMovedSince(stamp))
 		return;
 
 	beginMutation();
-	_repo->undoLastCommit(mutationDone(tr("Undo failed"), /*changesHistory=*/true));
+	_repo->undoLastCommit([this, message = state.headMessage, done = mutationDone(tr("Undo failed"), /*changesHistory=*/true)](std::expected<void, QString> result) {
+		if (result && _messageEdit->toPlainText().trimmed().isEmpty())
+		{
+			_messageEdit->setPlainText(message);
+			_messageEdit->moveCursor(QTextCursor::End);
+		}
+		done(std::move(result));
+	});
 }
 
 void CommitWindow::addSelectionToIndex()

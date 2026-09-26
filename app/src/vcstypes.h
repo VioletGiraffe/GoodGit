@@ -168,7 +168,7 @@ struct RepoState
 {
 	QString branch;      // empty when detached
 	QString headSha;     // full sha of HEAD; empty when unborn
-	QString headSubject; // subject line of HEAD; empty when unborn
+	QString headMessage; // HEAD's whole message, trimmed; empty when unborn
 	int headParentCount = 0; // 0 for a root commit, more than one for a merge; read by lastCommitUndoRefusal()
 	QString upstream;    // empty if none configured
 	int ahead = 0; // commits one push would send
@@ -197,6 +197,7 @@ struct RepoState
 	QString readFailure;
 
 	[[nodiscard]] bool known() const { return readFailure.isEmpty(); }
+	[[nodiscard]] QString headSubject() const { return headMessage.section(QLatin1Char('\n'), 0, 0); }
 	[[nodiscard]] bool operationInProgress() const { return op != RepoOp::None; }
 	// The conflict-resolution ops forbid a path-limited commit, so theirs takes every tracked change.
 	// Bisect does not constrain the commit; committing during one is refused by the window instead.

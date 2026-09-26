@@ -8,6 +8,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QSet>
 RESTORE_COMPILER_WARNINGS
 
+#include <functional>
 #include <map>
 #include <optional>
 #include <vector>
@@ -94,7 +95,9 @@ public:
 
 	// Re-reads the state and the file list. A call while a refresh is running is coalesced into one more
 	// run after it, so two runs' answers never interleave.
-	void refresh();
+	// `onDone` runs after refreshed(), once a run started after this call has completed, whether it read the state or not.
+	// Held until then: capture only what outlives this repository.
+	void refresh(std::function<void()> onDone = {});
 
 	// Counts the refreshes that replaced the state. A flow whose dialog spins an event loop captures this
 	// before and compares after: a difference means the state its decision was made from is gone.
@@ -290,5 +293,7 @@ private:
 
 	bool _refreshing = false;
 	bool _refreshPending = false;
+	std::vector<std::function<void()>> _runningRefreshCallbacks;
+	std::vector<std::function<void()>> _pendingRefreshCallbacks; // for the coalesced run after the running one
 	uint64_t _refreshGeneration = 0;
 };
