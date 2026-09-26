@@ -31,8 +31,8 @@ Deliberate consequences:
 `RepoState::lastCommitUndoRefusal()` names why the last commit cannot be undone, and every refusal lives
 there rather than in a backend: a commit the upstream already has, a merge, a root commit, an operation in
 progress, or a detached HEAD (where pushed cannot be told from unpushed). The menu item stays enabled for
-all of them and reports which one applies. The action refreshes first and decides on that state: nothing
-refreshes on window activation, and a commit or push from outside the app changes the answer. Both backends
+all of them and reports which one applies. The action refreshes first and decides on that state: a commit
+or push from outside the app since the last refresh changes the answer. Both backends
 leave the changes in the working tree, where the list shows them as uncommitted again. The commit's message
 returns to the message box, unless the box already holds text.
 

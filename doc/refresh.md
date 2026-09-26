@@ -7,7 +7,7 @@ is no file watcher.
 - **Return from another application, not window activation**: a dialog closing reactivates its window, and a
   refresh landing inside a write flow's next dialog would fail its `StateStamp` check (below). Switching
   between the app's own windows changes nothing a refresh would read.
-- **Deferred while a write or push runs**: the refresh waits for the window's next activation.
+- **Deferred while a write or push runs**: the refresh runs once neither is in flight.
 
 The list may be stale by design: **the checked rows are the commit pathspec, verbatim**, and a stale list
 produces ordinary VCS errors through the normal failure path, not silent re-scans. A refresh showing the same

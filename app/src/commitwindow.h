@@ -89,6 +89,8 @@ private:
 	[[nodiscard]] Vcs::Answer<void> mutationDone(const QString& errorTitle, bool changesHistory = false);
 	// Ends the push flow, finished or failed
 	void endPush();
+	// Runs the return-to-app refresh a write deferred, once no write is in flight
+	void runRefreshDeferredByWrite();
 	// False while a mutation is in flight, and while the rows are only the last state that could be read
 	[[nodiscard]] bool canActOnList() const;
 	// True while a command that writes the repository or the remote is running
@@ -129,7 +131,7 @@ private:
 
 	void showHistoryWindow();
 	void undoLastCommit();
-	// Only called once undoLastCommit()'s refresh has completed: every refusal is decided on that state.
+	// Only called once undoLastCommit()'s refresh has completed, with the mutation held: every refusal is decided on that state.
 	// The undone commit's message goes into the message box if the box is blank.
 	void confirmThenUndoLastCommit();
 	void continueOperation();
@@ -232,6 +234,9 @@ private:
 	// could stack over the first's
 	bool _discardPlanInFlight = false;
 	bool _pushInFlight = false; // held across the whole push: the plan, every step, and the upstream dialog
+	// A return from another app came while a write was in flight: a refresh landing in a write flow's dialogs
+	// fails its StateStamp check
+	bool _refreshDeferredByWrite = false;
 	// A refresh has established the state at least once: before that there is no parent sha to judge a stored draft by
 	bool _stateWasRead = false;
 	bool _initialWidthPending = false; // set when no stored splitter state was restored

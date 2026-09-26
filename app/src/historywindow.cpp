@@ -130,10 +130,7 @@ HistoryWindow::HistoryWindow(const RepositoryLocation& location, const QString& 
 	// One geometry for every history window
 	enablePersistence(this, QStringLiteral("HistoryWindow"));
 
-	WidgetUtils::callOnReturnFromOtherApp(this, [this] {
-		reloadIfHistoryChanged();
-		return true;
-	});
+	WidgetUtils::callOnReturnFromOtherApp(this, [this] { reloadIfHistoryChanged(); });
 
 	reload();
 }

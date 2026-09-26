@@ -58,6 +58,7 @@ RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 #include <iterator>
+#include <utility>
 
 namespace {
 
@@ -261,9 +262,9 @@ CommitWindow::CommitWindow(const RepositoryLocation& location) :
 	connect(_repo.get(), &Repository::refreshed, this, &CommitWindow::onRefreshed);
 	WidgetUtils::callOnReturnFromOtherApp(this, [this] {
 		if (writeInFlight())
-			return false; // a refresh landing in a write flow's dialogs fails its StateStamp check
-		_repo->refresh();
-		return true;
+			_refreshDeferredByWrite = true;
+		else
+			_repo->refresh();
 	});
 
 	// Every history window on this repository follows this window's writes, including those it did not open
@@ -983,12 +984,20 @@ void CommitWindow::endMutation()
 {
 	_mutationInFlight = false;
 	updateControlStates();
+	runRefreshDeferredByWrite();
 }
 
 void CommitWindow::endPush()
 {
 	_pushInFlight = false;
 	updateControlStates();
+	runRefreshDeferredByWrite();
+}
+
+void CommitWindow::runRefreshDeferredByWrite()
+{
+	if (!writeInFlight() && std::exchange(_refreshDeferredByWrite, false))
+		_repo->refresh();
 }
 
 Vcs::Answer<void> CommitWindow::mutationDone(const QString& errorTitle, bool changesHistory)
@@ -1928,24 +1937,27 @@ void CommitWindow::undoLastCommit()
 	if (writeInFlight())
 		return;
 
-	// Decided on a fresh state: nothing refreshes on window activation, and a commit or push made outside the
-	// app since the last refresh changes the refusal and the message restored
+	// Decided on a fresh state: a commit or push made outside the app since the last refresh changes the
+	// refusal and the message restored
 	beginMutation();
-	_repo->refresh([this] {
-		endMutation();
-		confirmThenUndoLastCommit();
-	});
+	_repo->refresh([this] { confirmThenUndoLastCommit(); });
 }
 
 void CommitWindow::confirmThenUndoLastCommit()
 {
-	if (!canActOnList())
-		return; // the refresh could not read the state; the read failure strip says why
+	assert_r(_mutationInFlight);
 
 	const RepoState& state = _repo->state();
+	if (!state.known())
+	{
+		endMutation(); // the refresh could not read the state; the read failure strip says why
+		return;
+	}
+
 	const UndoRefusal refusal = state.lastCommitUndoRefusal();
 	if (refusal != UndoRefusal::None)
 	{
+		endMutation();
 		const auto reason = [&state, refusal] {
 			switch (refusal)
 			{
@@ -1976,9 +1988,11 @@ void CommitWindow::confirmThenUndoLastCommit()
 			"is not modified.").arg(subjectOrPlaceholder(state.headSubject())),
 		{ tr("Undo commit") });
 	if (answer != 0 || stateMovedSince(stamp))
+	{
+		endMutation();
 		return;
+	}
 
-	beginMutation();
 	_repo->undoLastCommit([this, message = state.headMessage, done = mutationDone(tr("Undo failed"), /*changesHistory=*/true)](std::expected<void, QString> result) {
 		if (result && _messageEdit->toPlainText().trimmed().isEmpty())
 		{
