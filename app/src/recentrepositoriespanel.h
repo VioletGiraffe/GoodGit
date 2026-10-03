@@ -16,7 +16,8 @@ class QLineEdit;
 class RecentRepositoriesPanel final : public QTreeWidget
 {
 public:
-	// `currentRepositoryRoot` is the repository of the window this panel belongs to, marked in the list
+	// `currentRepositoryRoot` is the repository of the window this panel belongs to, marked in the list.
+	// Where it is a listed repository's submodule, that repository starts expanded.
 	explicit RecentRepositoriesPanel(QString currentRepositoryRoot, QWidget* parent = nullptr);
 
 	// Keeps the rows whose absolute path contains `text`, plus the parent of every submodule kept, and

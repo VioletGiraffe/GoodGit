@@ -239,6 +239,17 @@ RecentRepositoriesPanel::RecentRepositoriesPanel(QString currentRepositoryRoot, 
 		this, &RecentRepositoriesPanel::rebuild);
 
 	rebuild();
+
+	// Only the initial state: rememberExpansion() keeps whatever the user leaves it in
+	for (int i = 0; i < topLevelItemCount(); ++i)
+	{
+		QTreeWidgetItem* item = topLevelItem(i);
+		for (int child = 0; child < item->childCount(); ++child)
+		{
+			if (item->child(child)->data(0, CurrentRole).toBool())
+				item->setExpanded(true);
+		}
+	}
 }
 
 void RecentRepositoriesPanel::resizeEvent(QResizeEvent* event)
