@@ -345,6 +345,11 @@ void CommitWindow::buildMenuBar()
 	// Not one item per operation kind: the op strip names the one running, which no menu label has room to do
 	_continueAction = repositoryMenu->addAction(tr("&Continue Operation"), this, &CommitWindow::continueOperation);
 	_abortAction = repositoryMenu->addAction(tr("&Abort Operation..."), this, &CommitWindow::abortOperation);
+	repositoryMenu->addSeparator();
+	// Not created when absent: the editor does that on save
+	repositoryMenu->addAction(tr("&Edit %1").arg(_repo->ignoreFileName()), this, [this] {
+		openInTextEditor(QDir{ _repo->path() }.filePath(_repo->ignoreFileName()), this);
+	});
 	addHelpMenu(*menuBar(), this);
 }
 
