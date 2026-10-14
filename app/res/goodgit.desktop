@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=GoodGit
+Comment=Check files, write a message, commit, push
+Exec=gg
+Icon=goodgit
+Terminal=false
+Categories=Development;RevisionControl;

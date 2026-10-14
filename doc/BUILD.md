@@ -13,7 +13,7 @@ The `.sln`, `.vcxproj` and `Makefile*` files in the tree are qmake output (`qmak
 git-ignored and never edited.
 
 `app/res` holds `theme.qrc` (the monochrome glyph SVGs the theme tints at load, and the window icon), the
-platform icons and `Info.plist`.
+platform icons, `Info.plist` and the Linux desktop file.
 
 ## `gg` on PATH
 
@@ -26,7 +26,8 @@ platform icons and `Info.plist`.
   the running executable (`commandlinetool`):
   - macOS: `/usr/local/bin/gg`. macOS asks for administrator credentials where that directory is not user-writable.
   - Linux: `~/.local/bin/gg`. Whether that directory is on PATH varies by distribution and shell; the result message
-    says when it is not.
+    says when it is not. Run from an AppImage, the link points at the AppImage file: the executable inside it lives
+    in a mount that is gone once the app exits.
 
 ## Tests
 
@@ -64,15 +65,18 @@ must spell the same value: the update check compares `GG_VERSION` against the ta
 
 ## Release
 
-`.github/workflows/CI.yml` builds on Windows, macOS and Linux on every push.
+`.github/workflows/CI.yml` builds on Windows, macOS, and Linux x86_64 and arm64 on every push.
 
 - **Windows**: tests, msbuild, windeployqt into `dist/` (the TLS plugins stay, for the update check), then
   Inno Setup with `installer.iss` produces `GoodGit.exe`.
 - **macOS**: `scripts/create_dmg.sh <Qt dir>` runs macdeployqt on the release bundle, thins the universal Qt
   binaries to the app's own architecture, re-signs the bundle ad-hoc, and packs it into `GoodGit.dmg`.
-- **Linux**: build only, nothing packaged.
+- **Linux**: `scripts/create_appimage.sh <Qt dir>` runs linuxdeploy and its Qt plugin (continuous builds, downloaded
+  into `build/`) on the release binary with `app/res/goodgit.desktop`, deploying the xcb and Wayland platform plugins,
+  and produces `GoodGit-x86_64.AppImage` or `GoodGit-arm64.AppImage`. The AppImage uses the system's glibc and
+  libstdc++, so it runs only where both are at least as new as the build machine's: CI pins Ubuntu 24.04.
 
-A tag push creates a draft GitHub release with both artifacts and a changelog of the commits since the previous
+A tag push creates a draft GitHub release with every artifact and a changelog of the commits since the previous
 tag. The update check skips drafts: a release reaches users once published by hand, after editing the notes and
 setting the pre-release flag if it applies.
 

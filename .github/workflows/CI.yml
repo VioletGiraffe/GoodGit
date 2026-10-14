@@ -13,12 +13,13 @@ env:
 
 jobs:
   build:
-    name: Build & test on ${{ matrix.os }} with ${{ matrix.compiler }}
+    name: Build & test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Linux is pinned: the AppImage runs only where glibc and libstdc++ are at least as new as the build machine's
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-latest, windows-latest]
 
     steps:
     - name: Checkout
@@ -32,7 +33,8 @@ jobs:
         version: '6.11.*'
         aqtsource: git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7
         target: desktop
-        archives: 'qtbase icu qtsvg'
+        # qtwayland: the Adwaita window decorations; the Wayland client itself is in qtbase
+        archives: ${{ startsWith(matrix.os, 'ubuntu') && 'qtbase icu qtsvg qtwayland' || 'qtbase icu qtsvg' }}
         cache: 'true'
         #modules: 'qtimageformats'
 
@@ -222,12 +224,28 @@ jobs:
         $QT_ROOT_DIR/bin/qmake -r CONFIG+=release
         make -j4
 
+    # linuxdeploy copies the libraries the Wayland platform plugin links from this machine
+    - name: Linux - create AppImage
+      if: startsWith(matrix.os, 'ubuntu')
+      run: |
+        sudo apt install -qq libwayland-client0 libwayland-cursor0 libxkbcommon0
+        ./scripts/create_appimage.sh $QT_ROOT_DIR
+
+    # The runner has no FUSE to mount the AppImage
     - name: Linux - smoke test
       if: startsWith(matrix.os, 'ubuntu')
       run: |
         git init -q "$RUNNER_TEMP/smoke-repository"
         echo smoke > "$RUNNER_TEMP/smoke-repository/untracked.txt"
-        xvfb-run --auto-servernum bin/release/gg --smoke-test "$RUNNER_TEMP/smoke-repository"
+        APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run --auto-servernum ./GoodGit-*.AppImage --smoke-test "$RUNNER_TEMP/smoke-repository"
+
+    - name: Archive AppImage
+      if: success() && startsWith(matrix.os, 'ubuntu')
+      uses: actions/upload-artifact@v7
+      with:
+        name: AppImage-${{ matrix.os }}
+        path: GoodGit-*.AppImage
+        if-no-files-found: error
 
   create-release:
     needs: build
@@ -254,6 +272,13 @@ jobs:
         name: GoodGit.dmg
         path: .
 
+    - name: Download AppImages
+      uses: actions/download-artifact@v8
+      with:
+        pattern: AppImage-*
+        merge-multiple: true
+        path: .
+
     - name: Generate changelog
       id: changelog
       run: |
@@ -276,6 +301,8 @@ jobs:
         files: |
           GoodGit.exe
           GoodGit.dmg
+          GoodGit-x86_64.AppImage
+          GoodGit-arm64.AppImage
         token: ${{ secrets.GITHUB_TOKEN }}
         tag_name: ${{ github.ref }}
         name: ${{ github.ref_name }}

@@ -47,6 +47,17 @@ QString withNoticeIfNotOnPath(const QString& message)
 	return message;
 }
 
+// The file that launches this copy: inside an AppImage the executable sits in a mount that is gone once the app exits
+QString linkTargetPath()
+{
+	const QString executable = QCoreApplication::applicationFilePath();
+	const QString appImage = qEnvironmentVariable("APPIMAGE");
+	const QString appDir = QFileInfo(qEnvironmentVariable("APPDIR")).canonicalFilePath(); // empty if unset or gone
+	// Child processes inherit both variables, so they describe this process only when the executable is inside APPDIR
+	const bool runningFromAppImage = !appImage.isEmpty() && !appDir.isEmpty() && executable.startsWith(appDir + QLatin1Char('/'));
+	return QFileInfo(runningFromAppImage ? appImage : executable).canonicalFilePath();
+}
+
 }
 
 bool commandLineToolLinkMissingOrBroken()
@@ -56,7 +67,7 @@ bool commandLineToolLinkMissingOrBroken()
 
 std::expected<QString, QString> installCommandLineTool()
 {
-	const QString target = QFileInfo(QCoreApplication::applicationFilePath()).canonicalFilePath();
+	const QString target = linkTargetPath();
 	const QString linkPath = linkFilePath();
 	const QByteArray encodedLinkPath = QFile::encodeName(linkPath);
 

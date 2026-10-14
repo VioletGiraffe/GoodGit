@@ -14,7 +14,7 @@ class QWidget;
 // that resolves counts as present, wherever it points - another copy of GoodGit, or another program entirely.
 [[nodiscard]] bool commandLineToolLinkMissingOrBroken();
 
-// Points a gg link at this executable, creating its directory:
+// Points a gg link at this executable, or at the AppImage running it, creating its directory:
 //   macOS - /usr/local/bin/gg: on the default PATH but not user-writable on every Mac; where it is not, macOS asks for
 //           administrator credentials through its own dialog.
 //   other - ~/.local/bin/gg: on PATH depending on the distribution and shell; the message says how to add it where it is not.
