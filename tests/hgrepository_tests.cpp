@@ -303,3 +303,38 @@ TEST_CASE("A git subrepo inside an hg repository is a git location, and its cont
 	CHECK(files[0].isSubmodule);
 	CHECK(files[0].content == SubmoduleContent::DirtyTracked);
 }
+
+TEST_CASE("An hg incoming check counts every incoming changeset and lists the newest first, without a refresh", "[hg]")
+{
+	const ScratchHgRepository upstream;
+	upstream.write(QStringLiteral("file.txt"), "base\n");
+	upstream.commitAll(QStringLiteral("base"));
+
+	const ScratchHgRepository local;
+	local.hg({ QStringLiteral("pull"), QStringLiteral("-q"), QStringLiteral("-u"), upstream.root() });
+	local.write(QStringLiteral(".hg/hgrc"), (QStringLiteral("[paths]\ndefault = ") + upstream.root() + QLatin1Char('\n')).toUtf8());
+
+	for (const QString& subject : { QStringLiteral("one"), QStringLiteral("two"), QStringLiteral("three") })
+	{
+		upstream.write(QStringLiteral("file.txt"), subject.toUtf8());
+		upstream.commitAll(subject);
+	}
+
+	HgRepository repository{ local.root() };
+	refreshToCompletion(repository);
+	CHECK(repository.state().upstream == QStringLiteral("default"));
+	CHECK(repository.state().behind == 0); // nothing checked yet
+	const uint64_t generation = repository.refreshGeneration();
+
+	const std::vector<CommitRecord> listed = requireSuccess(awaitAnswer<std::vector<CommitRecord>>(
+		[&](Vcs::Answer<std::vector<CommitRecord>> onDone) { repository.checkIncoming(/*interactive=*/false, 2, std::move(onDone)); }));
+	REQUIRE(listed.size() == 2);
+	CHECK(listed[0].subject() == QStringLiteral("three"));
+	CHECK(listed[1].subject() == QStringLiteral("two"));
+	CHECK_FALSE(listed[0].revision.has_value()); // the remote's numbering
+	CHECK(repository.state().behind == 3);
+	CHECK(repository.refreshGeneration() == generation);
+
+	refreshToCompletion(repository);
+	CHECK(repository.state().behind == 3); // carried over: no local ref holds it
+}

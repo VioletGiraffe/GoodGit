@@ -418,7 +418,8 @@ RepoState HgRepository::stateFromRun(const RefreshRun& run) const
 	// The named branch (`default` unless another was created); bookmarks are not read, and hg has no detached state
 	state.branch = run.workingDir.branch;
 	state.upstream = pushPathName(run.pathNames);
-	state.behind = _behind;
+	// Set by checkIncoming() and carried over: Mercurial keeps no local ref to read it from
+	state.behind = Repository::state().behind;
 
 	if (!state.upstream.isEmpty())
 	{
@@ -710,10 +711,21 @@ QString HgRepository::pushCommandLabel(const PushStep& /*step*/, bool /*setUpstr
 	return QStringLiteral("hg push -r .");
 }
 
-void HgRepository::fetch(Vcs::Answer<void> onDone)
+void HgRepository::checkIncoming(bool /*interactive*/, int maxCommits, Vcs::Answer<std::vector<CommitRecord>> onDone)
 {
-	// Nothing to do: Mercurial keeps no remote-tracking state, incomingCommits() reads the remote directly
-	Vcs::answerLater(this, std::move(onDone), std::expected<void, QString>{});
+	const auto record = [this, maxCommits](const QByteArray& output) {
+		std::vector<CommitRecord> commits = Hg::parseCommitLog(output);
+		setBehindCount(int(commits.size()));
+		if (commits.size() > size_t(maxCommits))
+			commits.resize(size_t(maxCommits));
+		// Revision numbers are the remote's; pulling would number these differently
+		for (CommitRecord& commit : commits)
+			commit.revision.reset();
+		return commits;
+	};
+	// No -l: it limits only what hg prints, every incoming changeset is transferred anyway, and the count must be whole
+	runQuery(path(), { QStringLiteral("incoming"), QStringLiteral("--newest-first"), QStringLiteral("-T"), QStringLiteral("json") },
+		this, tolerantOfEmptyResult(Vcs::answering(std::move(onDone), record)));
 }
 
 void HgRepository::addToIndex(const QStringList& paths, Vcs::Answer<void> onDone)
@@ -909,22 +921,6 @@ Vcs::Query HgRepository::currentCommit(const QObject* context, Vcs::Answer<QStri
 {
 	return runQuery(path(), { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("."),
 		QStringLiteral("-T"), QStringLiteral("{node}") }, context, Vcs::answering(std::move(onDone), Vcs::outputAsTrimmedText));
-}
-
-Vcs::Query HgRepository::incomingCommits(int maxCommits, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone)
-{
-	// The result is also the only source of the behind count, so it is kept for the next refresh
-	const auto record = [this](const QByteArray& output) {
-		std::vector<CommitRecord> commits = Hg::parseCommitLog(output);
-		_behind = int(commits.size());
-		// Revision numbers are the remote's; pulling would number these differently
-		for (CommitRecord& commit : commits)
-			commit.revision.reset();
-		return commits;
-	};
-	return runQuery(path(), { QStringLiteral("incoming"), QStringLiteral("-l"), QString::number(maxCommits),
-		QStringLiteral("-T"), QStringLiteral("json") }, context,
-		tolerantOfEmptyResult(Vcs::answering(std::move(onDone), record)));
 }
 
 Vcs::Query HgRepository::commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone)

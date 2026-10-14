@@ -149,3 +149,11 @@ void Repository::completeRefresh(RepoState state, std::vector<FileEntry> files)
 	for (const std::function<void()>& callback : completedRunCallbacks)
 		callback();
 }
+
+void Repository::runAfterCurrentRefresh(std::function<void()> fn)
+{
+	if (_refreshing)
+		_runningRefreshCallbacks.push_back(std::move(fn));
+	else
+		fn();
+}

@@ -41,7 +41,7 @@ public:
 	[[nodiscard]] std::optional<QString> missingUpstreamName(const PushStep& step, const ProcessResult& failure) const override;
 	[[nodiscard]] QString pushCommandLabel(const PushStep& step, bool setUpstream) const override;
 
-	void fetch(Vcs::Answer<void> onDone) override;
+	void checkIncoming(bool interactive, int maxCommits, Vcs::Answer<std::vector<CommitRecord>> onDone) override;
 
 	void addToIndex(const QStringList& paths, Vcs::Answer<void> onDone) override;
 	void unAdd(const QStringList& paths, Vcs::Answer<void> onDone) override;
@@ -61,7 +61,6 @@ public:
 	Vcs::Query commitsAddingOrRemovingText(const LogQuery& query, const QObject* context, Vcs::Answer<QSet<QString>> onDone) override;
 	Vcs::Query historyFingerprint(const QObject* context, Vcs::Answer<QString> onDone) override;
 	Vcs::Query currentCommit(const QObject* context, Vcs::Answer<QString> onDone) override;
-	Vcs::Query incomingCommits(int maxCommits, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone) override;
 	Vcs::Query commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone) override;
 	Vcs::Query commitFileCounts(const QString& sha, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone) override;
 	Vcs::Query commitFileDiff(const QString& sha, const CommitFileChange& file, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) override;

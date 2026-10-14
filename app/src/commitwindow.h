@@ -125,8 +125,11 @@ private:
 	// Offers to set `upstream` for the step's branch and retries if accepted. Returns whether the push
 	// goes on.
 	bool offerUpstreamThenRetry(size_t index, const QString& upstream);
+	// The menu's check: joins the one in flight, and ends in the popup or an error dialog
 	void checkForIncomingChanges();
-	void showIncomingCommits(const std::vector<CommitRecord>& commits, bool capped);
+	// Every refresh starts one, non-interactive; the header shows its outcome
+	void startIncomingCheck(bool interactive);
+	void showIncomingCommits(const std::vector<CommitRecord>& commits);
 	void closePushLogEntry(const ProcessResult& result);
 
 	void showHistoryWindow();
@@ -232,7 +235,12 @@ private:
 	// Held for a whole writing flow, dialogs and the asynchronous reattach included, not just while a process
 	// runs: two flows would meet at index.lock, and the second would commit a pathspec the first already took
 	bool _mutationInFlight = false;
-	bool _incomingCheckInFlight = false; // a fetch is slow, and a refresh landing meanwhile must not re-enable the action
+	// The last incoming check to finish in this window. The header shows no count before one has succeeded.
+	enum class IncomingCheckOutcome : uint8_t { None, Succeeded, Failed };
+	IncomingCheckOutcome _incomingCheckOutcome = IncomingCheckOutcome::None;
+	QString _incomingCheckError; // Failed: the reason, for the header's tooltip
+	bool _incomingCheckInFlight = false; // a refresh landing meanwhile starts no second check
+	bool _showIncomingWhenChecked = false; // the menu asked: the check in flight ends in the popup
 	// A submodule discard plan is being built; disables the menu's discard action, or a second plan's dialog
 	// could stack over the first's
 	bool _discardPlanInFlight = false;

@@ -72,6 +72,12 @@ constexpr int MaxIncomingCommits = 200; // a glance, not a history window
 constexpr int IncomingPopupWidth = 560;
 constexpr int IncomingPopupHeight = 320;
 
+// A gone upstream leaves the check's HEAD..@{upstream} nothing to resolve against
+bool incomingCheckPossible(const RepoState& state)
+{
+	return !state.upstream.isEmpty() && !state.upstreamGone;
+}
+
 // Empty where the path is not a file on disk: a deleted entry, or a submodule's own directory
 QString workingTreeSizeLabel(const QString& absolutePath)
 {
@@ -704,6 +710,10 @@ void CommitWindow::onRefreshed()
 	updateStrips();
 	updateControlStates();
 
+	// Not during a push: its end refreshes
+	if (!_incomingCheckInFlight && !_pushInFlight && incomingCheckPossible(state))
+		startIncomingCheck(/*interactive=*/false);
+
 	if (_initialWidthPending)
 	{
 		_initialWidthPending = false;
@@ -797,6 +807,11 @@ void CommitWindow::updateHeader()
 		_aheadLabel->setText(state.unborn || state.detached ? QString{} : tr("no upstream"));
 	else if (state.upstreamGone)
 		_aheadLabel->setText(tr("upstream %1 is gone").arg(state.upstream));
+	// No count is shown before a check has succeeded: the counts are only as current as the last one
+	else if (_incomingCheckOutcome == IncomingCheckOutcome::None)
+		_aheadLabel->setText(tr("checking %1...").arg(state.upstream));
+	else if (_incomingCheckOutcome == IncomingCheckOutcome::Failed)
+		_aheadLabel->setText(tr("could not check %1").arg(state.upstream));
 	else if (state.ahead > 0 && state.behind > 0)
 		_aheadLabel->setText(tr("%1 to push, %2 behind %3").arg(state.ahead).arg(state.behind).arg(state.upstream));
 	else if (state.ahead > 0)
@@ -820,6 +835,7 @@ void CommitWindow::updateHeader()
 		: QStringLiteral("Ctrl+Shift+P\n") + unpushedTooltip);
 	_aheadLabel->setToolTip(state.upstreamGone
 		? tr("The upstream branch no longer exists on the remote - deleted or pruned. Pushing recreates it.")
+		: !state.upstream.isEmpty() && _incomingCheckOutcome == IncomingCheckOutcome::Failed ? _incomingCheckError
 		: unpushedTooltip);
 
 	const QString parentSubject = subjectOrPlaceholder(state.headSubject());
@@ -918,8 +934,7 @@ void CommitWindow::updateControlStates()
 		: tr("Commit %1 file(s)").arg(checkedCount));
 
 	_pushButton->setEnabled(!writeInFlight());
-	// A gone upstream leaves the incoming check's HEAD..@{upstream} nothing to resolve against
-	_checkIncomingAction->setEnabled(!state.upstream.isEmpty() && !state.upstreamGone && !_incomingCheckInFlight);
+	_checkIncomingAction->setEnabled(incomingCheckPossible(state));
 	// The history-changing actions wait for a push too: it is publishing the history they would rewrite
 	const bool canChangeHistory = canActOnList() && !_pushInFlight;
 	// undoLastCommit() reports every refusal, so nothing else disables this
@@ -1268,37 +1283,34 @@ bool CommitWindow::offerUpstreamThenRetry(size_t index, const QString& upstream)
 
 void CommitWindow::checkForIncomingChanges()
 {
-	_incomingCheckInFlight = true;
-	updateControlStates();
+	_showIncomingWhenChecked = true;
+	if (!_incomingCheckInFlight)
+		startIncomingCheck(/*interactive=*/true);
+}
 
-	_repo->fetch([this](std::expected<void, QString> fetchResult) {
-		if (!fetchResult)
+void CommitWindow::startIncomingCheck(bool interactive)
+{
+	assert_r(!_incomingCheckInFlight);
+	_incomingCheckInFlight = true;
+
+	_repo->checkIncoming(interactive, MaxIncomingCommits, [this](std::expected<std::vector<CommitRecord>, QString> commits) {
+		_incomingCheckInFlight = false;
+		_incomingCheckOutcome = commits ? IncomingCheckOutcome::Succeeded : IncomingCheckOutcome::Failed;
+		_incomingCheckError = commits ? QString{} : commits.error();
+		updateHeader();
+
+		if (!std::exchange(_showIncomingWhenChecked, false))
+			return;
+		if (!commits)
 		{
-			_incomingCheckInFlight = false;
-			updateControlStates();
-			showError(tr("Fetch failed"), fetchResult.error());
+			showError(tr("Could not check for incoming changes"), commits.error());
 			return;
 		}
-
-		// _incomingCheckInFlight is held to the answer: a second check would otherwise race this one and
-		// re-show a dismissed popup
-		_repo->incomingCommits(MaxIncomingCommits, this, [this](std::expected<std::vector<CommitRecord>, QString> commits) {
-			_incomingCheckInFlight = false;
-			updateControlStates();
-			// After the answer: hg's behind count comes from it, and the fetch moved git's remote-tracking
-			// refs - the header counts are stale until this refresh either way
-			_repo->refresh();
-			if (!commits)
-			{
-				showError(tr("Could not list the incoming commits"), commits.error());
-				return;
-			}
-			showIncomingCommits(*commits, int(commits->size()) >= MaxIncomingCommits);
-		});
+		showIncomingCommits(*commits);
 	});
 }
 
-void CommitWindow::showIncomingCommits(const std::vector<CommitRecord>& commits, bool capped)
+void CommitWindow::showIncomingCommits(const std::vector<CommitRecord>& commits)
 {
 	if (!_incomingPopup)
 	{
@@ -1317,15 +1329,16 @@ void CommitWindow::showIncomingCommits(const std::vector<CommitRecord>& commits,
 	}
 
 	const QString upstream = _repo->state().upstream;
+	const int total = _repo->state().behind; // the list is capped, the count is not
 	_incomingHeaderLabel->setText(commits.empty()
 		? tr("Nothing to pull from %1").arg(upstream)
-		: tr("%1 commit(s) to pull from %2").arg(int(commits.size())).arg(upstream));
+		: tr("%1 commit(s) to pull from %2").arg(total).arg(upstream));
 
 	QStringList lines;
 	lines.reserve(qsizetype(commits.size()) + 1);
 	for (const CommitRecord& commit : commits)
 		lines.push_back(shortSha(commit.sha) + QStringLiteral("  ") + commit.subject());
-	if (capped)
+	if (total > int(commits.size()))
 		lines.push_back(tr("... and more; only the newest %1 are listed").arg(MaxIncomingCommits));
 	_incomingView->setPlainText(lines.join(QLatin1Char('\n')));
 

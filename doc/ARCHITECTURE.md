@@ -19,7 +19,7 @@ own under `doc/`:
 - `refresh.md`: what triggers a refresh, the re-check before a write, which query failures discard a run.
 - `history.md`: the history window's walks, searches, marks and lane diagram.
 - `submodules.md`: submodule rows in the list and in history, discarding inside one, and the push plan.
-- `remotes.md`: fetching.
+- `remotes.md`: the incoming check: fetching, the behind count, what the header claims.
 - `updates.md`: the update check, the one network access outside git and hg.
 - `diff.md`: from a unified diff to the lines shown: merged lines, moved blocks, the view and the pane.
 - `git.md`, `hg.md`: what git and Mercurial themselves do, as opposed to what this app does about it.
@@ -136,5 +136,5 @@ Three asymmetries the boundary deliberately does not hide:
   columns and nothing else. Mercurial has no `--numstat` and counts the lines of a `-U0` diff.
 - **A commit is labelled by whatever its system calls it.** `CommitRecord::revision` is optional:
   Mercurial's clone-local revision number, absent in git. The history's Commit column shows it where present
-  and the short sha otherwise, never both. `incomingCommits()` drops it, since those numbers are the remote's.
+  and the short sha otherwise, never both. `checkIncoming()` drops it, since those numbers are the remote's.
 

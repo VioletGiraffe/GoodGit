@@ -402,3 +402,38 @@ TEST_CASE("A branch with unpushed commits is not offered, and the state says why
 	CHECK(state.reattachObstacles[0].upstream == QStringLiteral("origin/main"));
 	CHECK(state.reattachObstacles[0].unpushedCommits == 1);
 }
+
+TEST_CASE("An incoming check fetches, counts every incoming commit and lists the newest, without a refresh", "[git]")
+{
+	const ScratchRepository upstream;
+	upstream.write(QStringLiteral("file.txt"), "base\n");
+	upstream.commitAll(QStringLiteral("base"));
+
+	const ScratchRepository local;
+	local.git({ QStringLiteral("remote"), QStringLiteral("add"), QStringLiteral("origin"), upstream.root() });
+	local.git({ QStringLiteral("fetch"), QStringLiteral("-q"), QStringLiteral("origin") });
+	local.git({ QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("--track"), QStringLiteral("-B"), QStringLiteral("main"),
+		QStringLiteral("origin/main") });
+
+	for (const QString& subject : { QStringLiteral("one"), QStringLiteral("two"), QStringLiteral("three") })
+	{
+		upstream.write(QStringLiteral("file.txt"), subject.toUtf8());
+		upstream.commitAll(subject);
+	}
+
+	GitRepository repository{ local.root() };
+	refreshToCompletion(repository);
+	CHECK(repository.state().behind == 0); // nothing fetched yet
+	const uint64_t generation = repository.refreshGeneration();
+
+	const std::vector<CommitRecord> listed = requireSuccess(awaitAnswer<std::vector<CommitRecord>>(
+		[&](Vcs::Answer<std::vector<CommitRecord>> onDone) { repository.checkIncoming(/*interactive=*/false, 2, std::move(onDone)); }));
+	REQUIRE(listed.size() == 2);
+	CHECK(listed[0].subject() == QStringLiteral("three"));
+	CHECK(listed[1].subject() == QStringLiteral("two"));
+	CHECK(repository.state().behind == 3);
+	CHECK(repository.refreshGeneration() == generation);
+
+	refreshToCompletion(repository);
+	CHECK(repository.state().behind == 3); // read from the ref the fetch moved
+}

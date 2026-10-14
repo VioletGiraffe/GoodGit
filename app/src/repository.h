@@ -157,10 +157,11 @@ public:
 	// progress flags are noise there.
 	[[nodiscard]] virtual QString pushCommandLabel(const PushStep& step, bool setUpstream) const = 0;
 
-	// Updates whatever local state the behind count is read from; the incoming check runs this before refreshing.
-	// A backend without such state succeeds immediately; its count comes from incomingCommits().
-	// This, push and incomingCommits() are the only operations that touch the network.
-	virtual void fetch(Vcs::Answer<void> onDone) = 0;
+	// Contacts the upstream and sets state().behind from it without a refresh, so refreshGeneration stays.
+	// Answers the commits the upstream has and HEAD lacks, newest first, at most maxCommits; state().behind counts them all.
+	// `interactive`: a credential helper may show its sign-in window. Without it, a missing credential fails the check.
+	// This and push are the only operations that touch the network.
+	virtual void checkIncoming(bool interactive, int maxCommits, Vcs::Answer<std::vector<CommitRecord>> onDone) = 0;
 
 	// Puts untracked paths under version control, and takes them back out. Every backend has an "added but
 	// not committed" state, under some name.
@@ -233,9 +234,6 @@ public:
 	virtual Vcs::Query historyFingerprint(const QObject* context, Vcs::Answer<QString> onDone) = 0;
 	// The commit the working tree is on: git's HEAD, Mercurial's `.`. Fails on an unborn repository.
 	virtual Vcs::Query currentCommit(const QObject* context, Vcs::Answer<QString> onDone) = 0;
-	// The commits the upstream has and HEAD does not, newest first. A backend may read the remote directly or use
-	// what fetch() brought in; the incoming check does both in that order.
-	virtual Vcs::Query incomingCommits(int maxCommits, const QObject* context, Vcs::Answer<std::vector<CommitRecord>> onDone) = 0;
 	// The files one commit touched. A merge yields nothing here, so detect merges from the parent count
 	// rather than from an empty result.
 	virtual Vcs::Query commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone) = 0;
@@ -287,6 +285,11 @@ protected:
 	// rows built from partial answers would look as complete as full ones.
 	// Only the failure is recorded; the window refuses to act on what it shows.
 	void completeRefresh(RepoState state, std::vector<FileEntry> files);
+
+	// For checkIncoming(): the count is not a new state, so refreshGeneration stays
+	void setBehindCount(int behind) { _state.behind = behind; }
+	// Runs `fn` now, or once the running refresh completes: that run may have read what a change since overwrote
+	void runAfterCurrentRefresh(std::function<void()> fn);
 
 private:
 	const QString _rootPath;

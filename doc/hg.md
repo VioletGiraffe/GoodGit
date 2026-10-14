@@ -46,6 +46,8 @@ hits, nothing to push.
 
 - `incoming` and `outgoing` print `comparing with ...` before their JSON, and no JSON at all when they found
   nothing. The array begins on a fresh line, unlike a bracket inside a remote path.
+- `incoming` lists oldest first unless passed `--newest-first`. Its `-l` limits only what it prints: every
+  incoming changeset is transferred regardless (`cmd_impls/incoming.py`).
 - Dates are `[seconds since the epoch, seconds *west* of UTC]`. Most time APIs count east.
 - `user` is `Name <email>`.
 - `tip` is not a stable label: it names whichever changeset is newest.
