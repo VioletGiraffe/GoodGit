@@ -19,7 +19,8 @@ Verified against Mercurial 7.2.2 on Windows. Version floors are named where one 
   the meter's `progress.delay` and `progress.changedelay` (seconds, floats).
 - The user's extensions must **not** be disabled: a repository may need one (largefiles, lfs) to be readable
   at all.
-- Every invocation pays Python startup, so a refresh batches its queries rather than chaining them.
+- A fresh `hg` process pays interpreter startup on every call. A command server (`hg serve --cmdserver pipe`)
+  pays it once, then runs one command per request.
 - `-T json` output changes its field set under `-q` or `-v`, so neither may be combined with it.
 - `diff.nobinary=True` makes a binary file's diff a one-line note. Without it `--git` mode emits a base85
   patch.

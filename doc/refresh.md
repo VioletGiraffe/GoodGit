@@ -23,7 +23,7 @@ plus fresh probes of the on-disk operation markers and of the commit HEAD names 
 writing; a mismatch refuses the action and asks the user to retry against the new state.
 
 `GitRepository` refreshes in two rounds of parallel queries, the second depending on the first's answers.
-`HgRepository` uses a single round, since every hg invocation has a fixed cost: one `hg status` answers
+`HgRepository` uses a single round: one `hg status` answers
 tracked changes, untracked files and rename sources together, alongside the unpushed set, each submodule's
 pointer and dirtiness, and the conflicted paths where a mergestate exists.
 

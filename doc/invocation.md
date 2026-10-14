@@ -29,6 +29,10 @@ readable at all. `nobinary` is what makes hg's `--git` diffs safe to ask for: wi
 arrives as a base85 patch. Queries use `-T json`, never with `-q` or `-v`, which change the field set. The
 message and any long path list travel in temp files, the latter passed as `listfile0:<file>`.
 
+hg commands run on the `hgcommandserver` pool, not a process each, so interpreter startup is paid per server.
+A process of its own carries the push (minutes over the network, kept off the shared servers), a command
+with stdin data, and the blocking `runSync()` calls.
+
 Output accumulates as it arrives, so a chatty child cannot fill a pipe and stall, and reaches the result
 callback whole. A job may additionally stream chunks to a sink (`Job::streamTo`), attached before control
 returns to the event loop or the first chunks are missed. Push is the one command that streams, and the one
