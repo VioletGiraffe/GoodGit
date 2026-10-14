@@ -68,8 +68,8 @@ must spell the same value: the update check compares `GG_VERSION` against the ta
 
 - **Windows**: tests, msbuild, windeployqt into `dist/` (the TLS plugins stay, for the update check), then
   Inno Setup with `installer.iss` produces `GoodGit.exe`.
-- **macOS**: `scripts/create_dmg.sh <Qt dir>` runs macdeployqt on the release bundle and packs it into
-  `GoodGit.dmg`.
+- **macOS**: `scripts/create_dmg.sh <Qt dir>` runs macdeployqt on the release bundle, thins the universal Qt
+  binaries to the app's own architecture, re-signs the bundle ad-hoc, and packs it into `GoodGit.dmg`.
 - **Linux**: build only, nothing packaged.
 
 A tag push creates a draft GitHub release with both artifacts and a changelog of the commits since the previous
