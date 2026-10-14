@@ -34,8 +34,10 @@ public:
 	[[nodiscard]] std::optional<QString> missingUpstreamName(const PushStep& step, const ProcessResult& failure) const override;
 	[[nodiscard]] QString pushCommandLabel(const PushStep& step, bool setUpstream) const override;
 
-	// Never prompts, `interactive` or not: ui.interactive=False is an invocation invariant
-	void checkIncoming(bool interactive, int maxCommits, Vcs::Answer<std::vector<CommitRecord>> onDone) override;
+	// Never prompts, `interactive` or not: ui.interactive=False is an invocation invariant.
+	// `detachedHeadBranch` is unused: Mercurial has no detached state.
+	void checkIncoming(bool interactive, const QString& detachedHeadBranch, int maxCommits,
+		Vcs::Answer<std::vector<CommitRecord>> onDone) override;
 
 	void addToIndex(const QStringList& paths, Vcs::Answer<void> onDone) override;
 	void unAdd(const QStringList& paths, Vcs::Answer<void> onDone) override;
@@ -64,6 +66,7 @@ public:
 	Vcs::Query fileAtRevision(const QString& sha, const QString& repoRelativePath, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) override;
 	Vcs::Query unpushedCommits(const QObject* context, Vcs::Answer<QSet<QString>> onDone) override;
 	Vcs::Query submodulePointerLog(const QString& repoRelativePath, const QObject* context, Vcs::Answer<QString> onDone) override;
+	Vcs::Query submoduleUpdateBranches(const QObject* context, Vcs::Answer<std::map<QString, QString>> onDone) override;
 
 	[[nodiscard]] RepositoryLocation nestedRepositoryLocation(const QString& repoRelativePath) const override;
 

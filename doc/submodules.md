@@ -41,6 +41,9 @@ surrounding history stays visible. The all-ref walk holds the recorded commit wh
 checkout stands; one reachable from no ref, or older than the limit, is named in the count label and the
 newest row is selected.
 
+Check for Incoming Changes covers the submodules one level down, a detached one compared as
+`git submodule update --remote` would compare it (`remotes.md`).
+
 ## Push
 
 A superproject commit referencing an unpublished submodule commit is unfetchable, so those submodules must

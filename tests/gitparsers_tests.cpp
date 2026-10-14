@@ -199,6 +199,20 @@ TEST_CASE("Gitlink entries of a tree listing, other entries skipped", "[gitparse
 	CHECK(entries[0].sha == QStringLiteral("4444444444444444444444444444444444444444"));
 }
 
+TEST_CASE("Submodule branches are keyed by path, a dotted name included, and one naming no branch is absent", "[gitparsers]")
+{
+	const std::map<QString, QString> branches = Git::parseSubmoduleBranches(nulTerminated({
+		"submodule.lib.x.path\nlibs/x",
+		"submodule.lib.x.branch\nrelease",
+		"submodule.own.path\nown",
+		"submodule.own.branch\n.",
+		"submodule.plain.path\nplain",
+	}));
+
+	CHECK(branches == std::map<QString, QString>{ { QStringLiteral("libs/x"), QStringLiteral("release") }, { QStringLiteral("own"), QStringLiteral(".") } });
+	CHECK(Git::parseSubmoduleBranches({}).empty());
+}
+
 TEST_CASE("An object size is a number or an error, never a zero", "[gitparsers]")
 {
 	CHECK(Git::parseObjectSize("1234\n") == 1234);

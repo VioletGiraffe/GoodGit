@@ -939,13 +939,32 @@ QString GitRepository::pushCommandLabel(const PushStep& step, bool setUpstream) 
 	return step.subject.isEmpty() ? QStringLiteral("git ") + command : QStringLiteral("git -C %1 %2").arg(step.subject, command);
 }
 
-void GitRepository::checkIncoming(bool interactive, int maxCommits, Vcs::Answer<std::vector<CommitRecord>> onDone)
+void GitRepository::checkIncoming(bool interactive, const QString& detachedHeadBranch, int maxCommits,
+	Vcs::Answer<std::vector<CommitRecord>> onDone)
+{
+	// Exit 1: HEAD is detached
+	runQuery(path(), { QStringLiteral("symbolic-ref"), QStringLiteral("-q"), QStringLiteral("HEAD") }, this,
+		[this, interactive, detachedHeadBranch, maxCommits, onDone = std::move(onDone)](const ProcessResult& headRef) mutable {
+			const bool detached = headRef.outcome == ProcessOutcome::Exited && headRef.exitCode == 1;
+			if (!headRef.ok && !detached)
+			{
+				onDone(std::unexpected(headRef.errorText()));
+				return;
+			}
+
+			const QString comparedWith = !detached ? QStringLiteral("@{upstream}")
+				: QStringLiteral("origin/") + (detachedHeadBranch.isEmpty() ? QStringLiteral("HEAD") : detachedHeadBranch);
+			fetchThenListIncoming(interactive, QStringLiteral("HEAD..") + comparedWith, maxCommits, std::move(onDone));
+		});
+}
+
+void GitRepository::fetchThenListIncoming(bool interactive, const QString& range, int maxCommits, Vcs::Answer<std::vector<CommitRecord>> onDone)
 {
 	// Not a read-only query: it writes the remote-tracking refs.
 	// credential.interactive is Git Credential Manager's: false fails a missing credential instead of showing its window.
 	const QStringList fetchArgs = interactive ? QStringList{ QStringLiteral("fetch") }
 		: QStringList{ QStringLiteral("-c"), QStringLiteral("credential.interactive=false"), QStringLiteral("fetch") };
-	Git::run(path(), fetchArgs, this, [this, maxCommits, onDone = std::move(onDone)](const ProcessResult& fetched) mutable {
+	Git::run(path(), fetchArgs, this, [this, range, maxCommits, onDone = std::move(onDone)](const ProcessResult& fetched) mutable {
 		if (!fetched.ok)
 		{
 			onDone(std::unexpected(fetched.errorText()));
@@ -953,9 +972,9 @@ void GitRepository::checkIncoming(bool interactive, int maxCommits, Vcs::Answer<
 		}
 
 		// A refresh already running may have read the refs from before the fetch, and would overwrite the count
-		runAfterCurrentRefresh([this, maxCommits, onDone = std::move(onDone)]() mutable {
-			const QStringList countArgs{ QStringLiteral("rev-list"), QStringLiteral("--count"), QStringLiteral("HEAD..@{upstream}") };
-			runQuery(path(), countArgs, this, [this, maxCommits, onDone = std::move(onDone)](const ProcessResult& counted) mutable {
+		runAfterCurrentRefresh([this, range, maxCommits, onDone = std::move(onDone)]() mutable {
+			const QStringList countArgs{ QStringLiteral("rev-list"), QStringLiteral("--count"), range };
+			runQuery(path(), countArgs, this, [this, range, maxCommits, onDone = std::move(onDone)](const ProcessResult& counted) mutable {
 				if (!counted.ok)
 				{
 					onDone(std::unexpected(counted.errorText()));
@@ -964,7 +983,7 @@ void GitRepository::checkIncoming(bool interactive, int maxCommits, Vcs::Answer<
 
 				setBehindCount(counted.out.trimmed().toInt());
 				QStringList listArgs = commitLogArgs(maxCommits);
-				listArgs << QStringLiteral("HEAD..@{upstream}");
+				listArgs << range;
 				runQuery(path(), std::move(listArgs), this, Vcs::answering(std::move(onDone), Git::parseCommitLog));
 			});
 		});
@@ -1180,6 +1199,34 @@ Vcs::Query GitRepository::submodulePointerLog(const QString& repoRelativePath, c
 				oldSha + QStringLiteral("..HEAD") }, context, Vcs::answering(std::move(onDone), Vcs::outputAsText), {}, /*readOnlyQuery=*/true));
 		}, {}, /*readOnlyQuery=*/true));
 	return query;
+}
+
+Vcs::Query GitRepository::submoduleUpdateBranches(const QObject* context, Vcs::Answer<std::map<QString, QString>> onDone)
+{
+	const QString ownBranch = state().branch;
+	return runQuery(path(), { QStringLiteral("config"), QStringLiteral("-f"), QStringLiteral(".gitmodules"), QStringLiteral("-z"),
+		QStringLiteral("--get-regexp"), QStringLiteral("^submodule\\..*\\.(path|branch)$") }, context,
+		[ownBranch, onDone = std::move(onDone)](const ProcessResult& result) {
+			// Exit 1: no .gitmodules, or no entry matched
+			if (result.outcome == ProcessOutcome::Exited && result.exitCode == 1)
+			{
+				onDone(std::map<QString, QString>{});
+				return;
+			}
+			if (!result.ok)
+			{
+				onDone(std::unexpected(result.errorText()));
+				return;
+			}
+
+			std::map<QString, QString> branches = Git::parseSubmoduleBranches(result.out);
+			for (auto& [subPath, branch] : branches)
+			{
+				if (branch == QLatin1String("."))
+					branch = ownBranch;
+			}
+			onDone(std::move(branches));
+		});
 }
 
 RepositoryLocation GitRepository::nestedRepositoryLocation(const QString& repoRelativePath) const

@@ -68,6 +68,7 @@ HEADERS += \
 	src/hgrepository.h \
 	src/historymodels.h \
 	src/historywindow.h \
+	src/incomingchangesdialog.h \
 	src/init_logging.h \
 	src/messageedit.h \
 	src/movedblocks.h \
@@ -113,6 +114,7 @@ SOURCES += \
 	src/hgrepository.cpp \
 	src/historymodels.cpp \
 	src/historywindow.cpp \
+	src/incomingchangesdialog.cpp \
 	src/init_logging.cpp \
 	src/main.cpp \
 	src/messageedit.cpp \

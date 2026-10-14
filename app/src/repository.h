@@ -160,8 +160,11 @@ public:
 	// Contacts the upstream and sets state().behind from it without a refresh, so refreshGeneration stays.
 	// Answers the commits the upstream has and HEAD lacks, newest first, at most maxCommits; state().behind counts them all.
 	// `interactive`: a credential helper may show its sign-in window. Without it, a missing credential fails the check.
+	// `detachedHeadBranch`: what a detached HEAD compares against, as `submodule update --remote` would - that branch on
+	// origin, or origin/HEAD when empty. A HEAD on a branch compares against its upstream.
 	// This and push are the only operations that touch the network.
-	virtual void checkIncoming(bool interactive, int maxCommits, Vcs::Answer<std::vector<CommitRecord>> onDone) = 0;
+	virtual void checkIncoming(bool interactive, const QString& detachedHeadBranch, int maxCommits,
+		Vcs::Answer<std::vector<CommitRecord>> onDone) = 0;
 
 	// Puts untracked paths under version control, and takes them back out. Every backend has an "added but
 	// not committed" state, under some name.
@@ -256,6 +259,9 @@ public:
 	virtual Vcs::Query unpushedCommits(const QObject* context, Vcs::Answer<QSet<QString>> onDone) = 0;
 	// For a moved submodule pointer at a repo-relative path: the commits being pulled in, one line each
 	virtual Vcs::Query submodulePointerLog(const QString& repoRelativePath, const QObject* context, Vcs::Answer<QString> onDone) = 0;
+	// Per repo-relative submodule path: the branch `submodule update --remote` follows, for the submodules naming
+	// one - the detachedHeadBranch of that submodule's checkIncoming(). Absent where none is named.
+	virtual Vcs::Query submoduleUpdateBranches(const QObject* context, Vcs::Answer<std::map<QString, QString>> onDone) = 0;
 
 	// The location of the repository at a repo-relative path - a submodule, or an untracked repository - for opening a
 	// window on it. The parent names the kind: a nested repository need not be of the same kind.

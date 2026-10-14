@@ -6,6 +6,7 @@
 #include "filelistview.h"
 #include "historymodels.h"
 #include "historywindow.h"
+#include "incomingchangesdialog.h"
 #include "messageedit.h"
 #include "recentrepositories.h"
 #include "recentrepositoriespanel.h"
@@ -68,9 +69,6 @@ constexpr int FirstRunDiffPaneWidth = 440; // what the diff keeps while the left
 constexpr int MaxInitialLeftPaneWidth = 1000;
 constexpr int MaxListedPathsInDialog = 20;
 constexpr size_t MaxListedReattachObstacles = 3; // the strip is one paragraph
-constexpr int MaxIncomingCommits = 200; // a glance, not a history window
-constexpr int IncomingPopupWidth = 560;
-constexpr int IncomingPopupHeight = 320;
 
 // A gone upstream leaves the check's HEAD..@{upstream} nothing to resolve against
 bool incomingCheckPossible(const RepoState& state)
@@ -323,8 +321,6 @@ void CommitWindow::buildUi()
 	connect(&_filesModel, &ChangedFilesModel::checksChanged, this, &CommitWindow::updateControlStates);
 	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] {
 		_branchLabel->setFont(monospaceFont());
-		if (_incomingView)
-			_incomingView->setFont(monospaceFont());
 	});
 	installShortcuts();
 
@@ -1283,7 +1279,15 @@ bool CommitWindow::offerUpstreamThenRetry(size_t index, const QString& upstream)
 
 void CommitWindow::checkForIncomingChanges()
 {
-	_showIncomingWhenChecked = true;
+	// Window-modal, but a menu shared across windows may still reach this one
+	if (_incomingDialog)
+	{
+		_incomingDialog->activateWindow();
+		return;
+	}
+
+	_incomingDialog = new IncomingChangesDialog(*_repo, this);
+	_incomingDialog->open();
 	if (!_incomingCheckInFlight)
 		startIncomingCheck(/*interactive=*/true);
 }
@@ -1293,65 +1297,17 @@ void CommitWindow::startIncomingCheck(bool interactive)
 	assert_r(!_incomingCheckInFlight);
 	_incomingCheckInFlight = true;
 
-	_repo->checkIncoming(interactive, MaxIncomingCommits, [this](std::expected<std::vector<CommitRecord>, QString> commits) {
-		_incomingCheckInFlight = false;
-		_incomingCheckOutcome = commits ? IncomingCheckOutcome::Succeeded : IncomingCheckOutcome::Failed;
-		_incomingCheckError = commits ? QString{} : commits.error();
-		updateHeader();
+	// Never detached here: a detached HEAD has no upstream, and no check starts without one
+	_repo->checkIncoming(interactive, /*detachedHeadBranch=*/{}, MaxListedIncomingCommits,
+		[this](std::expected<std::vector<CommitRecord>, QString> commits) {
+			_incomingCheckInFlight = false;
+			_incomingCheckOutcome = commits ? IncomingCheckOutcome::Succeeded : IncomingCheckOutcome::Failed;
+			_incomingCheckError = commits ? QString{} : commits.error();
+			updateHeader();
 
-		if (!std::exchange(_showIncomingWhenChecked, false))
-			return;
-		if (!commits)
-		{
-			showError(tr("Could not check for incoming changes"), commits.error());
-			return;
-		}
-		showIncomingCommits(*commits);
-	});
-}
-
-void CommitWindow::showIncomingCommits(const std::vector<CommitRecord>& commits)
-{
-	if (!_incomingPopup)
-	{
-		_incomingPopup = new QFrame(this, Qt::Popup);
-		_incomingPopup->setFrameShape(QFrame::StyledPanel);
-		auto* popupLayout = new QVBoxLayout(_incomingPopup);
-		popupLayout->setContentsMargins(8, 8, 8, 8);
-		popupLayout->setSpacing(6);
-		_incomingHeaderLabel = new QLabel;
-		_incomingView = new QPlainTextEdit;
-		_incomingView->setReadOnly(true);
-		_incomingView->setFont(monospaceFont());
-		_incomingView->setLineWrapMode(QPlainTextEdit::NoWrap);
-		popupLayout->addWidget(_incomingHeaderLabel);
-		popupLayout->addWidget(_incomingView, 1);
-	}
-
-	const QString upstream = _repo->state().upstream;
-	const int total = _repo->state().behind; // the list is capped, the count is not
-	_incomingHeaderLabel->setText(commits.empty()
-		? tr("Nothing to pull from %1").arg(upstream)
-		: tr("%1 commit(s) to pull from %2").arg(total).arg(upstream));
-
-	QStringList lines;
-	lines.reserve(qsizetype(commits.size()) + 1);
-	for (const CommitRecord& commit : commits)
-		lines.push_back(shortSha(commit.sha) + QStringLiteral("  ") + commit.subject());
-	if (total > int(commits.size()))
-		lines.push_back(tr("... and more; only the newest %1 are listed").arg(MaxIncomingCommits));
-	_incomingView->setPlainText(lines.join(QLatin1Char('\n')));
-
-	// With nothing to list the popup shrinks to its header line
-	_incomingView->setVisible(!commits.empty());
-	if (commits.empty())
-		_incomingPopup->adjustSize();
-	else
-		_incomingPopup->resize(IncomingPopupWidth, IncomingPopupHeight);
-
-	// The anchor states the behind count this popup lists
-	WidgetUtils::placeUnder(_incomingPopup, _aheadLabel);
-	_incomingPopup->show();
+			if (_incomingDialog)
+				_incomingDialog->setOwnAnswer(commits, _repo->state().behind);
+		});
 }
 
 void CommitWindow::closePushLogEntry(const ProcessResult& result)

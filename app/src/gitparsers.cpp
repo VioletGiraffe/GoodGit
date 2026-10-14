@@ -320,6 +320,38 @@ std::vector<GitlinkEntry> parseGitlinkEntries(const QByteArray& lsTreeOutput)
 	return entries;
 }
 
+std::map<QString, QString> parseSubmoduleBranches(const QByteArray& configOutput)
+{
+	// Record format: submodule.<name>.<variable>\n<value>. The name may contain dots, so the variable is the last field.
+	constexpr QByteArrayView Prefix = "submodule.";
+	std::map<QByteArray, QString> pathByName;
+	std::map<QByteArray, QString> branchByName;
+	for (const QByteArray& record : configOutput.split('\0'))
+	{
+		const qsizetype newline = record.indexOf('\n');
+		const QByteArray key = record.left(newline);
+		const qsizetype lastDot = key.lastIndexOf('.');
+		if (newline < 0 || !key.startsWith(Prefix) || lastDot <= Prefix.size())
+			continue;
+
+		const QByteArray name = key.mid(Prefix.size(), lastDot - Prefix.size());
+		const QByteArray variable = key.mid(lastDot + 1);
+		const QByteArray value = record.mid(newline + 1);
+		if (variable == "path")
+			pathByName[name] = pathFromOutput(value);
+		else if (variable == "branch")
+			branchByName[name] = QString::fromUtf8(value);
+	}
+
+	std::map<QString, QString> branchByPath;
+	for (const auto& [name, branch] : branchByName)
+	{
+		if (const auto path = pathByName.find(name); path != pathByName.end())
+			branchByPath[path->second] = branch;
+	}
+	return branchByPath;
+}
+
 std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput)
 {
 	std::vector<CommitRecord> commits;

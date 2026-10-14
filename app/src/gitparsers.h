@@ -105,6 +105,11 @@ struct GitlinkEntry
 // publishes what the commits record, not what is staged.
 [[nodiscard]] std::vector<GitlinkEntry> parseGitlinkEntries(const QByteArray& lsTreeOutput);
 
+// Input: `config -f .gitmodules -z --get-regexp ^submodule\..*\.(path|branch)$` output.
+// Keyed by submodule path: the branch `submodule update --remote` follows, for the submodules naming one.
+// "." (the superproject's own branch) is returned as is.
+[[nodiscard]] std::map<QString, QString> parseSubmoduleBranches(const QByteArray& configOutput);
+
 // One local branch, as the reattachment offer reads it
 struct LocalBranchRef
 {

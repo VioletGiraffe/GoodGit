@@ -19,7 +19,7 @@ own under `doc/`:
 - `refresh.md`: what triggers a refresh, the re-check before a write, which query failures discard a run.
 - `history.md`: the history window's walks, searches, marks and lane diagram.
 - `submodules.md`: submodule rows in the list and in history, discarding inside one, and the push plan.
-- `remotes.md`: the incoming check: fetching, the behind count, what the header claims.
+- `remotes.md`: the incoming check: fetching, the behind count, what the header claims, the submodule-wide manual check.
 - `updates.md`: the update check, the one network access outside git and hg.
 - `diff.md`: from a unified diff to the lines shown: merged lines, moved blocks, the view and the pane.
 - `git.md`, `hg.md`: what git and Mercurial themselves do, as opposed to what this app does about it.
@@ -36,7 +36,7 @@ own under `doc/`:
 
 Dependencies point one way, top to bottom:
 
-- Windows: `commitwindow`, `historywindow`, `welcomewindow`, `fileviewerwindow`, `appmenus`, `settingspages`,
+- Windows: `commitwindow`, `historywindow`, `welcomewindow`, `fileviewerwindow`, `incomingchangesdialog`, `appmenus`, `settingspages`,
   `recentrepositoriespanel`, and the views they compose - `diffpane`, `difftextview`, `filelistview`,
   `filelistdelegate`, `consolelogview`, `messageedit`, `commitgraphdelegate`.
 - Models: `changedfilesmodel`, `historymodels`.
@@ -91,6 +91,7 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `init_logging`, `up
 | `appmenus` | The menus every window shares - File, Edit, Repository, Help: their actions need no repository. A commit window appends its own items to the Repository menu |
 | `welcomewindow` | The window shown with nothing to open: what the app needs, a folder chooser, the recent list. The one window without a repository |
 | `fileviewerwindow` | Read-only text in a window of its own, on qtutils `CLightningFastViewerWidget` with a `CFindBar` under it: one file as of one commit, decoded where the bytes are text and a hex dump where they are not |
+| `incomingchangesdialog` | Check for Incoming Changes: the repository and its submodules one level down, checked in parallel and listed as they answer. See `remotes.md` |
 | `updatecheck` | The interactive and the automatic update check, see `updates.md` |
 | `commandlinetool` | macOS and Linux: the `gg` link on PATH, see `doc/BUILD.md`. `commandlinetool_mac` creates it with administrator credentials |
 | `smoketest` | `gg --smoke-test <repository>`: the launch mode CI runs on the deployed build, see `doc/BUILD.md` |
@@ -106,6 +107,7 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `init_logging`, `up
 | `FileViewerWindow` | borrows the opener's, in the constructor only | never deduplicated; cascaded from the opener, several are meant to sit side by side | none | a history window's file row; with Shift, the parent commit's version |
 | `WelcomeWindow` | none | at most one | none | startup with nothing to open, View > Show Welcome Screen; closed by any open |
 | Preferences (qtutils `CSettingsDialog`) | none | modal | none | the Edit menu |
+| `IncomingChangesDialog` | borrows the commit window's to list its submodules; owns one per submodule it checks | window-modal, one per commit window | none | Check for Incoming Changes |
 
 Every window's queries take it as their context (`Vcs::Job`), so closing one drops its pending answers.
 Closing the last window quits.

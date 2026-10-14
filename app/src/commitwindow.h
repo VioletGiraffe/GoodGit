@@ -6,6 +6,7 @@
 
 DISABLE_COMPILER_WARNINGS
 #include <QMainWindow>
+#include <QPointer>
 #include <QSet>
 RESTORE_COMPILER_WARNINGS
 
@@ -13,14 +14,13 @@ RESTORE_COMPILER_WARNINGS
 
 class QAction;
 class QCheckBox;
-class QFrame;
 class QLabel;
 class QPushButton;
 class QSplitter;
-class QPlainTextEdit;
 class ConsoleLogView;
 class DiffPane;
 class FileListView;
+class IncomingChangesDialog;
 class MessageEdit;
 class CLabelElided;
 
@@ -125,11 +125,10 @@ private:
 	// Offers to set `upstream` for the step's branch and retries if accepted. Returns whether the push
 	// goes on.
 	bool offerUpstreamThenRetry(size_t index, const QString& upstream);
-	// The menu's check: joins the one in flight, and ends in the popup or an error dialog
+	// The menu's check: opens the dialog, which checks the submodules; this repository's own check joins the one in flight
 	void checkForIncomingChanges();
 	// Every refresh starts one, non-interactive; the header shows its outcome
 	void startIncomingCheck(bool interactive);
-	void showIncomingCommits(const std::vector<CommitRecord>& commits);
 	void closePushLogEntry(const ProcessResult& result);
 
 	void showHistoryWindow();
@@ -208,9 +207,7 @@ private:
 	QWidget* _pushLogPane = nullptr; // hidden until the first push of the session
 	ConsoleLogView* _pushLogView = nullptr;
 
-	QFrame* _incomingPopup = nullptr; // built on the first check; Qt::Popup, so it closes on a click outside
-	QLabel* _incomingHeaderLabel = nullptr;
-	QPlainTextEdit* _incomingView = nullptr;
+	QPointer<IncomingChangesDialog> _incomingDialog; // open while the menu's check shows; takes this repository's answer
 
 	std::vector<PushStep> _pushSteps; // the running push's plan
 
@@ -240,7 +237,6 @@ private:
 	IncomingCheckOutcome _incomingCheckOutcome = IncomingCheckOutcome::None;
 	QString _incomingCheckError; // Failed: the reason, for the header's tooltip
 	bool _incomingCheckInFlight = false; // a refresh landing meanwhile starts no second check
-	bool _showIncomingWhenChecked = false; // the menu asked: the check in flight ends in the popup
 	// A submodule discard plan is being built; disables the menu's discard action, or a second plan's dialog
 	// could stack over the first's
 	bool _discardPlanInFlight = false;

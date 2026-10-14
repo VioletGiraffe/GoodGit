@@ -711,7 +711,8 @@ QString HgRepository::pushCommandLabel(const PushStep& /*step*/, bool /*setUpstr
 	return QStringLiteral("hg push -r .");
 }
 
-void HgRepository::checkIncoming(bool /*interactive*/, int maxCommits, Vcs::Answer<std::vector<CommitRecord>> onDone)
+void HgRepository::checkIncoming(bool /*interactive*/, const QString& /*detachedHeadBranch*/, int maxCommits,
+	Vcs::Answer<std::vector<CommitRecord>> onDone)
 {
 	const auto record = [this, maxCommits](const QByteArray& output) {
 		std::vector<CommitRecord> commits = Hg::parseCommitLog(output);
@@ -1064,6 +1065,12 @@ Vcs::Query HgRepository::submodulePointerLog(const QString& repoRelativePath, co
 	return Vcs::Query{ Hg::run(workDir, { QStringLiteral("log"), QStringLiteral("-r"),
 		QStringLiteral("only(., %1)").arg(recorded->second), QStringLiteral("-T"), QStringLiteral("{node|short} {desc|firstline}\n") },
 		context, Vcs::answering(std::move(onDone), Hg::textFromOutput)) };
+}
+
+// .hgsub names no branch, so a git subrepo compares against origin/HEAD
+Vcs::Query HgRepository::submoduleUpdateBranches(const QObject* context, Vcs::Answer<std::map<QString, QString>> onDone)
+{
+	return Vcs::Query{ Vcs::answerLater(context, std::move(onDone), std::map<QString, QString>{}) };
 }
 
 // Read from disk, not from .hgsub: the history window calls this on a repository it never refreshes

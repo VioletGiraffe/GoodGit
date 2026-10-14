@@ -427,7 +427,7 @@ TEST_CASE("An incoming check fetches, counts every incoming commit and lists the
 	const uint64_t generation = repository.refreshGeneration();
 
 	const std::vector<CommitRecord> listed = requireSuccess(awaitAnswer<std::vector<CommitRecord>>(
-		[&](Vcs::Answer<std::vector<CommitRecord>> onDone) { repository.checkIncoming(/*interactive=*/false, 2, std::move(onDone)); }));
+		[&](Vcs::Answer<std::vector<CommitRecord>> onDone) { repository.checkIncoming(/*interactive=*/false, {}, 2, std::move(onDone)); }));
 	REQUIRE(listed.size() == 2);
 	CHECK(listed[0].subject() == QStringLiteral("three"));
 	CHECK(listed[1].subject() == QStringLiteral("two"));
@@ -436,4 +436,68 @@ TEST_CASE("An incoming check fetches, counts every incoming commit and lists the
 
 	refreshToCompletion(repository);
 	CHECK(repository.state().behind == 3); // read from the ref the fetch moved
+}
+
+TEST_CASE("A detached HEAD's incoming check compares against origin/HEAD, or the branch it is given", "[git]")
+{
+	const ScratchRepository upstream;
+	upstream.write(QStringLiteral("file.txt"), "base\n");
+	upstream.commitAll(QStringLiteral("base"));
+	upstream.git({ QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("-b"), QStringLiteral("dev") });
+	upstream.write(QStringLiteral("file.txt"), "dev\n");
+	upstream.commitAll(QStringLiteral("on dev"));
+	upstream.git({ QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("main") });
+
+	const ScratchRepository local;
+	local.git({ QStringLiteral("remote"), QStringLiteral("add"), QStringLiteral("origin"), upstream.root() });
+	local.git({ QStringLiteral("fetch"), QStringLiteral("-q"), QStringLiteral("origin") });
+	local.git({ QStringLiteral("remote"), QStringLiteral("set-head"), QStringLiteral("origin"), QStringLiteral("main") });
+	local.git({ QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("--detach"), QStringLiteral("origin/main") });
+
+	for (const QString& subject : { QStringLiteral("one"), QStringLiteral("two") })
+	{
+		upstream.write(QStringLiteral("file.txt"), subject.toUtf8());
+		upstream.commitAll(subject);
+	}
+
+	GitRepository repository{ local.root() };
+	const auto checkIncoming = [&](const QString& detachedHeadBranch) {
+		return requireSuccess(awaitAnswer<std::vector<CommitRecord>>([&](Vcs::Answer<std::vector<CommitRecord>> onDone) {
+			repository.checkIncoming(/*interactive=*/false, detachedHeadBranch, 10, std::move(onDone));
+		}));
+	};
+
+	const std::vector<CommitRecord> fromDefault = checkIncoming({});
+	REQUIRE(fromDefault.size() == 2);
+	CHECK(fromDefault[0].subject() == QStringLiteral("two"));
+	CHECK(repository.state().behind == 2);
+
+	const std::vector<CommitRecord> fromDev = checkIncoming(QStringLiteral("dev"));
+	REQUIRE(fromDev.size() == 1);
+	CHECK(fromDev[0].subject() == QStringLiteral("on dev"));
+	CHECK(repository.state().behind == 1);
+}
+
+TEST_CASE("Submodule update branches come from .gitmodules, \".\" naming the repository's own branch", "[git]")
+{
+	const ScratchRepository scratch;
+	{
+		GitRepository repository{ scratch.root() };
+		const std::map<QString, QString> none = requireSuccess(awaitAnswer<std::map<QString, QString>>(
+			[&](Vcs::Answer<std::map<QString, QString>> onDone) { repository.submoduleUpdateBranches(&repository, std::move(onDone)); }));
+		CHECK(none.empty()); // no .gitmodules at all
+	}
+
+	scratch.write(QStringLiteral(".gitmodules"),
+		"[submodule \"lib\"]\n\tpath = libs/lib\n\turl = ../lib\n\tbranch = release\n"
+		"[submodule \"own\"]\n\tpath = own\n\turl = ../own\n\tbranch = .\n"
+		"[submodule \"plain\"]\n\tpath = plain\n\turl = ../plain\n");
+	scratch.commitAll(QStringLiteral("base"));
+	scratch.git({ QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("-b"), QStringLiteral("feature") });
+
+	GitRepository repository{ scratch.root() };
+	refreshToCompletion(repository); // the state names the branch "." stands for
+	const std::map<QString, QString> branches = requireSuccess(awaitAnswer<std::map<QString, QString>>(
+		[&](Vcs::Answer<std::map<QString, QString>> onDone) { repository.submoduleUpdateBranches(&repository, std::move(onDone)); }));
+	CHECK(branches == std::map<QString, QString>{ { QStringLiteral("libs/lib"), QStringLiteral("release") }, { QStringLiteral("own"), QStringLiteral("feature") } });
 }
