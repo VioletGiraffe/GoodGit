@@ -9,6 +9,7 @@ Conventions this codebase follows beyond ordinary C++ and Qt practice.
   - Still requires it: `Q_PROPERTY`, `Q_ENUM`, `Q_INVOKABLE`, a slot invoked by name (`SLOT()`, `invokeMethod` with a
     string), `qobject_cast` to the class. Cast to a class without a meta-object with `dynamic_cast`.
   - Without it `tr()` uses the base class's translation context: known and accepted.
+- **A UI string that differs per platform comes from qtutils `textForPlatform()`**, not an `#ifdef` per string.
 
 ## Naming
 

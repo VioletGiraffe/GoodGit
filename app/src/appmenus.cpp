@@ -10,6 +10,7 @@
 #include "appdialogs/caboutdialog.h"
 #include "appdialogs/csettingsdialog.h"
 #include "appdialogs/reportbugdialog.h"
+#include "utils/displayformatting.h"
 #ifdef _DEBUG
 #include "ui/widget-gallery/cwidgetgallery.h"
 #endif
@@ -46,7 +47,9 @@ QAction* addFileMenu(QMenuBar& menuBar, QWidget* dialogParent)
 		[dialogParent] { installCommandLineToolAndReport(dialogParent); });
 	menu->addSeparator();
 #endif
-	menu->addAction(QObject::tr("E&xit"), [] { QApplication::closeAllWindows(); }); // not quit(): a window with a write in flight refuses to close
+	menu->addAction(textForPlatform(QObject::tr("E&xit"), QObject::tr("&Quit"), QObject::tr("&Quit")),
+		[] { QApplication::closeAllWindows(); }) // not quit(): a window with a write in flight refuses to close
+		->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Q));
 	return openRepositoryAction;
 }
 

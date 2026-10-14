@@ -2,6 +2,7 @@
 #include "settings.h"
 
 #include "dialogs/messagedialog.h"
+#include "utils/displayformatting.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QDesktopServices>
@@ -14,33 +15,17 @@ RESTORE_COMPILER_WARNINGS
 
 QString openInFileManagerActionText()
 {
-#ifdef Q_OS_WIN
-	return QStringLiteral("Open in &Explorer");
-#elif defined Q_OS_MACOS
-	return QStringLiteral("Open in &Finder");
-#else
-	return QStringLiteral("Open in &file manager");
-#endif
+	return textForPlatform("Open in &Explorer", "Open in &Finder", "Open in &file manager");
 }
 
 QString showInFileManagerActionText()
 {
-#ifdef Q_OS_WIN
-	return QStringLiteral("Show in &Explorer");
-#elif defined Q_OS_MACOS
-	return QStringLiteral("&Reveal in Finder");
-#else
-	return QStringLiteral("Show in &file manager");
-#endif
+	return textForPlatform("Show in &Explorer", "&Reveal in Finder", "Show in &file manager");
 }
 
 QString trashName()
 {
-#ifdef Q_OS_WIN
-	return QStringLiteral("Recycle Bin");
-#else
-	return QStringLiteral("Trash");
-#endif
+	return textForPlatform("Recycle Bin", "Trash", "Trash");
 }
 
 void openInFileManager(const QString& directory)
