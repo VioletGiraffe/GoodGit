@@ -10,6 +10,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QBrush>
 #include <QFont>
 #include <QSettings>
+#include <QStringList>
 RESTORE_COMPILER_WARNINGS
 
 #include <unordered_map>
@@ -434,11 +435,15 @@ QString ChangedFilesModel::stateText(const FileEntry& entry)
 	if (!entry.isSubmodule)
 		return changeTypeText(entry.type);
 
-	if (entry.content == SubmoduleContent::Unknown)
-		return QStringLiteral("Submodule - unreadable");
-	if (!entry.pointerMoved)
-		return QStringLiteral("Uncommitted inside");
-	return entry.content == SubmoduleContent::DirtyTracked ? QStringLiteral("Submodule - blocked") : QStringLiteral("Submodule");
+	// Content first, then the pointer; a submodule gets a row only when at least one of them applies
+	QStringList parts;
+	if (entry.content == SubmoduleContent::DirtyTracked)
+		parts << QStringLiteral("Uncommitted inside");
+	else if (entry.content == SubmoduleContent::Unknown)
+		parts << QStringLiteral("Unreadable inside");
+	if (entry.pointerMoved)
+		parts << QStringLiteral("Revision moved");
+	return parts.join(QStringLiteral(", "));
 }
 
 QString ChangedFilesModel::pathText(const FileEntry& entry)

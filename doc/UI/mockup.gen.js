@@ -369,9 +369,9 @@ const FILES = [
 	{ chk: 1,    st: 'Deleted',   cls: 'del', path: 'app/src/old_widget.cpp', add: 0, del: 128 },
 	{ chk: 0,    st: 'Untracked', cls: 'unt', path: 'app/src/diffview.cpp' },
 	{ chk: 0,    st: 'Untracked', cls: 'unt', path: 'build/moc_commitwindow.o' },
-	{ chk: 1,    st: 'Submodule', cls: 'sub', path: 'cpputils', ico: 1 },
-	{ chk: null, st: 'Submodule &mdash; blocked', cls: 'del', path: 'thin_io', ico: 1, blocked: 1 },
-	{ chk: null, st: 'Uncommitted inside', cls: 'unt', path: 'cpp-template-utils', ico: 1, blocked: 1 },
+	{ chk: 1,    st: 'Revision moved', cls: 'sub', path: 'cpputils', ico: 1 },
+	{ chk: null, st: 'Uncommitted inside, Revision moved', cls: 'del', path: 'thin_io', ico: 1, blocked: 1 },
+	{ chk: null, st: 'Uncommitted inside', cls: 'del', path: 'cpp-template-utils', ico: 1, blocked: 1 },
 ];
 
 const DIFF = [
@@ -497,7 +497,7 @@ const cb = state => state === null
 	: `<span class="cb ${state === 'tri' ? 'tri' : state ? 'on' : ''}"></span>`;
 
 const frow = (f, selected) => {
-	const cls = ['frow', selected ? 'sel' : '', f.cls === 'del' ? 'del' : '',
+	const cls = ['frow', selected ? 'sel' : '', f.cls === 'del' && !f.ico ? 'del' : '', // red submodule rows are blocked, not deleted
 		f.blocked ? 'disabled blocked' : ''].filter(Boolean).join(' ');
 	const counts = f.add === undefined
 		? '<span class="plus"></span><span class="minus"></span>'

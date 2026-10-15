@@ -6,7 +6,8 @@ that cost work; the ones that produced no code have nowhere else to live.
 What the app does about these is in `invocation.md`, `encoding.md` and `refresh.md`. This
 file states what git does; that one states the rules built on it.
 
-Verified against git 2.37.1.windows.1. Version floors are named where one is known.
+Verified against git 2.37.1.windows.1; what writes the git directory and the `--ignored` modes, against
+2.55.0.windows.3. Version floors are named where one is known.
 
 ## Version floors
 
@@ -54,6 +55,13 @@ Other format facts:
   numbers and not from the key being there.
 - `ls-files --others` without `--directory` lists untracked files one by one, but stops at a directory holding
   a repository and lists the directory itself with a trailing slash: the only mark of an untracked repository.
+- **`--ignored` does not mean "matched by an ignore pattern".** `status --ignored` in its default mode
+  (`traditional`) and `ls-files --others --ignored --directory` report a directory whose untracked contents
+  all happen to be ignored as the directory itself, although a new file in it may be untracked: with `*.o`
+  ignored, `junk/` holding only `z.o` is listed as `junk/`.
+- `status --ignored=matching` lists a directory only when a pattern matches the directory itself. A
+  directory holding a tracked file is never listed whole in either mode: its ignored contents are listed
+  instead, a level down.
 - `diff --name-status HEAD` never reports `U` during a merge. A UU path shows as `M`; a UD path, whose
   worktree content equals HEAD, does not appear at all. The unmerged index entries are the only complete
   record of which paths are conflicted.
@@ -81,6 +89,20 @@ Other format facts:
 - A submodule's `.git` is a file, not a directory.
 - The empty tree is resolvable in every repository without being written: its sha depends only on the hash
   algorithm, and `hash-object -t tree --stdin` yields it.
+- **`git status` writes `index`** after a working-tree file's stat changes, to update the cached stat data.
+  `--no-optional-locks` stops that. With it, `status`, `diff`, `ls-files` and `log` write nothing in the
+  git directory.
+
+What each operation writes in the git directory, `objects/` and `logs/` aside:
+
+| operation | writes |
+|---|---|
+| `add` | `index` |
+| `commit` | `refs/heads/<branch>`, `index`, `COMMIT_EDITMSG` |
+| `push` | `refs/remotes/<remote>/<branch>`; with `-u`, also `config` |
+| `fetch` | `FETCH_HEAD`, rewritten even when nothing was fetched |
+| `stash` | `refs/stash`, `index`, `ORIG_HEAD` |
+| `gc` | `packed-refs`, deleting the loose refs it packed |
 
 ## Operations in progress
 
@@ -166,5 +188,7 @@ Each of these was assumed to be otherwise, and acted on or nearly acted on:
 - **`git reset` against an unborn HEAD needs no special handling.** See above.
 - **The marker files are not a complete test for cherry-pick and revert.** The sequencer outlives
   `CHERRY_PICK_HEAD`; see Operations in progress.
+- **An `--ignored` listing is not the set of directories ignored as a whole.** It also lists directories
+  holding only ignored files; see Output formats.
 - `QFileInfo::canonicalFilePath()` resolves neither a junction, a `subst` drive, nor a second mount of one
   volume in Qt 6.11.2. A Qt fact, not a git one, and the first thing a path-identity question runs into.

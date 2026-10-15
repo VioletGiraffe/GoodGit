@@ -88,6 +88,28 @@ Unlike git's:
   `format.use-dirstate-v2=1` aborts every command where hg has no Rust extension available.
 - Directory existence does not identify a repository: hg queried in a marker-less directory resolves upward
   and answers for the parent.
+- `format.use-dirstate-tracked-hint` (off by default) adds `.hg/dirstate-tracked-hint`, which changes when
+  the set of tracked files changes. It is written after the dirstate, not atomically with it.
+
+**Read-only commands write in `.hg`.** hg has no equivalent of git's `--no-optional-locks`:
+
+- `status` re-records as clean a tracked file whose stat changed but whose content did not (touched,
+  rewritten identically, just committed), once its mtime is old enough to trust, and writes the dirstate
+  (`context._checklookup`, `_poststatusfixup`). It takes the wlock without waiting and skips the write when
+  the lock is held.
+- Each such change costs one or two writes over the following runs; `status` on an unchanged tree writes
+  nothing.
+- `log -r 'wdir()'` does not perform that write.
+- The Rust status can mark the dirstate dirty by itself. It is skipped on case-insensitive filesystems
+  (`dirstate.use_rust_status`), so default Windows and macOS installs run only the Python path.
+- `log` writes caches under `.hg/cache/`: the first one after a commit writes `tags2-visible`.
+
+What each operation writes in `.hg`, `.hg/cache/` aside:
+
+| operation | writes |
+|---|---|
+| `add`, `forget`, `remove` | `dirstate` only |
+| `commit` | `dirstate`, `last-message.txt`, `store/00changelog.*`, `store/00manifest.i`, `store/data/*`, the `undo*` files |
 
 ## Operations in progress
 
