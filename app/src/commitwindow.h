@@ -120,7 +120,9 @@ private:
 	void doCommit(bool pushAfterwards, StateStamp decisionStamp);
 	// Runs the steps the repository plans one after another, logged as one console session. The first
 	// failure ends the push.
-	void startPush();
+	void startPush(PushMode mode);
+	// Before a one-by-one push of the planned steps: each push of a commit can start a CI run
+	[[nodiscard]] bool confirmOneByOnePush();
 	void runPushStep(size_t index, bool setUpstream);
 	// Offers to set `upstream` for the step's branch and retries if accepted. Returns whether the push
 	// goes on.
@@ -188,6 +190,7 @@ private:
 	QLabel* _aheadLabel = nullptr;
 	QPushButton* _pushButton = nullptr;
 	QAction* _checkIncomingAction = nullptr;
+	QAction* _pushOneByOneAction = nullptr;
 	QAction* _uncommitAction = nullptr;
 	QAction* _continueAction = nullptr;
 	QAction* _abortAction = nullptr;
@@ -240,7 +243,7 @@ private:
 	// A submodule discard plan is being built; disables the menu's discard action, or a second plan's dialog
 	// could stack over the first's
 	bool _discardPlanInFlight = false;
-	bool _pushInFlight = false; // held across the whole push: the plan, every step, and the upstream dialog
+	bool _pushInFlight = false; // held across the whole push: the plan, its confirmation, every step, and the upstream dialog
 	// A return from another app came while a write was in flight: a refresh landing in a write flow's dialogs
 	// fails its StateStamp check
 	bool _refreshDeferredByWrite = false;

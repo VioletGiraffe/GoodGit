@@ -86,6 +86,23 @@ T requireSuccess(std::expected<T, QString> answer)
 		return *std::move(answer);
 }
 
+// Runs one planned push step to its end; requires it to succeed
+inline void runPushStepToSuccess(Repository& repository, const PushStep& step)
+{
+	QEventLoop loop;
+	QTimer::singleShot(TestTimeoutMs, &loop, &QEventLoop::quit);
+	std::optional<ProcessResult> result;
+	repository.runPushStep(step, /*setUpstream=*/false, [&](const ProcessResult& r) {
+		result = r;
+		loop.quit();
+	});
+	loop.exec();
+
+	REQUIRE(result.has_value()); // the timer fired instead of the step finishing
+	INFO(result->errorText().toStdString());
+	REQUIRE(result->ok);
+}
+
 // Requires the refresh to have read the state
 inline void refreshToCompletion(Repository& repository)
 {

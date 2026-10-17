@@ -422,6 +422,16 @@ std::vector<RemoteBranchRef> parseRemoteBranchRefs(const QByteArray& forEachRefO
 	return branches;
 }
 
+std::optional<BranchPushTarget> parseBranchPushTarget(const QByteArray& forEachRefOutput)
+{
+	std::optional<BranchPushTarget> target;
+	forEachRefRecord(forEachRefOutput, 4, [&target](const QList<QByteArray>& fields) {
+		target = BranchPushTarget{ .upstream = QString::fromUtf8(fields[0]), .push = QString::fromUtf8(fields[1]),
+			.remote = QString::fromUtf8(fields[2]), .remoteRef = QString::fromUtf8(fields[3]) };
+	});
+	return target;
+}
+
 ReattachOptions reattachOptions(const QString& headSha, const std::vector<LocalBranchRef>& localBranches,
 	const std::vector<RemoteBranchRef>& remotesContainingHead)
 {

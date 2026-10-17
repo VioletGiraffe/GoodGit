@@ -69,6 +69,7 @@ hits, nothing to push.
   line of history; without it every head is searched.
 - A revset union comes out oldest first, the opposite of a log view's order.
 - `only(., X)` is what the working directory's parent has and X does not.
+- No documented revset walks first parents only; `_firstancestors` is internal.
 - Every changeset is draft where nothing is configured to push to, so a draft count is only meaningful with
   a path configured.
 
@@ -190,6 +191,10 @@ touching the user's configuration. Which tool `extdiff` starts is the user's `[e
 - The working directory has two parents while a merge is uncommitted.
 - **hg has no per-branch upstream.** A push contacts `default-push` where configured, else `default`. No
   configured path is an answer - nowhere to push to - not a failure.
+- A push that would leave a branch with a second remote head is refused without `-f`: a draft from before a merge
+  of the remote's head cannot be pushed alone.
+- A repository publishes by default (`phases.publish`): changesets pulled from one arrive public, and drafts pushed
+  to one become public.
 - hg keeps no remote-tracking state, so what a remote holds must be read from the remote.
 - A missing file cannot be committed by name until its removal is recorded (`addremove`, `remove --after`).
 - `addremove` (and `commit -A`) adds every unknown file its pattern reaches: unscoped, the whole tree; a listed

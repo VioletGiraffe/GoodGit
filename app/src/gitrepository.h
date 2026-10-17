@@ -36,7 +36,8 @@ public:
 	// The repository's own step recurses on demand, as a backstop.
 	// A submodule step never recurses: the plan already ordered its nested pushes, and git's own recursion
 	// cannot push a submodule whose branch name differs from the superproject's.
-	void planPush(Vcs::Answer<std::vector<PushStep>> onDone) override;
+	// A one-by-one step only checks that the submodule commits it references are published: the submodule steps pushed them.
+	void planPush(PushMode mode, Vcs::Answer<std::vector<PushStep>> onDone) override;
 	Vcs::Job* runPushStep(const PushStep& step, bool setUpstream, Vcs::Callback onDone) override;
 	[[nodiscard]] std::optional<QString> missingUpstreamName(const PushStep& step, const ProcessResult& failure) const override;
 	[[nodiscard]] QString pushCommandLabel(const PushStep& step, bool setUpstream) const override;

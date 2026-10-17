@@ -63,3 +63,16 @@ refused before any step runs.
 
 `hg push -r .` recurses into submodules itself, so Mercurial's plan is one step.
 
+### One by one
+
+Push One by One pushes the repository's commits one at a time, oldest first, so that each is a push event on the
+remote and starts a CI run. A confirmation names the count first.
+
+- Submodules are planned and pushed as for a plain push, before the repository's commits.
+- Only commits on the first-parent line that descend from the upstream are steps. Any other commit cannot
+  fast-forward the remote alone, and arrives with the merge that brings it in.
+- git pushes each as `<sha>:<ref>` to the upstream, so a branch whose plain push is configured to go elsewhere is
+  refused. The backstop is `--recurse-submodules=check`: the submodule steps already pushed what the commits reference.
+- Mercurial pushes `-r <node>` to the push path. hg has no documented first-parent revset, so the backend walks the
+  line itself.
+

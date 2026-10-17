@@ -140,6 +140,21 @@ inline constexpr char RemoteBranchRefFormat[] = "%(refname)%1f%(objectname)%1f%(
 // origin/HEAD is skipped: it names another listed branch.
 [[nodiscard]] std::vector<RemoteBranchRef> parseRemoteBranchRefs(const QByteArray& forEachRefOutput);
 
+// One local branch's upstream, and where a plain `git push` of it goes
+struct BranchPushTarget
+{
+	QString upstream;  // the full remote-tracking ref name; empty if none is configured
+	QString push;      // the remote-tracking ref a plain push updates; empty where push.default pushes nothing
+	QString remote;    // the upstream's remote
+	QString remoteRef; // the upstream's ref on that remote: "refs/heads/main"
+};
+
+// US-separated, as LocalBranchRefFormat
+inline constexpr char BranchPushTargetFormat[] = "%(upstream)%1f%(push)%1f%(upstream:remotename)%1f%(upstream:remoteref)";
+
+// Input: `for-each-ref --format=<BranchPushTargetFormat> refs/heads/<branch>` output. Empty when the branch is not listed.
+[[nodiscard]] std::optional<BranchPushTarget> parseBranchPushTarget(const QByteArray& forEachRefOutput);
+
 struct ReattachOptions
 {
 	std::vector<ReattachCandidate> candidates; // in Kind order, their commit counts not yet filled

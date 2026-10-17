@@ -338,3 +338,59 @@ TEST_CASE("An hg incoming check counts every incoming changeset and lists the ne
 	refreshToCompletion(repository);
 	CHECK(repository.state().behind == 3); // carried over: no local ref holds it
 }
+
+TEST_CASE("An hg one-by-one push steps through the first-parent drafts descending from the public head", "[hg]")
+{
+	const ScratchHgRepository upstream;
+	upstream.write(QStringLiteral("file.txt"), "base\n");
+	upstream.commitAll(QStringLiteral("base"));
+
+	const ScratchHgRepository local;
+	local.hg({ QStringLiteral("pull"), QStringLiteral("-q"), QStringLiteral("-u"), upstream.root() });
+	local.write(QStringLiteral(".hg/hgrc"), (QStringLiteral("[paths]\ndefault = ") + upstream.root() + QLatin1Char('\n')).toUtf8());
+
+	upstream.write(QStringLiteral("upstream.txt"), "upstream\n");
+	upstream.commitAll(QStringLiteral("upstream"));
+
+	// Two drafts that only the merge of the pulled head publishes, then the merge and one on top of it
+	for (const QString& subject : { QStringLiteral("before 1"), QStringLiteral("before 2") })
+	{
+		local.write(QStringLiteral("file.txt"), subject.toUtf8());
+		local.commitAll(subject);
+	}
+	local.hg({ QStringLiteral("pull"), QStringLiteral("-q") });
+	local.hg({ QStringLiteral("merge"), QStringLiteral("-q") });
+	local.hg({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("merge") });
+	local.write(QStringLiteral("file.txt"), "after\n");
+	local.commitAll(QStringLiteral("after"));
+
+	const auto node = [&](const QString& revision) {
+		return local.hgOutput({ QStringLiteral("log"), QStringLiteral("-r"), revision, QStringLiteral("-T"), QStringLiteral("{node}") }).trimmed();
+	};
+	const auto upstreamHeads = [&] {
+		return upstream.hgOutput({ QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("heads(all())"), QStringLiteral("-T"),
+			QStringLiteral("{node}\n") }).trimmed();
+	};
+
+	HgRepository repository{ local.root() };
+	refreshToCompletion(repository);
+	CHECK(repository.state().ahead == 4);
+
+	const std::vector<PushStep> steps = requireSuccess(awaitAnswer<std::vector<PushStep>>(
+		[&](Vcs::Answer<std::vector<PushStep>> onDone) { repository.planPush(PushMode::OneByOne, std::move(onDone)); }));
+	REQUIRE(steps.size() == 2);
+	CHECK(steps[0].commit == node(QStringLiteral(".^")));
+	CHECK(steps[1].commit == node(QStringLiteral(".")));
+
+	runPushStepToSuccess(repository, steps[0]);
+	CHECK(upstreamHeads() == steps[0].commit);
+	runPushStepToSuccess(repository, steps[1]);
+	CHECK(upstreamHeads() == steps[1].commit);
+
+	refreshToCompletion(repository);
+	CHECK(repository.state().ahead == 0);
+
+	const std::expected<std::vector<PushStep>, QString> nothingLeft = awaitAnswer<std::vector<PushStep>>(
+		[&](Vcs::Answer<std::vector<PushStep>> onDone) { repository.planPush(PushMode::OneByOne, std::move(onDone)); });
+	CHECK_FALSE(nothingLeft.has_value());
+}

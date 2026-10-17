@@ -22,6 +22,7 @@ RESTORE_COMPILER_WARNINGS
 #include <algorithm>
 #include <array>
 #include <functional>
+#include <map>
 #include <utility>
 
 namespace {
@@ -80,6 +81,28 @@ QString pushPathName(const QStringList& pathNames)
 {
 	return pathNames.contains(QLatin1String("default-push")) ? QStringLiteral("default-push")
 		: pathNames.contains(QLatin1String("default")) ? QStringLiteral("default") : QString{};
+}
+
+// The drafts among the ancestors of `.` that descend from a public head, or from a draft root while nothing is public; newest first.
+// A draft not descending from one, such as one before a merge of the remote's head, would create a new remote head pushed alone.
+constexpr char OneByOnePushCandidatesRevset[] = "sort(draft() and ::. and descendants(heads(public() and ::.) or (roots(::.) and draft())), -rev)";
+
+// The first-parent line from the first of `newestFirst` down to where it leaves them, oldest first.
+// Walked here: hg has no documented first-parent revset.
+QStringList firstParentLineOldestFirst(const std::vector<CommitRecord>& newestFirst)
+{
+	std::map<QString, const CommitRecord*> bySha;
+	for (const CommitRecord& commit : newestFirst)
+		bySha.emplace(commit.sha, &commit);
+
+	QStringList line;
+	for (const CommitRecord* commit = newestFirst.empty() ? nullptr : &newestFirst.front(); commit;)
+	{
+		line.prepend(commit->sha);
+		const auto parent = commit->parents.isEmpty() ? bySha.cend() : bySha.find(commit->parents.front());
+		commit = parent == bySha.cend() ? nullptr : parent->second;
+	}
+	return line;
 }
 
 // The shape of a commit listing; the caller appends the walk
@@ -684,9 +707,31 @@ void HgRepository::continueOperation(Vcs::Answer<void> onDone)
 	Hg::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));
 }
 
-void HgRepository::planPush(Vcs::Answer<std::vector<PushStep>> onDone)
+void HgRepository::planPush(PushMode mode, Vcs::Answer<std::vector<PushStep>> onDone)
 {
-	Vcs::answerLater(this, std::move(onDone), std::vector<PushStep>{ { .workDir = path() } });
+	if (mode == PushMode::Branch)
+	{
+		Vcs::answerLater(this, std::move(onDone), std::vector<PushStep>{ { .workDir = path() } });
+		return;
+	}
+
+	Hg::run(path(), { QStringLiteral("log"), QStringLiteral("-r"), QLatin1String(OneByOnePushCandidatesRevset), QStringLiteral("-T"),
+			QStringLiteral("json") }, this,
+		[workDir = path(), onDone = std::move(onDone)](const ProcessResult& result) {
+			if (!result.ok)
+			{
+				onDone(std::unexpected(result.errorText()));
+				return;
+			}
+
+			std::vector<PushStep> steps;
+			for (const QString& node : firstParentLineOldestFirst(Hg::parseCommitLog(result.out)))
+				steps.push_back({ .workDir = workDir, .commit = node });
+			if (steps.empty())
+				onDone(std::unexpected(QObject::tr("Nothing to push one by one: the working directory's parent is public already.")));
+			else
+				onDone(std::move(steps));
+		});
 }
 
 Vcs::Job* HgRepository::runPushStep(const PushStep& step, bool /*setUpstream*/, Vcs::Callback onDone)
@@ -698,7 +743,8 @@ Vcs::Job* HgRepository::runPushStep(const PushStep& step, bool /*setUpstream*/, 
 		QStringLiteral("--config"), QStringLiteral("progress.assume-tty=True"),
 		QStringLiteral("--config"), QStringLiteral("progress.delay=0.5"),
 		QStringLiteral("--config"), QStringLiteral("progress.changedelay=0.3"),
-		QStringLiteral("push"), QStringLiteral("-r"), QStringLiteral(".") }, this, tolerantOfEmptyResult(std::move(onDone)), {}, Hg::Transport::Process);
+		QStringLiteral("push"), QStringLiteral("-r"), step.commit.isEmpty() ? QStringLiteral(".") : step.commit }, this,
+		tolerantOfEmptyResult(std::move(onDone)), {}, Hg::Transport::Process);
 }
 
 std::optional<QString> HgRepository::missingUpstreamName(const PushStep& /*step*/, const ProcessResult& /*failure*/) const
@@ -706,9 +752,9 @@ std::optional<QString> HgRepository::missingUpstreamName(const PushStep& /*step*
 	return {}; // a push path is repository-wide, with no per-branch upstream to configure
 }
 
-QString HgRepository::pushCommandLabel(const PushStep& /*step*/, bool /*setUpstream*/) const
+QString HgRepository::pushCommandLabel(const PushStep& step, bool /*setUpstream*/) const
 {
-	return QStringLiteral("hg push -r .");
+	return QStringLiteral("hg push -r ") + (step.commit.isEmpty() ? QStringLiteral(".") : step.commit);
 }
 
 void HgRepository::checkIncoming(bool /*interactive*/, const QString& /*detachedHeadBranch*/, int maxCommits,

@@ -317,6 +317,10 @@ struct PushPlanRun
 {
 	std::shared_ptr<SubmoduleScan> root = std::make_shared<SubmoduleScan>();
 	QString refusal; // why no plan can be formed; the first one stands
+	// PushMode::OneByOne: the repository's own commits, oldest first, and where each is pushed
+	QStringList ownCommits;
+	QString remote;
+	QString remoteRef;
 
 	void refuse(const QString& reason)
 	{
@@ -391,6 +395,56 @@ void scanSubmodulesForPush(const std::shared_ptr<PushPlanRun>& run, const std::s
 						scanSubmodulesForPush(run, node, round);
 					});
 			}
+		});
+}
+
+// The repository's own steps of a one-by-one push: every commit on the branch's first-parent line that descends from the upstream.
+// A commit not descending from the upstream, such as one before a merge of it, cannot fast-forward the upstream alone.
+// Only the upstream is pushed to: a plain push may be configured elsewhere, and git exposes no destination ref for that.
+void planOneByOnePushes(const std::shared_ptr<PushPlanRun>& run, const QString& workDir, const QString& branch, QueryRound round)
+{
+	if (branch.isEmpty())
+	{
+		run->refuse(QObject::tr("Not on a branch, so there is no upstream to push to one by one."));
+		return;
+	}
+
+	const QString branchRef = QStringLiteral("refs/heads/") + branch;
+	round.launch(workDir, { QStringLiteral("for-each-ref"), QStringLiteral("--format=") + QLatin1String(Git::BranchPushTargetFormat), branchRef },
+		[run, workDir, branch, branchRef, round](const ProcessResult& forEachRef) mutable {
+			if (!forEachRef.ok)
+			{
+				run->refuse(forEachRef.errorText());
+				return;
+			}
+			const std::optional<Git::BranchPushTarget> target = Git::parseBranchPushTarget(forEachRef.out);
+			if (!target || target->upstream.isEmpty())
+			{
+				run->refuse(QObject::tr("The branch '%1' has no upstream to push to one by one.\nPush it once to set one.").arg(branch));
+				return;
+			}
+			if (target->push != target->upstream)
+			{
+				run->refuse(QObject::tr("A push of the branch '%1' is configured to go somewhere other than its upstream "
+					"(remote.pushDefault, branch.%1.pushRemote or push.default). Pushing one by one only pushes to the upstream.").arg(branch));
+				return;
+			}
+
+			run->remote = target->remote;
+			run->remoteRef = target->remoteRef;
+			round.launch(workDir, { QStringLiteral("rev-list"), QStringLiteral("--reverse"), QStringLiteral("--first-parent"),
+					QStringLiteral("--ancestry-path"), target->upstream + QStringLiteral("..") + branchRef },
+				[run, branch](const ProcessResult& revList) {
+					if (!revList.ok)
+					{
+						run->refuse(revList.errorText());
+						return;
+					}
+					run->ownCommits = Git::parseLineList(revList.out);
+					if (run->ownCommits.isEmpty())
+						run->refuse(QObject::tr("No commit of the branch '%1' can be pushed to its upstream on its own: "
+							"everything is pushed already, or the branch has diverged from the upstream.").arg(branch));
+				});
 		});
 }
 
@@ -890,12 +944,12 @@ void GitRepository::continueOperation(Vcs::Answer<void> onDone)
 	Git::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));
 }
 
-void GitRepository::planPush(Vcs::Answer<std::vector<PushStep>> onDone)
+void GitRepository::planPush(PushMode mode, Vcs::Answer<std::vector<PushStep>> onDone)
 {
 	auto run = std::make_shared<PushPlanRun>();
 	run->root->workDir = path();
 
-	QueryRound round{ Git::readOnlyQueries(this), [run, onDone = std::move(onDone), self = QPointer<GitRepository>{ this }] {
+	QueryRound round{ Git::readOnlyQueries(this), [run, mode, onDone = std::move(onDone), self = QPointer<GitRepository>{ this }] {
 		if (!self)
 			return; // the round also ends when its context dies
 
@@ -907,15 +961,26 @@ void GitRepository::planPush(Vcs::Answer<std::vector<PushStep>> onDone)
 
 		std::vector<PushStep> steps;
 		appendPushSteps(*run->root, steps);
-		steps.push_back({ .workDir = self->path(), .branch = self->state().branch });
+		if (mode == PushMode::Branch)
+			steps.push_back({ .workDir = self->path(), .branch = self->state().branch });
+		for (const QString& commit : run->ownCommits)
+			steps.push_back({ .workDir = self->path(), .commit = commit, .remote = run->remote, .remoteRef = run->remoteRef });
 		onDone(std::move(steps));
 	} };
 
 	scanSubmodulesForPush(run, run->root, round);
+	if (mode == PushMode::OneByOne)
+		planOneByOnePushes(run, path(), state().branch, round);
 }
 
 Vcs::Job* GitRepository::runPushStep(const PushStep& step, bool setUpstream, Vcs::Callback onDone)
 {
+	if (!step.commit.isEmpty())
+	{
+		return Git::run(step.workDir, { QStringLiteral("push"), QStringLiteral("--progress"), QStringLiteral("--recurse-submodules=check"),
+			step.remote, step.commit + QLatin1Char(':') + step.remoteRef }, this, std::move(onDone));
+	}
+
 	QStringList args = { QStringLiteral("push"), QStringLiteral("--progress"),
 		step.subject.isEmpty() ? QStringLiteral("--recurse-submodules=on-demand") : QStringLiteral("--recurse-submodules=no") };
 	if (setUpstream)
@@ -935,6 +1000,9 @@ std::optional<QString> GitRepository::missingUpstreamName(const PushStep& step, 
 
 QString GitRepository::pushCommandLabel(const PushStep& step, bool setUpstream) const
 {
+	if (!step.commit.isEmpty())
+		return QStringLiteral("git push %1 %2:%3").arg(step.remote, step.commit, step.remoteRef);
+
 	const QString command = setUpstream ? QStringLiteral("push --set-upstream origin HEAD") : QStringLiteral("push");
 	return step.subject.isEmpty() ? QStringLiteral("git ") + command : QStringLiteral("git -C %1 %2").arg(step.subject, command);
 }

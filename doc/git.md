@@ -173,6 +173,17 @@ reports "Cherry-pick currently in progress", and `cherry-pick --continue` still 
   contains it.
 - Children must be pushed before their parent: the parent's tree references commits living in its children.
 
+## Pushing
+
+- A push fast-forwards a remote branch only to a commit descending from its tip. On the first-parent line,
+  `rev-list --first-parent --ancestry-path <upstream>..<branch>` lists exactly those; a commit before a merge of the
+  upstream is not among them.
+- `%(push:remoteref)` reads empty under every `push.default`, so the ref a plain push updates on the remote cannot be
+  read. `%(push)`, the remote-tracking ref it updates, can; it is empty under `push.default=nothing`.
+- A push of `<sha>:<ref>` updates the remote-tracking ref as a plain push does.
+- `--recurse-submodules=check` works with a `<sha>:<ref>` refspec: the push fails while a submodule commit the pushed
+  commits reference is on no remote of that submodule.
+
 ## Probing git locally
 
 A shell profile or an agent harness may already export the variable under test. `GIT_EDITOR=true` makes

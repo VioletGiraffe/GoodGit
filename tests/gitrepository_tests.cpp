@@ -14,6 +14,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QTimer>
 RESTORE_COMPILER_WARNINGS
 
+#include <expected>
 #include <utility>
 #include <vector>
 
@@ -500,4 +501,97 @@ TEST_CASE("Submodule update branches come from .gitmodules, \".\" naming the rep
 	const std::map<QString, QString> branches = requireSuccess(awaitAnswer<std::map<QString, QString>>(
 		[&](Vcs::Answer<std::map<QString, QString>> onDone) { repository.submoduleUpdateBranches(&repository, std::move(onDone)); }));
 	CHECK(branches == std::map<QString, QString>{ { QStringLiteral("libs/lib"), QStringLiteral("release") }, { QStringLiteral("own"), QStringLiteral("feature") } });
+}
+
+TEST_CASE("A one-by-one push steps through the first-parent commits descending from the upstream, each moving it by one", "[git]")
+{
+	const ScratchRepository upstream;
+	upstream.write(QStringLiteral("file.txt"), "base\n");
+	upstream.commitAll(QStringLiteral("base"));
+
+	const ScratchRepository local;
+	local.git({ QStringLiteral("remote"), QStringLiteral("add"), QStringLiteral("origin"), upstream.root() });
+	local.git({ QStringLiteral("fetch"), QStringLiteral("-q"), QStringLiteral("origin") });
+	local.git({ QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("--track"), QStringLiteral("-B"), QStringLiteral("main"),
+		QStringLiteral("origin/main") });
+
+	upstream.write(QStringLiteral("upstream.txt"), "upstream\n");
+	upstream.commitAll(QStringLiteral("upstream"));
+	upstream.git({ QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("--detach") }); // a checked-out branch refuses pushes
+
+	// Two commits that only the merge of the upstream publishes, then the merge and one on top of it
+	for (const QString& subject : { QStringLiteral("before 1"), QStringLiteral("before 2") })
+	{
+		local.write(QStringLiteral("file.txt"), subject.toUtf8());
+		local.commitAll(subject);
+	}
+	local.git({ QStringLiteral("fetch"), QStringLiteral("-q"), QStringLiteral("origin") });
+	local.git({ QStringLiteral("merge"), QStringLiteral("-q"), QStringLiteral("--no-edit"), QStringLiteral("origin/main") });
+	local.write(QStringLiteral("file.txt"), "after\n");
+	local.commitAll(QStringLiteral("after"));
+
+	GitRepository repository{ local.root() };
+	refreshToCompletion(repository);
+	CHECK(repository.state().ahead == 4);
+
+	const std::vector<PushStep> steps = requireSuccess(awaitAnswer<std::vector<PushStep>>(
+		[&](Vcs::Answer<std::vector<PushStep>> onDone) { repository.planPush(PushMode::OneByOne, std::move(onDone)); }));
+	REQUIRE(steps.size() == 2);
+	CHECK(steps[0].commit == local.sha(QStringLiteral("HEAD~1")));
+	CHECK(steps[1].commit == local.sha(QStringLiteral("HEAD")));
+	for (const PushStep& step : steps)
+	{
+		CHECK(step.subject.isEmpty());
+		CHECK(step.remote == QStringLiteral("origin"));
+		CHECK(step.remoteRef == QStringLiteral("refs/heads/main"));
+	}
+
+	runPushStepToSuccess(repository, steps[0]);
+	CHECK(upstream.sha(QStringLiteral("refs/heads/main")) == steps[0].commit);
+	runPushStepToSuccess(repository, steps[1]);
+	CHECK(upstream.sha(QStringLiteral("refs/heads/main")) == steps[1].commit);
+
+	refreshToCompletion(repository);
+	CHECK(repository.state().ahead == 0); // the remote-tracking ref moved with each push
+}
+
+TEST_CASE("A one-by-one push is refused for a diverged branch and for one whose plain push goes elsewhere", "[git]")
+{
+	const ScratchRepository upstream;
+	upstream.write(QStringLiteral("file.txt"), "base\n");
+	upstream.commitAll(QStringLiteral("base"));
+
+	const ScratchRepository local;
+	local.git({ QStringLiteral("remote"), QStringLiteral("add"), QStringLiteral("origin"), upstream.root() });
+	local.git({ QStringLiteral("fetch"), QStringLiteral("-q"), QStringLiteral("origin") });
+	local.git({ QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("--track"), QStringLiteral("-B"), QStringLiteral("main"),
+		QStringLiteral("origin/main") });
+	local.write(QStringLiteral("file.txt"), "local\n");
+	local.commitAll(QStringLiteral("local"));
+
+	GitRepository repository{ local.root() };
+	const auto planOneByOne = [&] {
+		refreshToCompletion(repository);
+		return awaitAnswer<std::vector<PushStep>>(
+			[&](Vcs::Answer<std::vector<PushStep>> onDone) { repository.planPush(PushMode::OneByOne, std::move(onDone)); });
+	};
+
+	SECTION("diverged")
+	{
+		upstream.write(QStringLiteral("upstream.txt"), "upstream\n");
+		upstream.commitAll(QStringLiteral("upstream"));
+		local.git({ QStringLiteral("fetch"), QStringLiteral("-q"), QStringLiteral("origin") });
+		const std::expected<std::vector<PushStep>, QString> plan = planOneByOne();
+		REQUIRE_FALSE(plan.has_value());
+		CHECK(plan.error().contains(QLatin1String("diverged")));
+	}
+
+	SECTION("pushRemote")
+	{
+		local.git({ QStringLiteral("remote"), QStringLiteral("add"), QStringLiteral("fork"), upstream.root() });
+		local.git({ QStringLiteral("config"), QStringLiteral("branch.main.pushRemote"), QStringLiteral("fork") });
+		const std::expected<std::vector<PushStep>, QString> plan = planOneByOne();
+		REQUIRE_FALSE(plan.has_value());
+		CHECK(plan.error().contains(QLatin1String("pushRemote")));
+	}
 }

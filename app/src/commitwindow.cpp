@@ -342,7 +342,9 @@ void CommitWindow::buildMenuBar()
 	_checkIncomingAction = repositoryMenu->addAction(tr("Check for &Incoming Changes"), this, &CommitWindow::checkForIncomingChanges);
 	_checkIncomingAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_I));
 	_checkIncomingAction->setToolTip(tr("Fetch and list the commits on the upstream that this branch does not have yet"));
-	repositoryMenu->setToolTipsVisible(true); // the item's name doesn't say that it goes to the network
+	_pushOneByOneAction = repositoryMenu->addAction(tr("&Push One by One..."), this, [this] { startPush(PushMode::OneByOne); });
+	_pushOneByOneAction->setToolTip(tr("Push the unpushed commits to the upstream one at a time, oldest first, so that CI runs for each"));
+	repositoryMenu->setToolTipsVisible(true); // the names say neither that the check goes to the network nor what pushing one by one is for
 	_uncommitAction = repositoryMenu->addAction(tr("&Undo Last Commit"), this, &CommitWindow::undoLastCommit);
 	// Not one item per operation kind: the op strip names the one running, which no menu label has room to do
 	_continueAction = repositoryMenu->addAction(tr("&Continue Operation"), this, &CommitWindow::continueOperation);
@@ -426,7 +428,7 @@ QWidget* CommitWindow::buildRepoBar()
 	repoBarLayout->addWidget(_pushButton);
 	repoBarLayout->addWidget(historyButton);
 
-	connect(_pushButton, &QPushButton::clicked, this, &CommitWindow::startPush);
+	connect(_pushButton, &QPushButton::clicked, this, [this] { startPush(PushMode::Branch); });
 	connect(historyButton, &QPushButton::clicked, this, &CommitWindow::showHistoryWindow);
 	return repoBar;
 }
@@ -569,7 +571,7 @@ void CommitWindow::installShortcuts()
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_H), this, [this] { showHistoryWindow(); });
 	new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_P), this, [this] {
 		if (_pushButton->isEnabled())
-			startPush();
+			startPush(PushMode::Branch);
 	});
 	const auto commitShortcut = [this] {
 		if (_commitButton->isEnabled())
@@ -931,6 +933,7 @@ void CommitWindow::updateControlStates()
 
 	_pushButton->setEnabled(!writeInFlight());
 	_checkIncomingAction->setEnabled(incomingCheckPossible(state));
+	_pushOneByOneAction->setEnabled(!writeInFlight() && !state.upstream.isEmpty() && !state.upstreamGone && state.ahead > 0);
 	// The history-changing actions wait for a push too: it is publishing the history they would rewrite
 	const bool canChangeHistory = canActOnList() && !_pushInFlight;
 	// undoLastCommit() reports every refusal, so nothing else disables this
@@ -1188,7 +1191,7 @@ void CommitWindow::doCommit(bool pushAfterwards, StateStamp decisionStamp)
 		emit historyChanged();
 		_repo->refresh();
 		if (pushAfterwards)
-			startPush();
+			startPush(PushMode::Branch);
 	};
 
 	if (_repo->state().mergeCommitRequired())
@@ -1197,14 +1200,14 @@ void CommitWindow::doCommit(bool pushAfterwards, StateStamp decisionStamp)
 		_repo->commit(message, pathspec, untracked, onDone);
 }
 
-void CommitWindow::startPush()
+void CommitWindow::startPush(PushMode mode)
 {
 	assert_r(!_pushInFlight); // doCommit reaches this too, but Commit & Push is off while a push runs
 	_pushInFlight = true;
 	updateControlStates();
 	_pushLogView->clearLog();
 
-	_repo->planPush([this](std::expected<std::vector<PushStep>, QString> steps) {
+	_repo->planPush(mode, [this, mode](std::expected<std::vector<PushStep>, QString> steps) {
 		if (!steps)
 		{
 			endPush();
@@ -1213,8 +1216,26 @@ void CommitWindow::startPush()
 		}
 
 		_pushSteps = std::move(*steps);
+		if (mode == PushMode::OneByOne && !confirmOneByOnePush())
+		{
+			endPush();
+			return;
+		}
 		runPushStep(0, /*setUpstream=*/false);
 	});
+}
+
+bool CommitWindow::confirmOneByOnePush()
+{
+	const RepoState& state = _repo->state();
+	const auto commitCount = int(std::ranges::count_if(_pushSteps, [](const PushStep& step) { return !step.commit.isEmpty(); }));
+	QString text = tr("Push %1 commit(s) to %2 one at a time? Each push can start a CI run.").arg(commitCount).arg(state.upstream);
+	if (const int publishedWithMerges = state.ahead - commitCount; publishedWithMerges > 0)
+		text += QLatin1Char('\n') + tr("%1 more commit(s) arrive with the merges that bring them in.").arg(publishedWithMerges);
+	if (std::ranges::any_of(_pushSteps, [](const PushStep& step) { return !step.subject.isEmpty(); }))
+		text += QLatin1Char('\n') + tr("Submodules with unpushed commits are pushed first, with one push each.");
+
+	return MessageDialog::question(this, tr("Push one by one?"), text, { tr("Push one by one") }) == 0;
 }
 
 void CommitWindow::runPushStep(size_t index, bool setUpstream)
@@ -1231,7 +1252,7 @@ void CommitWindow::runPushStep(size_t index, bool setUpstream)
 		if (result.ok)
 		{
 			// A submodule's own window, when one is open: its branch was just pushed from here.
-			// The last step is this repository, refreshed below.
+			// This repository's own steps come last, refreshed below.
 			if (CommitWindow* window = repositoryWindow(_pushSteps[index].workDir); window && window != this)
 				window->refreshAfterPush();
 
@@ -1253,6 +1274,8 @@ void CommitWindow::runPushStep(size_t index, bool setUpstream)
 			return;
 
 		endPush();
+		if (index > 0 && _pushSteps[index - 1].subject.isEmpty()) // a one-by-one push published some of this repository's commits
+			refreshAfterPush();
 		if (!missingUpstream) // a declined offer already named this failure
 			showError(tr("Push failed"), result.errorText());
 	};
