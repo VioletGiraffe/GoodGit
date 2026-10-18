@@ -1007,12 +1007,13 @@ QString GitRepository::pushCommandLabel(const PushStep& step, bool setUpstream) 
 	return step.subject.isEmpty() ? QStringLiteral("git ") + command : QStringLiteral("git -C %1 %2").arg(step.subject, command);
 }
 
-void GitRepository::checkIncoming(bool interactive, const QString& detachedHeadBranch, int maxCommits,
+void GitRepository::checkIncoming(bool interactive, const QString& detachedHeadBranch, int maxCommits, const QObject* context,
 	Vcs::Answer<std::vector<CommitRecord>> onDone)
 {
+	assert_r(context); // a null one would read as dead once the fetch is done
 	// Exit 1: HEAD is detached
-	runQuery(path(), { QStringLiteral("symbolic-ref"), QStringLiteral("-q"), QStringLiteral("HEAD") }, this,
-		[this, interactive, detachedHeadBranch, maxCommits, onDone = std::move(onDone)](const ProcessResult& headRef) mutable {
+	runQuery(path(), { QStringLiteral("symbolic-ref"), QStringLiteral("-q"), QStringLiteral("HEAD") }, context,
+		[this, interactive, detachedHeadBranch, maxCommits, context, onDone = std::move(onDone)](const ProcessResult& headRef) mutable {
 			const bool detached = headRef.outcome == ProcessOutcome::Exited && headRef.exitCode == 1;
 			if (!headRef.ok && !detached)
 			{
@@ -1022,27 +1023,32 @@ void GitRepository::checkIncoming(bool interactive, const QString& detachedHeadB
 
 			const QString comparedWith = !detached ? QStringLiteral("@{upstream}")
 				: QStringLiteral("origin/") + (detachedHeadBranch.isEmpty() ? QStringLiteral("HEAD") : detachedHeadBranch);
-			fetchThenListIncoming(interactive, QStringLiteral("HEAD..") + comparedWith, maxCommits, std::move(onDone));
+			fetchThenListIncoming(interactive, QStringLiteral("HEAD..") + comparedWith, maxCommits, context, std::move(onDone));
 		});
 }
 
-void GitRepository::fetchThenListIncoming(bool interactive, const QString& range, int maxCommits, Vcs::Answer<std::vector<CommitRecord>> onDone)
+void GitRepository::fetchThenListIncoming(bool interactive, const QString& range, int maxCommits, const QObject* context,
+	Vcs::Answer<std::vector<CommitRecord>> onDone)
 {
 	// Not a read-only query: it writes the remote-tracking refs.
 	// credential.interactive is Git Credential Manager's: false fails a missing credential instead of showing its window.
 	const QStringList fetchArgs = interactive ? QStringList{ QStringLiteral("fetch") }
 		: QStringList{ QStringLiteral("-c"), QStringLiteral("credential.interactive=false"), QStringLiteral("fetch") };
-	Git::run(path(), fetchArgs, this, [this, range, maxCommits, onDone = std::move(onDone)](const ProcessResult& fetched) mutable {
+	Git::run(path(), fetchArgs, context, [this, range, maxCommits, context, onDone = std::move(onDone)](const ProcessResult& fetched) mutable {
 		if (!fetched.ok)
 		{
 			onDone(std::unexpected(fetched.errorText()));
 			return;
 		}
 
-		// A refresh already running may have read the refs from before the fetch, and would overwrite the count
-		runAfterCurrentRefresh([this, range, maxCommits, onDone = std::move(onDone)]() mutable {
+		// A refresh already running may have read the refs from before the fetch, and would overwrite the count.
+		// `guard`: the context may die while that refresh runs.
+		runAfterCurrentRefresh([this, range, maxCommits, guard = QPointer<const QObject>{ context }, onDone = std::move(onDone)]() mutable {
+			if (!guard)
+				return;
+
 			const QStringList countArgs{ QStringLiteral("rev-list"), QStringLiteral("--count"), range };
-			runQuery(path(), countArgs, this, [this, range, maxCommits, onDone = std::move(onDone)](const ProcessResult& counted) mutable {
+			runQuery(path(), countArgs, guard.data(), [this, range, maxCommits, guard, onDone = std::move(onDone)](const ProcessResult& counted) mutable {
 				if (!counted.ok)
 				{
 					onDone(std::unexpected(counted.errorText()));
@@ -1052,7 +1058,7 @@ void GitRepository::fetchThenListIncoming(bool interactive, const QString& range
 				setBehindCount(counted.out.trimmed().toInt());
 				QStringList listArgs = commitLogArgs(maxCommits);
 				listArgs << range;
-				runQuery(path(), std::move(listArgs), this, Vcs::answering(std::move(onDone), Git::parseCommitLog));
+				runQuery(path(), std::move(listArgs), guard.data(), Vcs::answering(std::move(onDone), Git::parseCommitLog));
 			});
 		});
 	});

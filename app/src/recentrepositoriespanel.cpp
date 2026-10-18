@@ -493,9 +493,8 @@ void RecentRepositoriesPanel::openRepository(const QString& root, const QString&
 	if (!window)
 		return;
 
-	// A commit or undo in the submodule moves the pointer row in the parent
 	if (CommitWindow* parentWindow = repositoryWindow(parentRoot))
-		connect(window, &CommitWindow::historyChanged, parentWindow, &CommitWindow::refreshRepository, Qt::UniqueConnection);
+		parentWindow->followSubmoduleHistory(*window);
 }
 
 void RecentRepositoriesPanel::showContextMenu(const QPoint& pos)

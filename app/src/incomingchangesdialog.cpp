@@ -142,9 +142,9 @@ void IncomingChangesDialog::startSubmoduleChecks(const std::expected<std::map<QS
 
 		SubmoduleCheck& check = _submodules[index];
 		const auto branch = updateBranches->find(check.path);
-		check.repository = openRepository(check.location);
+		check.repository = sharedRepository(check.location);
 		check.repository->checkIncoming(/*interactive=*/true, branch == updateBranches->end() ? QString{} : branch->second,
-			MaxListedIncomingCommits, [this, index](std::expected<std::vector<CommitRecord>, QString> commits) {
+			MaxListedIncomingCommits, this, [this, index](std::expected<std::vector<CommitRecord>, QString> commits) {
 				recordSubmoduleAnswer(index, commits);
 			});
 	}

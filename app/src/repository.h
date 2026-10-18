@@ -87,6 +87,7 @@ struct SubmoduleDiscardPlan
 [[nodiscard]] SubmoduleDiscardPlan discardPlanFor(const std::vector<CommitFileChange>& changes, bool nestedSubmoduleChanged);
 
 // One repository of any kind: its state, file entries and every action on it. A submodule is another Repository.
+// One object per repository on disk, shared by every window on it: see sharedRepository().
 // The windows and models are written against this interface; a backend supplies the commands.
 // Every operation is asynchronous.
 // Every answer is parsed before delivery: no raw command output crosses this boundary.
@@ -127,6 +128,41 @@ public:
 	// Compare two probes with each other, as with probeOperation(): a difference means a commit, checkout or
 	// reset landed outside the app, from another instance or from a shell.
 	[[nodiscard]] virtual QString probeHeadSha() const = 0;
+
+	// The state a write was decided against, captured before any dialog that precedes it
+	struct StateStamp
+	{
+		uint64_t refreshGeneration = 0;
+		RepoOp probedOp = RepoOp::None;
+		QString probedHeadSha;
+	};
+	[[nodiscard]] StateStamp stateStamp() const;
+	// False once a refresh replaced the state since `stamp`, or an operation, commit or checkout landed outside the
+	// app - from a second instance, or from a shell
+	[[nodiscard]] bool stateMatches(const StateStamp& stamp) const;
+
+	// The write lock every view of this repository shares. Each one disables what would start a second write, and
+	// writeStateChanged() tells it when to re-check.
+	// A mutation writes the index, the working tree or the refs. It is held for a whole flow, dialogs and asynchronous
+	// steps included: two flows would meet at index.lock, and the second would commit a pathspec the first already took.
+	void beginMutation();
+	void endMutation();
+	// A push is held from its plan to its last step, the confirmation and the upstream dialog included
+	void beginPush();
+	void endPush();
+	[[nodiscard]] bool mutationInFlight() const { return _mutationInFlight; }
+	[[nodiscard]] bool pushInFlight() const { return _pushInFlight; }
+	[[nodiscard]] bool writeInFlight() const { return _mutationInFlight || _pushInFlight; }
+	// Refreshes now, or once no write is in flight: for a refresh no write flow asked for, which would land in that
+	// flow's dialogs and fail its StateStamp check
+	void refreshAfterWrites();
+
+	// Only called by the writer, after a successful write
+	void announceHistoryChange() { emit historyChanged(); }
+	void announcePush() { emit pushed(); }
+
+	// An action below without a context answers while this object lives, which may be past the caller.
+	// Each such action runs under the write lock, and its caller must stay alive until the lock is released.
 
 	// Commits the pathspec (which must include both sides of every rename). untrackedPaths (a subset of the
 	// pathspec) is added to tracking first, and un-added if the commit fails.
@@ -178,7 +214,8 @@ public:
 	// `detachedHeadBranch`: what a detached HEAD compares against, as `submodule update --remote` would - that branch on
 	// origin, or origin/HEAD when empty. A HEAD on a branch compares against its upstream.
 	// This and push are the only operations that touch the network.
-	virtual void checkIncoming(bool interactive, const QString& detachedHeadBranch, int maxCommits,
+	// Dies with `context`, as a query does: steps not yet run are dropped, and the answer with them.
+	virtual void checkIncoming(bool interactive, const QString& detachedHeadBranch, int maxCommits, const QObject* context,
 		Vcs::Answer<std::vector<CommitRecord>> onDone) = 0;
 
 	// Puts untracked paths under version control, and takes them back out. Every backend has an "added but
@@ -297,6 +334,9 @@ public:
 
 signals:
 	void refreshed();
+	void writeStateChanged(); // a write flow began or ended
+	void historyChanged();    // a write moved a ref or the checkout: every history listing is stale
+	void pushed();            // commits were published: the unpushed marks are stale
 
 protected:
 	// Runs whatever queries the backend needs and calls completeRefresh() exactly once, when the last has answered
@@ -313,6 +353,9 @@ protected:
 	void runAfterCurrentRefresh(std::function<void()> fn);
 
 private:
+	// Runs the refresh refreshAfterWrites() deferred, once no write is in flight
+	void runRefreshDeferredByWrite();
+
 	const QString _rootPath;
 
 	RepoState _state;
@@ -323,4 +366,8 @@ private:
 	std::vector<std::function<void()>> _runningRefreshCallbacks;
 	std::vector<std::function<void()>> _pendingRefreshCallbacks; // for the coalesced run after the running one
 	uint64_t _refreshGeneration = 0;
+
+	bool _mutationInFlight = false;
+	bool _pushInFlight = false;
+	bool _refreshDeferredByWrite = false;
 };

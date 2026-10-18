@@ -37,5 +37,7 @@ struct FoundRepository
 void findRepositoriesInFolder(const QString& folder, const QObject* context,
 	std::function<void(std::vector<FoundRepository>)> onDone);
 
-// No QObject parent: the caller owns it
-[[nodiscard]] std::unique_ptr<Repository> openRepository(const RepositoryLocation& location);
+// The one Repository for the repository at `location`, so every view of it shares its state, its write lock and
+// its signals. Created on the first request, destroyed with its last holder.
+// Matched by kind and by filesystem identity (sameDirectoryOnDisk), so an alias of an open root finds its object.
+[[nodiscard]] std::shared_ptr<Repository> sharedRepository(const RepositoryLocation& location);

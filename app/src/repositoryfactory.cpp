@@ -128,6 +128,18 @@ std::vector<FoundRepository> repositoriesInFolder(const QString& folder)
 	return found;
 }
 
+std::shared_ptr<Repository> newRepository(const RepositoryLocation& location)
+{
+	switch (location.kind)
+	{
+	case VcsKind::Git:
+		return std::make_shared<GitRepository>(location.root);
+	case VcsKind::Mercurial:
+		return std::make_shared<HgRepository>(location.root);
+	}
+	return {};
+}
+
 } // namespace
 
 std::expected<RepositoryLocation, std::vector<ProcessResult>> findRepository(const QString& startPath)
@@ -180,14 +192,19 @@ void findRepositoriesInFolder(const QString& folder, const QObject* context,
 	}
 }
 
-std::unique_ptr<Repository> openRepository(const RepositoryLocation& location)
+std::shared_ptr<Repository> sharedRepository(const RepositoryLocation& location)
 {
-	switch (location.kind)
+	// Weak: the registry never keeps a repository alive
+	static std::vector<std::weak_ptr<Repository>> registry;
+	std::erase_if(registry, [](const std::weak_ptr<Repository>& entry) { return entry.expired(); });
+	for (const std::weak_ptr<Repository>& entry : registry)
 	{
-	case VcsKind::Git:
-		return std::make_unique<GitRepository>(location.root);
-	case VcsKind::Mercurial:
-		return std::make_unique<HgRepository>(location.root);
+		std::shared_ptr<Repository> repository = entry.lock();
+		if (repository->kind() == location.kind && sameDirectoryOnDisk(repository->path(), location.root))
+			return repository;
 	}
-	return {};
+
+	std::shared_ptr<Repository> repository = newRepository(location);
+	registry.push_back(repository);
+	return repository;
 }

@@ -42,7 +42,7 @@ public:
 	[[nodiscard]] std::optional<QString> missingUpstreamName(const PushStep& step, const ProcessResult& failure) const override;
 	[[nodiscard]] QString pushCommandLabel(const PushStep& step, bool setUpstream) const override;
 
-	void checkIncoming(bool interactive, const QString& detachedHeadBranch, int maxCommits,
+	void checkIncoming(bool interactive, const QString& detachedHeadBranch, int maxCommits, const QObject* context,
 		Vcs::Answer<std::vector<CommitRecord>> onDone) override;
 
 	void addToIndex(const QStringList& paths, Vcs::Answer<void> onDone) override;
@@ -95,7 +95,8 @@ private:
 	// HEAD, or the empty tree while there is no HEAD
 	[[nodiscard]] QString diffBase() const;
 	// The rest of checkIncoming(), once HEAD's comparison is resolved: `range` is HEAD..<that ref>
-	void fetchThenListIncoming(bool interactive, const QString& range, int maxCommits, Vcs::Answer<std::vector<CommitRecord>> onDone);
+	void fetchThenListIncoming(bool interactive, const QString& range, int maxCommits, const QObject* context,
+		Vcs::Answer<std::vector<CommitRecord>> onDone);
 
 private:
 	// In a submodule .git is a file pointing here

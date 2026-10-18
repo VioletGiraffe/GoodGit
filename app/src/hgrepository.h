@@ -37,7 +37,7 @@ public:
 
 	// Never prompts, `interactive` or not: ui.interactive=False is an invocation invariant.
 	// `detachedHeadBranch` is unused: Mercurial has no detached state.
-	void checkIncoming(bool interactive, const QString& detachedHeadBranch, int maxCommits,
+	void checkIncoming(bool interactive, const QString& detachedHeadBranch, int maxCommits, const QObject* context,
 		Vcs::Answer<std::vector<CommitRecord>> onDone) override;
 
 	void addToIndex(const QStringList& paths, Vcs::Answer<void> onDone) override;

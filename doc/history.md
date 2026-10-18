@@ -40,7 +40,7 @@ so an unrelated head above it stays solid. They keep their lane and color rather
 their own: the checkout and the branch tip above it are one first-parent chain, and a lane of their own
 would draw a branch point at a commit that has one child. The type carries both marks where the diagram is
 hidden, as it is for a file history and a content search. The current commit's sha comes from a query of its
-own, the window owning a `Repository` it never refreshes.
+own: the shared `Repository` is refreshed only while a commit window is open on it.
 
 Text search runs in memory over the loaded records (sha, revision, author, refs, date, message) and hides
 non-matching rows, which is why a miss is reported against the loaded count rather than as "not found": the

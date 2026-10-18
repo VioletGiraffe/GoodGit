@@ -20,6 +20,13 @@ thin_io), so one repository reached both directly and through a subst drive or a
 either way. Only the decisions an alias would break pay for that: the recent list's scans match on spelling,
 where a wrong answer costs a duplicate row and not a second window.
 
+One repository on disk is also one `Repository` object (`sharedRepository()`), matched the same way and held by
+every window and dialog on it until the last one closes. They share:
+
+- its state and refresh;
+- its write lock: a write started in one window disables the writing actions of every other;
+- its announcements: a history change or a push reaches every history view of it.
+
 Instances are independent: nothing stops a second process, and it may open a repository the first already
 shows. They share the settings store, so the recent list is written as one value, and the repository, so a
 write is re-checked against the on-disk state before it runs (`refresh.md`).

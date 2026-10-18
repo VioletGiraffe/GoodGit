@@ -1,5 +1,6 @@
 #include "repository.h"
 
+#include "assert/advanced_assert.h"
 #include "fs.hpp" // thin_io
 
 DISABLE_COMPILER_WARNINGS
@@ -156,4 +157,56 @@ void Repository::runAfterCurrentRefresh(std::function<void()> fn)
 		_runningRefreshCallbacks.push_back(std::move(fn));
 	else
 		fn();
+}
+
+Repository::StateStamp Repository::stateStamp() const
+{
+	return { _refreshGeneration, probeOperation(), probeHeadSha() };
+}
+
+bool Repository::stateMatches(const StateStamp& stamp) const
+{
+	return _refreshGeneration == stamp.refreshGeneration && probeOperation() == stamp.probedOp && probeHeadSha() == stamp.probedHeadSha;
+}
+
+void Repository::beginMutation()
+{
+	assert_r(!_mutationInFlight);
+	_mutationInFlight = true;
+	emit writeStateChanged();
+}
+
+void Repository::endMutation()
+{
+	_mutationInFlight = false;
+	emit writeStateChanged();
+	runRefreshDeferredByWrite();
+}
+
+void Repository::beginPush()
+{
+	assert_r(!_pushInFlight);
+	_pushInFlight = true;
+	emit writeStateChanged();
+}
+
+void Repository::endPush()
+{
+	_pushInFlight = false;
+	emit writeStateChanged();
+	runRefreshDeferredByWrite();
+}
+
+void Repository::refreshAfterWrites()
+{
+	if (writeInFlight())
+		_refreshDeferredByWrite = true;
+	else
+		refresh();
+}
+
+void Repository::runRefreshDeferredByWrite()
+{
+	if (!writeInFlight() && std::exchange(_refreshDeferredByWrite, false))
+		refresh();
 }

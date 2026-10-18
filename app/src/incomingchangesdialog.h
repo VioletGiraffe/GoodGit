@@ -39,7 +39,7 @@ private:
 	{
 		QString path; // repo-relative
 		RepositoryLocation location;
-		std::unique_ptr<Repository> repository; // created when its check starts
+		std::shared_ptr<Repository> repository; // taken when its check starts
 		bool answered = false;
 		bool hasRow = false; // something to pull, or a failure; one up to date is listed under the summary row
 	};

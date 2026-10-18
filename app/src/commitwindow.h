@@ -27,8 +27,6 @@ class CLabelElided;
 // One window = one repository. Submodule and untracked repository rows open another instance of this window.
 class CommitWindow final : public QMainWindow
 {
-	Q_OBJECT
-
 public:
 	explicit CommitWindow(const RepositoryLocation& location);
 
@@ -39,12 +37,8 @@ public:
 	// Called after this repository is pushed, from here or as one step of a parent's push. Not
 	// refreshRepository(): a push also stales the unpushed marks, which a working-tree change does not
 	void refreshAfterPush();
-
-signals:
-	// A commit, undo or abort here changed the history other windows show: the parent's gitlink row, the
-	// history listing
-	void historyChanged();
-	void pushed(); // the history windows' unpushed marks are stale until this fires
+	// Refreshes this window on every history change in `submodule`: a commit or undo there moves its pointer row here
+	void followSubmoduleHistory(const CommitWindow& submodule);
 
 protected:
 	bool eventFilter(QObject* watched, QEvent* event) override;
@@ -80,32 +74,14 @@ private:
 	void saveDraftMessage();
 	void restoreDraftIfParentUnchanged();
 
-	// Every flow that writes to the index or the working tree brackets itself with these; they disable the
-	// controls that would start a second one
-	void beginMutation();
-	void endMutation();
-	// The completion for a mutation with no follow-up work: endMutation, `errorTitle` on failure, refresh.
-	// `changesHistory`: success reshapes the log, so historyChanged is emitted too.
+	// The completion for a mutation with no follow-up work: ends the mutation, `errorTitle` on failure, refresh.
+	// `changesHistory`: success reshapes the log, so the history change is announced too.
 	[[nodiscard]] Vcs::Answer<void> mutationDone(const QString& errorTitle, bool changesHistory = false);
-	// Ends the push flow, finished or failed
-	void endPush();
-	// Runs the return-to-app refresh a write deferred, once no write is in flight
-	void runRefreshDeferredByWrite();
 	// False while a mutation is in flight, and while the rows are only the last state that could be read
 	[[nodiscard]] bool canActOnList() const;
-	// True while a command that writes the repository or the remote is running
-	[[nodiscard]] bool writeInFlight() const;
 
-	// The state a write was decided against, captured before any dialog that precedes it
-	struct StateStamp
-	{
-		uint64_t refreshGeneration = 0;
-		RepoOp probedOp = RepoOp::None;
-		QString probedHeadSha;
-	};
-	[[nodiscard]] StateStamp stateStamp() const;
-	// True when the repository no longer matches `stamp`: a refresh landed in a dialog's event loop, or an
-	// operation, commit or checkout landed outside the app - from a second instance, or from a shell.
+	using StateStamp = Repository::StateStamp;
+	// True when the repository no longer matches `stamp` (Repository::stateMatches()).
 	// Tells the user and queues a refresh before returning true.
 	[[nodiscard]] bool stateMovedSince(const StateStamp& stamp);
 
@@ -181,7 +157,7 @@ private:
 	[[nodiscard]] QString absolutePath(const FileEntry& entry) const;
 
 private:
-	const std::unique_ptr<Repository> _repo;
+	const std::shared_ptr<Repository> _repo;
 	ChangedFilesModel _filesModel;
 
 	QSplitter* _splitter = nullptr;
@@ -232,9 +208,6 @@ private:
 	// refresh's meanwhile, so nothing reads it.
 	bool _changeSetPending = false;
 	bool _rowAwaitsChangeSet = false; // the row shown is waiting, so the set's arrival shows it
-	// Held for a whole writing flow, dialogs and the asynchronous reattach included, not just while a process
-	// runs: two flows would meet at index.lock, and the second would commit a pathspec the first already took
-	bool _mutationInFlight = false;
 	// The last incoming check to finish in this window. The header shows no count before one has succeeded.
 	enum class IncomingCheckOutcome : uint8_t { None, Succeeded, Failed };
 	IncomingCheckOutcome _incomingCheckOutcome = IncomingCheckOutcome::None;
@@ -243,10 +216,6 @@ private:
 	// A submodule discard plan is being built; disables the menu's discard action, or a second plan's dialog
 	// could stack over the first's
 	bool _discardPlanInFlight = false;
-	bool _pushInFlight = false; // held across the whole push: the plan, its confirmation, every step, and the upstream dialog
-	// A return from another app came while a write was in flight: a refresh landing in a write flow's dialogs
-	// fails its StateStamp check
-	bool _refreshDeferredByWrite = false;
 	// A refresh has established the state at least once: before that there is no parent sha to judge a stored draft by
 	bool _stateWasRead = false;
 	bool _initialWidthPending = false; // set when no stored splitter state was restored

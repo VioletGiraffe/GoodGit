@@ -43,6 +43,7 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
+#include <vector>
 
 namespace {
 
@@ -77,30 +78,19 @@ FileRevisionTargets fileRevisionTargets(const CommitFileChange& entry, const Com
 	return targets;
 }
 
-// The whole repository's history, or none: a file history is not it
+// The whole repository's history, or none: a file history is not it.
+// The open windows are the registry, as with the repository windows.
 HistoryWindow* repositoryHistoryWindow(const QString& repositoryRoot)
 {
-	for (HistoryWindow* window : historyWindowsFor(repositoryRoot))
+	for (HistoryWindow* window : WidgetUtils::findTopLevelWindows<HistoryWindow>())
 	{
-		if (window->filePath().isEmpty())
+		if (window->filePath().isEmpty() && sameDirectoryOnDisk(window->repositoryPath(), repositoryRoot))
 			return window;
 	}
 	return nullptr;
 }
 
 } // namespace
-
-// The open windows are the registry, as with the repository windows
-std::vector<HistoryWindow*> historyWindowsFor(const QString& repositoryRoot)
-{
-	std::vector<HistoryWindow*> windows;
-	for (HistoryWindow* window : WidgetUtils::findTopLevelWindows<HistoryWindow>())
-	{
-		if (sameDirectoryOnDisk(window->repositoryPath(), repositoryRoot))
-			windows.push_back(window);
-	}
-	return windows;
-}
 
 HistoryWindow* showRepositoryHistory(const RepositoryLocation& location)
 {
@@ -118,7 +108,7 @@ HistoryWindow::HistoryWindow(const RepositoryLocation& location) :
 }
 
 HistoryWindow::HistoryWindow(const RepositoryLocation& location, const QString& filePath) :
-	_repo{ openRepository(location) },
+	_repo{ sharedRepository(location) },
 	_query{ .maxCommits = QSettings{}.value(Settings::HistoryMaxCommitsKey, Settings::HistoryMaxCommitsDefault).toInt(), .path = filePath }
 {
 	setAttribute(Qt::WA_DeleteOnClose);
@@ -131,6 +121,8 @@ HistoryWindow::HistoryWindow(const RepositoryLocation& location, const QString& 
 	enablePersistence(this, QStringLiteral("HistoryWindow"));
 
 	WidgetUtils::callOnReturnFromOtherApp(this, [this] { reloadIfHistoryChanged(); });
+	connect(_repo.get(), &Repository::historyChanged, this, &HistoryWindow::reload);
+	connect(_repo.get(), &Repository::pushed, this, &HistoryWindow::refreshUnpushedMarks);
 
 	reload();
 }

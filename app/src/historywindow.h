@@ -10,7 +10,6 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <memory>
-#include <vector>
 
 class QCheckBox;
 class QFrame;
@@ -32,7 +31,9 @@ enum class RevealMiss
 };
 
 // The commit history of one repository, read-only.
-// Owns its own Repository: a submodule's history may be opened without a CommitWindow on that submodule.
+// Holds the shared Repository: a submodule's history opens without a CommitWindow on that submodule.
+// Reads what it shows from its own queries, never from the state: without a CommitWindow nothing refreshes it.
+// Reloads on Repository::historyChanged, and re-reads the unpushed marks on Repository::pushed.
 // Every query is scoped to this window, so closing it drops the pending ones.
 // Parentless: it takes its own taskbar entry and outlives the window that opened it.
 class HistoryWindow final : public QMainWindow
@@ -53,11 +54,6 @@ public:
 	// ReloadOnce applies only where the listing predates the call: one still loading is already current.
 	void revealCommit(const QString& sha, RevealMiss onMiss = RevealMiss::Report);
 
-	// Re-runs the log query from scratch, returning to the commit the view was on
-	void reload();
-	// Re-reads which commits are unpushed, leaving the list and the selection alone
-	void refreshUnpushedMarks();
-
 protected:
 	bool eventFilter(QObject* watched, QEvent* event) override;
 	void showEvent(QShowEvent* event) override;
@@ -65,6 +61,11 @@ protected:
 
 private:
 	void buildUi();
+
+	// Re-runs the log query from scratch, returning to the commit the view was on
+	void reload();
+	// Re-reads which commits are unpushed, leaving the list and the selection alone
+	void refreshUnpushedMarks();
 
 	// Re-reads which commit the working tree is on, for the diagram's current-commit ring and the history
 	// drawn above it
@@ -104,7 +105,7 @@ private:
 	void showCommitBody(const QString& body);
 
 private:
-	const std::unique_ptr<Repository> _repo;
+	const std::shared_ptr<Repository> _repo;
 	CommitLogModel _logModel;
 	CommitFilesModel _filesModel;
 
@@ -180,7 +181,5 @@ private:
 	DiffPane::ItemInfo _currentItem;
 };
 
-// Every open history window on this repository, whole-repository and per-file alike
-[[nodiscard]] std::vector<HistoryWindow*> historyWindowsFor(const QString& repositoryRoot);
 // This repository's whole history, in the window already showing it or a new one, raised and activated
 HistoryWindow* showRepositoryHistory(const RepositoryLocation& location);

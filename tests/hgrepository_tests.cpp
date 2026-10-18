@@ -327,7 +327,7 @@ TEST_CASE("An hg incoming check counts every incoming changeset and lists the ne
 	const uint64_t generation = repository.refreshGeneration();
 
 	const std::vector<CommitRecord> listed = requireSuccess(awaitAnswer<std::vector<CommitRecord>>(
-		[&](Vcs::Answer<std::vector<CommitRecord>> onDone) { repository.checkIncoming(/*interactive=*/false, {}, 2, std::move(onDone)); }));
+		[&](Vcs::Answer<std::vector<CommitRecord>> onDone) { repository.checkIncoming(/*interactive=*/false, {}, 2, &repository, std::move(onDone)); }));
 	REQUIRE(listed.size() == 2);
 	CHECK(listed[0].subject() == QStringLiteral("three"));
 	CHECK(listed[1].subject() == QStringLiteral("two"));

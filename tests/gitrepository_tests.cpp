@@ -428,7 +428,7 @@ TEST_CASE("An incoming check fetches, counts every incoming commit and lists the
 	const uint64_t generation = repository.refreshGeneration();
 
 	const std::vector<CommitRecord> listed = requireSuccess(awaitAnswer<std::vector<CommitRecord>>(
-		[&](Vcs::Answer<std::vector<CommitRecord>> onDone) { repository.checkIncoming(/*interactive=*/false, {}, 2, std::move(onDone)); }));
+		[&](Vcs::Answer<std::vector<CommitRecord>> onDone) { repository.checkIncoming(/*interactive=*/false, {}, 2, &repository, std::move(onDone)); }));
 	REQUIRE(listed.size() == 2);
 	CHECK(listed[0].subject() == QStringLiteral("three"));
 	CHECK(listed[1].subject() == QStringLiteral("two"));
@@ -464,7 +464,7 @@ TEST_CASE("A detached HEAD's incoming check compares against origin/HEAD, or the
 	GitRepository repository{ local.root() };
 	const auto checkIncoming = [&](const QString& detachedHeadBranch) {
 		return requireSuccess(awaitAnswer<std::vector<CommitRecord>>([&](Vcs::Answer<std::vector<CommitRecord>> onDone) {
-			repository.checkIncoming(/*interactive=*/false, detachedHeadBranch, 10, std::move(onDone));
+			repository.checkIncoming(/*interactive=*/false, detachedHeadBranch, 10, &repository, std::move(onDone));
 		}));
 	};
 

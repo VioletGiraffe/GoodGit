@@ -254,7 +254,7 @@ inline void delayIfNecessary([[maybe_unused]] QObject* context, F&& f) {
 } // namespace
 
 CommitWindow::CommitWindow(const RepositoryLocation& location) :
-	_repo{ openRepository(location) }
+	_repo{ sharedRepository(location) }
 {
 	setAttribute(Qt::WA_DeleteOnClose);
 	buildUi();
@@ -263,22 +263,8 @@ CommitWindow::CommitWindow(const RepositoryLocation& location) :
 	enablePersistence(this, QStringLiteral("CommitWindow"), CPersistenceEnabler::Delayed{ true }, CPersistenceEnabler::SetDefaultSize{ false });
 
 	connect(_repo.get(), &Repository::refreshed, this, &CommitWindow::onRefreshed);
-	WidgetUtils::callOnReturnFromOtherApp(this, [this] {
-		if (writeInFlight())
-			_refreshDeferredByWrite = true;
-		else
-			_repo->refresh();
-	});
-
-	// Every history window on this repository follows this window's writes, including those it did not open
-	connect(this, &CommitWindow::historyChanged, this, [this] {
-		for (HistoryWindow* window : historyWindowsFor(_repo->path()))
-			window->reload();
-	});
-	connect(this, &CommitWindow::pushed, this, [this] {
-		for (HistoryWindow* window : historyWindowsFor(_repo->path()))
-			window->refreshUnpushedMarks();
-	});
+	connect(_repo.get(), &Repository::writeStateChanged, this, &CommitWindow::updateControlStates);
+	WidgetUtils::callOnReturnFromOtherApp(this, [this] { _repo->refreshAfterWrites(); });
 
 	_repo->refresh();
 }
@@ -296,7 +282,13 @@ void CommitWindow::refreshRepository()
 void CommitWindow::refreshAfterPush()
 {
 	_repo->refresh();
-	emit pushed();
+	_repo->announcePush();
+}
+
+void CommitWindow::followSubmoduleHistory(const CommitWindow& submodule)
+{
+	// Unique: every open of the submodule's window from here follows it again
+	connect(submodule._repo.get(), &Repository::historyChanged, this, &CommitWindow::refreshRepository, Qt::UniqueConnection);
 }
 
 void CommitWindow::buildUi()
@@ -656,14 +648,14 @@ QAction* CommitWindow::buildRecentRepositoriesDock()
 
 void CommitWindow::closeEvent(QCloseEvent* event)
 {
-	// A write in flight would be orphaned: nothing cancels a Vcs::Job, and its process outlives the window
-	if (writeInFlight())
+	// A write in flight would be orphaned: nothing cancels a Vcs::Job, and its answer is delivered to this window
+	if (_repo->writeInFlight())
 	{
 		event->ignore();
-		if (_pushInFlight)
+		if (_repo->pushInFlight())
 			_pushLogPane->show(); // may have been hidden mid-push; it shows how far the push has got
 
-		MessageDialog::notice(this, tr("Cannot close yet"), _pushInFlight
+		MessageDialog::notice(this, tr("Cannot close yet"), _repo->pushInFlight()
 			? tr("A push is running. Wait for it to finish, then close the window.")
 			: tr("An operation that changes the repository is running. Wait for it to finish, then close the window."), {});
 		return;
@@ -709,7 +701,7 @@ void CommitWindow::onRefreshed()
 	updateControlStates();
 
 	// Not during a push: its end refreshes
-	if (!_incomingCheckInFlight && !_pushInFlight && incomingCheckPossible(state))
+	if (!_incomingCheckInFlight && !_repo->pushInFlight() && incomingCheckPossible(state))
 		startIncomingCheck(/*interactive=*/false);
 
 	if (_initialWidthPending)
@@ -927,15 +919,15 @@ void CommitWindow::updateControlStates()
 	const bool canCommit = checkedCount > 0 && !_messageEdit->toPlainText().trimmed().isEmpty()
 		&& !detachedAndStuck && !state.opBlocksCommit() && canActOnList();
 	_commitButton->setEnabled(canCommit);
-	_commitPushButton->setEnabled(canCommit && !_pushInFlight);
+	_commitPushButton->setEnabled(canCommit && !_repo->pushInFlight());
 	_commitButton->setText(state.mergeCommitRequired() ? tr("Commit (%1 files)").arg(checkedCount)
 		: tr("Commit %1 file(s)").arg(checkedCount));
 
-	_pushButton->setEnabled(!writeInFlight());
+	_pushButton->setEnabled(!_repo->writeInFlight());
 	_checkIncomingAction->setEnabled(incomingCheckPossible(state));
-	_pushOneByOneAction->setEnabled(!writeInFlight() && !state.upstream.isEmpty() && !state.upstreamGone && state.ahead > 0);
+	_pushOneByOneAction->setEnabled(!_repo->writeInFlight() && !state.upstream.isEmpty() && !state.upstreamGone && state.ahead > 0);
 	// The history-changing actions wait for a push too: it is publishing the history they would rewrite
-	const bool canChangeHistory = canActOnList() && !_pushInFlight;
+	const bool canChangeHistory = canActOnList() && !_repo->pushInFlight();
 	// undoLastCommit() reports every refusal, so nothing else disables this
 	_uncommitAction->setEnabled(canChangeHistory);
 	_reattachButton->setEnabled(canChangeHistory);
@@ -990,62 +982,24 @@ void CommitWindow::restoreDraftIfParentUnchanged()
 
 bool CommitWindow::canActOnList() const
 {
-	return !_mutationInFlight && _repo->state().known();
-}
-
-bool CommitWindow::writeInFlight() const
-{
-	return _mutationInFlight || _pushInFlight;
-}
-
-void CommitWindow::beginMutation()
-{
-	assert_r(!_mutationInFlight);
-	_mutationInFlight = true;
-	updateControlStates();
-}
-
-void CommitWindow::endMutation()
-{
-	_mutationInFlight = false;
-	updateControlStates();
-	runRefreshDeferredByWrite();
-}
-
-void CommitWindow::endPush()
-{
-	_pushInFlight = false;
-	updateControlStates();
-	runRefreshDeferredByWrite();
-}
-
-void CommitWindow::runRefreshDeferredByWrite()
-{
-	if (!writeInFlight() && std::exchange(_refreshDeferredByWrite, false))
-		_repo->refresh();
+	return !_repo->mutationInFlight() && _repo->state().known();
 }
 
 Vcs::Answer<void> CommitWindow::mutationDone(const QString& errorTitle, bool changesHistory)
 {
 	return [this, errorTitle, changesHistory](std::expected<void, QString> result) {
-		endMutation();
+		_repo->endMutation();
 		if (!result)
 			showError(errorTitle, result.error());
 		else if (changesHistory)
-			emit historyChanged();
+			_repo->announceHistoryChange();
 		_repo->refresh();
 	};
 }
 
-CommitWindow::StateStamp CommitWindow::stateStamp() const
-{
-	return { _repo->refreshGeneration(), _repo->probeOperation(), _repo->probeHeadSha() };
-}
-
 bool CommitWindow::stateMovedSince(const StateStamp& stamp)
 {
-	if (_repo->refreshGeneration() == stamp.refreshGeneration && _repo->probeOperation() == stamp.probedOp
-		&& _repo->probeHeadSha() == stamp.probedHeadSha)
+	if (_repo->stateMatches(stamp))
 		return false;
 
 	MessageDialog::notice(this, tr("Repository changed"),
@@ -1057,11 +1011,11 @@ bool CommitWindow::stateMovedSince(const StateStamp& stamp)
 
 void CommitWindow::startCommit(bool pushAfterwards)
 {
-	if (_mutationInFlight)
+	if (_repo->mutationInFlight())
 		return;
 
 	// doCommit re-checks this stamp: the reattach and confirm dialogs below outlive the state decided against
-	const StateStamp stamp = stateStamp();
+	const StateStamp stamp = _repo->stateStamp();
 
 	// A merge commit takes every tracked change, so an unresolved row would go in with its conflict markers
 	const QStringList unresolved = _filesModel.unresolvedConflictPaths();
@@ -1073,7 +1027,7 @@ void CommitWindow::startCommit(bool pushAfterwards)
 		return;
 	}
 
-	beginMutation();
+	_repo->beginMutation();
 	if (!_repo->state().detached)
 	{
 		confirmUntrackedThenCommit(pushAfterwards, stamp);
@@ -1083,7 +1037,7 @@ void CommitWindow::startCommit(bool pushAfterwards)
 		if (reattached)
 			confirmUntrackedThenCommit(pushAfterwards, stamp);
 		else
-			endMutation();
+			_repo->endMutation();
 	});
 }
 
@@ -1098,7 +1052,7 @@ void CommitWindow::confirmUntrackedThenCommit(bool pushAfterwards, StateStamp de
 			{ tr("Track and commit") });
 		if (answer != 0)
 		{
-			endMutation();
+			_repo->endMutation();
 			return;
 		}
 	}
@@ -1117,7 +1071,7 @@ void CommitWindow::reattachHeadForCommit(std::function<void(bool reattached)> on
 		return;
 	}
 
-	const std::optional<ReattachCandidate> chosen = chooseReattachCandidate(std::move(candidates), stateStamp());
+	const std::optional<ReattachCandidate> chosen = chooseReattachCandidate(std::move(candidates), _repo->stateStamp());
 	if (!chosen)
 	{
 		onDone(false);
@@ -1132,14 +1086,14 @@ void CommitWindow::reattachHeadForCommit(std::function<void(bool reattached)> on
 
 void CommitWindow::reattachHeadFromStrip()
 {
-	if (writeInFlight())
+	if (_repo->writeInFlight())
 		return;
 
-	const std::optional<ReattachCandidate> chosen = chooseReattachCandidate(_repo->state().reattachCandidates, stateStamp());
+	const std::optional<ReattachCandidate> chosen = chooseReattachCandidate(_repo->state().reattachCandidates, _repo->stateStamp());
 	if (!chosen)
 		return;
 
-	beginMutation();
+	_repo->beginMutation();
 	_repo->reattachHead(*chosen, mutationDone(tr("Could not put HEAD on a branch"), /*changesHistory=*/true));
 }
 
@@ -1168,7 +1122,7 @@ void CommitWindow::doCommit(bool pushAfterwards, StateStamp decisionStamp)
 	// reattach - acted on the stamped state, and the commit mode below is chosen from it
 	if (stateMovedSince(decisionStamp))
 	{
-		endMutation();
+		_repo->endMutation();
 		return;
 	}
 
@@ -1176,10 +1130,10 @@ void CommitWindow::doCommit(bool pushAfterwards, StateStamp decisionStamp)
 	const QStringList pathspec = _filesModel.checkedPathspec();
 	const QStringList untracked = _filesModel.checkedUntrackedPaths();
 	assert_r(!message.trimmed().isEmpty() && !pathspec.isEmpty());
-	assert_r(_mutationInFlight); // held by startCommit across the reattach and the dialogs
+	assert_r(_repo->mutationInFlight()); // held by startCommit across the reattach and the dialogs
 
 	const auto onDone = [this, message, pushAfterwards](std::expected<void, QString> result) {
-		endMutation();
+		_repo->endMutation();
 		if (!result)
 		{
 			showError(tr("Commit failed"), result.error());
@@ -1188,7 +1142,7 @@ void CommitWindow::doCommit(bool pushAfterwards, StateStamp decisionStamp)
 		}
 		if (_messageEdit->toPlainText() == message) // text typed while the commit ran stays put
 			_messageEdit->clear();
-		emit historyChanged();
+		_repo->announceHistoryChange();
 		_repo->refresh();
 		if (pushAfterwards)
 			startPush(PushMode::Branch);
@@ -1202,15 +1156,14 @@ void CommitWindow::doCommit(bool pushAfterwards, StateStamp decisionStamp)
 
 void CommitWindow::startPush(PushMode mode)
 {
-	assert_r(!_pushInFlight); // doCommit reaches this too, but Commit & Push is off while a push runs
-	_pushInFlight = true;
-	updateControlStates();
+	// No push is in flight here: doCommit reaches this too, but Commit & Push is off while a push runs
+	_repo->beginPush();
 	_pushLogView->clearLog();
 
 	_repo->planPush(mode, [this, mode](std::expected<std::vector<PushStep>, QString> steps) {
 		if (!steps)
 		{
-			endPush();
+			_repo->endPush();
 			showError(tr("Cannot push"), steps.error());
 			return;
 		}
@@ -1218,7 +1171,7 @@ void CommitWindow::startPush(PushMode mode)
 		_pushSteps = std::move(*steps);
 		if (mode == PushMode::OneByOne && !confirmOneByOnePush())
 		{
-			endPush();
+			_repo->endPush();
 			return;
 		}
 		runPushStep(0, /*setUpstream=*/false);
@@ -1261,7 +1214,7 @@ void CommitWindow::runPushStep(size_t index, bool setUpstream)
 				runPushStep(index + 1, /*setUpstream=*/false);
 				return;
 			}
-			endPush();
+			_repo->endPush();
 			refreshAfterPush();
 			return;
 		}
@@ -1273,7 +1226,7 @@ void CommitWindow::runPushStep(size_t index, bool setUpstream)
 		if (missingUpstream && offerUpstreamThenRetry(index, *missingUpstream))
 			return;
 
-		endPush();
+		_repo->endPush();
 		if (index > 0 && _pushSteps[index - 1].subject.isEmpty()) // a one-by-one push published some of this repository's commits
 			refreshAfterPush();
 		if (!missingUpstream) // a declined offer already named this failure
@@ -1321,7 +1274,7 @@ void CommitWindow::startIncomingCheck(bool interactive)
 	_incomingCheckInFlight = true;
 
 	// Never detached here: a detached HEAD has no upstream, and no check starts without one
-	_repo->checkIncoming(interactive, /*detachedHeadBranch=*/{}, MaxListedIncomingCommits,
+	_repo->checkIncoming(interactive, /*detachedHeadBranch=*/{}, MaxListedIncomingCommits, this,
 		[this](std::expected<std::vector<CommitRecord>, QString> commits) {
 			_incomingCheckInFlight = false;
 			_incomingCheckOutcome = commits ? IncomingCheckOutcome::Succeeded : IncomingCheckOutcome::Failed;
@@ -1488,18 +1441,18 @@ void CommitWindow::showHistoryWindow()
 
 void CommitWindow::continueOperation()
 {
-	if (writeInFlight())
+	if (_repo->writeInFlight())
 		return;
 
 	// No confirmation: continuing is what the operation is waiting for, and it destroys nothing.
 	// The command may open the user's editor, so the mutation can stay in flight for as long as that is up.
-	beginMutation();
+	_repo->beginMutation();
 	_repo->continueOperation(mutationDone(tr("Continue failed"), /*changesHistory=*/true));
 }
 
 void CommitWindow::abortOperation()
 {
-	if (writeInFlight())
+	if (_repo->writeInFlight())
 		return;
 
 	const RepoOp op = _repo->state().op;
@@ -1524,20 +1477,18 @@ void CommitWindow::abortOperation()
 				  "resolution goes with it.\n\nA change that was already uncommitted when the operation began may "
 				  "not survive either.");
 
-	const StateStamp stamp = stateStamp();
+	const StateStamp stamp = _repo->stateStamp();
 	const auto answer = MessageDialog::question(this, title, text, { bisect ? tr("End bisect") : tr("Abort") });
 	if (answer != 0 || stateMovedSince(stamp))
 		return;
 
-	beginMutation();
+	_repo->beginMutation();
 	_repo->abortOperation(mutationDone(tr("Abort failed"), /*changesHistory=*/true));
 }
 
 void CommitWindow::openNestedRepositoryWindow(const FileEntry& entry)
 {
-	CommitWindow* window = openRepositoryWindow(_repo->nestedRepositoryLocation(entry.path));
-	// The window may already be open, and so already connected
-	connect(window, &CommitWindow::historyChanged, this, &CommitWindow::refreshRepository, Qt::UniqueConnection);
+	followSubmoduleHistory(*openRepositoryWindow(_repo->nestedRepositoryLocation(entry.path)));
 }
 
 void CommitWindow::showContextMenu(const QPoint& pos)
@@ -1783,9 +1734,9 @@ void CommitWindow::deleteSelection()
 	if (!addedPaths.isEmpty())
 	{
 		// Un-add first, or the index would point at a file that no longer exists
-		beginMutation();
+		_repo->beginMutation();
 		_repo->unAdd(addedPaths, [this, paths = untrackedPaths + trackedPaths + addedPaths, trashAllThenRefresh](std::expected<void, QString> result) {
-			endMutation();
+			_repo->endMutation();
 			if (!result)
 			{
 				showError(tr("Failed to un-add before deleting"), result.error());
@@ -1855,7 +1806,7 @@ void CommitWindow::discardSelection()
 			text += tr("\n\n%1 other selected row(s) will be left as they are: untracked files, and submodules with "
 					   "modified or unreadable content, cannot be discarded.").arg(skippedRows);
 
-		const StateStamp stamp = stateStamp();
+		const StateStamp stamp = _repo->stateStamp();
 		const auto answer = MessageDialog::question(this, tr("Discard changes?"), text, { tr("Discard") });
 		if (answer != 0 || stateMovedSince(stamp))
 			return;
@@ -1864,14 +1815,14 @@ void CommitWindow::discardSelection()
 	const auto unAddThenRefresh = [this, addedPaths] {
 		if (addedPaths.isEmpty())
 		{
-			endMutation();
+			_repo->endMutation();
 			_repo->refresh();
 			return;
 		}
 		_repo->unAdd(addedPaths, mutationDone(tr("Un-add failed")));
 	};
 
-	beginMutation();
+	_repo->beginMutation();
 	if (pathspec.isEmpty())
 	{
 		unAddThenRefresh();
@@ -1881,7 +1832,7 @@ void CommitWindow::discardSelection()
 	_repo->discardChanges(pathspec, [this, unAddThenRefresh](std::expected<void, QString> result) {
 		if (!result)
 		{
-			endMutation();
+			_repo->endMutation();
 			showError(tr("Discard failed"), result.error());
 			_repo->refresh();
 			return;
@@ -1894,7 +1845,7 @@ void CommitWindow::discardSubmoduleContent(const FileEntry& submodule)
 {
 	const QString path = submodule.path;
 	// The stamp spans the plan queries and the dialog: the state the plan describes must still stand at the write
-	const StateStamp stamp = stateStamp();
+	const StateStamp stamp = _repo->stateStamp();
 	_discardPlanInFlight = true;
 	_repo->submoduleDiscardPlan(path, this, [this, path, stamp](SubmoduleDiscardPlan plan) {
 		_discardPlanInFlight = false;
@@ -1925,7 +1876,7 @@ void CommitWindow::discardSubmoduleContent(const FileEntry& submodule)
 
 void CommitWindow::startSubmoduleContentDiscard(const QString& path, const SubmoduleDiscardPlan& plan)
 {
-	beginMutation();
+	_repo->beginMutation();
 	_repo->discardSubmoduleContent(path, plan, [this, path, done = mutationDone(tr("Discard failed"))](std::expected<void, QString> result) {
 		done(std::move(result));
 		if (CommitWindow* window = repositoryWindow(_repo->nestedRepositoryLocation(path).root))
@@ -1937,30 +1888,30 @@ void CommitWindow::undoLastCommit()
 {
 	// A push in flight blocks this too: the refusal is computed from pre-push state, and undoing the
 	// commit a running push is publishing is the rewrite AlreadyPushed exists to prevent
-	if (writeInFlight())
+	if (_repo->writeInFlight())
 		return;
 
 	// Decided on a fresh state: a commit or push made outside the app since the last refresh changes the
 	// refusal and the message restored
-	beginMutation();
+	_repo->beginMutation();
 	_repo->refresh([this] { confirmThenUndoLastCommit(); });
 }
 
 void CommitWindow::confirmThenUndoLastCommit()
 {
-	assert_r(_mutationInFlight);
+	assert_r(_repo->mutationInFlight());
 
 	const RepoState& state = _repo->state();
 	if (!state.known())
 	{
-		endMutation(); // the refresh could not read the state; the read failure strip says why
+		_repo->endMutation(); // the refresh could not read the state; the read failure strip says why
 		return;
 	}
 
 	const UndoRefusal refusal = state.lastCommitUndoRefusal();
 	if (refusal != UndoRefusal::None)
 	{
-		endMutation();
+		_repo->endMutation();
 		const auto reason = [&state, refusal] {
 			switch (refusal)
 			{
@@ -1985,14 +1936,14 @@ void CommitWindow::confirmThenUndoLastCommit()
 		return;
 	}
 
-	const StateStamp stamp = stateStamp();
+	const StateStamp stamp = _repo->stateStamp();
 	const auto answer = MessageDialog::question(this, tr("Undo the last commit?"),
 		tr("'%1' will be undone. Its changes return to this list as uncommitted changes; the working tree "
 			"is not modified.").arg(subjectOrPlaceholder(state.headSubject())),
 		{ tr("Undo commit") });
 	if (answer != 0 || stateMovedSince(stamp))
 	{
-		endMutation();
+		_repo->endMutation();
 		return;
 	}
 
@@ -2012,7 +1963,7 @@ void CommitWindow::addSelectionToIndex()
 		[](const FileEntry& entry) { return !entry.isSubmodule && entry.type == ChangeType::Untracked && !entry.isUntrackedRepository; });
 	if (paths.isEmpty())
 		return;
-	beginMutation();
+	_repo->beginMutation();
 	_repo->addToIndex(paths, mutationDone(tr("Add failed")));
 }
 
@@ -2022,7 +1973,7 @@ void CommitWindow::markResolvedSelection()
 		[](const FileEntry& entry) { return entry.type == ChangeType::Conflicted; });
 	if (paths.isEmpty())
 		return;
-	beginMutation();
+	_repo->beginMutation();
 	_repo->markResolved(paths, mutationDone(tr("Failed to mark resolved")));
 }
 
@@ -2032,7 +1983,7 @@ void CommitWindow::unAddSelection()
 		[](const FileEntry& entry) { return !entry.isSubmodule && entry.type == ChangeType::Added; });
 	if (paths.isEmpty())
 		return;
-	beginMutation();
+	_repo->beginMutation();
 	_repo->unAdd(paths, mutationDone(tr("Un-add failed")));
 }
 

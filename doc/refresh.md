@@ -18,7 +18,7 @@ checked whatever it was before and whatever the setting says.
 
 A confirmation dialog spins a nested event loop that a refresh can complete inside, and an operation or a
 commit can land outside the app - from a second instance, or from a shell - with no refresh seeing it. Every
-write decided before a dialog therefore captures a `StateStamp` (`CommitWindow`) - the refresh generation
+write decided before a dialog therefore captures a `StateStamp` (`Repository`) - the refresh generation
 plus fresh probes of the on-disk operation markers and of the commit HEAD names - and re-checks it before
 writing; a mismatch refuses the action and asks the user to retry against the new state.
 

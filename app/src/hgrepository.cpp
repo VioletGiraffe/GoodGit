@@ -757,7 +757,7 @@ QString HgRepository::pushCommandLabel(const PushStep& step, bool /*setUpstream*
 	return QStringLiteral("hg push -r ") + (step.commit.isEmpty() ? QStringLiteral(".") : step.commit);
 }
 
-void HgRepository::checkIncoming(bool /*interactive*/, const QString& /*detachedHeadBranch*/, int maxCommits,
+void HgRepository::checkIncoming(bool /*interactive*/, const QString& /*detachedHeadBranch*/, int maxCommits, const QObject* context,
 	Vcs::Answer<std::vector<CommitRecord>> onDone)
 {
 	const auto record = [this, maxCommits](const QByteArray& output) {
@@ -772,7 +772,7 @@ void HgRepository::checkIncoming(bool /*interactive*/, const QString& /*detached
 	};
 	// No -l: it limits only what hg prints, every incoming changeset is transferred anyway, and the count must be whole
 	runQuery(path(), { QStringLiteral("incoming"), QStringLiteral("--newest-first"), QStringLiteral("-T"), QStringLiteral("json") },
-		this, tolerantOfEmptyResult(Vcs::answering(std::move(onDone), record)));
+		context, tolerantOfEmptyResult(Vcs::answering(std::move(onDone), record)));
 }
 
 void HgRepository::addToIndex(const QStringList& paths, Vcs::Answer<void> onDone)
