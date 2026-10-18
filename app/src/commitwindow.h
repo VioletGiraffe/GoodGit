@@ -35,7 +35,8 @@ public:
 	// a parent's discard inside the submodule changes its working tree
 	void refreshRepository();
 	// Called after this repository is pushed, from here or as one step of a parent's push. Not
-	// refreshRepository(): a push also stales the unpushed marks, which a working-tree change does not
+	// refreshRepository(): a push also stales the unpushed marks, which a working-tree change does not.
+	// The refresh waits for the write lock: a parent's push holds it until its last step.
 	void refreshAfterPush();
 	// Refreshes this window on every history change in `submodule`: a commit or undo there moves its pointer row here
 	void followSubmoduleHistory(const CommitWindow& submodule);
@@ -97,6 +98,11 @@ private:
 	// Runs the steps the repository plans one after another, logged as one console session. The first
 	// failure ends the push.
 	void startPush(PushMode mode);
+	// Takes the push lock of every submodule the planned push writes, all or none. A busy one is reported, and
+	// nothing is locked.
+	[[nodiscard]] bool lockPushedSubmodules();
+	// Ends the push flow, finished or failed: this repository's push lock and the submodules'
+	void endPush();
 	// Before a one-by-one push of the planned steps: each push of a commit can start a CI run
 	[[nodiscard]] bool confirmOneByOnePush();
 	void runPushStep(size_t index, bool setUpstream);
@@ -189,6 +195,9 @@ private:
 	QPointer<IncomingChangesDialog> _incomingDialog; // open while the menu's check shows; takes this repository's answer
 
 	std::vector<PushStep> _pushSteps; // the running push's plan
+	std::vector<std::shared_ptr<Repository>> _pushedSubmodules; // their push locks are held until the push ends
+	// This window's push flow runs. The repository's push lock may instead be held by a parent's push.
+	bool _ownPushInFlight = false;
 
 	Vcs::Query _diffQuery; // whatever fills the diff pane: a file's diff, or a submodule's incoming commits
 	// The row whose text the pane showed last: a refresh showing it again returns to the same place

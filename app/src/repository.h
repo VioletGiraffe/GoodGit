@@ -197,6 +197,9 @@ public:
 	// is a step, oldest first, pushed to the upstream; a commit off that line is published with the merge that brings it in.
 	// Refuses where no commit qualifies.
 	virtual void planPush(PushMode mode, Vcs::Answer<std::vector<PushStep>> onDone) = 0;
+	// The other repositories a planned push writes: each submodule step's, and each subrepo the tool's own push
+	// recurses into. One level deep where the tool recurses: the levels below are not known here.
+	[[nodiscard]] virtual std::vector<RepositoryLocation> submodulesPushedBy(const std::vector<PushStep>& plan) const = 0;
 	// Runs one planned step. Returns the job so the caller can stream its output into the push log.
 	// Reported as a process rather than an answer: the push log shows the exit code when there was no output.
 	// `setUpstream` retries a step that reported having no upstream.

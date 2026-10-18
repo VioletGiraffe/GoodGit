@@ -62,6 +62,15 @@ refused before any step runs.
 
 `hg push -r .` recurses into submodules itself, so Mercurial's plan is one step.
 
+The push holds the push lock of every submodule it writes, so the submodule's own window cannot undo or push
+what is being published meanwhile:
+
+- git: every submodule step's repository, nested ones included.
+- hg: every cloned subrepo one level down. Deeper ones, which `push -r .` reaches too, are not known to the
+  parent and stay unlocked.
+
+If one of them already has a write in flight, the push is refused before any step runs.
+
 ### One by one
 
 Push One by One pushes the repository's commits one at a time, oldest first, so that each is a push event on the

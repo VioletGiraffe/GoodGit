@@ -973,6 +973,17 @@ void GitRepository::planPush(PushMode mode, Vcs::Answer<std::vector<PushStep>> o
 		planOneByOnePushes(run, path(), state().branch, round);
 }
 
+std::vector<RepositoryLocation> GitRepository::submodulesPushedBy(const std::vector<PushStep>& plan) const
+{
+	std::vector<RepositoryLocation> submodules;
+	for (const PushStep& step : plan)
+	{
+		if (!step.subject.isEmpty())
+			submodules.push_back({ VcsKind::Git, step.workDir });
+	}
+	return submodules;
+}
+
 Vcs::Job* GitRepository::runPushStep(const PushStep& step, bool setUpstream, Vcs::Callback onDone)
 {
 	if (!step.commit.isEmpty())

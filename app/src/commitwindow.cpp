@@ -281,7 +281,7 @@ void CommitWindow::refreshRepository()
 
 void CommitWindow::refreshAfterPush()
 {
-	_repo->refresh();
+	_repo->refreshAfterWrites();
 	_repo->announcePush();
 }
 
@@ -648,14 +648,15 @@ QAction* CommitWindow::buildRecentRepositoriesDock()
 
 void CommitWindow::closeEvent(QCloseEvent* event)
 {
-	// A write in flight would be orphaned: nothing cancels a Vcs::Job, and its answer is delivered to this window
-	if (_repo->writeInFlight())
+	// A write in flight would be orphaned: nothing cancels a Vcs::Job, and its answer is delivered to this window.
+	// A parent's push holding the lock is not this window's: its answers go to the parent.
+	if (_repo->mutationInFlight() || _ownPushInFlight)
 	{
 		event->ignore();
-		if (_repo->pushInFlight())
+		if (_ownPushInFlight)
 			_pushLogPane->show(); // may have been hidden mid-push; it shows how far the push has got
 
-		MessageDialog::notice(this, tr("Cannot close yet"), _repo->pushInFlight()
+		MessageDialog::notice(this, tr("Cannot close yet"), _ownPushInFlight
 			? tr("A push is running. Wait for it to finish, then close the window.")
 			: tr("An operation that changes the repository is running. Wait for it to finish, then close the window."), {});
 		return;
@@ -1158,24 +1159,54 @@ void CommitWindow::startPush(PushMode mode)
 {
 	// No push is in flight here: doCommit reaches this too, but Commit & Push is off while a push runs
 	_repo->beginPush();
+	_ownPushInFlight = true;
 	_pushLogView->clearLog();
 
 	_repo->planPush(mode, [this, mode](std::expected<std::vector<PushStep>, QString> steps) {
 		if (!steps)
 		{
-			_repo->endPush();
+			endPush();
 			showError(tr("Cannot push"), steps.error());
 			return;
 		}
 
 		_pushSteps = std::move(*steps);
-		if (mode == PushMode::OneByOne && !confirmOneByOnePush())
+		if (!lockPushedSubmodules() || (mode == PushMode::OneByOne && !confirmOneByOnePush()))
 		{
-			_repo->endPush();
+			endPush();
 			return;
 		}
 		runPushStep(0, /*setUpstream=*/false);
 	});
+}
+
+bool CommitWindow::lockPushedSubmodules()
+{
+	std::vector<std::shared_ptr<Repository>> submodules;
+	for (const RepositoryLocation& location : _repo->submodulesPushedBy(_pushSteps))
+	{
+		std::shared_ptr<Repository> submodule = sharedRepository(location);
+		if (submodule->writeInFlight())
+		{
+			MessageDialog::notice(this, tr("Cannot push"), tr("Submodule '%1' has a write of its own in flight. Wait for it to finish, then push again.")
+				.arg(QDir{ _repo->path() }.relativeFilePath(location.root)), {});
+			return false;
+		}
+		submodules.push_back(std::move(submodule));
+	}
+
+	for (const std::shared_ptr<Repository>& submodule : submodules)
+		submodule->beginPush();
+	_pushedSubmodules = std::move(submodules);
+	return true;
+}
+
+void CommitWindow::endPush()
+{
+	for (const std::shared_ptr<Repository>& submodule : std::exchange(_pushedSubmodules, {}))
+		submodule->endPush();
+	_ownPushInFlight = false;
+	_repo->endPush();
 }
 
 bool CommitWindow::confirmOneByOnePush()
@@ -1214,7 +1245,7 @@ void CommitWindow::runPushStep(size_t index, bool setUpstream)
 				runPushStep(index + 1, /*setUpstream=*/false);
 				return;
 			}
-			_repo->endPush();
+			endPush();
 			refreshAfterPush();
 			return;
 		}
@@ -1226,7 +1257,7 @@ void CommitWindow::runPushStep(size_t index, bool setUpstream)
 		if (missingUpstream && offerUpstreamThenRetry(index, *missingUpstream))
 			return;
 
-		_repo->endPush();
+		endPush();
 		if (index > 0 && _pushSteps[index - 1].subject.isEmpty()) // a one-by-one push published some of this repository's commits
 			refreshAfterPush();
 		if (!missingUpstream) // a declined offer already named this failure

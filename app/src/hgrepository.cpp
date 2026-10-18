@@ -734,6 +734,17 @@ void HgRepository::planPush(PushMode mode, Vcs::Answer<std::vector<PushStep>> on
 		});
 }
 
+std::vector<RepositoryLocation> HgRepository::submodulesPushedBy(const std::vector<PushStep>& /*plan*/) const
+{
+	std::vector<RepositoryLocation> subrepos;
+	for (const QString& subPath : state().submodules)
+	{
+		if (subrepoCloned(subPath))
+			subrepos.push_back(nestedRepositoryLocation(subPath));
+	}
+	return subrepos;
+}
+
 Vcs::Job* HgRepository::runPushStep(const PushStep& step, bool /*setUpstream*/, Vcs::Callback onDone)
 {
 	// Its own process: a push must not run on a shared server (see Hg::Transport)
