@@ -8,8 +8,9 @@ without them. Child processes inherit the result, including the helpers git and 
 
 ## Invocation invariants
 
-`gitprocess` applies to every call: `-c core.quotepath=false`, `GIT_TERMINAL_PROMPT=0` (a credential miss
-fails instead of hanging on an invisible prompt; Git Credential Manager's own GUI is unaffected), and
+`gitprocess` applies to every call: `-c core.quotepath=false`, `-c submodule.recurse=false` (machines differ, so
+a command that recurses into submodules says so itself), `GIT_TERMINAL_PROMPT=0` (a credential miss fails
+instead of hanging on an invisible prompt; Git Credential Manager's own GUI is unaffected), and
 `--no-optional-locks` on read-only queries. Paths travel NUL-separated (`-z`, `--pathspec-from-file=-
 --pathspec-file-nul` via stdin), never on argv, which Windows caps near 32 KB. The commit message goes
 through a temp file, never `-m`: it is the one argument with no bound on its length.
@@ -23,7 +24,8 @@ No git version is checked up front. A git older than 2.25 fails every command pa
 (commit, stage, un-stage, discard) with a usage error, which `gitprocess` prefixes with the minimum version;
 everything else keeps working.
 
-`hgprocess` applies `HGPLAIN=1`, `--config ui.interactive=False` and `--config diff.nobinary=True`, and
+`hgprocess` applies `HGPLAIN=1`, `--config ui.interactive=False`, `--config diff.nobinary=True` and
+`--config ui.commitsubrepos=False` (a commit never recurses into a dirty subrepo, whatever the machine says), and
 deliberately does **not** disable the user's extensions: a repository may need one (largefiles, lfs) to be
 readable at all. `nobinary` is what makes hg's `--git` diffs safe to ask for: without it a binary file
 arrives as a base85 patch. Queries use `-T json`, never with `-q` or `-v`, which change the field set. The

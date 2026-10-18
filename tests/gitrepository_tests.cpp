@@ -221,6 +221,27 @@ TEST_CASE("A submodule gets a row for modified files inside, and none for untrac
 	}
 }
 
+TEST_CASE("Discarding a moved submodule pointer checks the recorded commit out inside it", "[git]")
+{
+	const ScratchRepository scratch;
+	scratch.createNestedRepository(QStringLiteral("sub"));
+	scratch.write(QStringLiteral(".gitmodules"), "[submodule \"sub\"]\n\tpath = sub\n\turl = ./sub\n");
+	scratch.commitAll(QStringLiteral("with a submodule"));
+	// Active, as `git submodule init` leaves it: restore recurses only into an active submodule
+	scratch.git({ QStringLiteral("config"), QStringLiteral("submodule.sub.url"), QStringLiteral("./sub") });
+
+	scratch.write(QStringLiteral("sub/inside.txt"), "moved\n");
+	scratch.git({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-am"), QStringLiteral("moved") }, QStringLiteral("sub"));
+	const std::vector<FileEntry> moved = scratch.refreshed().first;
+	REQUIRE(moved.size() == 1);
+	REQUIRE(moved[0].pointerMoved);
+
+	GitRepository repository{ scratch.root() };
+	requireSuccess(awaitAnswer<void>([&](Vcs::Answer<void> onDone) { repository.discardChanges({ QStringLiteral("sub") }, std::move(onDone)); }));
+
+	CHECK(scratch.refreshed().first.empty());
+}
+
 TEST_CASE("Both sides of a merge conflict are conflicted rows, including a path modified here and deleted there", "[git]")
 {
 	const ScratchRepository scratch;

@@ -36,8 +36,10 @@ QStringList invariantArgs()
 {
 	// diff.nobinary: a binary file's diff is a one-line note (as with git) rather than the base85 patch --git
 	// mode would otherwise put into the diff pane and every line count
+	// ui.commitsubrepos=False: a commit never recurses into a dirty subrepo, whatever the machine's config says
 	return { QStringLiteral("--config"), QStringLiteral("ui.interactive=False"),
-		QStringLiteral("--config"), QStringLiteral("diff.nobinary=True") };
+		QStringLiteral("--config"), QStringLiteral("diff.nobinary=True"),
+		QStringLiteral("--config"), QStringLiteral("ui.commitsubrepos=False") };
 }
 
 Vcs::Job* run(const QString& workDir, QStringList args, const QObject* context, Vcs::Callback callback,

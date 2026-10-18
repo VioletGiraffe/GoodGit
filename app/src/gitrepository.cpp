@@ -1032,8 +1032,10 @@ void GitRepository::fetchThenListIncoming(bool interactive, const QString& range
 {
 	// Not a read-only query: it writes the remote-tracking refs.
 	// credential.interactive is Git Credential Manager's: false fails a missing credential instead of showing its window.
-	const QStringList fetchArgs = interactive ? QStringList{ QStringLiteral("fetch") }
+	// on-demand is git's default, stated: an explicit submodule.recurse, such as the invocation invariants' false, overrides it.
+	QStringList fetchArgs = interactive ? QStringList{ QStringLiteral("fetch") }
 		: QStringList{ QStringLiteral("-c"), QStringLiteral("credential.interactive=false"), QStringLiteral("fetch") };
+	fetchArgs << QStringLiteral("--recurse-submodules=on-demand");
 	Git::run(path(), fetchArgs, context, [this, range, maxCommits, context, onDone = std::move(onDone)](const ProcessResult& fetched) mutable {
 		if (!fetched.ok)
 		{
@@ -1084,8 +1086,10 @@ void GitRepository::unAdd(const QStringList& paths, Vcs::Answer<void> onDone)
 
 void GitRepository::discardChanges(const QStringList& pathspec, Vcs::Answer<void> onDone)
 {
-	Git::run(path(), { QStringLiteral("restore"), QStringLiteral("--source=HEAD"), QStringLiteral("--staged"), QStringLiteral("--worktree"),
-		QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") }, this, Vcs::reporting(std::move(onDone)), Git::nulJoinedPaths(pathspec));
+	// --recurse-submodules: without it a submodule row's restore resets only the index entry, and the moved pointer stays
+	Git::run(path(), { QStringLiteral("restore"), QStringLiteral("--recurse-submodules"), QStringLiteral("--source=HEAD"), QStringLiteral("--staged"),
+		QStringLiteral("--worktree"), QStringLiteral("--pathspec-from-file=-"), QStringLiteral("--pathspec-file-nul") }, this,
+		Vcs::reporting(std::move(onDone)), Git::nulJoinedPaths(pathspec));
 }
 
 void GitRepository::submoduleDiscardPlan(const QString& repoRelativePath, const QObject* context,
@@ -1417,8 +1421,7 @@ void discardAllUncommitted(const QString& workDir, const SubmoduleDiscardPlan& p
 	assert_r(!plan.restored.isEmpty() || !plan.keptOnDisk.isEmpty());
 
 	const Vcs::Callback report = Vcs::reporting(std::move(onDone));
-	// Exactly the paths the plan named, never a whole-tree pathspec: a restore checks out over every nested
-	// submodule its pathspec covers, detaching one that has nothing to do with this discard.
+	// Exactly the paths the plan named, never a whole-tree pathspec: the confirmation listed these.
 	// The reset comes first and takes both lists: with the paths the last commit does not have out of the
 	// index, the restore below cannot delete them.
 	Git::run(workDir, { QStringLiteral("reset"), QStringLiteral("-q"), QStringLiteral("--pathspec-from-file=-"),

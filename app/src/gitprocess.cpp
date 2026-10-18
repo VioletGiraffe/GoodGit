@@ -13,6 +13,10 @@ void applyInvariants(QStringList& args, bool readOnlyQuery)
 		args.prepend(QStringLiteral("--no-optional-locks"));
 	args.prepend(QStringLiteral("core.quotepath=false"));
 	args.prepend(QStringLiteral("-c"));
+	// submodule.recurse=false: the setting varies by machine, so a command that recurses says so itself.
+	// git passes it on to the git processes a command starts.
+	args.prepend(QStringLiteral("submodule.recurse=false"));
+	args.prepend(QStringLiteral("-c"));
 }
 
 Vcs::Tool gitTool()

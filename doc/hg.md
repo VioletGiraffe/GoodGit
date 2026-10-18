@@ -201,6 +201,8 @@ touching the user's configuration. Which tool `extdiff` starts is the user's `[e
   subrepo, all of it, recursively.
 - `addremove` also re-adds a forgotten file: removed, but still on disk.
 - `revert` leaves a `.orig` copy of every reverted file unless `-C` is passed.
+- `revert` of a subrepo path updates the subrepo to the revision `.hgsubstate` records.
+- A commit that takes a dirty subrepo aborts, unless `ui.commitsubrepos` is set: then it commits inside the subrepo first.
 - Reverting a path the parent changeset does not have only takes it out of tracking.
 
 ## Command server protocol

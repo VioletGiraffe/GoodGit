@@ -161,8 +161,12 @@ reports "Cherry-pick currently in progress", and `cherry-pick --continue` still 
 - `git add` fails on a path that is in neither the working tree nor the index.
 - With `core.filemode` off, only the index records a file's mode, so re-adding a cleared entry from the
   working tree loses it. `update-index --index-info` restores it.
-- `git restore` checks out over every nested submodule its pathspec covers, detaching one that has nothing
-  to do with the paths intended. A restore must name paths, never a whole-tree pathspec.
+- `git restore` updates a submodule's working tree only with `--recurse-submodules`: without it, restoring a
+  gitlink resets its index entry alone. With it, every submodule the pathspec covers is checked out at the
+  recorded commit, detached.
+- `submodule.recurse=true` turns on `--recurse-submodules` for every command that has the option, and reaches
+  the git processes a command starts: `merge --abort` resets through one. An unset `fetch.recurseSubmodules`
+  follows it too, in place of its `on-demand` default.
 
 ## Submodules
 

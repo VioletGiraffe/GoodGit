@@ -15,10 +15,9 @@ Those changes are discarded by the same Discard action: on a lone submodule row 
 the submodule instead of checking its pointer out, so its branch is not moved. `submoduleDiscardPlan()`
 reads what that would do and refuses what it must not touch: an operation in progress, unresolved conflicts,
 a nested submodule that moved or holds uncommitted changes of its own. It blocks, the plan being what the
-confirmation lists. The plan's paths are also the pathspec the discard runs with - a whole-tree pathspec
-would check out over every nested submodule it covers, detaching one that has nothing to do with the
-discard. Paths the submodule's last commit does not have (files added there, a rename's new name) come out
-of version control and stay on disk, and untracked files are untouched, as in the repository's own discard.
+confirmation lists, and the plan's paths are the discard's pathspec. Paths the submodule's last commit does
+not have (files added there, a rename's new name) come out of version control and stay on disk, and
+untracked files are untouched, as in the repository's own discard.
 
 A git repository inside the worktree that the parent does not track is an untracked row, not a submodule
 row: it has no pointer. It shares the folder icon and opens a window or its history like a submodule. It can
