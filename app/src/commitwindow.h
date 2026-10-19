@@ -31,13 +31,9 @@ public:
 	explicit CommitWindow(const RepositoryLocation& location);
 
 	[[nodiscard]] const QString& repositoryPath() const;
-	// Called by another window whose write changed this repository: a submodule's commit moves a pointer here, and
-	// a parent's discard inside the submodule changes its working tree
+	// Called by another window whose write changed this repository: a submodule's commit moves a pointer here,
+	// a parent's discard inside the submodule changes its working tree, and a parent's push may publish its commits
 	void refreshRepository();
-	// Called after this repository is pushed, from here or as one step of a parent's push. Not
-	// refreshRepository(): a push also stales the unpushed marks, which a working-tree change does not.
-	// The refresh waits for the write lock: a parent's push holds it until its last step.
-	void refreshAfterPush();
 	// Refreshes this window on every history change in `submodule`: a commit or undo there moves its pointer row here
 	void followSubmoduleHistory(const CommitWindow& submodule);
 
@@ -98,8 +94,12 @@ private:
 	// Takes the push lock of every submodule the planned push writes, all or none. A busy one is reported, and
 	// nothing is locked.
 	[[nodiscard]] bool lockPushedSubmodules();
-	// Ends the push flow, finished or failed: this repository's push lock and the submodules'
+	// Ends the push flow, finished or failed: this repository's push lock and the submodules'. Each submodule's
+	// history views re-read the unpushed marks, and its window refreshes.
 	void endPush();
+	// After this repository's own push. Not refreshRepository(): a push also stales the unpushed marks, which a
+	// working-tree change does not.
+	void refreshAfterPush();
 	// Before a one-by-one push of the planned steps: each push of a commit can start a CI run
 	[[nodiscard]] bool confirmOneByOnePush();
 	void runPushStep(size_t index, bool setUpstream);

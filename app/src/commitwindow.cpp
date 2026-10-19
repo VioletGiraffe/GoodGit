@@ -282,7 +282,7 @@ void CommitWindow::refreshRepository()
 
 void CommitWindow::refreshAfterPush()
 {
-	_repo->refreshAfterWrites();
+	_repo->refresh();
 	_repo->announcePush();
 }
 
@@ -1190,9 +1190,18 @@ bool CommitWindow::lockPushedSubmodules()
 
 void CommitWindow::endPush()
 {
-	for (const std::shared_ptr<Repository>& submodule : std::exchange(_pushedSubmodules, {}))
+	const std::vector<std::shared_ptr<Repository>> submodules = std::exchange(_pushedSubmodules, {});
+	for (const std::shared_ptr<Repository>& submodule : submodules)
 		submodule->endPush();
 	_repo->endPush();
+
+	// Any of them may have been pushed. One without a window stays unrefreshed: nothing shows its state.
+	for (const std::shared_ptr<Repository>& submodule : submodules)
+	{
+		submodule->announcePush();
+		if (CommitWindow* window = repositoryWindow(submodule->path()))
+			window->refreshRepository();
+	}
 }
 
 bool CommitWindow::confirmOneByOnePush()
@@ -1221,11 +1230,6 @@ void CommitWindow::runPushStep(size_t index, bool setUpstream)
 
 		if (result.ok)
 		{
-			// A submodule's own window, when one is open: its branch was just pushed from here.
-			// This repository's own steps come last, refreshed below.
-			if (CommitWindow* window = repositoryWindow(_pushSteps[index].workDir); window && window != this)
-				window->refreshAfterPush();
-
 			if (index + 1 < _pushSteps.size())
 			{
 				runPushStep(index + 1, /*setUpstream=*/false);

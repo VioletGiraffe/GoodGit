@@ -69,7 +69,8 @@ what is being published meanwhile:
 - hg: every cloned subrepo one level down. Deeper ones, which `push -r .` reaches too, are not known to the
   parent and stay unlocked.
 
-If one of them already has a write in flight, the push is refused before any step runs.
+If one of them already has a write in flight, the push is refused before any step runs. Once the push ends,
+finished or not, each of them has its window refreshed and its unpushed marks re-read.
 
 ### One by one
 
