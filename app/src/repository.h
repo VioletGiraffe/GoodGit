@@ -145,14 +145,18 @@ public:
 	// writeStateChanged() tells it when to re-check.
 	// A mutation writes the index, the working tree or the refs. It is held for a whole flow, dialogs and asynchronous
 	// steps included: two flows would meet at index.lock, and the second would commit a pathspec the first already took.
-	void beginMutation();
+	// `holder`: the window whose flow takes the lock, where its answers arrive. Compared, never dereferenced.
+	void beginMutation(const QObject* holder);
 	void endMutation();
 	// A push is held from its plan to its last step, the confirmation and the upstream dialog included
-	void beginPush();
+	void beginPush(const QObject* holder);
 	void endPush();
-	[[nodiscard]] bool mutationInFlight() const { return _mutationInFlight; }
-	[[nodiscard]] bool pushInFlight() const { return _pushInFlight; }
-	[[nodiscard]] bool writeInFlight() const { return _mutationInFlight || _pushInFlight; }
+	[[nodiscard]] bool mutationInFlight() const { return _mutationHolder != nullptr; }
+	[[nodiscard]] bool pushInFlight() const { return _pushHolder != nullptr; }
+	[[nodiscard]] bool writeInFlight() const { return mutationInFlight() || pushInFlight(); }
+	// A window must not close while it holds a write: the answers would arrive after it is gone
+	[[nodiscard]] bool writeHeldBy(const QObject* holder) const { return _mutationHolder == holder || pushHeldBy(holder); }
+	[[nodiscard]] bool pushHeldBy(const QObject* holder) const { return _pushHolder == holder; }
 	// Refreshes now, or once no write is in flight: for a refresh no write flow asked for, which would land in that
 	// flow's dialogs and fail its StateStamp check
 	void refreshAfterWrites();
@@ -370,7 +374,7 @@ private:
 	std::vector<std::function<void()>> _pendingRefreshCallbacks; // for the coalesced run after the running one
 	uint64_t _refreshGeneration = 0;
 
-	bool _mutationInFlight = false;
-	bool _pushInFlight = false;
+	const QObject* _mutationHolder = nullptr;
+	const QObject* _pushHolder = nullptr;
 	bool _refreshDeferredByWrite = false;
 };

@@ -37,7 +37,7 @@ own under `doc/`:
 Dependencies point one way, top to bottom:
 
 - Windows: `commitwindow`, `historywindow`, `welcomewindow`, `fileviewerwindow`, `incomingchangesdialog`, `appmenus`, `settingspages`,
-  `recentrepositoriespanel`, and the views they compose - `diffpane`, `difftextview`, `filelistview`,
+  `recentrepositoriespanel`, `writeflow`, and the views they compose - `diffpane`, `difftextview`, `filelistview`,
   `filelistdelegate`, `consolelogview`, `messageedit`, `commitgraphdelegate`.
 - Models: `changedfilesmodel`, `historymodels`.
 - The repository boundary and the window registry: `repository`, `repositoryfactory`, `repositorywindows`,
@@ -90,6 +90,7 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `init_logging`, `up
 | `main` | Startup: the application log, on macOS the package managers' directories on PATH (see `invocation.md`), the application identity, the theme, the automatic update check, then the way in described in `repositories.md`. Ends the hg command servers once the event loop returns |
 | `appmenus` | The menus every window shares - File, Edit, Repository, Help: their actions need no repository. A commit window appends its own items to the Repository menu |
 | `welcomewindow` | The window shown with nothing to open: what the app needs, a folder chooser, the recent list. The one window without a repository |
+| `writeflow` | What every window's write flow shares: the refusal once the repository moved under a confirmation dialog (`refresh.md`) |
 | `fileviewerwindow` | Read-only text in a window of its own, on qtutils `CLightningFastViewerWidget` with a `CFindBar` under it: one file as of one commit, decoded where the bytes are text and a hex dump where they are not |
 | `incomingchangesdialog` | Check for Incoming Changes: the repository and its submodules one level down, checked in parallel and listed as they answer. See `remotes.md` |
 | `updatecheck` | The interactive and the automatic update check, see `updates.md` |

@@ -169,30 +169,30 @@ bool Repository::stateMatches(const StateStamp& stamp) const
 	return _refreshGeneration == stamp.refreshGeneration && probeOperation() == stamp.probedOp && probeHeadSha() == stamp.probedHeadSha;
 }
 
-void Repository::beginMutation()
+void Repository::beginMutation(const QObject* holder)
 {
-	assert_r(!_mutationInFlight);
-	_mutationInFlight = true;
+	assert_r(holder && !_mutationHolder);
+	_mutationHolder = holder;
 	emit writeStateChanged();
 }
 
 void Repository::endMutation()
 {
-	_mutationInFlight = false;
+	_mutationHolder = nullptr;
 	emit writeStateChanged();
 	runRefreshDeferredByWrite();
 }
 
-void Repository::beginPush()
+void Repository::beginPush(const QObject* holder)
 {
-	assert_r(!_pushInFlight);
-	_pushInFlight = true;
+	assert_r(holder && !_pushHolder);
+	_pushHolder = holder;
 	emit writeStateChanged();
 }
 
 void Repository::endPush()
 {
-	_pushInFlight = false;
+	_pushHolder = nullptr;
 	emit writeStateChanged();
 	runRefreshDeferredByWrite();
 }

@@ -89,7 +89,8 @@ HEADERS += \
 	src/vcsprocess.h \
 	src/vcstypes.h \
 	src/version.h \
-	src/welcomewindow.h
+	src/welcomewindow.h \
+	src/writeflow.h
 
 SOURCES += \
 	src/appmenus.cpp \
@@ -131,7 +132,8 @@ SOURCES += \
 	src/unifieddiff.cpp \
 	src/updatecheck.cpp \
 	src/vcsprocess.cpp \
-	src/welcomewindow.cpp
+	src/welcomewindow.cpp \
+	src/writeflow.cpp
 
 RESOURCES += res/theme.qrc
 

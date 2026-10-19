@@ -24,7 +24,8 @@ One repository on disk is also one `Repository` object (`sharedRepository()`), m
 every window and dialog on it until the last one closes. They share:
 
 - its state and refresh;
-- its write lock: a write started in one window disables the writing actions of every other;
+- its write lock: a write started in one window disables the writing actions of every other. The lock records
+  which window holds it, and only that one cannot close until the write ends;
 - its announcements: a history change or a push reaches every history view of it.
 
 Instances are independent: nothing stops a second process, and it may open a repository the first already

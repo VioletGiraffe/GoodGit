@@ -82,9 +82,6 @@ private:
 	[[nodiscard]] bool canActOnList() const;
 
 	using StateStamp = Repository::StateStamp;
-	// True when the repository no longer matches `stamp` (Repository::stateMatches()).
-	// Tells the user and queues a refresh before returning true.
-	[[nodiscard]] bool stateMovedSince(const StateStamp& stamp);
 
 	void startCommit(bool pushAfterwards);
 	void confirmUntrackedThenCommit(bool pushAfterwards, StateStamp decisionStamp);
@@ -196,8 +193,6 @@ private:
 
 	std::vector<PushStep> _pushSteps; // the running push's plan
 	std::vector<std::shared_ptr<Repository>> _pushedSubmodules; // their push locks are held until the push ends
-	// This window's push flow runs. The repository's push lock may instead be held by a parent's push.
-	bool _ownPushInFlight = false;
 
 	Vcs::Query _diffQuery; // whatever fills the diff pane: a file's diff, or a submodule's incoming commits
 	// The row whose text the pane showed last: a refresh showing it again returns to the same place
