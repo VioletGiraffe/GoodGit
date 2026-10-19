@@ -25,6 +25,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QFontMetricsF>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QHash>
 #include <QHeaderView>
 #include <QKeyEvent>
 #include <QLabel>
@@ -856,9 +857,12 @@ void HistoryWindow::addCheckoutMenu(QMenu& menu, const CommitRecord& commit)
 	};
 
 	QSet<QString> localNames;
+	QHash<QString, QString> remoteTrackingShas; // by name
 	for (const BranchTip& tip : _branchTips)
 	{
-		if (!tip.remoteTracking)
+		if (tip.remoteTracking)
+			remoteTrackingShas.insert(tip.name, tip.sha);
+		else
 			localNames.insert(tip.name);
 	}
 
@@ -868,6 +872,15 @@ void HistoryWindow::addCheckoutMenu(QMenu& menu, const CommitRecord& commit)
 			continue;
 		QAction* action = addTarget(tip.checkedOutElsewhere ? tr("'%1' (checked out in another worktree)").arg(tip.name) : tr("'%1'").arg(tip.name),
 			{ .kind = CheckoutTarget::Kind::Branch, .branch = tip.name, .sha = commit.sha });
+		action->setEnabled(!tip.checkedOutElsewhere);
+	}
+	for (const BranchTip& tip : _branchTips)
+	{
+		if (!tip.fastForwardable || remoteTrackingShas.value(tip.upstream) != commit.sha)
+			continue;
+		const QString text = tr("'%1' fast-forwarded to %2").arg(tip.name, tip.upstream);
+		QAction* action = addTarget(tip.checkedOutElsewhere ? tr("%1 (checked out in another worktree)").arg(text) : text,
+			{ .kind = CheckoutTarget::Kind::FastForward, .branch = tip.name, .sha = commit.sha });
 		action->setEnabled(!tip.checkedOutElsewhere);
 	}
 	for (const BranchTip& tip : _branchTips)

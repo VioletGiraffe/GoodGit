@@ -142,7 +142,8 @@ inline constexpr char RemoteBranchRefFormat[] = "%(refname)%1f%(objectname)%1f%(
 
 // US-separated, as LocalBranchRefFormat. %(HEAD) is "*" on the branch HEAD is on; %(worktreepath) is set for every
 // worktree's branch, this one's included.
-inline constexpr char BranchTipFormat[] = "%(refname)%1f%(objectname)%1f%(HEAD)%1f%(if)%(worktreepath)%(then)1%(end)%1f%(symref)";
+inline constexpr char BranchTipFormat[] =
+	"%(refname)%1f%(objectname)%1f%(HEAD)%1f%(if)%(worktreepath)%(then)1%(end)%1f%(symref)%1f%(upstream)%1f%(upstream:track,nobracket)";
 
 // Input: `for-each-ref --format=<BranchTipFormat> refs/heads refs/remotes` output. A symbolic ref is skipped.
 [[nodiscard]] std::vector<BranchTip> parseBranchTips(const QByteArray& forEachRefOutput);

@@ -431,16 +431,20 @@ std::vector<RemoteBranchRef> parseRemoteBranchRefs(const QByteArray& forEachRefO
 std::vector<BranchTip> parseBranchTips(const QByteArray& forEachRefOutput)
 {
 	std::vector<BranchTip> tips;
-	forEachRefRecord(forEachRefOutput, 5, [&tips](const QList<QByteArray>& fields) {
+	forEachRefRecord(forEachRefOutput, 7, [&tips](const QList<QByteArray>& fields) {
 		if (!fields[4].isEmpty())
 			return; // a symbolic ref names another listed branch
 
 		const bool remoteTracking = fields[0].startsWith("refs/remotes/");
 		const bool current = fields[2] == "*";
 		const QString name = withoutPrefix(fields[0], remoteTracking ? "refs/remotes/" : "refs/heads/");
+		// An upstream that is a local branch is left out: the menu fast-forwards only to remote-tracking ones
+		const bool remoteUpstream = fields[5].startsWith("refs/remotes/");
 		tips.push_back({ .name = name, .sha = QString::fromUtf8(fields[1]), .remoteTracking = remoteTracking,
 			.localName = remoteTracking ? localBranchNameFor(name) : QString{}, .current = current,
-			.checkedOutElsewhere = fields[3] == "1" && !current });
+			.checkedOutElsewhere = fields[3] == "1" && !current,
+			.upstream = remoteUpstream ? withoutPrefix(fields[5], "refs/remotes/") : QString{},
+			.fastForwardable = remoteUpstream && fields[6].startsWith("behind ") }); // track: "ahead N, behind M" when diverged
 	});
 	return tips;
 }

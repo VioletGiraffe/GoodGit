@@ -14,6 +14,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QTimer>
 RESTORE_COMPILER_WARNINGS
 
+#include <algorithm>
 #include <expected>
 #include <utility>
 #include <vector>
@@ -290,7 +291,7 @@ TEST_CASE("A history walk covers every ref, the checkout and its upstream, or on
 	CHECK(subjects({ .scope = Scope::CheckedOut }) == QStringList{ QStringLiteral("base") });
 }
 
-TEST_CASE("A checkout puts HEAD on a branch, on a new branch tracking a remote-tracking one, or detaches it", "[git]")
+TEST_CASE("A checkout puts HEAD on a branch, on one fast-forwarded to its upstream, on a new branch tracking a remote-tracking one, or detaches it", "[git]")
 {
 	const ScratchRepository scratch;
 	scratch.write(QStringLiteral("file.txt"), "one\n");
@@ -299,8 +300,10 @@ TEST_CASE("A checkout puts HEAD on a branch, on a new branch tracking a remote-t
 	scratch.git({ QStringLiteral("branch"), QStringLiteral("side") });
 	scratch.write(QStringLiteral("file.txt"), "two\n");
 	scratch.commitAll(QStringLiteral("two"));
+	const QString second = scratch.sha(QStringLiteral("HEAD"));
 	scratch.setUpstreamOfMainToOriginMain(); // the fetch refspec a tracking branch is set up from
 	scratch.git({ QStringLiteral("update-ref"), QStringLiteral("refs/remotes/origin/feature"), first });
+	scratch.git({ QStringLiteral("update-ref"), QStringLiteral("refs/remotes/origin/main"), second });
 
 	GitRepository repository{ scratch.root() };
 	const auto checkOut = [&](const CheckoutTarget& target) {
@@ -335,6 +338,45 @@ TEST_CASE("A checkout puts HEAD on a branch, on a new branch tracking a remote-t
 		scratch.write(QStringLiteral("file.txt"), "uncommitted\n");
 		CHECK_FALSE(checkOut({ .kind = CheckoutTarget::Kind::Branch, .branch = QStringLiteral("side"), .sha = first }).has_value());
 		CHECK(scratch.headName() == QStringLiteral("main"));
+	}
+
+	SECTION("a branch behind its upstream, fast-forwarded: the current one, or another one HEAD goes on")
+	{
+		scratch.git({ QStringLiteral("reset"), QStringLiteral("-q"), QStringLiteral("--hard"), first });
+		scratch.git({ QStringLiteral("branch"), QStringLiteral("-q"), QStringLiteral("--set-upstream-to=origin/main"), QStringLiteral("side") });
+		const std::vector<BranchTip> tips = requireSuccess(awaitAnswer<std::vector<BranchTip>>(
+			[&](Vcs::Answer<std::vector<BranchTip>> onDone) { repository.branchTips(&repository, std::move(onDone)); }));
+		const auto mainTip = std::ranges::find(tips, QStringLiteral("main"), &BranchTip::name);
+		REQUIRE(mainTip != tips.end());
+		CHECK(mainTip->upstream == QStringLiteral("origin/main"));
+		CHECK(mainTip->fastForwardable);
+
+		requireSuccess(checkOut({ .kind = CheckoutTarget::Kind::FastForward, .branch = QStringLiteral("main"), .sha = second }));
+		CHECK(scratch.headName() == QStringLiteral("main"));
+		CHECK(scratch.sha(QStringLiteral("HEAD")) == second);
+		CHECK(scratch.sha(QStringLiteral("main@{upstream}")) == second); // the upstream kept
+
+		requireSuccess(checkOut({ .kind = CheckoutTarget::Kind::FastForward, .branch = QStringLiteral("side"), .sha = second }));
+		CHECK(scratch.headName() == QStringLiteral("side"));
+		CHECK(scratch.sha(QStringLiteral("HEAD")) == second);
+	}
+
+	SECTION("a fast-forward fails, and nothing moves, once the branch has a commit of its own")
+	{
+		scratch.git({ QStringLiteral("reset"), QStringLiteral("-q"), QStringLiteral("--hard"), first });
+		scratch.write(QStringLiteral("other.txt"), "own\n");
+		scratch.commitAll(QStringLiteral("own"));
+		const QString own = scratch.sha(QStringLiteral("HEAD"));
+		CHECK_FALSE(checkOut({ .kind = CheckoutTarget::Kind::FastForward, .branch = QStringLiteral("main"), .sha = second }).has_value());
+		CHECK(scratch.sha(QStringLiteral("main")) == own);
+	}
+
+	SECTION("a fast-forward fails, and nothing moves, over an uncommitted change it would overwrite")
+	{
+		scratch.git({ QStringLiteral("reset"), QStringLiteral("-q"), QStringLiteral("--hard"), first });
+		scratch.write(QStringLiteral("file.txt"), "uncommitted\n");
+		CHECK_FALSE(checkOut({ .kind = CheckoutTarget::Kind::FastForward, .branch = QStringLiteral("main"), .sha = second }).has_value());
+		CHECK(scratch.sha(QStringLiteral("main")) == first);
 	}
 }
 

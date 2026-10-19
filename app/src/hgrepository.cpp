@@ -912,7 +912,8 @@ void HgRepository::reattachHead(const ReattachCandidate& /*candidate*/, Vcs::Ans
 
 void HgRepository::checkOut(const CheckoutTarget& target, Vcs::Answer<void> onDone)
 {
-	assert_r(target.kind != CheckoutTarget::Kind::TrackingBranch); // branchTips() lists no remote-tracking branch
+	// branchTips() lists no remote-tracking branch and no upstream
+	assert_r(target.kind != CheckoutTarget::Kind::TrackingBranch && target.kind != CheckoutTarget::Kind::FastForward);
 	// A bookmark named as the revision is activated; a node leaves none active
 	const QString revision = target.kind == CheckoutTarget::Kind::Branch ? target.branch : target.sha;
 	Hg::run(path(), { QStringLiteral("--config"), QStringLiteral("commands.update.check=noconflict"), QStringLiteral("update"),

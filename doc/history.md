@@ -87,6 +87,9 @@ no diff for one without `--cc`, so merges are detected from the parent count rat
 The window's one write. A commit row's **Check out** lists each way HEAD can be put on that commit:
 
 - each local branch there, or hg bookmark, but the current one. One checked out in another worktree is shown disabled.
+- git: each local branch whose upstream is there, behind it and not ahead, fast-forwarded to it, the current one
+  included. The move is re-checked to be a fast-forward before it runs: the branch may have moved since the menu
+  was built.
 - a new local branch tracking each remote-tracking branch there, where that local name is free.
 - the commit itself, except the current one: git detaches HEAD, hg updates with no bookmark active.
 

@@ -105,6 +105,8 @@ struct BranchTip
 	QString localName; // remote-tracking only: the name a local branch tracking it takes
 	bool current = false;             // local only: HEAD is on it
 	bool checkedOutElsewhere = false; // local only: another worktree is on it, so this one cannot be
+	QString upstream;                 // local only: the remote-tracking branch it tracks, "origin/main"; empty if it tracks none
+	bool fastForwardable = false;     // local only: behind its upstream and not ahead of it
 };
 
 // Where a checkout puts HEAD and the working tree
@@ -114,11 +116,12 @@ struct CheckoutTarget
 	{
 		Branch,         // an existing local branch, or a Mercurial bookmark: HEAD goes on it
 		TrackingBranch, // a new local branch at a remote-tracking branch's tip, tracking it: HEAD goes on it
+		FastForward,    // an existing local branch, moved forward to the commit: HEAD goes on it
 		Commit,         // the commit itself: git detaches HEAD; Mercurial updates with no bookmark active
 	};
 
 	Kind kind = Kind::Commit;
-	QString branch;   // Branch, TrackingBranch: the local branch
+	QString branch;   // Branch, TrackingBranch, FastForward: the local branch
 	QString upstream; // TrackingBranch: the remote-tracking branch, "origin/main"
 	QString sha;      // the commit the working tree moves to
 };

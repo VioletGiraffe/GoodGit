@@ -1199,11 +1199,29 @@ void GitRepository::checkOut(const CheckoutTarget& target, Vcs::Answer<void> onD
 		// The full ref: a local branch may be named like a remote-tracking one
 		args << QStringLiteral("-c") << target.branch << QStringLiteral("--track") << QStringLiteral("refs/remotes/") + target.upstream;
 		break;
+	case CheckoutTarget::Kind::FastForward:
+		args << QStringLiteral("-C") << target.branch << target.sha;
+		break;
 	case CheckoutTarget::Kind::Commit:
 		args << QStringLiteral("--detach") << target.sha;
 		break;
 	}
-	Git::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));
+	if (target.kind != CheckoutTarget::Kind::FastForward)
+	{
+		Git::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));
+		return;
+	}
+
+	// -C resets the branch to any commit, so the move is checked to be a fast-forward: the branch may have moved since the menu was built
+	Git::run(path(), { QStringLiteral("merge-base"), QStringLiteral("--is-ancestor"), QStringLiteral("refs/heads/") + target.branch, target.sha }, this,
+		[this, args = std::move(args), branch = target.branch, onDone = std::move(onDone)](const ProcessResult& ancestry) mutable {
+			if (ancestry.ok)
+				Git::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));
+			else if (ancestry.outcome == ProcessOutcome::Exited && ancestry.exitCode == 1) // not an ancestor
+				onDone(std::unexpected(QObject::tr("'%1' has commits that are not in the selected commit, so it cannot be fast-forwarded to it.").arg(branch)));
+			else
+				onDone(std::unexpected(ancestry.errorText()));
+		}, {}, /*readOnlyQuery=*/true);
 }
 
 QString GitRepository::diffBase() const
