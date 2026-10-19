@@ -39,5 +39,8 @@ cd "${SCRIPT_DIR}/../tests" || exit 2
 find "${SCRIPT_DIR}/.." -name .qmake.stash -delete
 "${QMAKE}" -r tests.pro CONFIG+="${CONFIG}" || exit 1
 make -j"$(getconf _NPROCESSORS_ONLN)" || exit 1
+# The backend tests run these
+git --version
+hg --version -q
 # --warn NoTests: a filter that matches nothing exits 0 otherwise, so a broken one would pass silently
 exec "bin/${CONFIG}/tests" "$@" --warn NoTests

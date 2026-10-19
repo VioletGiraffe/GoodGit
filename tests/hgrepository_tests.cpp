@@ -340,7 +340,7 @@ TEST_CASE("An hg subrepo gets a row for modified files inside, and none for untr
 	SECTION("untracked files inside")
 	{
 		scratch.write(QStringLiteral("sub/untracked.txt"), "new\n");
-		CHECK(scratch.refreshed().first.empty());
+		CHECK(describedRows(scratch.refreshed().first) == "");
 	}
 
 	SECTION("a modified tracked file inside")
@@ -368,7 +368,7 @@ TEST_CASE("An hg commit of a subrepo row records its pointer and leaves the unkn
 
 	CHECK(scratch.hgOutput({ QStringLiteral("status") }, QStringLiteral("sub")) == QStringLiteral("? unknown.txt\n"));
 	CHECK(scratch.hgOutput({ QStringLiteral("status") }).isEmpty());
-	CHECK(scratch.refreshed().first.empty()); // the pointer is recorded
+	CHECK(describedRows(scratch.refreshed().first) == ""); // the pointer is recorded
 }
 
 TEST_CASE("An hg commit records a missing file's removal, and keeps a forgotten file removed", "[hg]")

@@ -23,6 +23,7 @@ RESTORE_COMPILER_WARNINGS
 #include <expected>
 #include <functional>
 #include <optional>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -131,4 +132,45 @@ inline void refreshToCompletion(Repository& repository)
 	for (const FileEntry& file : files)
 		paths.push_back(file.path);
 	return paths;
+}
+
+[[nodiscard]] inline const char* nameOf(ChangeType type)
+{
+	switch (type)
+	{
+	case ChangeType::Modified: return "Modified";
+	case ChangeType::Added: return "Added";
+	case ChangeType::Untracked: return "Untracked";
+	case ChangeType::Deleted: return "Deleted";
+	case ChangeType::Renamed: return "Renamed";
+	case ChangeType::TypeChanged: return "TypeChanged";
+	case ChangeType::Conflicted: return "Conflicted";
+	}
+	return "?";
+}
+
+[[nodiscard]] inline const char* nameOf(SubmoduleContent content)
+{
+	switch (content)
+	{
+	case SubmoduleContent::Clean: return "Clean";
+	case SubmoduleContent::Untracked: return "Untracked";
+	case SubmoduleContent::DirtyTracked: return "DirtyTracked";
+	case SubmoduleContent::Unknown: return "Unknown";
+	}
+	return "?";
+}
+
+// The rows, one per line, for a failed check to print: `CHECK(describedRows(files) == "")` asserts there are none
+[[nodiscard]] inline std::string describedRows(const std::vector<FileEntry>& files)
+{
+	std::string text;
+	for (const FileEntry& file : files)
+	{
+		text += file.path.toStdString() + ": " + nameOf(file.type);
+		if (file.isSubmodule)
+			text += std::string{ ", submodule, pointer " } + (file.pointerMoved ? "moved" : "unmoved") + ", content " + nameOf(file.content);
+		text += '\n';
+	}
+	return text;
 }

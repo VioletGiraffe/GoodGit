@@ -210,7 +210,7 @@ TEST_CASE("A submodule gets a row for modified files inside, and none for untrac
 	SECTION("untracked files inside")
 	{
 		scratch.write(QStringLiteral("sub/untracked.txt"), "new\n");
-		CHECK(scratch.refreshed().first.empty());
+		CHECK(describedRows(scratch.refreshed().first) == "");
 	}
 
 	SECTION("a modified tracked file inside")
@@ -246,7 +246,7 @@ TEST_CASE("Discarding a moved submodule pointer checks the recorded commit out i
 	GitRepository repository{ scratch.root() };
 	requireSuccess(awaitAnswer<void>([&](Vcs::Answer<void> onDone) { repository.discardChanges({ QStringLiteral("sub") }, std::move(onDone)); }));
 
-	CHECK(scratch.refreshed().first.empty());
+	CHECK(describedRows(scratch.refreshed().first) == "");
 }
 
 TEST_CASE("A history walk covers every ref, the checkout and its upstream, or one branch, a branch named like a file included", "[git]")

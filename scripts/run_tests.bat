@@ -31,6 +31,9 @@ for /f "usebackq delims=" %%s in (`dir /s /b /a-d "%SCRIPT_DIR%..\.qmake.stash" 
 :: msbuild, not nmake: it also rebuilds what the compiler command line changed for, such as the Qt include paths
 msbuild tests.sln /nologo /m /v:minimal /p:Configuration=%CONFIG% /p:Platform=x64 || goto :fail
 popd
+:: The backend tests run these; call: hg may be a batch wrapper, which would otherwise end this script
+git --version
+call hg --version -q
 :: --warn NoTests: a filter that matches nothing exits 0 otherwise, so a broken one would pass silently
 "%SCRIPT_DIR%..\tests\bin\%CONFIG%\tests.exe" %1 %2 %3 %4 %5 --warn NoTests
 exit /b %errorlevel%
