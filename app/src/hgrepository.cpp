@@ -120,6 +120,7 @@ QString quotedRevsetSymbol(const QString& name)
 
 // Every changeset without -r. -f is the rename tracing a file history needs, inseparable from the restriction to the
 // ancestors of one revision, `.` unless -r names another (doc/history.md).
+// A pathless CheckedOut also walks the public heads of `.`'s named branch: a pull moves them past `.` without updating to them.
 // Must precede the pattern and the pathspec, which are positional.
 void appendRevisionScope(QStringList& args, const Repository::LogQuery& query)
 {
@@ -129,7 +130,7 @@ void appendRevisionScope(QStringList& args, const Repository::LogQuery& query)
 	if (query.scope == Scope::Tip)
 		args << QStringLiteral("-r") << (query.path.isEmpty() ? QStringLiteral("reverse(ancestors(%1))") : QStringLiteral("%1")).arg(quotedRevsetSymbol(query.tip));
 	else if (query.scope == Scope::CheckedOut && query.path.isEmpty())
-		args << QStringLiteral("-r") << QStringLiteral("reverse(ancestors(.))");
+		args << QStringLiteral("-r") << QStringLiteral("reverse(ancestors(. or heads(branch(.) and public())))");
 }
 
 // Must come last: the pathspec closes the argument list

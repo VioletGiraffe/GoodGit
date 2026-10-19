@@ -248,7 +248,7 @@ TEST_CASE("Discarding a moved submodule pointer checks the recorded commit out i
 	CHECK(scratch.refreshed().first.empty());
 }
 
-TEST_CASE("A history walk covers every ref, the checkout alone, or one branch, a branch named like a file included", "[git]")
+TEST_CASE("A history walk covers every ref, the checkout and its upstream, or one branch, a branch named like a file included", "[git]")
 {
 	using Scope = Repository::LogQuery::Scope;
 	const ScratchRepository scratch;
@@ -278,6 +278,16 @@ TEST_CASE("A history walk covers every ref, the checkout alone, or one branch, a
 	CHECK(subjects({ .scope = Scope::Tip, .tip = QStringLiteral("file.txt") }) == QStringList{ QStringLiteral("base") });
 	CHECK(subjects({ .scope = Scope::Tip, .tip = QStringLiteral("main"), .path = QStringLiteral("file.txt") })
 		== QStringList{ QStringLiteral("on main"), QStringLiteral("base") });
+
+	// main behind its upstream, as after a fetch
+	scratch.git({ QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("main") });
+	scratch.git({ QStringLiteral("update-ref"), QStringLiteral("refs/remotes/origin/main"), QStringLiteral("main") });
+	scratch.git({ QStringLiteral("reset"), QStringLiteral("-q"), QStringLiteral("--hard"), QStringLiteral("HEAD~1") });
+	scratch.setUpstreamOfMainToOriginMain();
+	CHECK(subjects({ .scope = Scope::CheckedOut }) == QStringList{ QStringLiteral("on main"), QStringLiteral("base") });
+	CHECK(subjects({ .scope = Scope::CheckedOut, .path = QStringLiteral("file.txt") }) == QStringList{ QStringLiteral("base") });
+	scratch.git({ QStringLiteral("update-ref"), QStringLiteral("-d"), QStringLiteral("refs/remotes/origin/main") }); // the upstream gone
+	CHECK(subjects({ .scope = Scope::CheckedOut }) == QStringList{ QStringLiteral("base") });
 }
 
 TEST_CASE("A checkout puts HEAD on a branch, on a new branch tracking a remote-tracking one, or detaches it", "[git]")

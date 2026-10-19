@@ -274,7 +274,8 @@ void appendPickaxe(QStringList& args, const Repository::LogQuery& query, bool co
 // Every ref: not --all, which also walks refs/stash and refs/notes. HEAD by name: a detached checkout is on no branch.
 // Every ref with a path: git's default of HEAD alone. --follow tracks one path and rewrites it at each rename it
 // crosses, so a second tip in the walk carries that path onto a line of history that never held it.
-void appendRevisionScope(QStringList& args, const Repository::LogQuery& query)
+// `upstreamSha`: CheckedOut only, walked beside HEAD unless empty.
+void appendRevisionScope(QStringList& args, const Repository::LogQuery& query, const QString& upstreamSha)
 {
 	using Scope = Repository::LogQuery::Scope;
 	switch (query.scope)
@@ -285,6 +286,8 @@ void appendRevisionScope(QStringList& args, const Repository::LogQuery& query)
 		break;
 	case Scope::CheckedOut:
 		args << QStringLiteral("HEAD");
+		if (!upstreamSha.isEmpty())
+			args << upstreamSha;
 		break;
 	case Scope::Tip:
 		args << query.tip;
@@ -316,6 +319,28 @@ Vcs::Query runQuery(const QString& workDir, QStringList args, const QObject* con
 	Vcs::Job* job = Git::run(workDir, std::move(args), context, std::move(callback), {}, /*readOnlyQuery=*/true);
 	job->limitOutput(maxOutputBytes);
 	return Vcs::Query{ job };
+}
+
+// Runs a commit-listing query, `args` holding everything before the walk.
+// A pathless CheckedOut walk also covers the upstream, resolved first: a walk naming @{upstream} fails where there is none.
+Vcs::Query runWalk(const QString& workDir, QStringList args, const Repository::LogQuery& query, const QObject* context, Vcs::Callback callback)
+{
+	if (query.scope != Repository::LogQuery::Scope::CheckedOut || !query.path.isEmpty())
+	{
+		appendRevisionScope(args, query, {});
+		appendPathLimit(args, query);
+		return runQuery(workDir, std::move(args), context, std::move(callback));
+	}
+
+	Vcs::Query walk;
+	walk.attach(Git::run(workDir, { QStringLiteral("rev-parse"), QStringLiteral("--verify"), QStringLiteral("-q"), QStringLiteral("@{upstream}") }, context,
+		[walk, workDir, args = std::move(args), query, context, callback = std::move(callback)](const ProcessResult& upstream) mutable {
+			// Fails on a detached HEAD, a branch with no upstream, and one whose upstream ref is gone
+			appendRevisionScope(args, query, upstream.ok ? QString::fromLatin1(upstream.out.trimmed()) : QString{});
+			appendPathLimit(args, query);
+			walk.attach(Git::run(workDir, std::move(args), context, std::move(callback), {}, /*readOnlyQuery=*/true));
+		}, {}, /*readOnlyQuery=*/true));
+	return walk;
 }
 
 // A submodule the push plan visits. Filled as the scan answers and read only once every query has, so the
@@ -1215,9 +1240,7 @@ Vcs::Query GitRepository::commitLog(const LogQuery& query, const QObject* contex
 {
 	QStringList args = commitLogArgs(query.maxCommits);
 	appendPickaxe(args, query, /*countChangesOnly=*/false);
-	appendRevisionScope(args, query);
-	appendPathLimit(args, query);
-	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Git::parseCommitLog));
+	return runWalk(path(), std::move(args), query, context, Vcs::answering(std::move(onDone), Git::parseCommitLog));
 }
 
 Vcs::Query GitRepository::commitsAddingOrRemovingText(const LogQuery& query, const QObject* context, Vcs::Answer<QSet<QString>> onDone)
@@ -1225,16 +1248,14 @@ Vcs::Query GitRepository::commitsAddingOrRemovingText(const LogQuery& query, con
 	QStringList args = { QStringLiteral("log"), QStringLiteral("--max-count=%1").arg(query.maxCommits),
 		QStringLiteral("--format=%H") };
 	appendPickaxe(args, query, /*countChangesOnly=*/true);
-	appendRevisionScope(args, query);
-	appendPathLimit(args, query);
-	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), shaSet));
+	return runWalk(path(), std::move(args), query, context, Vcs::answering(std::move(onDone), shaSet));
 }
 
 Vcs::Query GitRepository::historyFingerprint(const QObject* context, Vcs::Answer<QString> onDone)
 {
 	// The tips a pathless walk starts from, each with the ref names the listing shows on it
 	QStringList args{ QStringLiteral("log"), QStringLiteral("--no-walk"), QStringLiteral("--format=%H %D") };
-	appendRevisionScope(args, LogQuery{});
+	appendRevisionScope(args, LogQuery{}, {});
 	return runQuery(path(), std::move(args), context, Vcs::answering(std::move(onDone), Vcs::outputAsTrimmedText));
 }
 

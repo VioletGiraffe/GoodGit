@@ -172,7 +172,7 @@ TEST_CASE("An hg commit adds a head where the parent has a child on the working 
 	CHECK_FALSE(scratch.refreshed().second.commitAddsHead);
 }
 
-TEST_CASE("An hg history walk covers every changeset, the working directory's ancestry, or one bookmark's or named branch's", "[hg]")
+TEST_CASE("An hg history walk covers every changeset, the working directory's ancestry and its branch's public heads, or one bookmark's or named branch's", "[hg]")
 {
 	using Scope = Repository::LogQuery::Scope;
 	const ScratchHgRepository scratch;
@@ -218,6 +218,16 @@ TEST_CASE("An hg history walk covers every changeset, the working directory's an
 	CHECK(tips[2].name == QStringLiteral("mark"));
 	CHECK_FALSE(tips[2].namedBranch);
 	CHECK(tips[2].sha == tips[1].sha);
+
+	// The working directory behind the published head of its branch, as after a pull, beside a draft head of its own:
+	// the published head is listed, the draft head is not
+	scratch.hg({ QStringLiteral("phase"), QStringLiteral("-q"), QStringLiteral("--public"), QStringLiteral("-r"), QStringLiteral("2") });
+	scratch.hg({ QStringLiteral("update"), QStringLiteral("-q"), QStringLiteral("-r"), QStringLiteral("0") });
+	scratch.write(QStringLiteral("file.txt"), "draft\n");
+	scratch.commitAll(QStringLiteral("draft head"));
+	scratch.hg({ QStringLiteral("update"), QStringLiteral("-q"), QStringLiteral("-r"), QStringLiteral("0") });
+	CHECK(subjects({ .scope = Scope::CheckedOut }) == QStringList{ QStringLiteral("on default"), QStringLiteral("base") });
+	CHECK(subjects({ .scope = Scope::CheckedOut, .path = QStringLiteral("file.txt") }) == QStringList{ QStringLiteral("base") });
 }
 
 TEST_CASE("An hg checkout updates to a bookmark and activates it, or to a revision leaving no bookmark active", "[hg]")

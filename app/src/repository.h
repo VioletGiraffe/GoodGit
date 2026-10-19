@@ -283,7 +283,7 @@ public:
 		enum class Scope : uint8_t
 		{
 			EveryRef,   // every branch, tag and the checkout; with a path, the checkout alone (see `path`)
-			CheckedOut, // the working tree's commit
+			CheckedOut, // the working tree's commit and its upstream, so incoming commits are listed; with a path, the commit alone
 			Tip,        // the branch `tip` names
 		};
 

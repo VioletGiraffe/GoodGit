@@ -19,18 +19,20 @@ was read: a reload re-walks the whole limit and re-centres the view.
 
 The **branch selector** in the log bar picks whose history the walk covers (`LogQuery::Scope`):
 
-- **Checked out**, the default: the working tree's commit and its ancestors, so the user's own line is at the top
-  and other branches' commits are out of the way.
+- **Checked out**, the default: the working tree's commit and its upstream, with their ancestors, so the user's own
+  line is at the top, incoming commits above it, and other branches' commits out of the way. The upstream is git's
+  `@{upstream}`; Mercurial has none and takes the public heads of the checkout's named branch, which a pull moves
+  without updating to them.
 - **All branches**: every ref - git's `--branches --tags --remotes HEAD` (not `--all`, which adds `refs/stash` and
   `refs/notes`), Mercurial's plain `log` - so commits above the checkout, on other branches, and fetched but
   unmerged are listed.
 - One branch: a local or remote-tracking branch, an hg bookmark or named branch, from `branchTips()`.
 
-A **file history has no All branches**: the rename tracing both systems spell `--follow`/`-f` rewrites the one path
-it tracks at each rename it crosses, for the whole walk, so a second tip in it would carry that path onto a line of
-history that never held it. The content search takes the scope of the listing it filters. A reveal the scoped
-listing does not hold widens the scope to All branches once: a submodule's recorded commit need not be on its
-checkout's line. A selected branch that is gone falls back to Checked out. The selection is per window, not stored.
+A **file history has no All branches**, and its Checked out leaves the upstream out: the rename tracing both systems
+spell `--follow`/`-f` rewrites the one path it tracks at each rename it crosses, for the whole walk, so a second tip
+in it would carry that path onto a line of history that never held it. The content search takes the scope of the
+listing it filters. A reveal the scoped listing does not hold widens the scope to All branches once: a submodule's
+recorded commit need not be on its checkout's line. A selected branch that is gone falls back to Checked out. The selection is per window, not stored.
 
 The lane diagram (`commitgraph`) is computed from the parent links alone, so one implementation serves both
 backends. It needs a **topologically ordered** listing, every commit above all its parents: git's walk
