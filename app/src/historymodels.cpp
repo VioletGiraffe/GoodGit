@@ -89,11 +89,29 @@ QString pathText(const CommitFileChange& entry)
 	return entry.oldPath.isEmpty() ? entry.path : QStringLiteral("%1 (was %2)").arg(entry.path, entry.oldPath);
 }
 
+QFont boldAndLarger(QFont font, qreal extraPoints)
+{
+	font.setWeight(QFont::Bold);
+	if (font.pointSizeF() > 0) // not for a font sized in pixels
+		font.setPointSizeF(font.pointSizeF() + extraPoints);
+	return font;
+}
+
 } // namespace
 
 QString shortSha(const QString& sha)
 {
 	return sha.left(8);
+}
+
+QFont checkedOutCommitIdFont()
+{
+	return boldAndLarger(monospaceFont(), 1.0);
+}
+
+QFont checkedOutSubjectFont()
+{
+	return boldAndLarger(QApplication::font(), 0.5);
 }
 
 CommitLogModel::CommitLogModel(QObject* parent) :
@@ -314,29 +332,21 @@ QVariant CommitLogModel::data(const QModelIndex& index, int role) const
 		return {};
 	case Qt::FontRole:
 	{
+		const bool current = commit.sha == _currentSha;
 		if (index.column() == SubjectColumn)
 		{
-			const bool current = commit.sha == _currentSha;
 			const bool ahead = graphRowAt(index.row()).ahead;
 			if (!current && !ahead && !addsOrRemoves)
 				return {};
-			QFont font = QApplication::font();
-			if (current)
-				font.setWeight(QFont::Bold);
-			else if (addsOrRemoves)
+			QFont font = current ? checkedOutSubjectFont() : QApplication::font();
+			if (addsOrRemoves && !current)
 				font.setWeight(QFont::DemiBold);
 			font.setItalic(ahead);
-			// Half a point: the view keeps one row height for all rows, and a whole one clips in a tight theme
-			if (current && font.pointSizeF() > 0)
-				font.setPointSizeF(font.pointSizeF() + 0.5);
 			return font;
 		}
 		if (index.column() != CommitColumn)
 			return {};
-		QFont font = monospaceFont();
-		if (unpushed)
-			font.setWeight(QFont::DemiBold);
-		return font;
+		return current ? checkedOutCommitIdFont() : monospaceFont();
 	}
 	case Qt::ForegroundRole:
 		// The same accent as the commit window's ahead count

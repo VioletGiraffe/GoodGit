@@ -6,6 +6,7 @@
 DISABLE_COMPILER_WARNINGS
 #include <QAbstractTableModel>
 #include <QDateTime>
+#include <QFont>
 #include <QSet>
 RESTORE_COMPILER_WARNINGS
 
@@ -14,6 +15,9 @@ RESTORE_COMPILER_WARNINGS
 #include <vector>
 
 [[nodiscard]] QString shortSha(const QString& sha);
+// CommitLogModel's fonts for the checked-out commit
+[[nodiscard]] QFont checkedOutCommitIdFont(); // CommitColumn: the monospace font, bold and a point larger
+[[nodiscard]] QFont checkedOutSubjectFont();  // SubjectColumn: the UI font, bold and half a point larger by design
 
 // The commit list, in the backend's walk order: newest first, no commit before its children
 class CommitLogModel final : public QAbstractTableModel

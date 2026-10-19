@@ -320,7 +320,7 @@ body {
 /* Sha, author and date are dim; the subject is not, being the one the eye scans for. An unpushed
    commit takes the accent on its sha - the same mark the commit window's ahead count wears. */
 .c-sha { flex: 0 0 72px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; color: var(--dim); }
-.c-sha.unpushed { color: var(--accent-text); font-weight: 600; }
+.c-sha.unpushed { color: var(--accent-text); }
 .c-subj { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .c-auth { flex: 0 0 96px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
 .c-date { flex: 0 0 232px; color: var(--dim); }

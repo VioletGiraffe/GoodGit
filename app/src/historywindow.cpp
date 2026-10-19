@@ -22,6 +22,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFontMetrics>
 #include <QFontMetricsF>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -39,6 +40,8 @@ DISABLE_COMPILER_WARNINGS
 #include <QSettings>
 #include <QShortcut>
 #include <QSplitter>
+#include <QStyle>
+#include <QStyledItemDelegate>
 #include <QTextDocument>
 #include <QTimer>
 #include <QTreeView>
@@ -97,6 +100,31 @@ HistoryWindow* repositoryHistoryWindow(const QString& repositoryRoot)
 	}
 	return nullptr;
 }
+
+// Sizes every row of its column for the checked-out commit's font there: the view takes one row height from row 0,
+// and a ResizeToContents width from a sample of rows
+class CheckedOutFontSizeDelegate final : public QStyledItemDelegate
+{
+public:
+	CheckedOutFontSizeDelegate(QFont (*checkedOutFont)(), QObject* parent) :
+		QStyledItemDelegate(parent),
+		_checkedOutFont{ checkedOutFont }
+	{
+	}
+
+	QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override
+	{
+		QStyleOptionViewItem sizedOption = option;
+		initStyleOption(&sizedOption, index);
+		sizedOption.font = _checkedOutFont();
+		sizedOption.fontMetrics = QFontMetrics{ sizedOption.font };
+		const QStyle* style = sizedOption.widget ? sizedOption.widget->style() : QApplication::style();
+		return style->sizeFromContents(QStyle::CT_ItemViewItem, &sizedOption, QSize{}, sizedOption.widget);
+	}
+
+private:
+	QFont (*_checkedOutFont)();
+};
 
 } // namespace
 
@@ -192,6 +220,8 @@ void HistoryWindow::buildUi()
 	_logView->setSelectionBehavior(QAbstractItemView::SelectRows);
 	_logView->setContextMenuPolicy(Qt::CustomContextMenu);
 	_logView->setItemDelegateForColumn(CommitLogModel::GraphColumn, new CommitGraphDelegate{ _logView });
+	_logView->setItemDelegateForColumn(CommitLogModel::CommitColumn, new CheckedOutFontSizeDelegate{ checkedOutCommitIdFont, _logView });
+	_logView->setItemDelegateForColumn(CommitLogModel::SubjectColumn, new CheckedOutFontSizeDelegate{ checkedOutSubjectFont, _logView });
 	_logView->header()->setStretchLastSection(false); // Subject is the column to grow, not Date
 	_logView->header()->setSectionResizeMode(CommitLogModel::GraphColumn, QHeaderView::ResizeToContents);
 	_logView->header()->setSectionResizeMode(CommitLogModel::CommitColumn, QHeaderView::ResizeToContents);
