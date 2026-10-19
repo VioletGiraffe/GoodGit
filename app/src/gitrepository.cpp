@@ -248,11 +248,12 @@ QStringList commitFilesArgs(const QString& sha, const QString& outputFormat, con
 }
 
 // The base of every commit-listing query; the caller appends the walk.
-// --topo-order: no commit above any of its children, and each line of history contiguous, which the graph
-// needs. The default order only guarantees the former against the child a commit was first reached through.
+// --date-order: no commit above any of its children, which the graph needs; otherwise by commit date, so parallel
+// branches interleave. The default order only guarantees the former against the child a commit was first reached
+// through, and --topo-order lists each branch as one block.
 QStringList commitLogArgs(int maxCommits)
 {
-	return { QStringLiteral("log"), QStringLiteral("-z"), QStringLiteral("--topo-order"),
+	return { QStringLiteral("log"), QStringLiteral("-z"), QStringLiteral("--date-order"),
 		QStringLiteral("--max-count=%1").arg(maxCommits),
 		QStringLiteral("--format=") + QLatin1String(Git::CommitLogFormat) };
 }

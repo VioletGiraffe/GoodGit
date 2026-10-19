@@ -48,6 +48,31 @@ TEST_CASE("Linear history runs down one lane on one chain", "[commitgraph]")
 	}
 }
 
+TEST_CASE("Two branches interleaved by date each keep one lane and one chain across the other's rows", "[commitgraph]")
+{
+	// Newest first, as a date-ordered walk lists two branches committed alternately
+	const CommitGraph graph = buildCommitGraph({ commit("m2", parents({ "m1" })), commit("f2", parents({ "f1" })), commit("m1", parents({ "base" })),
+												commit("f1", parents({ "base" })), commit("base") }, {});
+	const GraphRow& m2 = graph.rows[0];
+	const GraphRow& f2 = graph.rows[1];
+	const GraphRow& m1 = graph.rows[2];
+	const GraphRow& f1 = graph.rows[3];
+	const GraphRow& base = graph.rows[4];
+
+	CHECK(graph.laneCount == 2);
+	CHECK(m1.lane == m2.lane);
+	CHECK(m1.chain == m2.chain);
+	CHECK(f1.lane == f2.lane);
+	CHECK(f1.chain == f2.chain);
+	CHECK(f2.lane != m2.lane);
+	CHECK(f2.chain != m2.chain);
+	// The main line passes the feature rows straight through
+	CHECK(std::ranges::any_of(f2.segments, [&](const GraphSegment& segment) { return segment.fromLane == m2.lane && segment.toLane == m2.lane; }));
+	// The base belongs to the leftmost line reaching it
+	CHECK(base.lane == 0);
+	CHECK(base.chain == graph.rows[0].chain);
+}
+
 TEST_CASE("A merge: the second parent opens a lane on a chain of its own, and the trunk keeps its lane past the branch point", "[commitgraph]")
 {
 	const CommitGraph graph = buildCommitGraph(mergeHistory(), {});

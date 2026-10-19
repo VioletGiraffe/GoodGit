@@ -26,7 +26,9 @@ content search takes the scope of the listing it filters.
 
 The lane diagram (`commitgraph`) is computed from the parent links alone, so one implementation serves both
 backends. It needs a **topologically ordered** listing, every commit above all its parents: git's walk
-carries `--topo-order`, and Mercurial's revision-descending order already is one. An unrelated head opens a
+carries `--date-order`, and Mercurial's revision-descending order already is one. Both interleave parallel
+branches by date, so they run side by side in the lanes; `--topo-order` would stack each branch as a block, the
+checkout's possibly thousands of rows below another branch's. An unrelated head opens a
 lane and a color of its own, having no child in the listing to inherit either from. The diagram is not
 drawn for a file history or a content search, since neither listing holds the commits between the ones it
 would join. A text search over the loaded records is the middle case: a chain is still one line of history,

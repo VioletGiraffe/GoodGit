@@ -72,7 +72,8 @@ Other format facts:
 - `-S` counts occurrences and takes its term literally. `-G` matches patch lines with a regex that
   `--fixed-strings` does not apply to, so a term must be escaped - an unescaped `foo(` aborts the query.
 - `log` default ordering only guarantees that a commit comes above the child it was first reached through.
-  `--topo-order` guarantees it against every child and keeps each line of history contiguous.
+  `--date-order` and `--topo-order` guarantee it against every child; the former then sorts by commit date, the
+  latter lists each line of history as one block.
 - `--all` means every ref under `refs/`, `refs/stash` and `refs/notes` included. `--branches --tags
   --remotes HEAD` is the same set without those two, and names a detached checkout, which is on no branch.
 - `--follow` tracks one path and rewrites it at each rename it crosses, for the whole walk and not just for
