@@ -206,6 +206,8 @@ struct RepoState
 	bool upstreamGone = false;
 	bool detached = false;
 	bool unborn = false;
+	// hg only: the parent has a child on the branch a commit lands on, so the commit adds another head to that branch
+	bool commitAddsHead = false;
 	RepoOp op = RepoOp::None;
 	OperationHint opHint; // meaningful only while `op` is set
 

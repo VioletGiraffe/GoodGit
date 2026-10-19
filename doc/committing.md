@@ -70,3 +70,9 @@ operation leaves HEAD on its branch, and a commit made during one attaches exact
 History's checkout of a commit detaches HEAD on purpose, to look at it (`history.md`). Committing there goes
 through the same candidates. A Move candidate then takes its branch back to the commit being looked at, so the
 way back is History's checkout of that branch, which its confirmation says.
+
+## Another hg head
+
+A Mercurial commit on a parent that is not a head of the working directory's branch adds another head to it. A
+strip says so, without blocking: anonymous heads are ordinary in hg, but a push refuses a second remote head until
+the two are merged. A pending `hg branch` lands the commit on the new branch, so no strip shows.

@@ -154,6 +154,23 @@ TEST_CASE("The hg history fingerprint moves with a bookmark and a commit, and st
 	CHECK(scratch.historyFingerprint() != bookmarked);
 }
 
+TEST_CASE("An hg commit adds a head where the parent has a child on the working directory's branch", "[hg]")
+{
+	const ScratchHgRepository scratch;
+	scratch.write(QStringLiteral("file.txt"), "base\n");
+	scratch.commitAll(QStringLiteral("base"));
+	scratch.write(QStringLiteral("file.txt"), "second\n");
+	scratch.commitAll(QStringLiteral("second"));
+	CHECK_FALSE(scratch.refreshed().second.commitAddsHead);
+
+	scratch.hg({ QStringLiteral("update"), QStringLiteral("-q"), QStringLiteral("-r"), QStringLiteral("0") });
+	CHECK(scratch.refreshed().second.commitAddsHead);
+
+	// The commit starts the new branch instead
+	scratch.hg({ QStringLiteral("branch"), QStringLiteral("-q"), QStringLiteral("other") });
+	CHECK_FALSE(scratch.refreshed().second.commitAddsHead);
+}
+
 TEST_CASE("hg status shapes: a move is one renamed row, removed and missing files are both deleted", "[hg]")
 {
 	const ScratchHgRepository scratch;

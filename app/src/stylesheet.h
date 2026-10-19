@@ -41,7 +41,7 @@ QWidget#messageHeader QLabel, QFrame#pushLogHeader QLabel, QFrame#dockHeader QLa
 /* ---------- status strips ---------- */
 QLabel#errorStrip { background: @errBg@; color: @errFg@; }
 QFrame#warningStrip { background: @warnBg@; }
-QFrame#warningStrip QLabel { color: @warnFg@; }
+QFrame#warningStrip, QFrame#warningStrip QLabel { color: @warnFg@; }
 
 /* ---------- file list ---------- */
 QTreeView { background: @surface@; border: none; outline: none; }

@@ -279,6 +279,7 @@ struct HgRepository::RefreshRun
 	std::map<QString, LineCounts> changeCounts; // by path; only files with countable lines have one
 	std::vector<CommitRecord> head; // `.`; the null changeset in an unborn repository
 	Hg::WorkingDirectory workingDir;
+	QString parentBranchWithChild; // the parent's branch when a child of the parent is on it; empty when the parent is its head
 	QStringList pathNames; // the configured [paths] names; which one a push contacts is stateFromRun's call
 	std::vector<CommitRecord> unpushed; // the drafts `push -r .` would send
 	QStringList conflicted; // only queried while a mergestate exists
@@ -348,6 +349,13 @@ void HgRepository::startRefresh()
 				run->workingDir = Hg::parseWorkingDirectory(r.out);
 			else
 				run->noteFailure(r); // unread, a merge in progress is indistinguishable from none
+		});
+	// Failure costs only the new-head warning
+	round.launch(path(), { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("children(.) and branch(.)"), QStringLiteral("-l"),
+			QStringLiteral("1"), QStringLiteral("-T"), QStringLiteral("{branch}") },
+		[run](const ProcessResult& r) {
+			if (r.ok)
+				run->parentBranchWithChild = Hg::textFromOutput(r.out).trimmed();
 		});
 	// No configured path is an answer, not a failure: nowhere to push to
 	round.launch(path(), configuredPathsArgs(),
@@ -440,6 +448,8 @@ RepoState HgRepository::stateFromRun(const RefreshRun& run) const
 	state.headParentCount = int(head.parents.size()); // the parser already drops a root changeset's null parent
 	// The named branch (`default` unless another was created); bookmarks are not read, and hg has no detached state
 	state.branch = run.workingDir.branch;
+	// After `hg branch`, the working directory's branch differs and a commit starts that branch instead
+	state.commitAddsHead = !run.parentBranchWithChild.isEmpty() && run.parentBranchWithChild == state.branch;
 	state.upstream = pushPathName(run.pathNames);
 	// Set by checkIncoming() and carried over: Mercurial keeps no local ref to read it from
 	state.behind = Repository::state().behind;

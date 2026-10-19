@@ -178,6 +178,7 @@ private:
 	QWidget* _detachedStrip = nullptr;
 	QLabel* _detachedLabel = nullptr;
 	QPushButton* _reattachButton = nullptr;
+	QLabel* _newHeadStrip = nullptr;
 	QCheckBox* _checkAllBox = nullptr;
 	QLabel* _lineTotalsLabel = nullptr;
 	FileListView* _filesView = nullptr;

@@ -373,6 +373,8 @@ QWidget* CommitWindow::buildLeftPane()
 	leftLayout->addWidget(_readFailureStrip);
 	leftLayout->addWidget(_opStrip);
 	leftLayout->addWidget(buildDetachedStrip());
+	_newHeadStrip = makeStrip("warningStrip");
+	leftLayout->addWidget(_newHeadStrip);
 
 	leftLayout->addWidget(buildCounterBar());
 
@@ -859,6 +861,12 @@ void CommitWindow::updateStrips()
 	if (const qsizetype unresolved = _filesModel.unresolvedConflictPaths().size(); unresolved > 0)
 		opText += tr(" %1 file(s) are still conflicted and must be marked resolved first.").arg(unresolved);
 	setStripTextOrHide(_opStrip, opText);
+
+	// Not blocking: another head is ordinary in Mercurial
+	setStripTextOrHide(_newHeadStrip, state.commitAddsHead && !state.opBlocksCommit()
+		? tr("Not at a head of '%1': committing here adds another head to it. A push refuses a second head on the remote "
+			 "until the two are merged.").arg(state.branch)
+		: QString{});
 
 	// A bisect and a rebase detach HEAD as a matter of course; the op strip explains, and no commit will reattach
 	const bool showDetached = state.detached && !state.opBlocksCommit();
