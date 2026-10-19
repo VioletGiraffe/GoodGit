@@ -76,6 +76,21 @@ TEST_CASE("Log records: revision 0, the null parent dropped, the date in the com
 	CHECK(commits[1].refs == QStringLiteral("mark, feature"));
 }
 
+TEST_CASE("Named branches are tips at their heads, the working directory's current", "[hgparsers]")
+{
+	const std::vector<BranchTip> tips = Hg::parseBranches(R"([
+		{"active": true, "branch": "default", "closed": false, "current": true, "node": "b617545e4c8b0a3c627ade353506df3fde7236b5", "rev": 4},
+		{"active": true, "branch": "feat", "closed": false, "current": false, "node": "090b808b888840314dc97bd83141543108c61b37", "rev": 3}
+	])");
+	REQUIRE(tips.size() == 2);
+	CHECK(tips[0].name == QStringLiteral("default"));
+	CHECK(tips[0].sha == QStringLiteral("b617545e4c8b0a3c627ade353506df3fde7236b5"));
+	CHECK(tips[0].namedBranch);
+	CHECK(tips[0].current);
+	CHECK(tips[1].name == QStringLiteral("feat"));
+	CHECK_FALSE(tips[1].current);
+}
+
 TEST_CASE("Bookmarks are local branch tips, the active one current", "[hgparsers]")
 {
 	const std::vector<BranchTip> tips = Hg::parseBookmarks(R"([

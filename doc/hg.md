@@ -65,6 +65,10 @@ hits, nothing to push.
 - `log -f` walks the ancestors of `.` (or of `-r`) only. A plain `hg log` lists every changeset, unrelated
   heads included.
 - With a path, `-f` also follows that file across renames.
+- `ancestors(X)` comes out oldest first: a log view wants `reverse(ancestors(X))`. A bookmark or branch name is a
+  revset symbol, quoted, since an unquoted one takes only a few punctuation characters.
+- `branches -T json` lists the open named branches at their heads, `current` marking the working directory's;
+  closed ones need `-c`.
 - **`hg grep` has no fixed-string mode**, so a search term must be escaped. `-f` confines it to the walked
   line of history; without it every head is searched.
 - A revset union comes out oldest first, the opposite of a log view's order.

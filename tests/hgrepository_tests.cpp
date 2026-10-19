@@ -13,6 +13,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QTemporaryDir>
 RESTORE_COMPILER_WARNINGS
 
+#include <algorithm>
 #include <expected>
 #include <utility>
 #include <vector>
@@ -169,6 +170,54 @@ TEST_CASE("An hg commit adds a head where the parent has a child on the working 
 	// The commit starts the new branch instead
 	scratch.hg({ QStringLiteral("branch"), QStringLiteral("-q"), QStringLiteral("other") });
 	CHECK_FALSE(scratch.refreshed().second.commitAddsHead);
+}
+
+TEST_CASE("An hg history walk covers every changeset, the working directory's ancestry, or one bookmark's or named branch's", "[hg]")
+{
+	using Scope = Repository::LogQuery::Scope;
+	const ScratchHgRepository scratch;
+	scratch.write(QStringLiteral("file.txt"), "base\n");
+	scratch.commitAll(QStringLiteral("base"));
+	scratch.hg({ QStringLiteral("branch"), QStringLiteral("-q"), QStringLiteral("feat") });
+	scratch.write(QStringLiteral("file.txt"), "feat\n");
+	scratch.commitAll(QStringLiteral("on feat"));
+	scratch.hg({ QStringLiteral("bookmark"), QStringLiteral("-r"), QStringLiteral("1"), QStringLiteral("mark") });
+	scratch.hg({ QStringLiteral("update"), QStringLiteral("-q"), QStringLiteral("default") });
+	scratch.write(QStringLiteral("file.txt"), "default\n");
+	scratch.commitAll(QStringLiteral("on default"));
+
+	HgRepository repository{ scratch.root() };
+	const auto subjects = [&](Repository::LogQuery query) {
+		query.maxCommits = 50;
+		const std::vector<CommitRecord> commits = requireSuccess(awaitAnswer<std::vector<CommitRecord>>(
+			[&](Vcs::Answer<std::vector<CommitRecord>> onDone) { repository.commitLog(query, &repository, std::move(onDone)); }));
+		QStringList listed;
+		for (const CommitRecord& commit : commits)
+			listed << commit.subject();
+		return listed;
+	};
+
+	CHECK(subjects({}).size() == 3);
+	CHECK(subjects({ .scope = Scope::CheckedOut }) == QStringList{ QStringLiteral("on default"), QStringLiteral("base") });
+	CHECK(subjects({ .scope = Scope::Tip, .tip = QStringLiteral("feat") }) == QStringList{ QStringLiteral("on feat"), QStringLiteral("base") });
+	CHECK(subjects({ .scope = Scope::Tip, .tip = QStringLiteral("mark") }) == QStringList{ QStringLiteral("on feat"), QStringLiteral("base") });
+	CHECK(subjects({ .scope = Scope::Tip, .tip = QStringLiteral("feat"), .path = QStringLiteral("file.txt") })
+		== QStringList{ QStringLiteral("on feat"), QStringLiteral("base") });
+
+	// The tips: the bookmark, and both named branches at their heads, the working directory's current
+	std::vector<BranchTip> tips = requireSuccess(awaitAnswer<std::vector<BranchTip>>(
+		[&](Vcs::Answer<std::vector<BranchTip>> onDone) { repository.branchTips(&repository, std::move(onDone)); }));
+	std::ranges::sort(tips, {}, &BranchTip::name);
+	REQUIRE(tips.size() == 3);
+	CHECK(tips[0].name == QStringLiteral("default"));
+	CHECK(tips[0].namedBranch);
+	CHECK(tips[0].current);
+	CHECK(tips[1].name == QStringLiteral("feat"));
+	CHECK(tips[1].namedBranch);
+	CHECK_FALSE(tips[1].current);
+	CHECK(tips[2].name == QStringLiteral("mark"));
+	CHECK_FALSE(tips[2].namedBranch);
+	CHECK(tips[2].sha == tips[1].sha);
 }
 
 TEST_CASE("An hg checkout updates to a bookmark and activates it, or to a revision leaving no bookmark active", "[hg]")

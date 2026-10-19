@@ -59,6 +59,9 @@ struct WorkingDirectory
 // Input: `bookmarks -T json`. The active bookmark is the current one: each commit moves it along.
 [[nodiscard]] std::vector<BranchTip> parseBookmarks(const QByteArray& bookmarksOutput);
 
+// Input: `branches -T json`: the open named branches, each at its head. The working directory's branch is current.
+[[nodiscard]] std::vector<BranchTip> parseBranches(const QByteArray& branchesOutput);
+
 // Input: `paths -T json`. The configured path names ("default", "default-push"), in hg's order.
 [[nodiscard]] QStringList parsePathNames(const QByteArray& pathsOutput);
 

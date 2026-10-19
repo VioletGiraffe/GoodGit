@@ -271,21 +271,36 @@ void appendPickaxe(QStringList& args, const Repository::LogQuery& query, bool co
 		args << QStringLiteral("-i");
 }
 
-// A pathless listing walks every ref, so commits above the checkout and on other branches are listed.
-// Not --all, which also walks refs/stash and refs/notes. HEAD by name: a detached checkout is on no branch.
-// A file history takes git's default of HEAD alone: --follow tracks one path and rewrites it at each rename it
+// Every ref: not --all, which also walks refs/stash and refs/notes. HEAD by name: a detached checkout is on no branch.
+// Every ref with a path: git's default of HEAD alone. --follow tracks one path and rewrites it at each rename it
 // crosses, so a second tip in the walk carries that path onto a line of history that never held it.
 void appendRevisionScope(QStringList& args, const Repository::LogQuery& query)
 {
-	if (query.path.isEmpty())
-		args << QStringLiteral("--branches") << QStringLiteral("--tags") << QStringLiteral("--remotes") << QStringLiteral("HEAD");
+	using Scope = Repository::LogQuery::Scope;
+	switch (query.scope)
+	{
+	case Scope::EveryRef:
+		if (query.path.isEmpty())
+			args << QStringLiteral("--branches") << QStringLiteral("--tags") << QStringLiteral("--remotes") << QStringLiteral("HEAD");
+		break;
+	case Scope::CheckedOut:
+		args << QStringLiteral("HEAD");
+		break;
+	case Scope::Tip:
+		args << query.tip;
+		break;
+	}
 }
 
-// Must come last: the pathspec closes the argument list
+// Must come last: the pathspec closes the argument list. Always present: without it a branch named like a file
+// in the worktree is an ambiguous argument.
 void appendPathLimit(QStringList& args, const Repository::LogQuery& query)
 {
 	if (!query.path.isEmpty())
-		args << QStringLiteral("--follow") << QStringLiteral("--") << query.path; // --follow requires exactly one path
+		args << QStringLiteral("--follow"); // requires exactly one path
+	args << QStringLiteral("--");
+	if (!query.path.isEmpty())
+		args << query.path;
 }
 
 QSet<QString> shaSet(const QByteArray& output)

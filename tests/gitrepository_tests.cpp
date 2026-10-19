@@ -248,6 +248,38 @@ TEST_CASE("Discarding a moved submodule pointer checks the recorded commit out i
 	CHECK(scratch.refreshed().first.empty());
 }
 
+TEST_CASE("A history walk covers every ref, the checkout alone, or one branch, a branch named like a file included", "[git]")
+{
+	using Scope = Repository::LogQuery::Scope;
+	const ScratchRepository scratch;
+	scratch.write(QStringLiteral("file.txt"), "base\n");
+	scratch.commitAll(QStringLiteral("base"));
+	scratch.git({ QStringLiteral("branch"), QStringLiteral("file.txt") }); // at the base
+	scratch.write(QStringLiteral("file.txt"), "main\n");
+	scratch.commitAll(QStringLiteral("on main"));
+	scratch.git({ QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("-b"), QStringLiteral("side"), QStringLiteral("HEAD~1") });
+	scratch.write(QStringLiteral("file.txt"), "side\n");
+	scratch.commitAll(QStringLiteral("on side"));
+
+	GitRepository repository{ scratch.root() };
+	const auto subjects = [&](Repository::LogQuery query) {
+		query.maxCommits = 50;
+		const std::vector<CommitRecord> commits = requireSuccess(awaitAnswer<std::vector<CommitRecord>>(
+			[&](Vcs::Answer<std::vector<CommitRecord>> onDone) { repository.commitLog(query, &repository, std::move(onDone)); }));
+		QStringList listed;
+		for (const CommitRecord& commit : commits)
+			listed << commit.subject();
+		return listed;
+	};
+
+	CHECK(subjects({}).size() == 3);
+	CHECK(subjects({ .scope = Scope::CheckedOut }) == QStringList{ QStringLiteral("on side"), QStringLiteral("base") });
+	CHECK(subjects({ .scope = Scope::Tip, .tip = QStringLiteral("main") }) == QStringList{ QStringLiteral("on main"), QStringLiteral("base") });
+	CHECK(subjects({ .scope = Scope::Tip, .tip = QStringLiteral("file.txt") }) == QStringList{ QStringLiteral("base") });
+	CHECK(subjects({ .scope = Scope::Tip, .tip = QStringLiteral("main"), .path = QStringLiteral("file.txt") })
+		== QStringList{ QStringLiteral("on main"), QStringLiteral("base") });
+}
+
 TEST_CASE("A checkout puts HEAD on a branch, on a new branch tracking a remote-tracking one, or detaches it", "[git]")
 {
 	const ScratchRepository scratch;

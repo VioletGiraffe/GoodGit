@@ -279,9 +279,19 @@ public:
 	// The parameters of one history view's walk
 	struct LogQuery
 	{
+		// Whose ancestry is walked
+		enum class Scope : uint8_t
+		{
+			EveryRef,   // every branch, tag and the checkout; with a path, the checkout alone (see `path`)
+			CheckedOut, // the working tree's commit
+			Tip,        // the branch `tip` names
+		};
+
 		int maxCommits = 0;
-		// empty: every ref's history. Otherwise the checkout's ancestry alone, following this one path across
-		// renames: rename tracing needs a single starting tip (doc/ARCHITECTURE.md)
+		Scope scope = Scope::EveryRef;
+		QString tip; // Scope::Tip: a BranchTip::name
+		// empty: the whole history. Otherwise this one path's, followed across renames, from a single tip: rename
+		// tracing rewrites the path at each rename it crosses, for the whole walk (doc/history.md)
 		QString path;
 		// empty: no content search. Always a literal string, never a pattern
 		QString contentSearch;

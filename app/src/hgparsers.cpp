@@ -292,6 +292,18 @@ std::vector<BranchTip> parseBookmarks(const QByteArray& bookmarksOutput)
 	return tips;
 }
 
+std::vector<BranchTip> parseBranches(const QByteArray& branchesOutput)
+{
+	std::vector<BranchTip> tips;
+	for (const auto value : jsonRecords(branchesOutput))
+	{
+		const QJsonObject record = value.toObject();
+		tips.push_back({ .name = record.value(QLatin1String("branch")).toString(), .sha = record.value(QLatin1String("node")).toString(),
+			.namedBranch = true, .current = record.value(QLatin1String("current")).toBool() });
+	}
+	return tips;
+}
+
 QStringList parsePathNames(const QByteArray& pathsOutput)
 {
 	QStringList names;

@@ -17,12 +17,20 @@ F5 reloads unconditionally. A return from another application (`refresh.md`) re-
 reloads only if `Repository::historyFingerprint()` - the listed refs and the checkout - moved since the listing
 was read: a reload re-walks the whole limit and re-centres the view.
 
-The repo-wide walk covers **every ref** - git's `--branches --tags --remotes HEAD` (not `--all`, which adds
-`refs/stash` and `refs/notes`), Mercurial's plain `log` - so commits above the checkout, on other branches,
-and fetched but unmerged are listed. A **file history is the exception, rooted at the checkout**: the rename
-tracing both systems spell `--follow`/`-f` rewrites the one path it tracks at each rename it crosses, for
-the whole walk, so a second tip in it would carry that path onto a line of history that never held it. The
-content search takes the scope of the listing it filters.
+The **branch selector** in the log bar picks whose history the walk covers (`LogQuery::Scope`):
+
+- **Checked out**, the default: the working tree's commit and its ancestors, so the user's own line is at the top
+  and other branches' commits are out of the way.
+- **All branches**: every ref - git's `--branches --tags --remotes HEAD` (not `--all`, which adds `refs/stash` and
+  `refs/notes`), Mercurial's plain `log` - so commits above the checkout, on other branches, and fetched but
+  unmerged are listed.
+- One branch: a local or remote-tracking branch, an hg bookmark or named branch, from `branchTips()`.
+
+A **file history has no All branches**: the rename tracing both systems spell `--follow`/`-f` rewrites the one path
+it tracks at each rename it crosses, for the whole walk, so a second tip in it would carry that path onto a line of
+history that never held it. The content search takes the scope of the listing it filters. A reveal the scoped
+listing does not hold widens the scope to All branches once: a submodule's recorded commit need not be on its
+checkout's line. A selected branch that is gone falls back to Checked out. The selection is per window, not stored.
 
 The lane diagram (`commitgraph`) is computed from the parent links alone, so one implementation serves both
 backends. It needs a **topologically ordered** listing, every commit above all its parents: git's walk

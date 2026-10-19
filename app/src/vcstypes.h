@@ -101,6 +101,7 @@ struct BranchTip
 	QString name; // "main", "origin/main"
 	QString sha;
 	bool remoteTracking = false;
+	bool namedBranch = false; // hg: a named branch's head, not a bookmark
 	QString localName; // remote-tracking only: the name a local branch tracking it takes
 	bool current = false;             // local only: HEAD is on it
 	bool checkedOutElsewhere = false; // local only: another worktree is on it, so this one cannot be

@@ -13,6 +13,7 @@ RESTORE_COMPILER_WARNINGS
 #include <vector>
 
 class QCheckBox;
+class QComboBox;
 class QFrame;
 class QLabel;
 class QLineEdit;
@@ -68,8 +69,16 @@ private:
 	void reload();
 	// Re-reads which commits are unpushed, leaving the list and the selection alone
 	void refreshUnpushedMarks();
-	// Re-reads the branches the checkout menu offers
+	// Re-reads the branches the checkout menu and the branch selector offer
 	void refreshBranchTips();
+	// Re-fills the branch selector from _branchTips, keeping the selection. One whose branch is gone falls back to
+	// the checkout and reloads.
+	void rebuildScopeBox();
+	// The selector's row for a scope; -1 where none
+	[[nodiscard]] int scopeRow(Repository::LogQuery::Scope scope, const QString& tip) const;
+	// Sets the walk's scope, in the selector too, and reloads
+	void setScope(Repository::LogQuery::Scope scope, const QString& tip);
+	void onScopeChosen(int row);
 
 	// Re-reads which commit the working tree is on, for the diagram's current-commit ring and the history
 	// drawn above it
@@ -146,6 +155,7 @@ private:
 	QPlainTextEdit* _bodyView = nullptr;
 	QTreeView* _logView = nullptr;
 	FileListView* _filesView = nullptr;
+	QComboBox* _scopeBox = nullptr; // whose history is walked: _query.scope
 	CLabelElided* _filePathLabel = nullptr; // shown only in a file history
 	QLabel* _countLabel = nullptr;
 	QLineEdit* _searchEdit = nullptr;

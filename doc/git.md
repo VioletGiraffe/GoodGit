@@ -76,6 +76,8 @@ Other format facts:
   latter lists each line of history as one block.
 - `--all` means every ref under `refs/`, `refs/stash` and `refs/notes` included. `--branches --tags
   --remotes HEAD` is the same set without those two, and names a detached checkout, which is on no branch.
+- A revision named like a path in the worktree is an ambiguous argument unless `--` follows it, so the walks always
+  pass one.
 - `--follow` tracks one path and rewrites it at each rename it crosses, for the whole walk and not just for
   the tip that crossed the rename. With several starting revisions it therefore carries a path onto a line of
   history that never held it: with `A` renaming `f`->`g` and `B` renaming `f`->`h`, `log --all --follow -- h`

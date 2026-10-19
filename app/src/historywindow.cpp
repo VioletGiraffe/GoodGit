@@ -18,6 +18,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QComboBox>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -29,6 +30,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMetaObject>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSaveFile>
@@ -54,6 +56,10 @@ constexpr int InitialCommitBatch = 500;
 constexpr int SearchDebounceMs = 200; // a keystroke rescans every commit and relaunches the detail queries
 constexpr int FileListWidth = 320;
 constexpr int MaxFilePathLabelWidth = 420; // beyond this the path elides
+constexpr int MaxScopeBoxWidth = 300;      // a longer branch name is cut
+// The branch selector's item data
+constexpr int ScopeRole = Qt::UserRole;
+constexpr int TipRole = Qt::UserRole + 1;
 constexpr int PickaxeEditWidth = 320;
 constexpr int MaxShownBodyLines = 8; // a longer body scrolls
 constexpr int CascadeStep = 28;  // about a title bar, so the window underneath stays identifiable
@@ -110,7 +116,8 @@ HistoryWindow::HistoryWindow(const RepositoryLocation& location) :
 
 HistoryWindow::HistoryWindow(const RepositoryLocation& location, const QString& filePath) :
 	_repo{ sharedRepository(location) },
-	_query{ .maxCommits = QSettings{}.value(Settings::HistoryMaxCommitsKey, Settings::HistoryMaxCommitsDefault).toInt(), .path = filePath }
+	_query{ .maxCommits = QSettings{}.value(Settings::HistoryMaxCommitsKey, Settings::HistoryMaxCommitsDefault).toInt(),
+		.scope = Repository::LogQuery::Scope::CheckedOut, .path = filePath }
 {
 	setAttribute(Qt::WA_DeleteOnClose);
 	setWindowTitle(_query.path.isEmpty()
@@ -139,6 +146,11 @@ void HistoryWindow::buildUi()
 	logBar->setObjectName(QStringLiteral("repoBar"));
 	auto* logBarLayout = new QHBoxLayout(logBar);
 	logBarLayout->setContentsMargins(8, 6, 8, 6);
+	_scopeBox = new QComboBox;
+	_scopeBox->setToolTip(tr("Whose history is listed: every branch's, the checked-out commit's, or one branch's"));
+	_scopeBox->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+	_scopeBox->setMaximumWidth(MaxScopeBoxWidth);
+	rebuildScopeBox(); // the fixed entries, until the branches arrive
 	_filePathLabel = new CLabelElided;
 	_filePathLabel->setFont(monospaceFont());
 	connect(&CSettingsNotifier::instance(), &CSettingsNotifier::settingsChanged, this, [this] { _filePathLabel->setFont(monospaceFont()); });
@@ -160,6 +172,8 @@ void HistoryWindow::buildUi()
 	_loadMoreButton->setVisible(false);
 	auto* refreshButton = new QPushButton(tr("Refresh"));
 	refreshButton->setToolTip(QStringLiteral("F5"));
+	logBarLayout->addWidget(new QLabel(tr("Branch:")));
+	logBarLayout->addWidget(_scopeBox);
 	logBarLayout->addWidget(_filePathLabel);
 	logBarLayout->addWidget(_countLabel);
 	logBarLayout->addStretch();
@@ -278,6 +292,7 @@ void HistoryWindow::buildUi()
 	connect(_searchDebounce, &QTimer::timeout, this, &HistoryWindow::applySearch);
 	connect(_searchEdit, &QLineEdit::textChanged, _searchDebounce, qOverload<>(&QTimer::start));
 	connect(_pickaxeButton, &QPushButton::clicked, this, &HistoryWindow::showPickaxePopup);
+	connect(_scopeBox, &QComboBox::activated, this, &HistoryWindow::onScopeChosen); // a user's pick, never a refill
 	connect(_logView, &QWidget::customContextMenuRequested, this, &HistoryWindow::showCommitContextMenu);
 	connect(_filesView, &QWidget::customContextMenuRequested, this, &HistoryWindow::showFileContextMenu);
 	connect(_logView->selectionModel(), &QItemSelectionModel::currentChanged, this, &HistoryWindow::showFilesForCurrentCommit);
@@ -387,7 +402,87 @@ void HistoryWindow::refreshBranchTips()
 	_branchTipsQuery = _repo->branchTips(this, [this](std::expected<std::vector<BranchTip>, QString> tips) {
 		// A failure offers the commit itself alone
 		_branchTips = std::move(tips).value_or(std::vector<BranchTip>{});
+		rebuildScopeBox();
 	});
+}
+
+void HistoryWindow::rebuildScopeBox()
+{
+	using Scope = Repository::LogQuery::Scope;
+	_scopeBox->clear();
+	const auto addEntry = [this](const QString& text, Scope scope, const QString& tip = {}) {
+		_scopeBox->addItem(text);
+		const int row = _scopeBox->count() - 1;
+		_scopeBox->setItemData(row, int(scope), ScopeRole);
+		_scopeBox->setItemData(row, tip, TipRole);
+	};
+	if (_query.path.isEmpty()) // a file history is walked from one tip (LogQuery::path)
+		addEntry(tr("All branches"), Scope::EveryRef);
+	// Named after the current branch: hg's active bookmark over its named branch, both being current there.
+	// Nameless on a detached HEAD, and until the tips arrive.
+	const auto current = std::ranges::find_if(_branchTips, [](const BranchTip& tip) { return tip.current && !tip.namedBranch; });
+	const auto currentNamed = std::ranges::find_if(_branchTips, &BranchTip::current);
+	const auto currentTip = current != _branchTips.end() ? current : currentNamed;
+	addEntry(currentTip != _branchTips.end() ? tr("Checked out (%1)").arg(currentTip->name) : tr("Checked out"), Scope::CheckedOut);
+
+	// Three groups, the current branch first in its group, the rest alphabetical
+	std::vector<const BranchTip*> sorted;
+	for (const BranchTip& tip : _branchTips)
+		sorted.push_back(&tip);
+	std::ranges::sort(sorted, [](const BranchTip* a, const BranchTip* b) {
+		return a->current != b->current ? a->current : a->name.compare(b->name, Qt::CaseInsensitive) < 0;
+	});
+	const auto addGroup = [&](auto belongs) {
+		bool first = true;
+		for (const BranchTip* tip : sorted)
+		{
+			if (!belongs(*tip))
+				continue;
+			if (first)
+				_scopeBox->insertSeparator(_scopeBox->count());
+			first = false;
+			addEntry(tip->name, Scope::Tip, tip->name);
+		}
+	};
+	addGroup([](const BranchTip& tip) { return !tip.remoteTracking && !tip.namedBranch; });
+	addGroup([](const BranchTip& tip) { return tip.namedBranch; });
+	addGroup([](const BranchTip& tip) { return tip.remoteTracking; });
+
+	const int row = scopeRow(_query.scope, _query.tip);
+	if (row >= 0)
+	{
+		_scopeBox->setCurrentIndex(row);
+		return;
+	}
+	// The selected branch is gone, and so is the listing: its walk fails.
+	// Queued: this runs inside the branch query's answer, which reload() cancels.
+	QMetaObject::invokeMethod(this, [this] { setScope(Scope::CheckedOut, {}); }, Qt::QueuedConnection);
+}
+
+int HistoryWindow::scopeRow(Repository::LogQuery::Scope scope, const QString& tip) const
+{
+	for (int row = 0; row < _scopeBox->count(); ++row)
+	{
+		if (_scopeBox->itemData(row, ScopeRole).toInt() == int(scope) && _scopeBox->itemData(row, TipRole).toString() == tip)
+			return row;
+	}
+	return -1;
+}
+
+void HistoryWindow::setScope(Repository::LogQuery::Scope scope, const QString& tip)
+{
+	_query.scope = scope;
+	_query.tip = tip;
+	_scopeBox->setCurrentIndex(scopeRow(scope, tip));
+	reload();
+}
+
+void HistoryWindow::onScopeChosen(int row)
+{
+	const auto scope = Repository::LogQuery::Scope(_scopeBox->itemData(row, ScopeRole).toInt());
+	const QString tip = _scopeBox->itemData(row, TipRole).toString();
+	if (scope != _query.scope || tip != _query.tip)
+		setScope(scope, tip);
 }
 
 // The narrower half of the content search, run alongside the listing; its result marks rows within it
@@ -537,6 +632,15 @@ void HistoryWindow::selectLoadedCommit()
 		}
 		if (_fullLoadPending)
 			return; // the full depth may list it; decided when it lands
+
+		// Outside the scope, maybe: a submodule's recorded commit need not be on its checkout's line.
+		// The widened walk is fresh, so it spends the retry too.
+		if (_query.scope != Repository::LogQuery::Scope::EveryRef && _query.path.isEmpty())
+		{
+			_revealOnMiss = RevealMiss::Report;
+			setScope(Repository::LogQuery::Scope::EveryRef, {}); // reload() leaves _revealSha for the new listing
+			return;
+		}
 
 		if (_revealOnMiss == RevealMiss::ReloadOnce)
 		{

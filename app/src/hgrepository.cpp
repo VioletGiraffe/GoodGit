@@ -112,13 +112,24 @@ QStringList commitLogArgs(int maxCommits)
 		QStringLiteral("-T"), QStringLiteral("json") };
 }
 
-// -f is the rename tracing a file history needs, inseparable from the restriction to the ancestors of `.`
-// (doc/ARCHITECTURE.md). Without it the walk lists every changeset, unrelated heads included.
+// A bookmark or branch name as a revset symbol: quoted, since an unquoted one takes only a few punctuation characters
+QString quotedRevsetSymbol(const QString& name)
+{
+	return QLatin1Char('"') + backslashEscaped(name, u"\\\"") + QLatin1Char('"');
+}
+
+// Every changeset without -r. -f is the rename tracing a file history needs, inseparable from the restriction to the
+// ancestors of one revision, `.` unless -r names another (doc/history.md).
 // Must precede the pattern and the pathspec, which are positional.
 void appendRevisionScope(QStringList& args, const Repository::LogQuery& query)
 {
+	using Scope = Repository::LogQuery::Scope;
 	if (!query.path.isEmpty())
 		args << QStringLiteral("-f");
+	if (query.scope == Scope::Tip)
+		args << QStringLiteral("-r") << (query.path.isEmpty() ? QStringLiteral("reverse(ancestors(%1))") : QStringLiteral("%1")).arg(quotedRevsetSymbol(query.tip));
+	else if (query.scope == Scope::CheckedOut && query.path.isEmpty())
+		args << QStringLiteral("-r") << QStringLiteral("reverse(ancestors(.))");
 }
 
 // Must come last: the pathspec closes the argument list
@@ -1002,8 +1013,28 @@ Vcs::Query HgRepository::currentCommit(const QObject* context, Vcs::Answer<QStri
 
 Vcs::Query HgRepository::branchTips(const QObject* context, Vcs::Answer<std::vector<BranchTip>> onDone)
 {
-	return runQuery(path(), { QStringLiteral("bookmarks"), QStringLiteral("-T"), QStringLiteral("json") },
-		context, Vcs::answering(std::move(onDone), Hg::parseBookmarks));
+	// Bookmarks, then the named branches: two commands, so two processes
+	Vcs::Query query;
+	query.attach(Hg::run(path(), { QStringLiteral("bookmarks"), QStringLiteral("-T"), QStringLiteral("json") }, context,
+		[this, query, context, onDone = std::move(onDone)](const ProcessResult& bookmarks) mutable {
+			if (!bookmarks.ok)
+			{
+				onDone(std::unexpected(bookmarks.errorText()));
+				return;
+			}
+			query.attach(Hg::run(path(), { QStringLiteral("branches"), QStringLiteral("-T"), QStringLiteral("json") }, context,
+				[tips = Hg::parseBookmarks(bookmarks.out), onDone = std::move(onDone)](const ProcessResult& branches) mutable {
+					if (!branches.ok)
+					{
+						onDone(std::unexpected(branches.errorText()));
+						return;
+					}
+					std::vector<BranchTip> named = Hg::parseBranches(branches.out);
+					tips.insert(tips.end(), std::make_move_iterator(named.begin()), std::make_move_iterator(named.end()));
+					onDone(std::move(tips));
+				}));
+		}));
+	return query;
 }
 
 Vcs::Query HgRepository::commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone)
