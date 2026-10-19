@@ -85,8 +85,9 @@ private:
 	// Each way HEAD can be put on `commit`: a branch there, a new one tracking a remote-tracking branch there, the
 	// commit itself. Absent where there is none; disabled while a write or an operation is in progress.
 	void addCheckoutMenu(QMenu& menu, const CommitRecord& commit);
-	// The write runs under this window's hold of the write lock
-	void confirmThenCheckOut(const CheckoutTarget& target, const CommitRecord& commit);
+	// Unconfirmed: the tool refuses before anything moves where an uncommitted change would be overwritten, and the
+	// refusal is reported. Runs under this window's hold of the write lock.
+	void checkOut(const CheckoutTarget& target);
 	void showFileContextMenu(const QPoint& pos);
 	void openFileHistory(const QString& filePath);
 	// One file's content as of one commit, in a separate window

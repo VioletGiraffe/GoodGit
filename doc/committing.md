@@ -69,7 +69,7 @@ operation leaves HEAD on its branch, and a commit made during one attaches exact
 
 History's checkout of a commit detaches HEAD on purpose, to look at it (`history.md`). Committing there goes
 through the same candidates. A Move candidate then takes its branch back to the commit being looked at, so the
-way back is History's checkout of that branch, which its confirmation says.
+way back is History's checkout of that branch.
 
 ## Another hg head
 

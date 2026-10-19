@@ -80,8 +80,10 @@ The window's one write. A commit row's **Check out** lists each way HEAD can be 
 
 The branches come from `branchTips()`, run beside the walk. The submenu is disabled while any window holds the
 write lock or an operation is in progress; the operation is read off the on-disk markers, so the window needs no
-refreshed state. The checkout runs under the window's own hold of the lock, and success announces a history change.
+refreshed state. The checkout runs unconfirmed, under the window's own hold of the lock, and success announces a
+history change.
 
 Uncommitted changes the checkout leaves alone go along; one it would overwrite fails it before anything moves,
-under hg too (`commands.update.check=noconflict`). Submodules move to the commits the target records.
+under hg too (`commands.update.check=noconflict`), and the refusal is the only dialog. Submodules move to the
+commits the target records.
 

@@ -6,7 +6,6 @@
 #include "repositoryfactory.h"
 #include "settings.h"
 #include "theme.h"
-#include "writeflow.h"
 
 #include "appdialogs/csettingsnotifier.h"
 #include "dialogs/messagedialog.h"
@@ -747,10 +746,9 @@ void HistoryWindow::showCommitContextMenu(const QPoint& pos)
 void HistoryWindow::addCheckoutMenu(QMenu& menu, const CommitRecord& commit)
 {
 	QMenu* checkoutMenu = menu.addMenu(tr("Check out"));
-	const auto addTarget = [this, checkoutMenu, commit](const QString& text, const CheckoutTarget& target) {
+	const auto addTarget = [this, checkoutMenu](const QString& text, const CheckoutTarget& target) {
 		// '&' doubled for display, or QMenu takes it as an accelerator marker
-		return checkoutMenu->addAction(QString{ text }.replace(QLatin1Char('&'), QStringLiteral("&&")), this,
-			[this, target, commit] { confirmThenCheckOut(target, commit); });
+		return checkoutMenu->addAction(QString{ text }.replace(QLatin1Char('&'), QStringLiteral("&&")), this, [this, target] { checkOut(target); });
 	};
 
 	QSet<QString> localNames;
@@ -784,36 +782,10 @@ void HistoryWindow::addCheckoutMenu(QMenu& menu, const CommitRecord& commit)
 	checkoutMenu->setEnabled(!_repo->writeInFlight() && _repo->probeOperation() == RepoOp::None);
 }
 
-void HistoryWindow::confirmThenCheckOut(const CheckoutTarget& target, const CommitRecord& commit)
+void HistoryWindow::checkOut(const CheckoutTarget& target)
 {
 	if (_repo->writeInFlight())
 		return; // started while the menu was up
-
-	const bool git = _repo->kind() == VcsKind::Git;
-	const QString commitId = commit.revision ? QString::number(*commit.revision) : shortSha(commit.sha);
-	const QString commitText = commit.subject().isEmpty() ? commitId : QStringLiteral("%1 '%2'").arg(commitId, commit.subject());
-	QString text;
-	switch (target.kind)
-	{
-	case CheckoutTarget::Kind::Branch:
-		text = git ? tr("HEAD goes on '%1', at %2.").arg(target.branch, commitText)
-			: tr("The working directory moves to %1, and '%2' becomes the active bookmark.").arg(commitText, target.branch);
-		break;
-	case CheckoutTarget::Kind::TrackingBranch:
-		text = tr("A new branch '%1' is created at %2, tracking %3, and HEAD goes on it.").arg(target.branch, commitText, target.upstream);
-		break;
-	case CheckoutTarget::Kind::Commit:
-		text = git ? tr("HEAD is detached at %1. Committing there needs a branch first.\n\nTo get back, check out a branch here. The commit "
-						"window's offer to move a branch moves that branch to this commit instead.").arg(commitText)
-			: tr("The working directory moves to %1, and no bookmark stays active.").arg(commitText);
-		break;
-	}
-	text += QStringLiteral("\n\n") + tr("Uncommitted changes the checkout does not touch stay as they are; if it would overwrite one, "
-										 "nothing is checked out. Submodules move to the commits it records.");
-
-	const Repository::StateStamp stamp = _repo->stateStamp();
-	if (MessageDialog::question(this, tr("Check out?"), text, { tr("Check out") }) != 0 || stateMovedSince(this, *_repo, stamp))
-		return;
 
 	_repo->beginMutation(this);
 	_repo->checkOut(target, [this](std::expected<void, QString> result) {

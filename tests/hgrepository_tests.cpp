@@ -171,6 +171,52 @@ TEST_CASE("An hg commit adds a head where the parent has a child on the working 
 	CHECK_FALSE(scratch.refreshed().second.commitAddsHead);
 }
 
+TEST_CASE("An hg checkout updates to a bookmark and activates it, or to a revision leaving no bookmark active", "[hg]")
+{
+	const ScratchHgRepository scratch;
+	scratch.write(QStringLiteral("file.txt"), "one\n");
+	scratch.commitAll(QStringLiteral("one"));
+	scratch.hg({ QStringLiteral("bookmark"), QStringLiteral("-r"), QStringLiteral("0"), QStringLiteral("side") });
+	scratch.write(QStringLiteral("file.txt"), "two\n");
+	scratch.commitAll(QStringLiteral("two"));
+	scratch.hg({ QStringLiteral("bookmark"), QStringLiteral("work") }); // active, at the tip
+	const QString first = scratch.hgOutput({ QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("0"), QStringLiteral("-T"), QStringLiteral("{node}") }).trimmed();
+	const QString second = scratch.hgOutput({ QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("1"), QStringLiteral("-T"), QStringLiteral("{node}") }).trimmed();
+
+	HgRepository repository{ scratch.root() };
+	const auto checkOut = [&](const CheckoutTarget& target) {
+		return awaitAnswer<void>([&](Vcs::Answer<void> onDone) { repository.checkOut(target, std::move(onDone)); });
+	};
+	const auto parentNode = [&] {
+		return scratch.hgOutput({ QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("."), QStringLiteral("-T"), QStringLiteral("{node}") }).trimmed();
+	};
+	const auto activeBookmark = [&] {
+		return scratch.hgOutput({ QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("."), QStringLiteral("-T"), QStringLiteral("{activebookmark}") }).trimmed();
+	};
+
+	SECTION("a bookmark")
+	{
+		requireSuccess(checkOut({ .kind = CheckoutTarget::Kind::Branch, .branch = QStringLiteral("side"), .sha = first }));
+		CHECK(parentNode() == first);
+		CHECK(activeBookmark() == QStringLiteral("side"));
+	}
+
+	SECTION("a revision")
+	{
+		requireSuccess(checkOut({ .kind = CheckoutTarget::Kind::Commit, .sha = first }));
+		CHECK(parentNode() == first);
+		CHECK(activeBookmark().isEmpty());
+	}
+
+	SECTION("an uncommitted change the update would overwrite fails it, and nothing moves")
+	{
+		scratch.write(QStringLiteral("file.txt"), "uncommitted\n");
+		CHECK_FALSE(checkOut({ .kind = CheckoutTarget::Kind::Branch, .branch = QStringLiteral("side"), .sha = first }).has_value());
+		CHECK(parentNode() == second);
+		CHECK(activeBookmark() == QStringLiteral("work"));
+	}
+}
+
 TEST_CASE("hg status shapes: a move is one renamed row, removed and missing files are both deleted", "[hg]")
 {
 	const ScratchHgRepository scratch;
