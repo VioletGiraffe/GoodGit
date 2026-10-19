@@ -396,6 +396,12 @@ QString withoutPrefix(const QByteArray& refName, QByteArrayView prefix)
 	return QString::fromUtf8(refName.startsWith(prefix) ? refName.sliced(prefix.size()) : refName);
 }
 
+// The name a local branch tracking `remoteName` ("origin/feature/x") takes: what follows the remote's name
+QString localBranchNameFor(const QString& remoteName)
+{
+	return remoteName.mid(remoteName.indexOf(QLatin1Char('/')) + 1);
+}
+
 } // namespace
 
 std::vector<LocalBranchRef> parseLocalBranchRefs(const QByteArray& forEachRefOutput)
@@ -420,6 +426,23 @@ std::vector<RemoteBranchRef> parseRemoteBranchRefs(const QByteArray& forEachRefO
 				.sha = QString::fromUtf8(fields[1]) });
 	});
 	return branches;
+}
+
+std::vector<BranchTip> parseBranchTips(const QByteArray& forEachRefOutput)
+{
+	std::vector<BranchTip> tips;
+	forEachRefRecord(forEachRefOutput, 5, [&tips](const QList<QByteArray>& fields) {
+		if (!fields[4].isEmpty())
+			return; // a symbolic ref names another listed branch
+
+		const bool remoteTracking = fields[0].startsWith("refs/remotes/");
+		const bool current = fields[2] == "*";
+		const QString name = withoutPrefix(fields[0], remoteTracking ? "refs/remotes/" : "refs/heads/");
+		tips.push_back({ .name = name, .sha = QString::fromUtf8(fields[1]), .remoteTracking = remoteTracking,
+			.localName = remoteTracking ? localBranchNameFor(name) : QString{}, .current = current,
+			.checkedOutElsewhere = fields[3] == "1" && !current });
+	});
+	return tips;
 }
 
 std::optional<BranchPushTarget> parseBranchPushTarget(const QByteArray& forEachRefOutput)
@@ -461,8 +484,7 @@ ReattachOptions reattachOptions(const QString& headSha, const std::vector<LocalB
 
 	for (const RemoteBranchRef& remote : remotesContainingHead)
 	{
-		// The local name is the remote's own name for the branch: what follows the remote's name
-		const QString localName = remote.name.mid(remote.name.indexOf(QLatin1Char('/')) + 1);
+		const QString localName = localBranchNameFor(remote.name);
 		const auto localUpstream = upstreamsByLocalName.constFind(localName);
 		if (localUpstream == upstreamsByLocalName.cend())
 			options.candidates.push_back({ .kind = ReattachCandidate::Kind::Create, .branch = localName, .upstream = remote.name });

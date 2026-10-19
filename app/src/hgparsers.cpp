@@ -280,6 +280,18 @@ std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput)
 	return commits;
 }
 
+std::vector<BranchTip> parseBookmarks(const QByteArray& bookmarksOutput)
+{
+	std::vector<BranchTip> tips;
+	for (const auto value : jsonRecords(bookmarksOutput))
+	{
+		const QJsonObject record = value.toObject();
+		tips.push_back({ .name = record.value(QLatin1String("bookmark")).toString(), .sha = record.value(QLatin1String("node")).toString(),
+			.current = record.value(QLatin1String("active")).toBool() });
+	}
+	return tips;
+}
+
 QStringList parsePathNames(const QByteArray& pathsOutput)
 {
 	QStringList names;

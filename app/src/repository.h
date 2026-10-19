@@ -255,6 +255,11 @@ public:
 	// Only called with a candidate from RepoState::reattachCandidates.
 	virtual void reattachHead(const ReattachCandidate& candidate, Vcs::Answer<void> onDone) = 0;
 
+	// Moves HEAD and the working tree to `target`, submodules to the commits it records.
+	// Uncommitted changes the move leaves alone are carried along; one it would overwrite fails the whole checkout
+	// before anything changes.
+	virtual void checkOut(const CheckoutTarget& target, Vcs::Answer<void> onDone) = 0;
+
 	// Read-only queries. Each parses its output before answering. The query dies with `context`, so pass
 	// the object that will display the answer - not the Repository, which outlives any one view of it.
 
@@ -296,6 +301,8 @@ public:
 	virtual Vcs::Query historyFingerprint(const QObject* context, Vcs::Answer<QString> onDone) = 0;
 	// The commit the working tree is on: git's HEAD, Mercurial's `.`. Fails on an unborn repository.
 	virtual Vcs::Query currentCommit(const QObject* context, Vcs::Answer<QString> onDone) = 0;
+	// Every local and remote-tracking branch with the commit it points at. A symbolic ref (origin/HEAD) is left out.
+	virtual Vcs::Query branchTips(const QObject* context, Vcs::Answer<std::vector<BranchTip>> onDone) = 0;
 	// The files one commit touched. A merge yields nothing here, so detect merges from the parent count
 	// rather than from an empty result.
 	virtual Vcs::Query commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone) = 0;

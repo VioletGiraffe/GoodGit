@@ -41,6 +41,7 @@ public:
 	// The checked-out commit, from a query of its own like the unpushed set. Rebuilds the diagram: which
 	// lines run above the checkout is part of it
 	void setCurrentSha(QString sha);
+	[[nodiscard]] const QString& currentSha() const { return _currentSha; }
 	// The narrower half of a content search, applied like the unpushed set
 	void setAddingOrRemovingShas(QSet<QString> shas);
 

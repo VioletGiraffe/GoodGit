@@ -244,6 +244,30 @@ TEST_CASE("Branch listings: unpushed counts, a worktree elsewhere, and a symboli
 	CHECK(remotes[0].name == QStringLiteral("origin/main"));
 }
 
+TEST_CASE("Branch tips: the current branch, one in another worktree, a remote-tracking one's local name, a symbolic ref skipped", "[gitparsers]")
+{
+	const std::vector<BranchTip> tips = Git::parseBranchTips(
+		"refs/heads/main\x1f" "aaa\x1f" "*\x1f" "1\x1f\n"
+		"refs/heads/wt\x1f" "bbb\x1f" " \x1f" "1\x1f\n"
+		"refs/heads/plain\x1f" "ccc\x1f" " \x1f\x1f\n"
+		"refs/remotes/origin/HEAD\x1f" "aaa\x1f" " \x1f\x1f" "refs/remotes/origin/main\n"
+		"refs/remotes/origin/feature/x\x1f" "ddd\x1f" " \x1f\x1f\n");
+	REQUIRE(tips.size() == 4);
+
+	CHECK(tips[0].name == QStringLiteral("main"));
+	CHECK(tips[0].sha == QStringLiteral("aaa"));
+	CHECK(tips[0].current);
+	CHECK_FALSE(tips[0].checkedOutElsewhere); // this worktree's own branch
+
+	CHECK(tips[1].checkedOutElsewhere);
+	CHECK_FALSE(tips[1].current);
+	CHECK_FALSE(tips[2].checkedOutElsewhere);
+
+	CHECK(tips[3].remoteTracking);
+	CHECK(tips[3].name == QStringLiteral("origin/feature/x"));
+	CHECK(tips[3].localName == QStringLiteral("feature/x"));
+}
+
 TEST_CASE("Reattach options: candidates that neither move the working tree nor orphan a commit, and what rules the near misses out", "[gitparsers]")
 {
 	const QString head = QStringLiteral("head");

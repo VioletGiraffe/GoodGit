@@ -53,6 +53,9 @@ public:
 
 	// Always fails: Mercurial has no detached state, so the state never offers a candidate
 	void reattachHead(const ReattachCandidate& candidate, Vcs::Answer<void> onDone) override;
+	// commands.update.check=noconflict: uncommitted changes go along only where they do not conflict, as with git.
+	// hg's default merges them in on a linear update, leaving any conflict behind.
+	void checkOut(const CheckoutTarget& target, Vcs::Answer<void> onDone) override;
 
 	Vcs::Query diffFile(const FileEntry& entry, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) override;
 	Vcs::Query workingTreeDiff(qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) override;
@@ -62,6 +65,8 @@ public:
 	Vcs::Query commitsAddingOrRemovingText(const LogQuery& query, const QObject* context, Vcs::Answer<QSet<QString>> onDone) override;
 	Vcs::Query historyFingerprint(const QObject* context, Vcs::Answer<QString> onDone) override;
 	Vcs::Query currentCommit(const QObject* context, Vcs::Answer<QString> onDone) override;
+	// The bookmarks: Mercurial's named branches need no entry, a commit carrying its own
+	Vcs::Query branchTips(const QObject* context, Vcs::Answer<std::vector<BranchTip>> onDone) override;
 	Vcs::Query commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone) override;
 	Vcs::Query commitFileCounts(const QString& sha, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone) override;
 	Vcs::Query commitFileDiff(const QString& sha, const CommitFileChange& file, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) override;

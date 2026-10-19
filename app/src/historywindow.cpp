@@ -6,6 +6,7 @@
 #include "repositoryfactory.h"
 #include "settings.h"
 #include "theme.h"
+#include "writeflow.h"
 
 #include "appdialogs/csettingsnotifier.h"
 #include "dialogs/messagedialog.h"
@@ -32,6 +33,7 @@ DISABLE_COMPILER_WARNINGS
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSaveFile>
+#include <QSet>
 #include <QSettings>
 #include <QShortcut>
 #include <QSplitter>
@@ -348,6 +350,14 @@ void HistoryWindow::showEvent(QShowEvent* event)
 
 void HistoryWindow::closeEvent(QCloseEvent* event)
 {
+	// Nothing cancels a Vcs::Job: a checkout this window holds would answer after it is gone
+	if (_repo->writeHeldBy(this))
+	{
+		event->ignore();
+		MessageDialog::notice(this, tr("Cannot close yet"), tr("A checkout is running. Wait for it to finish, then close the window."), {});
+		return;
+	}
+
 	QSettings settings;
 	settings.setValue(Settings::HistoryWindowSplitterKey, _splitter->saveState());
 	settings.setValue(Settings::HistoryWindowDetailSplitterKey, _detailSplitter->saveState());
@@ -369,6 +379,15 @@ void HistoryWindow::refreshUnpushedMarks()
 	_unpushedQuery = _repo->unpushedCommits(this, [this](std::expected<QSet<QString>, QString> shas) {
 		// A failure is the ordinary "no upstream to compare against"
 		_logModel.setUnpushedShas(std::move(shas).value_or(QSet<QString>{}));
+	});
+}
+
+void HistoryWindow::refreshBranchTips()
+{
+	_branchTipsQuery.cancel();
+	_branchTipsQuery = _repo->branchTips(this, [this](std::expected<std::vector<BranchTip>, QString> tips) {
+		// A failure offers the commit itself alone
+		_branchTips = std::move(tips).value_or(std::vector<BranchTip>{});
 	});
 }
 
@@ -402,6 +421,7 @@ void HistoryWindow::reload()
 
 	refreshUnpushedMarks();
 	refreshCurrentCommitMark();
+	refreshBranchTips();
 	// Read in parallel with the walk: a change landing between the two reads goes unseen until the next change
 	_listedFingerprintQuery.cancel();
 	_listedFingerprintQuery = _repo->historyFingerprint(this, [this](std::expected<QString, QString> fingerprint) {
@@ -719,7 +739,91 @@ void HistoryWindow::showCommitContextMenu(const QPoint& pos)
 	copyMessageAction->setEnabled(!commit.message.isEmpty());
 	menu.addAction(tr("Copy long hash"), this, [sha] { QApplication::clipboard()->setText(sha); });
 	menu.addAction(tr("Copy short hash"), this, [sha] { QApplication::clipboard()->setText(shortSha(sha)); });
+	menu.addSeparator();
+	addCheckoutMenu(menu, commit);
 	menu.exec(_logView->viewport()->mapToGlobal(pos));
+}
+
+void HistoryWindow::addCheckoutMenu(QMenu& menu, const CommitRecord& commit)
+{
+	QMenu* checkoutMenu = menu.addMenu(tr("Check out"));
+	const auto addTarget = [this, checkoutMenu, commit](const QString& text, const CheckoutTarget& target) {
+		// '&' doubled for display, or QMenu takes it as an accelerator marker
+		return checkoutMenu->addAction(QString{ text }.replace(QLatin1Char('&'), QStringLiteral("&&")), this,
+			[this, target, commit] { confirmThenCheckOut(target, commit); });
+	};
+
+	QSet<QString> localNames;
+	for (const BranchTip& tip : _branchTips)
+	{
+		if (!tip.remoteTracking)
+			localNames.insert(tip.name);
+	}
+
+	for (const BranchTip& tip : _branchTips)
+	{
+		if (tip.sha != commit.sha || tip.remoteTracking || tip.current)
+			continue;
+		QAction* action = addTarget(tip.checkedOutElsewhere ? tr("'%1' (checked out in another worktree)").arg(tip.name) : tr("'%1'").arg(tip.name),
+			{ .kind = CheckoutTarget::Kind::Branch, .branch = tip.name, .sha = commit.sha });
+		action->setEnabled(!tip.checkedOutElsewhere);
+	}
+	for (const BranchTip& tip : _branchTips)
+	{
+		if (tip.sha == commit.sha && tip.remoteTracking && !localNames.contains(tip.localName))
+			addTarget(tr("New '%1' tracking %2").arg(tip.localName, tip.name),
+				{ .kind = CheckoutTarget::Kind::TrackingBranch, .branch = tip.localName, .upstream = tip.name, .sha = commit.sha });
+	}
+	if (commit.sha != _logModel.currentSha())
+	{
+		addTarget(_repo->kind() == VcsKind::Git ? tr("Commit %1 (detached HEAD)").arg(shortSha(commit.sha)) : tr("Revision %1").arg(commit.revision.value_or(0)),
+			{ .kind = CheckoutTarget::Kind::Commit, .sha = commit.sha });
+	}
+
+	checkoutMenu->menuAction()->setVisible(!checkoutMenu->isEmpty());
+	checkoutMenu->setEnabled(!_repo->writeInFlight() && _repo->probeOperation() == RepoOp::None);
+}
+
+void HistoryWindow::confirmThenCheckOut(const CheckoutTarget& target, const CommitRecord& commit)
+{
+	if (_repo->writeInFlight())
+		return; // started while the menu was up
+
+	const bool git = _repo->kind() == VcsKind::Git;
+	const QString commitId = commit.revision ? QString::number(*commit.revision) : shortSha(commit.sha);
+	const QString commitText = commit.subject().isEmpty() ? commitId : QStringLiteral("%1 '%2'").arg(commitId, commit.subject());
+	QString text;
+	switch (target.kind)
+	{
+	case CheckoutTarget::Kind::Branch:
+		text = git ? tr("HEAD goes on '%1', at %2.").arg(target.branch, commitText)
+			: tr("The working directory moves to %1, and '%2' becomes the active bookmark.").arg(commitText, target.branch);
+		break;
+	case CheckoutTarget::Kind::TrackingBranch:
+		text = tr("A new branch '%1' is created at %2, tracking %3, and HEAD goes on it.").arg(target.branch, commitText, target.upstream);
+		break;
+	case CheckoutTarget::Kind::Commit:
+		text = git ? tr("HEAD is detached at %1. Committing there needs a branch first.\n\nTo get back, check out a branch here. The commit "
+						"window's offer to move a branch moves that branch to this commit instead.").arg(commitText)
+			: tr("The working directory moves to %1, and no bookmark stays active.").arg(commitText);
+		break;
+	}
+	text += QStringLiteral("\n\n") + tr("Uncommitted changes the checkout does not touch stay as they are; if it would overwrite one, "
+										 "nothing is checked out. Submodules move to the commits it records.");
+
+	const Repository::StateStamp stamp = _repo->stateStamp();
+	if (MessageDialog::question(this, tr("Check out?"), text, { tr("Check out") }) != 0 || stateMovedSince(this, *_repo, stamp))
+		return;
+
+	_repo->beginMutation(this);
+	_repo->checkOut(target, [this](std::expected<void, QString> result) {
+		_repo->endMutation();
+		if (!result)
+			MessageDialog::notice(this, tr("Checkout failed"), tr("Checkout failed."), result.error());
+		else
+			_repo->announceHistoryChange();
+		_repo->refresh();
+	});
 }
 
 void HistoryWindow::showFileContextMenu(const QPoint& pos)

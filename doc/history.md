@@ -2,7 +2,7 @@
 
 ## History
 
-Read-only, bounded rather than paged: one `log --max-count=N` builds the list (N is a setting) and "Load
+Bounded rather than paged: one `log --max-count=N` builds the list (N is a setting) and "Load
 more" re-runs it with N doubled. A cold open runs the walk twice, a small batch for an instant list and
 then the full limit in the background. Load more and that background phase both extend the shown rows in
 place, keeping the selection and scroll position: the shorter walk's result is verified to be a prefix of
@@ -69,4 +69,19 @@ one. Selecting a file cuts its section out of the whole diff, held as a `ChangeS
 between two files shows as one, and queries the file's own diff only where the whole one failed or passed its
 cap. All are cancelled when the selection moves on. A merge shows a note instead of files: `git show` prints
 no diff for one without `--cc`, so merges are detected from the parent count rather than from an empty result.
+
+## Checkout
+
+The window's one write. A commit row's **Check out** lists each way HEAD can be put on that commit:
+
+- each local branch there, or hg bookmark, but the current one. One checked out in another worktree is shown disabled.
+- a new local branch tracking each remote-tracking branch there, where that local name is free.
+- the commit itself, except the current one: git detaches HEAD, hg updates with no bookmark active.
+
+The branches come from `branchTips()`, run beside the walk. The submenu is disabled while any window holds the
+write lock or an operation is in progress; the operation is read off the on-disk markers, so the window needs no
+refreshed state. The checkout runs under the window's own hold of the lock, and success announces a history change.
+
+Uncommitted changes the checkout leaves alone go along; one it would overwrite fails it before anything moves,
+under hg too (`commands.update.check=noconflict`). Submodules move to the commits the target records.
 

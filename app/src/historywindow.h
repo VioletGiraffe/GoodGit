@@ -10,11 +10,13 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <memory>
+#include <vector>
 
 class QCheckBox;
 class QFrame;
 class QLabel;
 class QLineEdit;
+class QMenu;
 class QPlainTextEdit;
 class QPushButton;
 class QSplitter;
@@ -30,7 +32,7 @@ enum class RevealMiss
 	ReloadOnce // re-run the log query first, for a caller that knows the commit exists
 };
 
-// The commit history of one repository, read-only.
+// The commit history of one repository. Its one write is a checkout.
 // Holds the shared Repository: a submodule's history opens without a CommitWindow on that submodule.
 // Reads what it shows from its own queries, never from the state: without a CommitWindow nothing refreshes it.
 // Reloads on Repository::historyChanged, and re-reads the unpushed marks on Repository::pushed.
@@ -66,6 +68,8 @@ private:
 	void reload();
 	// Re-reads which commits are unpushed, leaving the list and the selection alone
 	void refreshUnpushedMarks();
+	// Re-reads the branches the checkout menu offers
+	void refreshBranchTips();
 
 	// Re-reads which commit the working tree is on, for the diagram's current-commit ring and the history
 	// drawn above it
@@ -78,6 +82,11 @@ private:
 	void runPickaxe(const QString& text, bool ignoreCase);
 	void startPickaxeQuery();
 	void showCommitContextMenu(const QPoint& pos);
+	// Each way HEAD can be put on `commit`: a branch there, a new one tracking a remote-tracking branch there, the
+	// commit itself. Absent where there is none; disabled while a write or an operation is in progress.
+	void addCheckoutMenu(QMenu& menu, const CommitRecord& commit);
+	// The write runs under this window's hold of the write lock
+	void confirmThenCheckOut(const CheckoutTarget& target, const CommitRecord& commit);
 	void showFileContextMenu(const QPoint& pos);
 	void openFileHistory(const QString& filePath);
 	// One file's content as of one commit, in a separate window
@@ -156,6 +165,8 @@ private:
 	Vcs::Query _pickaxeQuery;
 	Vcs::Query _unpushedQuery;
 	Vcs::Query _currentCommitQuery;
+	std::vector<BranchTip> _branchTips; // empty until the query answers, and where it failed
+	Vcs::Query _branchTipsQuery;
 	Vcs::Query _filesQuery;
 	Vcs::Query _fileCountsQuery;
 	Vcs::Query _diffQuery;

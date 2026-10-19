@@ -888,6 +888,15 @@ void HgRepository::reattachHead(const ReattachCandidate& /*candidate*/, Vcs::Ans
 	Vcs::answerLater(this, std::move(onDone), std::unexpected(QObject::tr("Mercurial has no detached state to leave.")));
 }
 
+void HgRepository::checkOut(const CheckoutTarget& target, Vcs::Answer<void> onDone)
+{
+	assert_r(target.kind != CheckoutTarget::Kind::TrackingBranch); // branchTips() lists no remote-tracking branch
+	// A bookmark named as the revision is activated; a node leaves none active
+	const QString revision = target.kind == CheckoutTarget::Kind::Branch ? target.branch : target.sha;
+	Hg::run(path(), { QStringLiteral("--config"), QStringLiteral("commands.update.check=noconflict"), QStringLiteral("update"),
+		QStringLiteral("-r"), revision }, this, Vcs::reporting(std::move(onDone)));
+}
+
 Vcs::Query HgRepository::diffFile(const FileEntry& entry, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone)
 {
 	// No need to name a rename's source: hg records copies rather than inferring them, so --git prints the
@@ -979,6 +988,12 @@ Vcs::Query HgRepository::currentCommit(const QObject* context, Vcs::Answer<QStri
 {
 	return runQuery(path(), { QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("."),
 		QStringLiteral("-T"), QStringLiteral("{node}") }, context, Vcs::answering(std::move(onDone), Vcs::outputAsTrimmedText));
+}
+
+Vcs::Query HgRepository::branchTips(const QObject* context, Vcs::Answer<std::vector<BranchTip>> onDone)
+{
+	return runQuery(path(), { QStringLiteral("bookmarks"), QStringLiteral("-T"), QStringLiteral("json") },
+		context, Vcs::answering(std::move(onDone), Hg::parseBookmarks));
 }
 
 Vcs::Query HgRepository::commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone)

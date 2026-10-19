@@ -204,6 +204,8 @@ touching the user's configuration. Which tool `extdiff` starts is the user's `[e
 - `revert` of a subrepo path updates the subrepo to the revision `.hgsubstate` records.
 - A commit that takes a dirty subrepo aborts, unless `ui.commitsubrepos` is set: then it commits inside the subrepo first.
 - Reverting a path the parent changeset does not have only takes it out of tracking.
+- `update` merges uncommitted changes into a linear update by default (`commands.update.check=linear`), leaving any
+  conflict behind. `noconflict` refuses an update that would conflict instead.
 
 ## Command server protocol
 

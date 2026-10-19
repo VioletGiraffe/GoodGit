@@ -17,7 +17,7 @@ own under `doc/`:
 - `invocation.md`: the flags every git and hg call carries, and how output arrives.
 - `encoding.md`: which encoding tool output, paths, file content and diffs are in.
 - `refresh.md`: what triggers a refresh, the re-check before a write, which query failures discard a run.
-- `history.md`: the history window's walks, searches, marks and lane diagram.
+- `history.md`: the history window's walks, searches, marks and lane diagram, and its checkout.
 - `submodules.md`: submodule rows in the list and in history, discarding inside one, and the push plan.
 - `remotes.md`: the incoming check: fetching, the behind count, what the header claims, the submodule-wide manual check.
 - `updates.md`: the update check, the one network access outside git and hg.
@@ -73,7 +73,7 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `init_logging`, `up
 | `filelistview` | The file list widget both windows show: the column sizing and delegate they share, the sort proxy its clickable header drives - status rank then path, or path alone - and the path-copy actions both context menus offer. Answers and takes indexes in the source model's coordinates, so no window handles the shown order |
 | `theme` | The selectable themes and the stylesheet built from them, on qtutils' theming framework (`CThemeController` persists the scheme and per-polarity theme choice; `themeicon:/` serves runtime-tinted QSS glyphs). The glyphs are monochrome SVGs in `app/res`, tinted per theme at load. Reapplied live on any change; the system scheme is followed unless overridden |
 | `commitwindow` | One window = one repository. Holds its `Repository`, runs every user flow, and hosts the recent repositories dock. A submodule or untracked repository row opens another `CommitWindow` on that repository; a history change announced on that repository refreshes the parent. An unsent message survives the window closing and comes back on the next open while HEAD still points where it did. In its context menus an action blocked by the repository's state is shown disabled, one the selected rows can never reach is absent |
-| `historywindow`, `historymodels` | The read-only commit history: log above; below it the selected commit's message body where it has one, over its file list beside a file's diff. Narrowed to one path it is a file history. Holds the shared `Repository`, so a submodule's history opens without a `CommitWindow` on that submodule |
+| `historywindow`, `historymodels` | The commit history, whose one write is a checkout: log above; below it the selected commit's message body where it has one, over its file list beside a file's diff. Narrowed to one path it is a file history. Holds the shared `Repository`, so a submodule's history opens without a `CommitWindow` on that submodule |
 | `commitgraph` | The lane diagram beside the commit list, computed from the records' parent links alone. Backend- and UI-free |
 | `commitgraphdelegate` | Paints that diagram in the log's first column |
 | `consolelogview` | The push log: raw process output rendered like a terminal, so a progress meter's carriage returns rewrite one line instead of filling the log |

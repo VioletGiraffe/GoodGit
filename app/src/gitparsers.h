@@ -140,6 +140,13 @@ inline constexpr char RemoteBranchRefFormat[] = "%(refname)%1f%(objectname)%1f%(
 // origin/HEAD is skipped: it names another listed branch.
 [[nodiscard]] std::vector<RemoteBranchRef> parseRemoteBranchRefs(const QByteArray& forEachRefOutput);
 
+// US-separated, as LocalBranchRefFormat. %(HEAD) is "*" on the branch HEAD is on; %(worktreepath) is set for every
+// worktree's branch, this one's included.
+inline constexpr char BranchTipFormat[] = "%(refname)%1f%(objectname)%1f%(HEAD)%1f%(if)%(worktreepath)%(then)1%(end)%1f%(symref)";
+
+// Input: `for-each-ref --format=<BranchTipFormat> refs/heads refs/remotes` output. A symbolic ref is skipped.
+[[nodiscard]] std::vector<BranchTip> parseBranchTips(const QByteArray& forEachRefOutput);
+
 // One local branch's upstream, and where a plain `git push` of it goes
 struct BranchPushTarget
 {

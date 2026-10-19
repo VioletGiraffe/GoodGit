@@ -66,3 +66,7 @@ repository and submodules. Mercurial has no detached state, so the flow is never
 The operations that detach HEAD themselves - bisect and rebase - are the exception: committing is refused
 while one is in progress, so the flow is never reached and the strip promises nothing. Every other
 operation leaves HEAD on its branch, and a commit made during one attaches exactly as any other does.
+
+History's checkout of a commit detaches HEAD on purpose, to look at it (`history.md`). Committing there goes
+through the same candidates. A Move candidate then takes its branch back to the commit being looked at, so the
+way back is History's checkout of that branch, which its confirmation says.

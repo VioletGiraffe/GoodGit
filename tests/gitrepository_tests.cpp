@@ -113,6 +113,12 @@ public:
 		return gitOutput({ QStringLiteral("rev-parse"), revision }).trimmed();
 	}
 
+	// The branch HEAD is on, or "HEAD" when detached
+	[[nodiscard]] QString headName() const
+	{
+		return gitOutput({ QStringLiteral("rev-parse"), QStringLiteral("--abbrev-ref"), QStringLiteral("HEAD") }).trimmed();
+	}
+
 	// What the index holds beyond HEAD, as `<letter>\t<path>` lines in path order
 	[[nodiscard]] QString stagedAgainstHead() const
 	{
@@ -240,6 +246,54 @@ TEST_CASE("Discarding a moved submodule pointer checks the recorded commit out i
 	requireSuccess(awaitAnswer<void>([&](Vcs::Answer<void> onDone) { repository.discardChanges({ QStringLiteral("sub") }, std::move(onDone)); }));
 
 	CHECK(scratch.refreshed().first.empty());
+}
+
+TEST_CASE("A checkout puts HEAD on a branch, on a new branch tracking a remote-tracking one, or detaches it", "[git]")
+{
+	const ScratchRepository scratch;
+	scratch.write(QStringLiteral("file.txt"), "one\n");
+	scratch.commitAll(QStringLiteral("one"));
+	const QString first = scratch.sha(QStringLiteral("HEAD"));
+	scratch.git({ QStringLiteral("branch"), QStringLiteral("side") });
+	scratch.write(QStringLiteral("file.txt"), "two\n");
+	scratch.commitAll(QStringLiteral("two"));
+	scratch.setUpstreamOfMainToOriginMain(); // the fetch refspec a tracking branch is set up from
+	scratch.git({ QStringLiteral("update-ref"), QStringLiteral("refs/remotes/origin/feature"), first });
+
+	GitRepository repository{ scratch.root() };
+	const auto checkOut = [&](const CheckoutTarget& target) {
+		return awaitAnswer<void>([&](Vcs::Answer<void> onDone) { repository.checkOut(target, std::move(onDone)); });
+	};
+
+	SECTION("an existing branch")
+	{
+		requireSuccess(checkOut({ .kind = CheckoutTarget::Kind::Branch, .branch = QStringLiteral("side"), .sha = first }));
+		CHECK(scratch.headName() == QStringLiteral("side"));
+		CHECK(scratch.sha(QStringLiteral("HEAD")) == first);
+	}
+
+	SECTION("a new branch tracking a remote-tracking one")
+	{
+		requireSuccess(checkOut({ .kind = CheckoutTarget::Kind::TrackingBranch, .branch = QStringLiteral("feature"),
+			.upstream = QStringLiteral("origin/feature"), .sha = first }));
+		CHECK(scratch.headName() == QStringLiteral("feature"));
+		CHECK(scratch.sha(QStringLiteral("HEAD")) == first);
+		CHECK(scratch.sha(QStringLiteral("feature@{upstream}")) == first);
+	}
+
+	SECTION("the commit itself")
+	{
+		requireSuccess(checkOut({ .kind = CheckoutTarget::Kind::Commit, .sha = first }));
+		CHECK(scratch.headName() == QStringLiteral("HEAD"));
+		CHECK(scratch.sha(QStringLiteral("HEAD")) == first);
+	}
+
+	SECTION("an uncommitted change the checkout would overwrite fails it, and nothing moves")
+	{
+		scratch.write(QStringLiteral("file.txt"), "uncommitted\n");
+		CHECK_FALSE(checkOut({ .kind = CheckoutTarget::Kind::Branch, .branch = QStringLiteral("side"), .sha = first }).has_value());
+		CHECK(scratch.headName() == QStringLiteral("main"));
+	}
 }
 
 TEST_CASE("Both sides of a merge conflict are conflicted rows, including a path modified here and deleted there", "[git]")

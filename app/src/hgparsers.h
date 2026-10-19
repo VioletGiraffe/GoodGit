@@ -56,6 +56,9 @@ struct WorkingDirectory
 // Input: `log -T json`. Records keep the revset's order.
 [[nodiscard]] std::vector<CommitRecord> parseCommitLog(const QByteArray& logOutput);
 
+// Input: `bookmarks -T json`. The active bookmark is the current one: each commit moves it along.
+[[nodiscard]] std::vector<BranchTip> parseBookmarks(const QByteArray& bookmarksOutput);
+
 // Input: `paths -T json`. The configured path names ("default", "default-push"), in hg's order.
 [[nodiscard]] QStringList parsePathNames(const QByteArray& pathsOutput);
 

@@ -55,6 +55,7 @@ public:
 	void discardSubmoduleContent(const QString& repoRelativePath, const SubmoduleDiscardPlan& plan, Vcs::Answer<void> onDone) override;
 
 	void reattachHead(const ReattachCandidate& candidate, Vcs::Answer<void> onDone) override;
+	void checkOut(const CheckoutTarget& target, Vcs::Answer<void> onDone) override;
 
 	Vcs::Query diffFile(const FileEntry& entry, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) override;
 	Vcs::Query workingTreeDiff(qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) override;
@@ -64,6 +65,7 @@ public:
 	Vcs::Query commitsAddingOrRemovingText(const LogQuery& query, const QObject* context, Vcs::Answer<QSet<QString>> onDone) override;
 	Vcs::Query historyFingerprint(const QObject* context, Vcs::Answer<QString> onDone) override;
 	Vcs::Query currentCommit(const QObject* context, Vcs::Answer<QString> onDone) override;
+	Vcs::Query branchTips(const QObject* context, Vcs::Answer<std::vector<BranchTip>> onDone) override;
 	Vcs::Query commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone) override;
 	Vcs::Query commitFileCounts(const QString& sha, const QObject* context, Vcs::Answer<std::map<QString, LineCounts>> onDone) override;
 	Vcs::Query commitFileDiff(const QString& sha, const CommitFileChange& file, qint64 maxBytes, const QObject* context, Vcs::Answer<QByteArray> onDone) override;

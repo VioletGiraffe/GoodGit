@@ -1146,6 +1146,25 @@ void GitRepository::reattachHead(const ReattachCandidate& candidate, Vcs::Answer
 	}
 }
 
+void GitRepository::checkOut(const CheckoutTarget& target, Vcs::Answer<void> onDone)
+{
+	QStringList args{ QStringLiteral("switch"), QStringLiteral("--recurse-submodules") };
+	switch (target.kind)
+	{
+	case CheckoutTarget::Kind::Branch:
+		args << target.branch;
+		break;
+	case CheckoutTarget::Kind::TrackingBranch:
+		// The full ref: a local branch may be named like a remote-tracking one
+		args << QStringLiteral("-c") << target.branch << QStringLiteral("--track") << QStringLiteral("refs/remotes/") + target.upstream;
+		break;
+	case CheckoutTarget::Kind::Commit:
+		args << QStringLiteral("--detach") << target.sha;
+		break;
+	}
+	Git::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));
+}
+
 QString GitRepository::diffBase() const
 {
 	return state().unborn ? _emptyTreeSha : QStringLiteral("HEAD");
@@ -1207,6 +1226,12 @@ Vcs::Query GitRepository::currentCommit(const QObject* context, Vcs::Answer<QStr
 {
 	return runQuery(path(), { QStringLiteral("rev-parse"), QStringLiteral("HEAD") },
 		context, Vcs::answering(std::move(onDone), Vcs::outputAsTrimmedText));
+}
+
+Vcs::Query GitRepository::branchTips(const QObject* context, Vcs::Answer<std::vector<BranchTip>> onDone)
+{
+	return runQuery(path(), { QStringLiteral("for-each-ref"), QStringLiteral("--format=") + QLatin1String(Git::BranchTipFormat),
+		QStringLiteral("refs/heads"), QStringLiteral("refs/remotes") }, context, Vcs::answering(std::move(onDone), Git::parseBranchTips));
 }
 
 Vcs::Query GitRepository::commitFiles(const QString& sha, const QObject* context, Vcs::Answer<std::vector<CommitFileChange>> onDone)

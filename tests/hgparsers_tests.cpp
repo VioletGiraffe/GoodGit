@@ -76,6 +76,22 @@ TEST_CASE("Log records: revision 0, the null parent dropped, the date in the com
 	CHECK(commits[1].refs == QStringLiteral("mark, feature"));
 }
 
+TEST_CASE("Bookmarks are local branch tips, the active one current", "[hgparsers]")
+{
+	const std::vector<BranchTip> tips = Hg::parseBookmarks(R"([
+		{"active": true, "bookmark": "main", "node": "3bf090a7f6cbcee054e5d10ab001fe023b9a764c", "rev": 1},
+		{"active": false, "bookmark": "feature", "node": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b", "rev": 0}
+	])");
+	REQUIRE(tips.size() == 2);
+	CHECK(tips[0].name == QStringLiteral("main"));
+	CHECK(tips[0].sha == QStringLiteral("3bf090a7f6cbcee054e5d10ab001fe023b9a764c"));
+	CHECK(tips[0].current);
+	CHECK_FALSE(tips[0].remoteTracking);
+	CHECK_FALSE(tips[1].current);
+
+	CHECK(Hg::parseBookmarks("[]").empty());
+}
+
 TEST_CASE("The working directory of an uncommitted merge has two parents", "[hgparsers]")
 {
 	const Hg::WorkingDirectory directory = Hg::parseWorkingDirectory(R"([

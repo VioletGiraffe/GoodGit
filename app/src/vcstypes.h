@@ -94,6 +94,34 @@ struct CommitRecord
 	}
 };
 
+// One branch and the commit it points at, as the history's checkout menu offers it. Mercurial's bookmarks are
+// its local branches; it keeps no remote-tracking ones.
+struct BranchTip
+{
+	QString name; // "main", "origin/main"
+	QString sha;
+	bool remoteTracking = false;
+	QString localName; // remote-tracking only: the name a local branch tracking it takes
+	bool current = false;             // local only: HEAD is on it
+	bool checkedOutElsewhere = false; // local only: another worktree is on it, so this one cannot be
+};
+
+// Where a checkout puts HEAD and the working tree
+struct CheckoutTarget
+{
+	enum class Kind : uint8_t
+	{
+		Branch,         // an existing local branch, or a Mercurial bookmark: HEAD goes on it
+		TrackingBranch, // a new local branch at a remote-tracking branch's tip, tracking it: HEAD goes on it
+		Commit,         // the commit itself: git detaches HEAD; Mercurial updates with no bookmark active
+	};
+
+	Kind kind = Kind::Commit;
+	QString branch;   // Branch, TrackingBranch: the local branch
+	QString upstream; // TrackingBranch: the remote-tracking branch, "origin/main"
+	QString sha;      // the commit the working tree moves to
+};
+
 // The operation that owns HEAD, classified by how it must be finished and not by what its system calls it.
 // Git's merge, cherry-pick and revert are finished by committing, so each has a value here.
 // Unmodelled: an operation this app cannot carry through, under either system - git's am, hg's graft.
