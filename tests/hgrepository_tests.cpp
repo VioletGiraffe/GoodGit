@@ -554,33 +554,25 @@ TEST_CASE("An hg push up to a changeset publishes it and its ancestors, and one 
 			[&](Vcs::Answer<std::vector<PushStep>> onDone) { repository.planPush(PushMode::UpTo, commit, std::move(onDone)); });
 	};
 
-	SECTION("on the first-parent line")
-	{
-		const QString merge = node(QStringLiteral(".^"));
-		const std::vector<PushStep> steps = requireSuccess(planUpTo(merge));
-		REQUIRE(steps.size() == 1);
-		CHECK(steps[0].commit == merge);
+	// The refusals first: they leave the repository as it is, and the push below changes it
+	const std::expected<std::vector<PushStep>, QString> beforeMerge = planUpTo(node(QStringLiteral(".^^")));
+	REQUIRE_FALSE(beforeMerge.has_value());
+	CHECK(beforeMerge.error().contains(QLatin1String("first-parent line")));
 
-		runPushStepToSuccess(repository, steps[0]);
-		CHECK(upstream.hgOutput({ QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("heads(all())"), QStringLiteral("-T"),
-			QStringLiteral("{node}\n") }).trimmed() == merge);
+	const std::expected<std::vector<PushStep>, QString> notAnAncestor = planUpTo(side);
+	REQUIRE_FALSE(notAnAncestor.has_value());
+	CHECK(notAnAncestor.error().contains(QLatin1String("not an ancestor")));
 
-		const std::expected<std::vector<PushStep>, QString> again = planUpTo(merge);
-		REQUIRE_FALSE(again.has_value());
-		CHECK(again.error().contains(QLatin1String("public already")));
-	}
+	const QString merge = node(QStringLiteral(".^"));
+	const std::vector<PushStep> steps = requireSuccess(planUpTo(merge));
+	REQUIRE(steps.size() == 1);
+	CHECK(steps[0].commit == merge);
 
-	SECTION("before a merge of the pulled head")
-	{
-		const std::expected<std::vector<PushStep>, QString> plan = planUpTo(node(QStringLiteral(".^^")));
-		REQUIRE_FALSE(plan.has_value());
-		CHECK(plan.error().contains(QLatin1String("first-parent line")));
-	}
+	runPushStepToSuccess(repository, steps[0]);
+	CHECK(upstream.hgOutput({ QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("heads(all())"), QStringLiteral("-T"),
+		QStringLiteral("{node}\n") }).trimmed() == merge);
 
-	SECTION("not an ancestor of the working directory's parent")
-	{
-		const std::expected<std::vector<PushStep>, QString> plan = planUpTo(side);
-		REQUIRE_FALSE(plan.has_value());
-		CHECK(plan.error().contains(QLatin1String("not an ancestor")));
-	}
+	const std::expected<std::vector<PushStep>, QString> pushedAlready = planUpTo(merge);
+	REQUIRE_FALSE(pushedAlready.has_value());
+	CHECK(pushedAlready.error().contains(QLatin1String("public already")));
 }

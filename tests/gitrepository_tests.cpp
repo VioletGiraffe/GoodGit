@@ -788,36 +788,28 @@ TEST_CASE("A push up to a commit publishes it and its ancestors, and one it cann
 			[&](Vcs::Answer<std::vector<PushStep>> onDone) { repository.planPush(PushMode::UpTo, commit, std::move(onDone)); });
 	};
 
-	SECTION("on the first-parent line")
-	{
-		const QString merge = local.sha(QStringLiteral("HEAD~1"));
-		const std::vector<PushStep> steps = requireSuccess(planUpTo(merge));
-		REQUIRE(steps.size() == 1);
-		CHECK(steps[0].commit == merge);
-		CHECK(steps[0].remote == QStringLiteral("origin"));
-		CHECK(steps[0].remoteRef == QStringLiteral("refs/heads/main"));
+	// The refusals first: they leave the repository as it is, and the push below changes it
+	const std::expected<std::vector<PushStep>, QString> beforeMerge = planUpTo(local.sha(QStringLiteral("HEAD~1^1")));
+	REQUIRE_FALSE(beforeMerge.has_value());
+	CHECK(beforeMerge.error().contains(QLatin1String("first-parent line")));
 
-		runPushStepToSuccess(repository, steps[0]);
-		CHECK(upstream.sha(QStringLiteral("refs/heads/main")) == merge);
+	const std::expected<std::vector<PushStep>, QString> onAnotherBranch = planUpTo(side);
+	REQUIRE_FALSE(onAnotherBranch.has_value());
+	CHECK(onAnotherBranch.error().contains(QLatin1String("not on the checked-out branch")));
 
-		const std::expected<std::vector<PushStep>, QString> again = planUpTo(merge);
-		REQUIRE_FALSE(again.has_value());
-		CHECK(again.error().contains(QLatin1String("on the upstream")));
-	}
+	const QString merge = local.sha(QStringLiteral("HEAD~1"));
+	const std::vector<PushStep> steps = requireSuccess(planUpTo(merge));
+	REQUIRE(steps.size() == 1);
+	CHECK(steps[0].commit == merge);
+	CHECK(steps[0].remote == QStringLiteral("origin"));
+	CHECK(steps[0].remoteRef == QStringLiteral("refs/heads/main"));
 
-	SECTION("before a merge of the upstream")
-	{
-		const std::expected<std::vector<PushStep>, QString> plan = planUpTo(local.sha(QStringLiteral("HEAD~1^1")));
-		REQUIRE_FALSE(plan.has_value());
-		CHECK(plan.error().contains(QLatin1String("first-parent line")));
-	}
+	runPushStepToSuccess(repository, steps[0]);
+	CHECK(upstream.sha(QStringLiteral("refs/heads/main")) == merge);
 
-	SECTION("on another branch")
-	{
-		const std::expected<std::vector<PushStep>, QString> plan = planUpTo(side);
-		REQUIRE_FALSE(plan.has_value());
-		CHECK(plan.error().contains(QLatin1String("not on the checked-out branch")));
-	}
+	const std::expected<std::vector<PushStep>, QString> pushedAlready = planUpTo(merge);
+	REQUIRE_FALSE(pushedAlready.has_value());
+	CHECK(pushedAlready.error().contains(QLatin1String("on the upstream")));
 }
 
 TEST_CASE("A push up to a commit pushes the submodules that commit references, not the ones HEAD does", "[git]")
