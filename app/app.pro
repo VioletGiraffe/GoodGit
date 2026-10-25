@@ -72,6 +72,7 @@ HEADERS += \
 	src/init_logging.h \
 	src/messageedit.h \
 	src/movedblocks.h \
+	src/pushpane.h \
 	src/queryround.h \
 	src/recentrepositories.h \
 	src/recentrepositoriespanel.h \
@@ -120,6 +121,7 @@ SOURCES += \
 	src/main.cpp \
 	src/messageedit.cpp \
 	src/movedblocks.cpp \
+	src/pushpane.cpp \
 	src/recentrepositories.cpp \
 	src/recentrepositoriespanel.cpp \
 	src/repository.cpp \

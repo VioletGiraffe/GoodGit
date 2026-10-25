@@ -17,11 +17,11 @@ class QCheckBox;
 class QLabel;
 class QPushButton;
 class QSplitter;
-class ConsoleLogView;
 class DiffPane;
 class FileListView;
 class IncomingChangesDialog;
 class MessageEdit;
+class PushPane;
 class CLabelElided;
 
 // One window = one repository. Submodule and untracked repository rows open another instance of this window.
@@ -52,7 +52,6 @@ private:
 	[[nodiscard]] QWidget* buildMessageHeader();
 	[[nodiscard]] QWidget* buildMessageArea();
 	[[nodiscard]] QWidget* buildRightPane();
-	[[nodiscard]] QWidget* buildPushLogPane();
 	// Returns the action that shows and hides the dock
 	[[nodiscard]] QAction* buildRecentRepositoriesDock();
 	void installShortcuts();
@@ -88,29 +87,10 @@ private:
 	// The only candidate, or the one picked from several. Empty when the dialog is dismissed or the state moved meanwhile.
 	[[nodiscard]] std::optional<ReattachCandidate> chooseReattachCandidate(std::vector<ReattachCandidate> candidates, const StateStamp& stamp);
 	void doCommit(bool pushAfterwards, StateStamp decisionStamp);
-	// Runs the steps the repository plans one after another, logged as one console session. The first
-	// failure ends the push.
-	void startPush(PushMode mode);
-	// Takes the push lock of every submodule the planned push writes, all or none. A busy one is reported, and
-	// nothing is locked.
-	[[nodiscard]] bool lockPushedSubmodules();
-	// Ends the push flow, finished or failed: this repository's push lock and the submodules'. Each submodule's
-	// history views re-read the unpushed marks, and its window refreshes.
-	void endPush();
-	// After this repository's own push. Not refreshRepository(): a push also stales the unpushed marks, which a
-	// working-tree change does not.
-	void refreshAfterPush();
-	// Before a one-by-one push of the planned steps: each push of a commit can start a CI run
-	[[nodiscard]] bool confirmOneByOnePush();
-	void runPushStep(size_t index, bool setUpstream);
-	// Offers to set `upstream` for the step's branch and retries if accepted. Returns whether the push
-	// goes on.
-	bool offerUpstreamThenRetry(size_t index, const QString& upstream);
 	// The menu's check: opens the dialog, which checks the submodules; this repository's own check joins the one in flight
 	void checkForIncomingChanges();
 	// Every refresh starts one, non-interactive; the header shows its outcome
 	void startIncomingCheck(bool interactive);
-	void closePushLogEntry(const ProcessResult& result);
 
 	void showHistoryWindow();
 	void undoLastCommit();
@@ -187,13 +167,9 @@ private:
 	QPushButton* _commitButton = nullptr;
 	QPushButton* _commitPushButton = nullptr;
 	DiffPane* _diffPane = nullptr;
-	QWidget* _pushLogPane = nullptr; // hidden until the first push of the session
-	ConsoleLogView* _pushLogView = nullptr;
+	PushPane* _pushPane = nullptr;
 
 	QPointer<IncomingChangesDialog> _incomingDialog; // open while the menu's check shows; takes this repository's answer
-
-	std::vector<PushStep> _pushSteps; // the running push's plan
-	std::vector<std::shared_ptr<Repository>> _pushedSubmodules; // their push locks are held until the push ends
 
 	Vcs::Query _diffQuery; // whatever fills the diff pane: a file's diff, or a submodule's incoming commits
 	// The row whose text the pane showed last: a refresh showing it again returns to the same place

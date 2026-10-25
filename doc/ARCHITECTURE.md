@@ -38,7 +38,7 @@ Dependencies point one way, top to bottom:
 
 - Windows: `commitwindow`, `historywindow`, `welcomewindow`, `fileviewerwindow`, `incomingchangesdialog`, `appmenus`, `settingspages`,
   `recentrepositoriespanel`, `writeflow`, and the views they compose - `diffpane`, `difftextview`, `filelistview`,
-  `filelistdelegate`, `consolelogview`, `messageedit`, `commitgraphdelegate`.
+  `filelistdelegate`, `pushpane`, `consolelogview`, `messageedit`, `commitgraphdelegate`.
 - Models: `changedfilesmodel`, `historymodels`.
 - The repository boundary and the window registry: `repository`, `repositoryfactory`, `repositorywindows`,
   `recentrepositories`.
@@ -76,6 +76,7 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `init_logging`, `up
 | `historywindow`, `historymodels` | The commit history, whose one write is a checkout: log above; below it the selected commit's message body where it has one, over its file list beside a file's diff. The walk covers the checkout's line, every ref or one branch, as the branch selector says. Narrowed to one path it is a file history. Holds the shared `Repository`, so a submodule's history opens without a `CommitWindow` on that submodule |
 | `commitgraph` | The lane diagram beside the commit list, computed from the records' parent links alone. Backend- and UI-free |
 | `commitgraphdelegate` | Paints that diagram in the log's first column |
+| `pushpane` | The pane a window pushes through: runs the planned steps in order, holds the push locks of the repository and the submodules it writes, and shows the output in a `consolelogview` |
 | `consolelogview` | The push log: raw process output rendered like a terminal, so a progress meter's carriage returns rewrite one line instead of filling the log |
 | `messageedit` | The message editor with the subject guide column and word completion over a pool it extracts from the changed paths and one diff per refresh. Matching is case-insensitive, and words whose case the typed prefix already matches are offered first |
 | `unifieddiff` | A unified diff read into the lines to show for it: a removed line and the added line one edit turned it into become one merged line, and a block removed in one place and added in another is a move. Backend- and UI-free, tested directly. See `diff.md` |
