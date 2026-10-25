@@ -62,6 +62,9 @@ refused before any step runs.
 
 `hg push -r .` recurses into submodules itself, so Mercurial's plan is one step.
 
+A submodule step publishes the submodule's whole branch, not only the commit its parent records, so commits after that
+one are pushed too. hg's own recursion does the same (`hg.md`).
+
 The push holds the push lock of every submodule it writes, so the submodule's own window cannot undo or push
 what is being published meanwhile:
 
@@ -84,4 +87,12 @@ remote and starts a CI run. A confirmation names the count first.
   refused. The backstop is `--recurse-submodules=check`: the submodule steps already pushed what the commits reference.
 - Mercurial pushes `-r <node>` to the push path. hg has no documented first-parent revset, so the backend walks the
   line itself.
+
+### Up to a commit
+
+Push up to here, on an unpushed commit in the history, publishes that commit and its ancestors in one push: the last
+step a one-by-one push would run, after the submodules that commit's tree references. hg's push recurses as it always does.
+A commit one-by-one would not step through is refused, the refusal saying why: on the upstream already, not on the
+checked-out line, or off its first-parent line. The planning reads nothing from the refreshed state: a history window
+may be open on a repository no commit window refreshes.
 

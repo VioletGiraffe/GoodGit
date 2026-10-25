@@ -25,6 +25,7 @@ class QTimer;
 class QTreeView;
 class CLabelElided;
 class FileListView;
+class PushPane;
 
 // What a reveal does where the listing does not hold the commit
 enum class RevealMiss
@@ -33,7 +34,7 @@ enum class RevealMiss
 	ReloadOnce // re-run the log query first, for a caller that knows the commit exists
 };
 
-// The commit history of one repository. Its one write is a checkout.
+// The commit history of one repository. Its writes are a checkout and a push up to a commit.
 // Holds the shared Repository: a submodule's history opens without a CommitWindow on that submodule.
 // Reads what it shows from its own queries, never from the state: without a CommitWindow nothing refreshes it.
 // Reloads on Repository::historyChanged, and re-reads the unpushed marks on Repository::pushed.
@@ -97,6 +98,8 @@ private:
 	// Unconfirmed: the tool refuses before anything moves where an uncommitted change would be overwritten, and the
 	// refusal is reported. Runs under this window's hold of the write lock.
 	void checkOut(const CheckoutTarget& target);
+	// Publishes `sha` and the unpushed commits before it, through this window's push pane
+	void pushUpTo(const QString& sha);
 	void showFileContextMenu(const QPoint& pos);
 	void openFileHistory(const QString& filePath);
 	// One file's content as of one commit, in a separate window
@@ -167,6 +170,7 @@ private:
 	QLabel* _fileCountLabel = nullptr;
 	QPushButton* _loadMoreButton = nullptr;
 	DiffPane* _diffPane = nullptr;
+	PushPane* _pushPane = nullptr;
 
 	Vcs::Query _logQuery;
 	// Repository::historyFingerprint() as of the listing shown; empty where it could not be read

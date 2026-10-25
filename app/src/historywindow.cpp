@@ -3,6 +3,7 @@
 #include "diffpane.h"
 #include "filelistview.h"
 #include "fileviewerwindow.h"
+#include "pushpane.h"
 #include "repositoryfactory.h"
 #include "settings.h"
 #include "theme.h"
@@ -303,7 +304,15 @@ void HistoryWindow::buildUi()
 		_splitter->restoreState(state);
 	else
 		_splitter->setSizes({ 340, 420 });
-	setCentralWidget(_splitter);
+
+	auto* central = new QWidget;
+	auto* centralLayout = new QVBoxLayout(central);
+	centralLayout->setContentsMargins(0, 0, 0, 0);
+	centralLayout->setSpacing(0);
+	centralLayout->addWidget(_splitter, 1);
+	_pushPane = new PushPane{ _repo };
+	centralLayout->addWidget(_pushPane);
+	setCentralWidget(central);
 	resize(1180, 780);
 
 	connect(refreshButton, &QPushButton::clicked, this, &HistoryWindow::reload);
@@ -395,11 +404,17 @@ void HistoryWindow::showEvent(QShowEvent* event)
 
 void HistoryWindow::closeEvent(QCloseEvent* event)
 {
-	// Nothing cancels a Vcs::Job: a checkout this window holds would answer after it is gone
-	if (_repo->writeHeldBy(this))
+	// Nothing cancels a Vcs::Job: a write this window holds would answer after it is gone
+	const bool pushRunning = _pushPane->pushRunning();
+	if (_repo->writeHeldBy(this) || pushRunning)
 	{
 		event->ignore();
-		MessageDialog::notice(this, tr("Cannot close yet"), tr("A checkout is running. Wait for it to finish, then close the window."), {});
+		if (pushRunning)
+			_pushPane->show(); // may have been hidden mid-push; it shows how far the push has got
+
+		MessageDialog::notice(this, tr("Cannot close yet"), pushRunning
+			? tr("A push is running. Wait for it to finish, then close the window.")
+			: tr("A checkout is running. Wait for it to finish, then close the window."), {});
 		return;
 	}
 
@@ -875,7 +890,19 @@ void HistoryWindow::showCommitContextMenu(const QPoint& pos)
 	menu.addAction(tr("Copy short hash"), this, [sha] { QApplication::clipboard()->setText(shortSha(sha)); });
 	menu.addSeparator();
 	addCheckoutMenu(menu, commit);
+	// On every unpushed commit: the plan refuses one it cannot push, and the refusal says why
+	if (index.data(CommitLogModel::UnpushedRole).toBool())
+	{
+		QAction* pushAction = menu.addAction(tr("Push up to here..."), this, [this, sha] { pushUpTo(sha); });
+		pushAction->setEnabled(!_repo->writeInFlight());
+	}
 	menu.exec(_logView->viewport()->mapToGlobal(pos));
+}
+
+void HistoryWindow::pushUpTo(const QString& sha)
+{
+	if (!_repo->writeInFlight()) // otherwise started while the menu was up
+		_pushPane->startPush(PushMode::UpTo, sha);
 }
 
 void HistoryWindow::addCheckoutMenu(QMenu& menu, const CommitRecord& commit)

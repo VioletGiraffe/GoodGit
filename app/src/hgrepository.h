@@ -28,10 +28,10 @@ public:
 	void continueOperation(Vcs::Answer<void> onDone) override;
 
 	// `hg push -r` recurses into subrepositories itself, so the plan is this repository alone.
-	// A one-by-one step goes to the configured push path, as a plain push does.
+	// A step pushing a commit goes to the configured push path, as a plain push does.
 	// `setUpstream` never arrives true: missingUpstreamName never names one here.
-	void planPush(PushMode mode, Vcs::Answer<std::vector<PushStep>> onDone) override;
-	// Every cloned subrepo, whatever the plan: each step's `push -r` recurses into all of them
+	void planPush(PushMode mode, const QString& upToCommit, Vcs::Answer<std::vector<PushStep>> onDone) override;
+	// Every cloned subrepo .hgsub declares, whatever the plan: each step's `push -r` recurses into all of them
 	[[nodiscard]] std::vector<RepositoryLocation> submodulesPushedBy(const std::vector<PushStep>& plan) const override;
 	Vcs::Job* runPushStep(const PushStep& step, bool setUpstream, Vcs::Callback onDone) override;
 	[[nodiscard]] std::optional<QString> missingUpstreamName(const PushStep& step, const ProcessResult& failure) const override;

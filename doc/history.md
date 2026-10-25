@@ -85,7 +85,7 @@ no diff for one without `--cc`, so merges are detected from the parent count rat
 
 ## Checkout
 
-The window's one write. A commit row's **Check out** lists each way HEAD can be put on that commit:
+One of the window's two writes, with Push. A commit row's **Check out** lists each way HEAD can be put on that commit:
 
 - each local branch there, or hg bookmark, but the current one. One checked out in another worktree is shown disabled.
 - git: each local branch whose upstream is there, behind it and not ahead, fast-forwarded to it, the current one
@@ -102,4 +102,10 @@ history change.
 Uncommitted changes the checkout leaves alone go along; one it would overwrite fails it before anything moves,
 under hg too (`commands.update.check=noconflict`), and the refusal is the only dialog. Submodules move to the
 commits the target records.
+
+## Push
+
+Every row marked unpushed offers **Push up to here**, disabled while any window holds the write lock. The window
+pushes through a push pane of its own, as the commit window does; what the push plans and refuses is in
+`submodules.md`. A commit the plan cannot push is refused with the reason rather than left out of the menu.
 

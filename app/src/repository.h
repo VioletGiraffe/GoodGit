@@ -66,8 +66,9 @@ struct PushStep
 
 enum class PushMode : uint8_t
 {
-	Branch,  // one push per repository, as configured
-	OneByOne // one push per commit of this repository, so that each is a push event on the remote and starts CI
+	Branch,   // one push per repository, as configured
+	UpTo,     // this repository's push publishes one commit and its ancestors, leaving the later commits unpushed
+	OneByOne  // one push per commit of this repository, so that each is a push event on the remote and starts CI
 };
 
 // The effect of discarding everything uncommitted inside one submodule, or why it cannot be done
@@ -200,9 +201,12 @@ public:
 	// OneByOne: submodules are pushed as in Branch. Then each commit on the first-parent line that descends from the upstream
 	// is a step, oldest first, pushed to the upstream; a commit off that line is published with the merge that brings it in.
 	// Refuses where no commit qualifies.
-	virtual void planPush(PushMode mode, Vcs::Answer<std::vector<PushStep>> onDone) = 0;
+	// UpTo: `upToCommit` is one step pushed as in OneByOne, after the submodules its tree references. A commit OneByOne would
+	// not step through is refused, the refusal saying why. `upToCommit` is empty in every other mode.
+	// Reads nothing from state(): a history window pushes a repository nothing refreshes.
+	virtual void planPush(PushMode mode, const QString& upToCommit, Vcs::Answer<std::vector<PushStep>> onDone) = 0;
 	// The other repositories a planned push writes: each submodule step's, and each subrepo the tool's own push
-	// recurses into. One level deep where the tool recurses: the levels below are not known here.
+	// recurses into. One level deep where the tool recurses: the levels below are not known here. Reads nothing from state().
 	[[nodiscard]] virtual std::vector<RepositoryLocation> submodulesPushedBy(const std::vector<PushStep>& plan) const = 0;
 	// Runs one planned step. Returns the job so the caller can stream its output into the push log.
 	// Reported as a process rather than an answer: the push log shows the exit code when there was no output.

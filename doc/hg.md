@@ -186,6 +186,8 @@ touching the user's configuration. Which tool `extdiff` starts is the user's `[e
   modified - exactly when the pointer must be committable. Dirtiness has to be asked of the subrepo itself.
 - A subrepo's own status must recurse: a nested subrepo the enclosing one has not recorded yet is
   uncommitted work.
+- **`push` recurses into the subrepos `.` records, whatever `-r` names**, and pushes an hg subrepo whole, every
+  outgoing changeset included (`commands.push`, `hgsubrepo.push`).
 
 ## Working-directory and branch facts
 

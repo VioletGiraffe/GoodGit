@@ -1,6 +1,7 @@
 #include "pushpane.h"
 #include "commitwindow.h"
 #include "consolelogview.h"
+#include "historymodels.h"
 #include "repositoryfactory.h"
 #include "repositorywindows.h"
 
@@ -49,12 +50,12 @@ bool PushPane::pushRunning() const
 	return _repo->pushHeldBy(this);
 }
 
-void PushPane::startPush(PushMode mode)
+void PushPane::startPush(PushMode mode, const QString& upToCommit)
 {
 	_repo->beginPush(this);
 	_pushLogView->clearLog();
 
-	_repo->planPush(mode, [this, mode](std::expected<std::vector<PushStep>, QString> steps) {
+	_repo->planPush(mode, upToCommit, [this, mode, upToCommit](std::expected<std::vector<PushStep>, QString> steps) {
 		if (!steps)
 		{
 			endPush();
@@ -63,7 +64,8 @@ void PushPane::startPush(PushMode mode)
 		}
 
 		_pushSteps = std::move(*steps);
-		if (!lockPushedSubmodules() || (mode == PushMode::OneByOne && !confirmOneByOnePush()))
+		if (!lockPushedSubmodules() || (mode == PushMode::OneByOne && !confirmOneByOnePush())
+			|| (mode == PushMode::UpTo && !confirmPushUpTo(upToCommit)))
 		{
 			endPush();
 			return;
@@ -126,6 +128,15 @@ bool PushPane::confirmOneByOnePush()
 		text += QLatin1Char('\n') + tr("Submodules with unpushed commits are pushed first, with one push each.");
 
 	return MessageDialog::question(this, tr("Push one by one?"), text, { tr("Push one by one") }) == 0;
+}
+
+bool PushPane::confirmPushUpTo(const QString& commit)
+{
+	QString text = tr("Push %1 and every unpushed commit before it? The commits after it stay unpushed.").arg(shortSha(commit));
+	if (!_pushedSubmodules.empty())
+		text += QLatin1Char('\n') + tr("Submodules with unpushed commits are pushed first, each with all of its unpushed commits.");
+
+	return MessageDialog::question(this, tr("Push up to here?"), text, { tr("Push") }) == 0;
 }
 
 void PushPane::runPushStep(size_t index, bool setUpstream)

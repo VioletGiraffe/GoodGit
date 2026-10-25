@@ -499,7 +499,7 @@ TEST_CASE("An hg one-by-one push steps through the first-parent drafts descendin
 	CHECK(repository.state().ahead == 4);
 
 	const std::vector<PushStep> steps = requireSuccess(awaitAnswer<std::vector<PushStep>>(
-		[&](Vcs::Answer<std::vector<PushStep>> onDone) { repository.planPush(PushMode::OneByOne, std::move(onDone)); }));
+		[&](Vcs::Answer<std::vector<PushStep>> onDone) { repository.planPush(PushMode::OneByOne, {}, std::move(onDone)); }));
 	REQUIRE(steps.size() == 2);
 	CHECK(steps[0].commit == node(QStringLiteral(".^")));
 	CHECK(steps[1].commit == node(QStringLiteral(".")));
@@ -513,6 +513,74 @@ TEST_CASE("An hg one-by-one push steps through the first-parent drafts descendin
 	CHECK(repository.state().ahead == 0);
 
 	const std::expected<std::vector<PushStep>, QString> nothingLeft = awaitAnswer<std::vector<PushStep>>(
-		[&](Vcs::Answer<std::vector<PushStep>> onDone) { repository.planPush(PushMode::OneByOne, std::move(onDone)); });
+		[&](Vcs::Answer<std::vector<PushStep>> onDone) { repository.planPush(PushMode::OneByOne, {}, std::move(onDone)); });
 	CHECK_FALSE(nothingLeft.has_value());
+}
+
+TEST_CASE("An hg push up to a changeset publishes it and its ancestors, and one it cannot push alone is refused with the reason", "[hg]")
+{
+	const ScratchHgRepository upstream;
+	upstream.write(QStringLiteral("file.txt"), "base\n");
+	upstream.commitAll(QStringLiteral("base"));
+
+	const ScratchHgRepository local;
+	local.hg({ QStringLiteral("pull"), QStringLiteral("-q"), QStringLiteral("-u"), upstream.root() });
+	local.write(QStringLiteral(".hg/hgrc"), (QStringLiteral("[paths]\ndefault = ") + upstream.root() + QLatin1Char('\n')).toUtf8());
+
+	upstream.write(QStringLiteral("upstream.txt"), "upstream\n");
+	upstream.commitAll(QStringLiteral("upstream"));
+
+	const auto node = [&](const QString& revision) {
+		return local.hgOutput({ QStringLiteral("log"), QStringLiteral("-r"), revision, QStringLiteral("-T"), QStringLiteral("{node}") }).trimmed();
+	};
+
+	// A draft on a head of its own, then one only the merge of the pulled head publishes, the merge, and one on top of it
+	local.write(QStringLiteral("side.txt"), "side\n");
+	local.commitAll(QStringLiteral("side"));
+	const QString side = node(QStringLiteral("."));
+	local.hg({ QStringLiteral("update"), QStringLiteral("-q"), QStringLiteral("-r"), QStringLiteral("0") });
+	local.write(QStringLiteral("file.txt"), "before\n");
+	local.commitAll(QStringLiteral("before"));
+	local.hg({ QStringLiteral("pull"), QStringLiteral("-q") });
+	local.hg({ QStringLiteral("merge"), QStringLiteral("-q"), QStringLiteral("-r"), QStringLiteral("public() and head()") });
+	local.hg({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("merge") });
+	local.write(QStringLiteral("file.txt"), "after\n");
+	local.commitAll(QStringLiteral("after"));
+
+	// Never refreshed: the plan reads nothing from the state
+	HgRepository repository{ local.root() };
+	const auto planUpTo = [&](const QString& commit) {
+		return awaitAnswer<std::vector<PushStep>>(
+			[&](Vcs::Answer<std::vector<PushStep>> onDone) { repository.planPush(PushMode::UpTo, commit, std::move(onDone)); });
+	};
+
+	SECTION("on the first-parent line")
+	{
+		const QString merge = node(QStringLiteral(".^"));
+		const std::vector<PushStep> steps = requireSuccess(planUpTo(merge));
+		REQUIRE(steps.size() == 1);
+		CHECK(steps[0].commit == merge);
+
+		runPushStepToSuccess(repository, steps[0]);
+		CHECK(upstream.hgOutput({ QStringLiteral("log"), QStringLiteral("-r"), QStringLiteral("heads(all())"), QStringLiteral("-T"),
+			QStringLiteral("{node}\n") }).trimmed() == merge);
+
+		const std::expected<std::vector<PushStep>, QString> again = planUpTo(merge);
+		REQUIRE_FALSE(again.has_value());
+		CHECK(again.error().contains(QLatin1String("public already")));
+	}
+
+	SECTION("before a merge of the pulled head")
+	{
+		const std::expected<std::vector<PushStep>, QString> plan = planUpTo(node(QStringLiteral(".^^")));
+		REQUIRE_FALSE(plan.has_value());
+		CHECK(plan.error().contains(QLatin1String("first-parent line")));
+	}
+
+	SECTION("not an ancestor of the working directory's parent")
+	{
+		const std::expected<std::vector<PushStep>, QString> plan = planUpTo(side);
+		REQUIRE_FALSE(plan.has_value());
+		CHECK(plan.error().contains(QLatin1String("not an ancestor")));
+	}
 }

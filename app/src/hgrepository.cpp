@@ -105,6 +105,29 @@ QStringList firstParentLineOldestFirst(const std::vector<CommitRecord>& newestFi
 	return line;
 }
 
+// Answers a refusal saying why `node` is not on the line a push by changeset steps through
+void refuseChangesetNotPushable(const QString& workDir, const QString& node, const QObject* context, Vcs::Answer<std::vector<PushStep>> onDone)
+{
+	// Empty for a changeset that is not an ancestor of the working directory's parent
+	Hg::run(workDir, { QStringLiteral("log"), QStringLiteral("-r"), node + QStringLiteral(" and ::."), QStringLiteral("-T"), QStringLiteral("{phase}") },
+		context, [onDone = std::move(onDone)](const ProcessResult& result) {
+			const QString phase = QString::fromUtf8(result.out.trimmed());
+			if (!result.ok)
+				onDone(std::unexpected(result.errorText()));
+			else if (phase.isEmpty())
+				onDone(std::unexpected(QObject::tr("This changeset is not an ancestor of the working directory's parent, the only line pushed "
+					"from here.\nUpdate to a changeset that contains it first.")));
+			else if (phase == QLatin1String("public"))
+				onDone(std::unexpected(QObject::tr("This changeset is public already: it has been pushed.")));
+			else if (phase == QLatin1String("draft"))
+				onDone(std::unexpected(QObject::tr("This changeset is not on the first-parent line from the working directory's parent down "
+					"to the public changesets: it came in with a merge, or precedes a merge of a pulled head. Only the changesets on that line "
+					"are pushed on their own.\nThis one is published by pushing the merge that brings it into the line.")));
+			else
+				onDone(std::unexpected(QObject::tr("This changeset is secret, so no push publishes it.")));
+		});
+}
+
 // The shape of a commit listing; the caller appends the walk
 QStringList commitLogArgs(int maxCommits)
 {
@@ -729,8 +752,9 @@ void HgRepository::continueOperation(Vcs::Answer<void> onDone)
 	Hg::run(path(), std::move(args), this, Vcs::reporting(std::move(onDone)));
 }
 
-void HgRepository::planPush(PushMode mode, Vcs::Answer<std::vector<PushStep>> onDone)
+void HgRepository::planPush(PushMode mode, const QString& upToCommit, Vcs::Answer<std::vector<PushStep>> onDone)
 {
+	assert_r((mode == PushMode::UpTo) == !upToCommit.isEmpty());
 	if (mode == PushMode::Branch)
 	{
 		Vcs::answerLater(this, std::move(onDone), std::vector<PushStep>{ { .workDir = path() } });
@@ -739,15 +763,25 @@ void HgRepository::planPush(PushMode mode, Vcs::Answer<std::vector<PushStep>> on
 
 	Hg::run(path(), { QStringLiteral("log"), QStringLiteral("-r"), QLatin1String(OneByOnePushCandidatesRevset), QStringLiteral("-T"),
 			QStringLiteral("json") }, this,
-		[workDir = path(), onDone = std::move(onDone)](const ProcessResult& result) {
+		[this, workDir = path(), upToCommit, onDone = std::move(onDone)](const ProcessResult& result) mutable {
 			if (!result.ok)
 			{
 				onDone(std::unexpected(result.errorText()));
 				return;
 			}
 
+			const QStringList line = firstParentLineOldestFirst(Hg::parseCommitLog(result.out));
+			if (!upToCommit.isEmpty())
+			{
+				if (line.contains(upToCommit))
+					onDone(std::vector<PushStep>{ { .workDir = workDir, .commit = upToCommit } });
+				else
+					refuseChangesetNotPushable(workDir, upToCommit, this, std::move(onDone));
+				return;
+			}
+
 			std::vector<PushStep> steps;
-			for (const QString& node : firstParentLineOldestFirst(Hg::parseCommitLog(result.out)))
+			for (const QString& node : line)
 				steps.push_back({ .workDir = workDir, .commit = node });
 			if (steps.empty())
 				onDone(std::unexpected(QObject::tr("Nothing to push one by one: the working directory's parent is public already.")));
@@ -756,13 +790,15 @@ void HgRepository::planPush(PushMode mode, Vcs::Answer<std::vector<PushStep>> on
 		});
 }
 
+// Read from disk, not from the refreshed state: the history window pushes a repository nothing refreshes
 std::vector<RepositoryLocation> HgRepository::submodulesPushedBy(const std::vector<PushStep>& /*plan*/) const
 {
 	std::vector<RepositoryLocation> subrepos;
-	for (const QString& subPath : state().submodules)
+	for (const auto& subrepo : Hg::parseSubrepoSources(fileContents(QDir{ path() }.filePath(QStringLiteral(".hgsub")))))
 	{
-		if (subrepoCloned(subPath))
-			subrepos.push_back(nestedRepositoryLocation(subPath));
+		const RepositoryLocation location = nestedRepositoryLocation(subrepo.first);
+		if (location.kind == VcsKind::Git || QFileInfo::exists(QDir{ location.root }.filePath(QStringLiteral(".hg"))))
+			subrepos.push_back(location);
 	}
 	return subrepos;
 }

@@ -23,7 +23,8 @@ public:
 	// Runs the steps the repository plans one after another, logged as one console session. The first
 	// failure ends the push.
 	// Requires no push in flight: every control that starts one is disabled during one.
-	void startPush(PushMode mode);
+	// `upToCommit`: see Repository::planPush.
+	void startPush(PushMode mode, const QString& upToCommit = {});
 	[[nodiscard]] bool pushRunning() const;
 
 private:
@@ -37,6 +38,8 @@ private:
 	void refreshAfterPush();
 	// Before a one-by-one push of the planned steps: each push of a commit can start a CI run
 	[[nodiscard]] bool confirmOneByOnePush();
+	// Before a push up to `commit`: a context menu item publishes from one click
+	[[nodiscard]] bool confirmPushUpTo(const QString& commit);
 	void runPushStep(size_t index, bool setUpstream);
 	// Offers to set `upstream` for the step's branch and retries if accepted. Returns whether the push
 	// goes on.
