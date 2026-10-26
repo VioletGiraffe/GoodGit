@@ -173,22 +173,28 @@ CommitWindow* openRepositoryWindowAt(const QString& path, QWidget* dialogParent)
 	return nullptr;
 }
 
-CommitWindow* openSubmoduleRepositoryWindow(const QString& root, QWidget* dialogParent)
+std::optional<RepositoryLocation> findSubmoduleRepository(const QString& root, QWidget* dialogParent)
 {
 	const std::expected<RepositoryLocation, std::vector<ProcessResult>> location = findRepository(root);
 	if (!location)
 	{
 		MessageDialog::notice(dialogParent, QApplication::applicationName(), noRepositoryMessage(root, location.error()), {}, QMessageBox::Critical);
-		return nullptr;
+		return {};
 	}
 	if (!sameDirectoryOnDisk(location->root, root))
 	{
 		MessageDialog::notice(dialogParent, QApplication::applicationName(),
 			QObject::tr("'%1' is not a repository of its own. If it is a submodule, it has not been initialized yet.")
 				.arg(QDir::toNativeSeparators(root)), {});
-		return nullptr;
+		return {};
 	}
-	return openRepositoryWindow(*location);
+	return *location;
+}
+
+CommitWindow* openSubmoduleRepositoryWindow(const QString& root, QWidget* dialogParent)
+{
+	const std::optional<RepositoryLocation> location = findSubmoduleRepository(root, dialogParent);
+	return location ? openRepositoryWindow(*location) : nullptr;
 }
 
 CommitWindow* openRecentRepository(const QString& root, QWidget* dialogParent)

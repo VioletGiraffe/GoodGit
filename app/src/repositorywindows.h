@@ -6,6 +6,8 @@ DISABLE_COMPILER_WARNINGS
 #include <QString>
 RESTORE_COMPILER_WARNINGS
 
+#include <optional>
+
 class CommitWindow;
 class QWidget;
 struct RepositoryLocation;
@@ -24,8 +26,12 @@ CommitWindow* openRepositoryWindow(const RepositoryLocation& location);
 CommitWindow* openRepositoryWindowAt(const QString& path, QWidget* dialogParent);
 
 // For a submodule row: `root` must be the repository's own root. Refused when discovery resolves elsewhere -
-// an uninitialized submodule's empty directory answers as the parent, and opening the parent in its place
+// an uninitialized submodule's empty directory answers as the parent, and showing the parent in its place
 // would only look like the submodule opened.
+// Empty with the failure already reported.
+[[nodiscard]] std::optional<RepositoryLocation> findSubmoduleRepository(const QString& root, QWidget* dialogParent);
+
+// Opens the repository findSubmoduleRepository() finds
 CommitWindow* openSubmoduleRepositoryWindow(const QString& root, QWidget* dialogParent);
 
 // The same for a root from the recent list; on failure offers to drop the entry

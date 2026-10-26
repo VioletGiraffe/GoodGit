@@ -105,7 +105,7 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `init_logging`, `up
 | | repository | how many | geometry | opened by |
 |---|---|---|---|---|
 | `CommitWindow` | shares one | one per repository; a second request raises it | stored, one key for the kind | `openRepositoryWindow()` only; a submodule row opens one on the submodule |
-| `HistoryWindow` | shares one | one per commit window for the whole history, kept and re-shown; a file or submodule history is a new window each time | stored, one key for the kind | the commit window, or another history window (a submodule row, a file's history) |
+| `HistoryWindow` | shares one | one per repository for the whole history, a second request raises it; a file history is a new window each time | stored, one key for the kind | the commit window, a submodule row of the recent repositories dock, or another history window (a submodule row, a file's history) |
 | `FileViewerWindow` | borrows the opener's, in the constructor only | never deduplicated; cascaded from the opener, several are meant to sit side by side | none | a history window's file row; with Shift, the parent commit's version |
 | `WelcomeWindow` | none | at most one | none | startup with nothing to open, View > Show Welcome Screen; closed by any open |
 | Preferences (qtutils `CSettingsDialog`) | none | modal | none | the Edit menu |

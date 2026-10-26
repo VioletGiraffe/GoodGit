@@ -1,7 +1,9 @@
 #include "recentrepositoriespanel.h"
 #include "commitwindow.h"
 #include "externalapps.h"
+#include "historywindow.h"
 #include "recentrepositories.h"
+#include "repository.h"
 #include "repositorywindows.h"
 #include "theme.h"
 
@@ -18,6 +20,7 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
+#include <optional>
 
 namespace {
 
@@ -510,6 +513,13 @@ void RecentRepositoriesPanel::showContextMenu(const QPoint& pos)
 		const QString parentRoot = rootOf(item->parent());
 
 		menu.addAction(tr("&Open"), this, [this, root, parentRoot] { openRepository(root, parentRoot); });
+		if (!parentRoot.isEmpty())
+		{
+			menu.addAction(tr("&View commit history"), this, [this, root] {
+				if (const std::optional<RepositoryLocation> location = findSubmoduleRepository(root, this))
+					showRepositoryHistory(*location);
+			});
+		}
 		menu.addAction(openInFileManagerActionText(), this, [root] { openInFileManager(root); });
 		if (parentRoot.isEmpty()) // a submodule has no rows under it, and only its parent is listed
 		{
