@@ -100,6 +100,8 @@ jobs:
 
     - name: Windows - smoke test
       if: startsWith(matrix.os, 'windows')
+      # The app's own timeout needs a running event loop: a hang at exit escapes it
+      timeout-minutes: 5
       shell: cmd
       run: |
         git init -q "%RUNNER_TEMP%\smoke-repository" || exit /b 1
@@ -194,6 +196,7 @@ jobs:
 
     - name: Mac - smoke test
       if: startsWith(matrix.os, 'macos')
+      timeout-minutes: 5
       run: |
         git init -q "$RUNNER_TEMP/smoke-repository"
         echo smoke > "$RUNNER_TEMP/smoke-repository/untracked.txt"
@@ -256,6 +259,7 @@ jobs:
     # The runner has no FUSE to mount the AppImage
     - name: Linux - smoke test
       if: startsWith(matrix.os, 'ubuntu')
+      timeout-minutes: 5
       run: |
         git init -q "$RUNNER_TEMP/smoke-repository"
         echo smoke > "$RUNNER_TEMP/smoke-repository/untracked.txt"

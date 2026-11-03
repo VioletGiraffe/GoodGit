@@ -64,10 +64,11 @@ namespace {
 	return it != sharedDirectoryWatches().end() ? it->second.lock() : nullptr;
 }
 
-// Destroyed from the event loop: a release can come from a slot connected to the watch's own notifier
-void releaseLater(std::shared_ptr<DirectoryWatch> watch)
+// Deleted from the event loop: the last reference can drop in a slot connected to the watch's own notifier.
+// Never deleted when released after the main event loop stops, per deleteLater(): the process is exiting by then.
+[[nodiscard]] std::shared_ptr<DirectoryWatch> makeDirectoryWatch(thin_io::directory_watcher watcher, QStringList excludedDirectories)
 {
-	QMetaObject::invokeMethod(QCoreApplication::instance(), [watch = std::move(watch)] {}, Qt::QueuedConnection);
+	return { new DirectoryWatch{ std::move(watcher), std::move(excludedDirectories) }, [](DirectoryWatch* watch) { watch->deleteLater(); } };
 }
 
 } // namespace
@@ -146,11 +147,7 @@ RepositoryWatcher::RepositoryWatcher(Repository& repository) :
 	connect(&_repository, &Repository::refreshed, this, &RepositoryWatcher::applyExclusions);
 }
 
-RepositoryWatcher::~RepositoryWatcher()
-{
-	for (Watch& watch : _watches)
-		releaseLater(std::move(watch.watch));
-}
+RepositoryWatcher::~RepositoryWatcher() = default;
 
 std::unique_ptr<ChangeSubscription> RepositoryWatcher::subscribe(bool workingTree, bool stateDirectory)
 {
@@ -293,7 +290,7 @@ bool RepositoryWatcher::armRoot(const WatchedRoot& root)
 					watch = sharedDirectoryWatch(root.path); // armed meanwhile by another repository
 				if (!watch)
 				{
-					watch = std::make_shared<DirectoryWatch>(std::move(**armed), exclusions);
+					watch = makeDirectoryWatch(std::move(**armed), exclusions);
 					if (!root.recursive)
 						sharedDirectoryWatches()[root.path] = watch;
 				}
@@ -369,10 +366,8 @@ void RepositoryWatcher::releaseWatchAt(size_t index)
 {
 	assert_and_return_r(index < _watches.size(), );
 
-	std::shared_ptr<DirectoryWatch> watch = std::move(_watches[index].watch);
+	disconnect(_watches[index].watch.get(), nullptr, this, nullptr);
 	_watches.erase(_watches.begin() + static_cast<ptrdiff_t>(index));
-	disconnect(watch.get(), nullptr, this, nullptr);
-	releaseLater(std::move(watch));
 }
 
 void RepositoryWatcher::onEvents(const WatchedRoot& root, const std::vector<thin_io::watch_event>& events)
