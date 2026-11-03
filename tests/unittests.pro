@@ -41,6 +41,7 @@ HEADERS += \
 	../app/src/movedblocks.h \
 	../app/src/queryround.h \
 	../app/src/repository.h \
+	../app/src/repositorywatcher.h \
 	../app/src/settings.h \
 	../app/src/textdiff.h \
 	../app/src/theme.h \
@@ -66,6 +67,7 @@ SOURCES += \
 	../app/src/hgrepository.cpp \
 	../app/src/movedblocks.cpp \
 	../app/src/repository.cpp \
+	../app/src/repositorywatcher.cpp \
 	../app/src/textdiff.cpp \
 	../app/src/theme.cpp \
 	../app/src/unifieddiff.cpp \
@@ -87,7 +89,7 @@ SOURCES += \
 RESOURCES += ../app/res/theme.qrc
 
 mac*{
-	LIBS += -framework AppKit -framework UniformTypeIdentifiers
+	LIBS += -framework AppKit -framework UniformTypeIdentifiers -framework CoreServices # thin_io directory_watcher: FSEvents
 	HEADERS += ../app/src/fileicons_mac.h
 	OBJECTIVE_SOURCES += ../app/src/fileicons_mac.mm
 }

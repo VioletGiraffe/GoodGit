@@ -1298,9 +1298,9 @@ QByteArray HgRepository::ignoreFileWithPatternAdded(QByteArray content, const Ig
 
 Vcs::Query HgRepository::watchedRoots(const QObject* context, Vcs::Answer<std::vector<WatchedRoot>> onDone)
 {
-	std::vector<WatchedRoot> roots{ { path(), ChangeScope::WorkingTree } };
-	// Holds the path of the source's .hg directory, relative to this one's under share.relative
 	const QDir stateDir{ QDir{ path() }.filePath(QStringLiteral(".hg")) };
+	std::vector<WatchedRoot> roots{ { path(), ChangeScope::WorkingTree }, { stateDir.path(), ChangeScope::StateDirectory } };
+	// Holds the path of the source's .hg directory, relative to this one's under share.relative
 	const QByteArray sharedPath = fileContents(stateDir.filePath(QStringLiteral("sharedpath"))).trimmed();
 	if (!sharedPath.isEmpty())
 		roots.push_back({ QDir::cleanPath(stateDir.absoluteFilePath(Hg::textFromOutput(sharedPath))), ChangeScope::StateDirectory });

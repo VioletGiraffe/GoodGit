@@ -35,11 +35,15 @@ enum class ChangeScope : uint8_t
 	StateDirectory, // every view, the history included: the refs, the checkout, the index
 };
 
-// A directory watched for changes, with everything under it
+// A directory watched for changes
 struct WatchedRoot
 {
 	QString path; // absolute, '/'-separated
-	ChangeScope scope = ChangeScope::WorkingTree; // the repository root, or a state directory outside it
+	// WorkingTree: the repository root, or a directory outside it holding a file the listing reads. StateDirectory: a state directory.
+	ChangeScope scope = ChangeScope::WorkingTree;
+	bool recursive = true; // false: the directory's own entries alone
+
+	[[nodiscard]] bool operator==(const WatchedRoot&) const = default;
 };
 
 // Each backend renders a scope into its own ignore syntax and knows where in its ignore file it belongs

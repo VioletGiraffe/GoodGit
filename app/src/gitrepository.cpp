@@ -122,21 +122,20 @@ QStringList gitDirectoriesArgs()
 	return QObject::tr("Unexpected git directories: %1").arg(QString::fromUtf8(output.trimmed()));
 }
 
+// Where git reads its global ignore patterns while core.excludesFile is unset
+[[nodiscard]] QString defaultExcludesFile()
+{
+	const QString xdgConfigHome = qEnvironmentVariable("XDG_CONFIG_HOME");
+	if (!xdgConfigHome.isEmpty())
+		return QDir{ xdgConfigHome }.filePath(QStringLiteral("git/ignore"));
+	const QString home = qEnvironmentVariable("HOME");
+	return QDir{ home.isEmpty() ? QDir::homePath() : home }.filePath(QStringLiteral(".config/git/ignore"));
+}
+
 // `relativePath` is `directory` itself or a path under it
 [[nodiscard]] bool isSameOrUnder(QStringView relativePath, QStringView directory)
 {
 	return relativePath.startsWith(directory) && (relativePath.size() == directory.size() || relativePath[directory.size()] == u'/');
-}
-
-// `directory` relative to `root`, where it is `root` itself ("") or under it
-[[nodiscard]] std::optional<QString> relativePathWithin(const QString& root, const QString& directory)
-{
-	const QString relative = QDir{ root }.relativeFilePath(directory);
-	if (relative == QLatin1String("."))
-		return QString{};
-	if (QDir::isAbsolutePath(relative) || isSameOrUnder(relative, u".."))
-		return std::nullopt;
-	return relative;
 }
 
 // `gitDir`'s object store, and those of the git directories under its modules/, at any depth
@@ -1556,7 +1555,8 @@ QByteArray GitRepository::ignoreFileWithPatternAdded(QByteArray content, const I
 
 Vcs::Query GitRepository::watchedRoots(const QObject* context, Vcs::Answer<std::vector<WatchedRoot>> onDone)
 {
-	return runQuery(path(), gitDirectoriesArgs(), context, [this, onDone = std::move(onDone)](const ProcessResult& r) {
+	Vcs::Query query;
+	query.attach(Git::run(path(), gitDirectoriesArgs(), context, [this, query, context, onDone = std::move(onDone)](const ProcessResult& r) mutable {
 		if (!r.ok)
 		{
 			onDone(std::unexpected(r.errorText()));
@@ -1568,19 +1568,38 @@ Vcs::Query GitRepository::watchedRoots(const QObject* context, Vcs::Answer<std::
 			return;
 		}
 
-		// A state directory under a root already listed is watched with it: a linked worktree's git dir is under the common dir
-		std::vector<WatchedRoot> roots{ { path(), ChangeScope::WorkingTree } };
-		for (const QString& stateDir : { _commonDir, _gitDir })
-		{
-			if (std::ranges::none_of(roots, [&stateDir](const WatchedRoot& root) { return relativePathWithin(root.path, stateDir).has_value(); }))
-				roots.push_back({ stateDir, ChangeScope::StateDirectory });
-		}
-		onDone(std::move(roots));
-	});
+		// Exit 1: unset. A relative path is relative to the working directory.
+		query.attach(Git::run(path(), { QStringLiteral("config"), QStringLiteral("--path"), QStringLiteral("--get"), QStringLiteral("core.excludesFile") },
+			context, [this, onDone = std::move(onDone)](const ProcessResult& excludes) {
+				const QString configured = excludes.ok ? Git::pathFromOutput(excludes.out.trimmed()) : QString{};
+				const QFileInfo excludesFile{ configured.isEmpty() ? defaultExcludesFile() : QDir{ path() }.absoluteFilePath(configured) };
+				_excludesFileName = excludesFile.fileName();
+
+				// A state directory under another is watched with it: a linked worktree's git dir is under the common dir
+				std::vector<WatchedRoot> roots{ { path(), ChangeScope::WorkingTree } };
+				for (const QString& stateDir : { _commonDir, _gitDir })
+				{
+					if (std::ranges::none_of(roots, [&stateDir](const WatchedRoot& root) {
+							return root.scope == ChangeScope::StateDirectory && relativePathWithin(root.path, stateDir).has_value(); }))
+						roots.push_back({ stateDir, ChangeScope::StateDirectory });
+				}
+				// Only an existing directory can be watched. One in the tree is covered by the root.
+				const QString excludesDir = QDir::cleanPath(excludesFile.absolutePath());
+				if (QFileInfo{ excludesDir }.isDir() && !relativePathWithin(path(), excludesDir))
+					roots.push_back({ excludesDir, ChangeScope::WorkingTree, /*recursive=*/false });
+				onDone(std::move(roots));
+			}, {}, /*readOnlyQuery=*/true));
+	}, {}, /*readOnlyQuery=*/true));
+	return query;
 }
 
 std::optional<ChangeScope> GitRepository::changeScope(const WatchedRoot& root, QStringView path) const
 {
+	// The global excludes file's directory, which holds unrelated files too.
+	// Case-insensitive: a needless refresh costs less than a missed one.
+	if (!root.recursive)
+		return path.compare(_excludesFileName, Qt::CaseInsensitive) == 0 ? std::optional{ ChangeScope::WorkingTree } : std::nullopt;
+
 	const ChangeFilter::IsGitDirectory isGitDirectory = std::ref(_gitDirectoryProbe);
 	// `statePath` is relative to `stateDir`
 	const auto stateScope = [&isGitDirectory](const QString& stateDir, QStringView statePath) -> std::optional<ChangeScope> {

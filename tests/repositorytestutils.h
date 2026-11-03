@@ -161,6 +161,21 @@ inline void refreshToCompletion(Repository& repository)
 	return "?";
 }
 
+// Runs the event loop until `object` emits `signal` or `timeoutMs` passes; true if it emitted
+template <typename Object, typename Signal>
+[[nodiscard]] bool waitForSignal(const Object* object, Signal signal, int timeoutMs = TestTimeoutMs)
+{
+	QEventLoop loop;
+	bool emitted = false;
+	QObject::connect(object, signal, &loop, [&] {
+		emitted = true;
+		loop.quit();
+	});
+	QTimer::singleShot(timeoutMs, &loop, &QEventLoop::quit);
+	loop.exec();
+	return emitted;
+}
+
 // Requires the query to succeed
 [[nodiscard]] inline std::vector<WatchedRoot> requireWatchedRoots(Repository& repository)
 {

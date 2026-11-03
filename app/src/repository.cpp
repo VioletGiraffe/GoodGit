@@ -1,4 +1,5 @@
 #include "repository.h"
+#include "repositorywatcher.h"
 
 #include "assert/advanced_assert.h"
 #include "fs.hpp" // thin_io
@@ -9,6 +10,8 @@ DISABLE_COMPILER_WARNINGS
 #include <QFileInfo>
 RESTORE_COMPILER_WARNINGS
 
+#include <algorithm>
+#include <memory>
 #include <optional>
 #include <utility>
 
@@ -95,6 +98,27 @@ Repository::Repository(QString rootPath, QObject* parent) :
 	QObject(parent),
 	_rootPath{ std::move(rootPath) }
 {
+}
+
+Repository::~Repository() = default;
+
+std::unique_ptr<ChangeSubscription> Repository::subscribeToChanges(std::initializer_list<ChangeScope> scopes)
+{
+	if (!_watcher)
+		_watcher = std::make_unique<RepositoryWatcher>(*this);
+	return _watcher->subscribe(std::ranges::find(scopes, ChangeScope::WorkingTree) != scopes.end(),
+		std::ranges::find(scopes, ChangeScope::StateDirectory) != scopes.end());
+}
+
+std::optional<QString> relativePathWithin(const QString& root, const QString& path)
+{
+	// Another drive's path comes back absolute
+	const QString relative = QDir{ root }.relativeFilePath(path);
+	if (relative == QLatin1String("."))
+		return QString{};
+	if (QDir::isAbsolutePath(relative) || relative == QLatin1String("..") || relative.startsWith(QLatin1String("../")))
+		return std::nullopt;
+	return relative;
 }
 
 QString repositoryDisplayName(const QString& root)

@@ -6,16 +6,19 @@ RESTORE_COMPILER_WARNINGS
 
 #include "gitrepository.h"
 #include "repositorytestutils.h"
+#include "repositorywatcher.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QEventLoop>
+#include <QFileInfo>
 #include <QTemporaryDir>
 #include <QTimer>
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
 #include <expected>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -33,9 +36,14 @@ public:
 
 		QDir{}.mkpath(root());
 		git({ QStringLiteral("init"), QStringLiteral("-q"), QStringLiteral("-b"), QStringLiteral("main") });
+		// Not the machine's default: whether that one's directory exists would decide the watched roots.
+		// Global, so that the submodules made here read it too.
+		git({ QStringLiteral("config"), QStringLiteral("--global"), QStringLiteral("core.excludesFile"), globalExcludesFile() });
 	}
 
 	[[nodiscard]] QString root() const { return _directory.filePath(QStringLiteral("repository")); }
+	// In a directory that does not exist until a test creates it
+	[[nodiscard]] QString globalExcludesFile() const { return _directory.filePath(QStringLiteral("global/ignore")); }
 
 	void write(const QString& relativePath, const QByteArray& content) const { writeFile(root(), relativePath, content); }
 
@@ -855,19 +863,28 @@ TEST_CASE("A push up to a commit pushes the submodules that commit references, n
 	CHECK(toUnpublished[1].commit == local.sha(QStringLiteral("HEAD")));
 }
 
-TEST_CASE("The watched roots are the working tree, plus an absorbed submodule's git directory or a linked worktree's common one", "[git]")
+TEST_CASE("The watched roots are the working tree and every state directory, an absorbed submodule's or a linked worktree's included", "[git]")
 {
 	const ScratchRepository scratch;
 	scratch.write(QStringLiteral("committed.txt"), "committed\n");
 	scratch.commitAll(QStringLiteral("initial"));
 
+	const auto requireRoots = [](const std::vector<WatchedRoot>& roots, const QStringList& expectedPaths) {
+		REQUIRE(roots.size() == static_cast<size_t>(expectedPaths.size()));
+		QStringList paths;
+		for (const WatchedRoot& root : roots)
+		{
+			paths.push_back(root.path);
+			CHECK(root.recursive);
+			CHECK(root.scope == (paths.size() == 1 ? ChangeScope::WorkingTree : ChangeScope::StateDirectory));
+		}
+		requireSameDirectories(paths, expectedPaths);
+	};
+
 	SECTION("a repository with its .git inside")
 	{
 		GitRepository repository{ scratch.root() };
-		const std::vector<WatchedRoot> roots = requireWatchedRoots(repository);
-		REQUIRE(roots.size() == 1);
-		CHECK(roots[0].scope == ChangeScope::WorkingTree);
-		CHECK(sameDirectoryOnDisk(roots[0].path, scratch.root()));
+		requireRoots(requireWatchedRoots(repository), { scratch.root(), QDir{ scratch.root() }.filePath(QStringLiteral(".git")) });
 	}
 
 	SECTION("an absorbed submodule")
@@ -876,25 +893,32 @@ TEST_CASE("The watched roots are the working tree, plus an absorbed submodule's 
 		const QString submoduleRoot = QDir{ scratch.root() }.filePath(QStringLiteral("sub"));
 
 		GitRepository repository{ submoduleRoot };
-		const std::vector<WatchedRoot> roots = requireWatchedRoots(repository);
-		REQUIRE(roots.size() == 2);
-		CHECK(roots[0].scope == ChangeScope::WorkingTree);
-		CHECK(roots[1].scope == ChangeScope::StateDirectory);
-		requireSameDirectories({ roots[0].path, roots[1].path },
-			{ submoduleRoot, QDir{ scratch.root() }.filePath(QStringLiteral(".git/modules/sub")) });
+		requireRoots(requireWatchedRoots(repository), { submoduleRoot, QDir{ scratch.root() }.filePath(QStringLiteral(".git/modules/sub")) });
 	}
 
-	SECTION("a linked worktree")
+	SECTION("a linked worktree, whose git directory is under the common one")
 	{
 		const QString worktree = QDir::cleanPath(QDir{ scratch.root() }.filePath(QStringLiteral("../worktree")));
 		scratch.git({ QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-q"), QStringLiteral("-b"), QStringLiteral("wt"), worktree });
 
 		GitRepository repository{ worktree };
-		const std::vector<WatchedRoot> roots = requireWatchedRoots(repository);
-		REQUIRE(roots.size() == 2);
-		CHECK(roots[1].scope == ChangeScope::StateDirectory);
-		requireSameDirectories({ roots[0].path, roots[1].path }, { worktree, QDir{ scratch.root() }.filePath(QStringLiteral(".git")) });
+		requireRoots(requireWatchedRoots(repository), { worktree, QDir{ scratch.root() }.filePath(QStringLiteral(".git")) });
 	}
+}
+
+TEST_CASE("The global excludes file's directory is watched alone, for that file", "[git]")
+{
+	const ScratchRepository scratch;
+	writeFile(QFileInfo{ scratch.globalExcludesFile() }.absolutePath(), QStringLiteral("ignore"), "*.log\n");
+
+	GitRepository repository{ scratch.root() };
+	const std::vector<WatchedRoot> roots = requireWatchedRoots(repository);
+	REQUIRE(roots.size() == 3);
+	const WatchedRoot& excludesRoot = roots[2];
+	CHECK_FALSE(excludesRoot.recursive);
+	CHECK(sameDirectoryOnDisk(excludesRoot.path, QFileInfo{ scratch.globalExcludesFile() }.absolutePath()));
+	CHECK(repository.changeScope(excludesRoot, u"ignore") == ChangeScope::WorkingTree);
+	CHECK_FALSE(repository.changeScope(excludesRoot, u"other"));
 }
 
 TEST_CASE("A change in the git directory is noise or reaches every view, and one in a submodule's reaches the parent's rows only", "[git]")
@@ -904,7 +928,7 @@ TEST_CASE("A change in the git directory is noise or reaches every view, and one
 
 	GitRepository parent{ scratch.root() };
 	const std::vector<WatchedRoot> parentRoots = requireWatchedRoots(parent);
-	REQUIRE(parentRoots.size() == 1);
+	REQUIRE(parentRoots.size() == 2);
 	const auto parentScope = [&](const char* path) { return parent.changeScope(parentRoots[0], QString::fromLatin1(path)); };
 
 	CHECK(parentScope("committed.txt") == ChangeScope::WorkingTree);
@@ -914,6 +938,9 @@ TEST_CASE("A change in the git directory is noise or reaches every view, and one
 	CHECK(parentScope(".git/modules/sub/HEAD") == ChangeScope::WorkingTree);
 	CHECK_FALSE(parentScope(".git/objects/ab/cdef"));
 	CHECK_FALSE(parentScope(".git/index.lock"));
+	// The same directory watched as a state root
+	CHECK(parent.changeScope(parentRoots[1], u"HEAD") == ChangeScope::StateDirectory);
+	CHECK_FALSE(parent.changeScope(parentRoots[1], u"objects/ab/cdef"));
 	CHECK_FALSE(parentScope(".git/modules/sub/objects/ab/cdef"));
 
 	GitRepository submodule{ QDir{ scratch.root() }.filePath(QStringLiteral("sub")) };
@@ -941,4 +968,86 @@ TEST_CASE("The unwatched directories are those ignored whole, a nested untracked
 	const QDir root{ scratch.root() };
 	requireSameDirectories(repository.unwatchedDirectories(), { root.filePath(QStringLiteral("build")), root.filePath(QStringLiteral("nested")),
 		root.filePath(QStringLiteral(".git/objects")), root.filePath(QStringLiteral(".git/modules/sub/objects")) });
+}
+
+namespace {
+
+// How long a test waits for a change notification that must not come
+constexpr int QuietPeriodMs = 1'500;
+
+// Lets the notifications a change already caused arrive, so that a later check sees only its own
+void settle(const ChangeSubscription& subscription)
+{
+	while (waitForSignal(&subscription, &ChangeSubscription::changed, 500))
+		;
+}
+
+} // namespace
+
+TEST_CASE("A subscription is ready once the watch is set up, then reports a write in the tree and nothing for the object store", "[watcher]")
+{
+	const ScratchRepository scratch;
+	scratch.write(QStringLiteral("committed.txt"), "committed\n");
+	scratch.commitAll(QStringLiteral("initial"));
+
+	GitRepository repository{ scratch.root() };
+	const std::unique_ptr<ChangeSubscription> subscription = repository.subscribeToChanges({ ChangeScope::WorkingTree, ChangeScope::StateDirectory });
+	REQUIRE(waitForSignal(subscription.get(), &ChangeSubscription::ready));
+	CHECK(subscription->trusted());
+
+	scratch.write(QStringLiteral("new.txt"), "new\n");
+	CHECK(waitForSignal(subscription.get(), &ChangeSubscription::changed));
+	settle(*subscription);
+
+	scratch.write(QStringLiteral(".git/objects/zz/not-an-object"), "x\n");
+	CHECK_FALSE(waitForSignal(subscription.get(), &ChangeSubscription::changed, QuietPeriodMs));
+}
+
+TEST_CASE("A history subscription sees the state directory alone, and keeps seeing it while a tree subscription comes and goes", "[watcher]")
+{
+	const ScratchRepository scratch;
+	scratch.write(QStringLiteral("committed.txt"), "committed\n");
+	scratch.commitAll(QStringLiteral("initial"));
+
+	GitRepository repository{ scratch.root() };
+	const std::unique_ptr<ChangeSubscription> history = repository.subscribeToChanges({ ChangeScope::StateDirectory });
+	REQUIRE(waitForSignal(history.get(), &ChangeSubscription::ready));
+
+	scratch.write(QStringLiteral("a.txt"), "a\n");
+	CHECK_FALSE(waitForSignal(history.get(), &ChangeSubscription::changed, QuietPeriodMs));
+	scratch.git({ QStringLiteral("branch"), QStringLiteral("first") });
+	CHECK(waitForSignal(history.get(), &ChangeSubscription::changed));
+	settle(*history);
+
+	std::unique_ptr<ChangeSubscription> commit = repository.subscribeToChanges({ ChangeScope::WorkingTree, ChangeScope::StateDirectory });
+	REQUIRE(waitForSignal(commit.get(), &ChangeSubscription::ready));
+	scratch.write(QStringLiteral("b.txt"), "b\n");
+	CHECK(waitForSignal(commit.get(), &ChangeSubscription::changed));
+	settle(*history);
+
+	commit.reset();
+	scratch.git({ QStringLiteral("branch"), QStringLiteral("second") });
+	CHECK(waitForSignal(history.get(), &ChangeSubscription::changed));
+}
+
+TEST_CASE("Moving the repository root loses the subscription's trust, and watching again once it is back restores it", "[watcher]")
+{
+	const ScratchRepository scratch;
+	scratch.write(QStringLiteral("committed.txt"), "committed\n");
+	scratch.commitAll(QStringLiteral("initial"));
+
+	GitRepository repository{ scratch.root() };
+	const std::unique_ptr<ChangeSubscription> subscription = repository.subscribeToChanges({ ChangeScope::WorkingTree, ChangeScope::StateDirectory });
+	REQUIRE(waitForSignal(subscription.get(), &ChangeSubscription::ready));
+	REQUIRE(subscription->trusted());
+
+	const QString moved = scratch.root() + QStringLiteral("-moved");
+	REQUIRE(QDir{}.rename(scratch.root(), moved));
+	CHECK(waitForSignal(subscription.get(), &ChangeSubscription::trustLost));
+	CHECK_FALSE(subscription->trusted());
+
+	REQUIRE(QDir{}.rename(moved, scratch.root()));
+	subscription->rearmIfStopped();
+	CHECK(waitForSignal(subscription.get(), &ChangeSubscription::trustRestored));
+	CHECK(subscription->trusted());
 }

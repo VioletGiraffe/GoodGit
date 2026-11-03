@@ -85,7 +85,7 @@ public:
 	// first), so a pattern goes into the section matching its scope rather than at the end
 	[[nodiscard]] QByteArray ignoreFileWithPatternAdded(QByteArray content, const IgnorePattern& pattern) const override;
 
-	// A share's store is in the source's .hg directory, watched as a second root
+	// The working tree and .hg. A share's store is in the source's .hg directory, watched as a third root.
 	Vcs::Query watchedRoots(const QObject* context, Vcs::Answer<std::vector<WatchedRoot>> onDone) override;
 	[[nodiscard]] std::optional<ChangeScope> changeScope(const WatchedRoot& root, QStringView path) const override;
 

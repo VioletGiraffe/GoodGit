@@ -577,7 +577,7 @@ TEST_CASE("An hg push up to a changeset publishes it and its ancestors, and one 
 	CHECK(pushedAlready.error().contains(QLatin1String("public already")));
 }
 
-TEST_CASE("The hg watched roots are the working tree, plus a share's source .hg directory, whose caches are noise", "[hg]")
+TEST_CASE("The hg watched roots are the working tree and .hg, plus a share's source .hg directory, whose caches are noise", "[hg]")
 {
 	const ScratchHgRepository source;
 	source.write(QStringLiteral("file.txt"), "x\n");
@@ -587,8 +587,9 @@ TEST_CASE("The hg watched roots are the working tree, plus a share's source .hg 
 	{
 		HgRepository repository{ source.root() };
 		const std::vector<WatchedRoot> roots = requireWatchedRoots(repository);
-		REQUIRE(roots.size() == 1);
-		CHECK(sameDirectoryOnDisk(roots[0].path, source.root()));
+		REQUIRE(roots.size() == 2);
+		CHECK(roots[1].scope == ChangeScope::StateDirectory);
+		requireSameDirectories({ roots[0].path, roots[1].path }, { source.root(), QDir{ source.root() }.filePath(QStringLiteral(".hg")) });
 
 		CHECK(repository.changeScope(roots[0], u"file.txt") == ChangeScope::WorkingTree);
 		CHECK(repository.changeScope(roots[0], u".hg/dirstate") == ChangeScope::StateDirectory);
@@ -603,11 +604,12 @@ TEST_CASE("The hg watched roots are the working tree, plus a share's source .hg 
 
 		HgRepository repository{ share };
 		const std::vector<WatchedRoot> roots = requireWatchedRoots(repository);
-		REQUIRE(roots.size() == 2);
-		CHECK(roots[1].scope == ChangeScope::StateDirectory);
-		requireSameDirectories({ roots[0].path, roots[1].path }, { share, QDir{ source.root() }.filePath(QStringLiteral(".hg")) });
+		REQUIRE(roots.size() == 3);
+		CHECK(roots[2].scope == ChangeScope::StateDirectory);
+		requireSameDirectories({ roots[0].path, roots[1].path, roots[2].path },
+			{ share, QDir{ share }.filePath(QStringLiteral(".hg")), QDir{ source.root() }.filePath(QStringLiteral(".hg")) });
 
-		CHECK(repository.changeScope(roots[1], u"store/phaseroots") == ChangeScope::StateDirectory);
-		CHECK_FALSE(repository.changeScope(roots[1], u"cache/branch2-served"));
+		CHECK(repository.changeScope(roots[2], u"store/phaseroots") == ChangeScope::StateDirectory);
+		CHECK_FALSE(repository.changeScope(roots[2], u"cache/branch2-served"));
 	}
 }

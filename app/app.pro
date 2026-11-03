@@ -79,6 +79,7 @@ HEADERS += \
 	src/recentrepositoriespanel.h \
 	src/repository.h \
 	src/repositoryfactory.h \
+	src/repositorywatcher.h \
 	src/repositorywindows.h \
 	src/settings.h \
 	src/settingspages.h \
@@ -128,6 +129,7 @@ SOURCES += \
 	src/recentrepositoriespanel.cpp \
 	src/repository.cpp \
 	src/repositoryfactory.cpp \
+	src/repositorywatcher.cpp \
 	src/repositorywindows.cpp \
 	src/settingspages.cpp \
 	src/smoketest.cpp \
@@ -163,7 +165,7 @@ unix {
 }
 
 mac*{
-	LIBS += -framework AppKit -framework UniformTypeIdentifiers
+	LIBS += -framework AppKit -framework UniformTypeIdentifiers -framework CoreServices # thin_io directory_watcher: FSEvents
 
 	HEADERS += src/commandlinetool_mac.h src/fileicons_mac.h
 	OBJECTIVE_SOURCES += src/commandlinetool_mac.mm src/fileicons_mac.mm

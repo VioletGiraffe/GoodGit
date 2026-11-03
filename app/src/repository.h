@@ -9,10 +9,15 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <functional>
+#include <initializer_list>
 #include <map>
+#include <memory>
 #include <optional>
 #include <utility>
 #include <vector>
+
+class ChangeSubscription;
+class RepositoryWatcher;
 
 // `text` with a backslash before every character in `metacharacters`
 [[nodiscard]] QString backslashEscaped(const QString& text, QStringView metacharacters);
@@ -45,6 +50,10 @@ struct RepositoryLocation
 // A root the tool resolved is already canonical - rev-parse --show-toplevel follows a junction - so the
 // aliases reaching here come from paths the app composed: a submodule's root, a scan hit.
 [[nodiscard]] bool sameDirectoryOnDisk(const QString& left, const QString& right);
+
+// `path` relative to `root`: empty for `root` itself, absent where `path` is not under it.
+// Compares spellings, case-insensitively on Windows (QDir::relativeFilePath).
+[[nodiscard]] std::optional<QString> relativePathWithin(const QString& root, const QString& path);
 
 // The name a repository at `root` is shown under: the directory name, or the root spelling for a drive
 // root, which has none. For places that hold only the path; Repository::name() answers for an instance.
@@ -99,6 +108,7 @@ class Repository : public QObject
 
 public:
 	explicit Repository(QString rootPath, QObject* parent = nullptr);
+	~Repository() override;
 
 	[[nodiscard]] const QString& path() const { return _rootPath; }
 	[[nodiscard]] QString name() const;
@@ -357,8 +367,9 @@ public:
 	// The caller does the file I/O; only the placement is the backend's.
 	[[nodiscard]] virtual QByteArray ignoreFileWithPatternAdded(QByteArray content, const IgnorePattern& pattern) const = 0;
 
-	// The directories a change to this repository can land in: the root, and any state directory outside it (an absorbed
-	// submodule's, a linked worktree's). Read from the tool or the disk, never from the state: a history window runs no refresh.
+	// The directories a change to this repository can land in: the root, and every state directory, in the tree or outside it
+	// (an absorbed submodule's, a linked worktree's). A state directory in the tree is listed too: a history window watches the
+	// state directories alone. Read from the tool or the disk, never from the state: a history window runs no refresh.
 	virtual Vcs::Query watchedRoots(const QObject* context, Vcs::Answer<std::vector<WatchedRoot>> onDone) = 0;
 	// The views a change at `path`, '/'-separated and relative to `root`, can make stale; empty where it alters nothing a
 	// view reads. Only called with a root watchedRoots() answered.
@@ -366,6 +377,9 @@ public:
 	// Absolute directories under which no view reads anything, as of the last refresh that read the state: those ignored as
 	// a whole, the untracked repositories nested in the tree, the object stores. Empty before the first.
 	[[nodiscard]] const QStringList& unwatchedDirectories() const { return _unwatchedDirectories; }
+	// Reports the changes in `scopes` to one window. Watching starts with the first subscription and ends with the last:
+	// the dialogs that hold a repository watch nothing.
+	[[nodiscard]] std::unique_ptr<ChangeSubscription> subscribeToChanges(std::initializer_list<ChangeScope> scopes);
 
 	// Opens the configured external diff tool on one path, detached from the job queue: the tool blocks the
 	// process that launched it until closed, and a queue slot held for minutes would starve refreshes.
@@ -412,4 +426,6 @@ private:
 	const QObject* _mutationHolder = nullptr;
 	const QObject* _pushHolder = nullptr;
 	bool _refreshDeferredByWrite = false;
+
+	std::unique_ptr<RepositoryWatcher> _watcher; // created with the first subscription
 };

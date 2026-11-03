@@ -83,6 +83,7 @@ public:
 	[[nodiscard]] std::vector<IgnorePattern> ignorePatternsFor(const QString& repoRelativePath) const override;
 	[[nodiscard]] QByteArray ignoreFileWithPatternAdded(QByteArray content, const IgnorePattern& pattern) const override;
 
+	// The working tree, the git and common directories, and the directory of the global excludes file, core.excludesFile
 	Vcs::Query watchedRoots(const QObject* context, Vcs::Answer<std::vector<WatchedRoot>> onDone) override;
 	// modules/ is WorkingTree: a submodule's state changes the parent's rows, never its history
 	[[nodiscard]] std::optional<ChangeScope> changeScope(const WatchedRoot& root, QStringView path) const override;
@@ -113,6 +114,7 @@ private:
 	// In a submodule .git is a file pointing here
 	QString _gitDir; // absolute, resolved by the first refresh or watchedRoots()
 	QString _commonDir; // resolved with _gitDir
+	QString _excludesFileName; // core.excludesFile's, read by watchedRoots()
 	QString _emptyTreeSha; // resolved on first refresh; empty only if that query failed
 	mutable ChangeFilter::GitDirectoryProbe _gitDirectoryProbe; // forgotten at every refresh
 
