@@ -22,8 +22,8 @@ class Repository;
 class RefreshScheduler final : public QObject
 {
 public:
-	// `run` refreshes the window. The window must outlive this object.
-	RefreshScheduler(QWidget& window, Repository& repository, std::initializer_list<ChangeScope> scopes, std::function<void()> run);
+	// The window must outlive this object
+	RefreshScheduler(QWidget& window, Repository& repository, std::initializer_list<ChangeScope> scopes, std::function<void()> refreshWindow);
 	~RefreshScheduler() override;
 
 	// A refresh the window started itself reads every change reported so far

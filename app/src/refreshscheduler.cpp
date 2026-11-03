@@ -19,10 +19,10 @@ constexpr std::chrono::milliseconds ChangeMaxDelay{ 2'000 };
 
 } // namespace
 
-RefreshScheduler::RefreshScheduler(QWidget& window, Repository& repository, std::initializer_list<ChangeScope> scopes, std::function<void()> run) :
+RefreshScheduler::RefreshScheduler(QWidget& window, Repository& repository, std::initializer_list<ChangeScope> scopes, std::function<void()> refreshWindow) :
 	_window{ window },
 	_repository{ repository },
-	_run{ std::move(run) },
+	_run{ std::move(refreshWindow) },
 	_subscription{ repository.subscribeToChanges(scopes) }
 {
 	_settleTimer.setSingleShot(true);
