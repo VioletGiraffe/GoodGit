@@ -12,6 +12,10 @@ if it exists.
 The `.sln`, `.vcxproj` and `Makefile*` files in the tree are qmake output (`qmake -tp vc -r` on Windows),
 git-ignored and never edited.
 
+`scripts/build_app.bat` (`.sh` on macOS and Linux) builds it into `bin/<config>`, release unless given `debug`; CI
+builds the packages with it. It and the tests' build script share their setup through `scripts/build_env.bat` /
+`build_env.sh`: the Qt kit, the MSVC environment, and a sweep of stale `.qmake.stash` files.
+
 `app/res` holds `theme.qrc` (the monochrome glyph SVGs the theme tints at load, and the window icon), the
 platform icons, `Info.plist` and the Linux desktop file.
 
@@ -51,11 +55,11 @@ Objects go under `tests/build/<Qt version>`: make rebuilds by timestamp only, an
 objects compiled against the old ones. On Windows the scripts build a generated `tests.sln` with msbuild, which also
 rebuilds on a changed compiler command line.
 
-`scripts/run_tests.bat` (Windows) and `scripts/run_tests.sh` (macOS, Linux) build and run it (`debug` as the
-argument for the debug configuration); `scripts/debug_tests.bat` runs the built tests under cdb. The Qt kit is
+`scripts/build_tests.bat` builds it and `scripts/run_tests.bat` runs the result (`.sh` on macOS and Linux; `debug`
+as the argument for the debug configuration); `scripts/debug_tests.bat` runs the built tests under cdb. The Qt kit is
 `QT_ROOT_DIR` if set, else the git-ignored `scripts/local-env.bat` / `local-env.sh`; the shell script also falls
-back to a `qmake6` or `qmake` on PATH. Failing that the scripts stop with an explanation. CI runs the tests on all
-three platforms.
+back to a `qmake6` or `qmake` on PATH. Failing that the scripts stop with an explanation. CI builds and runs the
+tests on all three platforms, as separate steps.
 
 ## Version
 

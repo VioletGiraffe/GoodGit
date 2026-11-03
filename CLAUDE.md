@@ -6,12 +6,14 @@ code: current structure and rationale only, no history, no implementation detail
 
 Read `doc/conventions.md` before writing code.
 
-`scripts/run_tests.bat` (`run_tests.sh` on macOS and Linux) builds and runs the unit tests; run it after changing any source `tests/tests.pro` builds.
-Run it locally with the `debug` argument (release is the default): release defines `NDEBUG`, which compiles out the asserts guarding invariants. CI runs both.
+`scripts/build_tests.bat` builds the unit tests and `scripts/run_tests.bat` runs them; build and run them after changing any source `tests/tests.pro` builds.
+`scripts/build_app.bat` builds the app; run it after changing any source under `app/src`: the tests compile only part of it.
+Each has a `.sh` twin for macOS and Linux. Locally, pass `debug` to each (release is the default): release defines `NDEBUG`, which compiles out the asserts guarding invariants. CI tests both.
 A run's output goes to a log file in the scratchpad, never into context; surface only the exit code and the informative lines:
 
 ```
-scripts/run_tests.bat debug > "$LOG" 2>&1; echo "EXIT: $?"; grep -E "error [A-Z]+[0-9]+|All tests passed|FAILED" "$LOG" | head -30
+(scripts/build_tests.bat debug && scripts/run_tests.bat debug) > "$LOG" 2>&1; echo "EXIT: $?"; grep -E "error [A-Z]+[0-9]+|All tests passed|FAILED" "$LOG" | head -30
+scripts/build_app.bat debug > "$LOG" 2>&1; echo "EXIT: $?"; grep -E "error [A-Z]+[0-9]+" "$LOG" | head -30
 ```
 
 The pattern matches MSVC errors and the Catch2 summary; adjust it for other toolchains, not by falling back to `tail`.

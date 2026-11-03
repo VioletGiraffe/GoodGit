@@ -52,12 +52,22 @@ jobs:
         python -m pip install --quiet mercurial || exit /b 1
         hg --version
 
-    - name: Windows - tests (debug)
+    - name: Windows - build tests (debug)
+      if: startsWith(matrix.os, 'windows')
+      shell: cmd
+      run: scripts\build_tests.bat debug
+
+    - name: Windows - run tests (debug)
       if: startsWith(matrix.os, 'windows')
       shell: cmd
       run: scripts\run_tests.bat debug
 
-    - name: Windows - tests (release)
+    - name: Windows - build tests (release)
+      if: startsWith(matrix.os, 'windows')
+      shell: cmd
+      run: scripts\build_tests.bat
+
+    - name: Windows - run tests (release)
       if: startsWith(matrix.os, 'windows')
       shell: cmd
       run: scripts\run_tests.bat
@@ -67,8 +77,7 @@ jobs:
       shell: cmd
       run: |
         %QT_ROOT_DIR%\bin\qmake.exe -v
-        %QT_ROOT_DIR%\bin\qmake.exe -tp vc -r
-        msbuild /t:Build /p:Configuration=Release || exit /b 1
+        scripts\build_app.bat
 
     - name: Windows - create installer
       if: startsWith(matrix.os, 'windows')
@@ -157,11 +166,19 @@ jobs:
         brew install mercurial
         hg --version
 
-    - name: Mac - tests (debug)
+    - name: Mac - build tests (debug)
+      if: startsWith(matrix.os, 'macos')
+      run: scripts/build_tests.sh debug
+
+    - name: Mac - run tests (debug)
       if: startsWith(matrix.os, 'macos')
       run: scripts/run_tests.sh debug
 
-    - name: Mac - tests (release)
+    - name: Mac - build tests (release)
+      if: startsWith(matrix.os, 'macos')
+      run: scripts/build_tests.sh
+
+    - name: Mac - run tests (release)
       if: startsWith(matrix.os, 'macos')
       run: scripts/run_tests.sh
 
@@ -169,8 +186,7 @@ jobs:
       if: startsWith(matrix.os, 'macos')
       run: |
         clang --version
-        $QT_ROOT_DIR/bin/qmake -r CONFIG+=release
-        make -j4
+        scripts/build_app.sh
 
     - name: Mac - create DMG
       if: startsWith(matrix.os, 'macos')
@@ -210,19 +226,25 @@ jobs:
         sudo apt install -qq mercurial
         hg --version
 
-    - name: Linux - tests (debug)
+    - name: Linux - build tests (debug)
+      if: startsWith(matrix.os, 'ubuntu')
+      run: scripts/build_tests.sh debug
+
+    - name: Linux - run tests (debug)
       if: startsWith(matrix.os, 'ubuntu')
       run: xvfb-run --auto-servernum scripts/run_tests.sh debug
 
-    - name: Linux - tests (release)
+    - name: Linux - build tests (release)
+      if: startsWith(matrix.os, 'ubuntu')
+      run: scripts/build_tests.sh
+
+    - name: Linux - run tests (release)
       if: startsWith(matrix.os, 'ubuntu')
       run: xvfb-run --auto-servernum scripts/run_tests.sh
 
     - name: Linux - build
       if: startsWith(matrix.os, 'ubuntu')
-      run: |
-        $QT_ROOT_DIR/bin/qmake -r CONFIG+=release
-        make -j4
+      run: scripts/build_app.sh
 
     # linuxdeploy copies the libraries the Wayland platform plugin links from this machine
     - name: Linux - create AppImage
