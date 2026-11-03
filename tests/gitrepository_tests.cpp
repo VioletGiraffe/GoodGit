@@ -11,6 +11,7 @@ RESTORE_COMPILER_WARNINGS
 DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QEventLoop>
+#include <QFile>
 #include <QFileInfo>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -906,6 +907,23 @@ TEST_CASE("The watched roots are the working tree and every state directory, an 
 		requireRoots(requireWatchedRoots(repository), { worktree, QDir{ scratch.root() }.filePath(QStringLiteral(".git")) });
 	}
 }
+
+// QFile::link makes a .lnk shortcut on Windows, not a symlink
+#ifndef Q_OS_WIN
+TEST_CASE("A repository opened through a symlink watches its git directory once, spelled under the path it was opened by", "[git]")
+{
+	const ScratchRepository scratch;
+	const QString link = QDir::cleanPath(QDir{ scratch.root() }.filePath(QStringLiteral("../link")));
+	REQUIRE(QFile::link(scratch.root(), link));
+
+	GitRepository repository{ link };
+	const std::vector<WatchedRoot> roots = requireWatchedRoots(repository);
+	REQUIRE(roots.size() == 2);
+	CHECK(roots[1].path == link + QStringLiteral("/.git"));
+	CHECK(repository.changeScope(roots[0], u".git/HEAD") == ChangeScope::StateDirectory);
+	CHECK_FALSE(repository.changeScope(roots[0], u".git/objects/ab/cdef"));
+}
+#endif
 
 TEST_CASE("The global excludes file's directory is watched alone, for that file", "[git]")
 {

@@ -1628,8 +1628,20 @@ bool GitRepository::setGitDirectories(const QByteArray& revParseOutput)
 	if (!directories)
 		return false;
 
-	_gitDir = directories->gitDir;
-	_commonDir = directories->commonDir;
+	// All three are canonicalized: they are related by path prefix, and git resolves symlinks in the git directory but not in a relative common directory.
+	// A directory inside the working tree is then spelled under path(), as the working-tree root's change paths are.
+	const auto canonical = [](const QString& directory) {
+		const QString canonicalPath = QFileInfo{ directory }.canonicalFilePath();
+		return canonicalPath.isEmpty() ? directory : canonicalPath; // empty where the directory is gone
+	};
+	const QString canonicalRoot = canonical(path());
+	const auto spelledUnderRoot = [&](const QString& directory) {
+		const QString canonicalDirectory = canonical(directory);
+		const std::optional<QString> relative = relativePathWithin(canonicalRoot, canonicalDirectory);
+		return relative ? QDir::cleanPath(QDir{ path() }.filePath(*relative)) : canonicalDirectory;
+	};
+	_gitDir = spelledUnderRoot(directories->gitDir);
+	_commonDir = spelledUnderRoot(directories->commonDir);
 	return true;
 }
 
