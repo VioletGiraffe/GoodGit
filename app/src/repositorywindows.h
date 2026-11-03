@@ -17,8 +17,6 @@ struct RepositoryLocation;
 // One window per repository. The recent list is updated on every open.
 // Each open returns the window now showing the repository, or nullptr with the failure already reported.
 
-[[nodiscard]] CommitWindow* repositoryWindow(const QString& root);
-
 // The window already open on it, raised, or a new one; never null. Records the open.
 CommitWindow* openRepositoryWindow(const RepositoryLocation& location);
 

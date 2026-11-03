@@ -1,5 +1,4 @@
 #include "recentrepositoriespanel.h"
-#include "commitwindow.h"
 #include "externalapps.h"
 #include "historywindow.h"
 #include "recentrepositories.h"
@@ -487,17 +486,9 @@ void RecentRepositoriesPanel::openRepository(const QString& root, const QString&
 		return;
 
 	if (parentRoot.isEmpty())
-	{
 		openRecentRepository(root, this); // only a listed repository can be dropped from the list
-		return;
-	}
-
-	CommitWindow* window = openSubmoduleRepositoryWindow(root, this);
-	if (!window)
-		return;
-
-	if (CommitWindow* parentWindow = repositoryWindow(parentRoot))
-		parentWindow->followSubmoduleHistory(*window);
+	else
+		openSubmoduleRepositoryWindow(root, this);
 }
 
 void RecentRepositoriesPanel::showContextMenu(const QPoint& pos)

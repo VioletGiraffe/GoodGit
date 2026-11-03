@@ -77,6 +77,7 @@ HEADERS += \
 	src/queryround.h \
 	src/recentrepositories.h \
 	src/recentrepositoriespanel.h \
+	src/refreshscheduler.h \
 	src/repository.h \
 	src/repositoryfactory.h \
 	src/repositorywatcher.h \
@@ -127,6 +128,7 @@ SOURCES += \
 	src/pushpane.cpp \
 	src/recentrepositories.cpp \
 	src/recentrepositoriespanel.cpp \
+	src/refreshscheduler.cpp \
 	src/repository.cpp \
 	src/repositoryfactory.cpp \
 	src/repositorywatcher.cpp \

@@ -1,9 +1,7 @@
 #include "pushpane.h"
-#include "commitwindow.h"
 #include "consolelogview.h"
 #include "historymodels.h"
 #include "repositoryfactory.h"
-#include "repositorywindows.h"
 
 #include "assert/advanced_assert.h"
 #include "dialogs/messagedialog.h"
@@ -101,20 +99,12 @@ void PushPane::endPush()
 	for (const std::shared_ptr<Repository>& submodule : submodules)
 		submodule->endPush();
 	_repo->endPush();
-
-	// Any of them may have been pushed. One without a window stays unrefreshed: nothing shows its state.
-	for (const std::shared_ptr<Repository>& submodule : submodules)
-	{
-		submodule->announcePush();
-		if (CommitWindow* window = repositoryWindow(submodule->path()))
-			window->refreshRepository();
-	}
+	emit pushEnded();
 }
 
 void PushPane::refreshAfterPush()
 {
 	_repo->refresh();
-	_repo->announcePush();
 }
 
 bool PushPane::confirmOneByOnePush()

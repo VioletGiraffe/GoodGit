@@ -13,9 +13,9 @@ commit on a parallel branch, and `--skip` re-walks the skipped commits anyway, w
 costs. The alternative would be streaming one `log` process, which `vcsprocess` has no incremental-read path
 for.
 
-F5 reloads unconditionally. A return from another application (`refresh.md`) re-reads the unpushed marks and
-reloads only if `Repository::historyFingerprint()` - the listed refs and the checkout - moved since the listing
-was read: a reload re-walks the whole limit and re-centres the view.
+F5 reloads unconditionally. A change in the state directory (`refresh.md`), and the end of a push from this
+window, re-read the unpushed marks and reload only if `Repository::historyFingerprint()` - the listed refs and
+the checkout - moved since the listing was read: a reload re-walks the whole limit and re-centres the view.
 
 The **branch selector** in the log bar picks whose history the walk covers (`LogQuery::Scope`):
 
@@ -96,8 +96,8 @@ One of the window's two writes, with Push. A commit row's **Check out** lists ea
 
 The branches come from `branchTips()`, run beside the walk. The submenu is disabled while any window holds the
 write lock or an operation is in progress; the operation is read off the on-disk markers, so the window needs no
-refreshed state. The checkout runs unconfirmed, under the window's own hold of the lock, and success announces a
-history change.
+refreshed state. The checkout runs unconfirmed, under the window's own hold of the lock, and success reloads the
+window; the other windows see it through their change watches.
 
 Uncommitted changes the checkout leaves alone go along; one it would overwrite fails it before anything moves,
 under hg too (`commands.update.check=noconflict`), and the refusal is the only dialog. Submodules move to the

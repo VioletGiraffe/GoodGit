@@ -146,6 +146,10 @@ void Repository::refresh(std::function<void()> onDone)
 	_runningRefreshCallbacks = std::exchange(_pendingRefreshCallbacks, {});
 	if (onDone)
 		_runningRefreshCallbacks.push_back(std::move(onDone));
+	// The changes already queued are reported first: the windows' pending refreshes are this run, which reads them
+	if (_watcher)
+		_watcher->readPendingChanges();
+	emit refreshStarted();
 	startRefresh();
 }
 
@@ -204,7 +208,6 @@ void Repository::endMutation()
 {
 	_mutationHolder = nullptr;
 	emit writeStateChanged();
-	runRefreshDeferredByWrite();
 }
 
 void Repository::beginPush(const QObject* holder)
@@ -218,19 +221,4 @@ void Repository::endPush()
 {
 	_pushHolder = nullptr;
 	emit writeStateChanged();
-	runRefreshDeferredByWrite();
-}
-
-void Repository::refreshAfterWrites()
-{
-	if (writeInFlight())
-		_refreshDeferredByWrite = true;
-	else
-		refresh();
-}
-
-void Repository::runRefreshDeferredByWrite()
-{
-	if (!writeInFlight() && std::exchange(_refreshDeferredByWrite, false))
-		refresh();
 }

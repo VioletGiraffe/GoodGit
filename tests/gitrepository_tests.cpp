@@ -19,6 +19,7 @@ RESTORE_COMPILER_WARNINGS
 #include <algorithm>
 #include <expected>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -1050,4 +1051,31 @@ TEST_CASE("Moving the repository root loses the subscription's trust, and watchi
 	subscription->rearmIfStopped();
 	CHECK(waitForSignal(subscription.get(), &ChangeSubscription::trustRestored));
 	CHECK(subscription->trusted());
+}
+
+TEST_CASE("A refresh starting reports the changes already queued before it signals its start", "[watcher]")
+{
+#ifdef Q_OS_MACOS
+	WARN("FSEvents delivers a change only after its latency: nothing is queued at once");
+	return;
+#endif
+	const ScratchRepository scratch;
+	scratch.write(QStringLiteral("committed.txt"), "committed\n");
+	scratch.commitAll(QStringLiteral("initial"));
+
+	GitRepository repository{ scratch.root() };
+	const std::unique_ptr<ChangeSubscription> subscription = repository.subscribeToChanges({ ChangeScope::WorkingTree, ChangeScope::StateDirectory });
+	REQUIRE(waitForSignal(subscription.get(), &ChangeSubscription::ready));
+
+	std::vector<std::string> sequence;
+	QObject::connect(subscription.get(), &ChangeSubscription::changed, [&sequence] { sequence.emplace_back("changed"); });
+	QObject::connect(&repository, &Repository::refreshStarted, [&sequence] { sequence.emplace_back("started"); });
+
+	// No event loop runs between the write and the refresh: only the refresh can have read the change
+	scratch.write(QStringLiteral("new.txt"), "new\n");
+	repository.refresh();
+	REQUIRE(sequence.size() >= 2);
+	CHECK(sequence.front() == "changed");
+	CHECK(sequence.back() == "started");
+	refreshToCompletion(repository);
 }

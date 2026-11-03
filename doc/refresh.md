@@ -1,13 +1,32 @@
 # Refresh
 
-Triggered by startup, F5, the app's own state-changing actions, Undo Last Commit before it decides
-(`committing.md`), and a window's first activation after the user returns from another application. There
-is no file watcher.
+Driven by a change watch on each repository (`repositorywatcher`, over thin_io's `directory_watcher`), shared by
+the windows on it. A reported change leaves a window's refresh pending (`RefreshScheduler`) until the window is active
+and no write or push is in flight; it then runs once the changes settle: 300 ms after the last, 2 s after the
+first at most. Also triggered by F5, the app's own state-changing actions, and Undo Last Commit before it
+decides (`committing.md`). A window's first refresh waits until the watch is set up: a change made before that
+could go unreported.
 
-- **Return from another application, not window activation**: a dialog closing reactivates its window, and a
-  refresh landing inside a write flow's next dialog would fail its `StateStamp` check (below). Switching
-  between the app's own windows changes nothing a refresh would read.
-- **Deferred while a write or push runs**: the refresh runs once neither is in flight.
+- **What is watched**: the working tree, every state directory in it or outside it (an absorbed submodule's, a
+  linked worktree's, an hg share's source), and the directory of git's global excludes file. A window showing
+  only history watches the state directories alone.
+- **What a change means**: the backend classifies it as noise (`changefilter`: the object store, the reflogs,
+  the caches, the lock files), a change to the file rows only, or one every view reads. The directories nothing
+  reads go unwatched: those ignored as a whole, untracked nested repositories, the object stores.
+  - hg cannot list the directories ignored as a whole (`status -i` walks into each and lists every file), and
+    `.hgignore` is not parsed here: a build in an hg repository costs settled refreshes while its window is active.
+- **Windows: the folders above an open repository cannot be renamed** while a window watches it. The watch's
+  handle locks them; the repository's own folder can still be renamed or deleted.
+- **A miss is the bug; a needless refresh is acceptable.** hg's own read-only commands rewrite `.hg/dirstate`
+  (`hg.md`), so an hg window refreshes once or twice more after a stat-only change.
+- **Only an active window refreshes.** A modal dialog is the active window, so no refresh lands inside a write
+  flow's confirmation. One landing as the dialog closes fails the flow's `StateStamp` check (below).
+- **Not while a write or push runs**: the pending refresh runs once neither is in flight. The writing window
+  refreshes as its write ends, and every refresh first reads the changes already queued, so a write's own
+  changes are not left pending.
+- **An untrusted watch**: one that stopped (the root moved or deleted, the volume ejected), failed to be set up,
+  or covers a volume whose notifications may miss changes. Its windows refresh on every activation, and the
+  watch is set up again then: during an eject, a handle opened earlier would block it.
 
 The list may be stale by design: **the checked rows are the commit pathspec, verbatim**, and a stale list
 produces ordinary VCS errors through the normal failure path, not silent re-scans. A refresh showing the same

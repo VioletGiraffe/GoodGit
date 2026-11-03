@@ -73,14 +73,14 @@ public:
 	[[nodiscard]] bool partialCoverage() const;
 	// Relative to the root
 	void setExcludedDirectories(const QStringList& relativePaths);
+	// Emits what is pending, if anything. Also the notifier's slot: the handle stays signalled until drained.
+	void readEvents();
 
 signals:
 	// A read that fails arrives as a `stopped` event. A slot must not destroy this watch: the notifier is emitting.
 	void eventsRead(const std::vector<thin_io::watch_event>& events);
 
 private:
-	void readEvents();
-
 	thin_io::directory_watcher _watcher;
 	QStringList _excludedDirectories;
 #ifdef Q_OS_WIN
@@ -101,6 +101,9 @@ public:
 	~RepositoryWatcher() override;
 
 	[[nodiscard]] std::unique_ptr<ChangeSubscription> subscribe(bool workingTree, bool stateDirectory);
+	// Reports the changes the operating system has queued without waiting for the notifiers: a refresh starting now
+	// reads them, so a window's pending refresh is that one
+	void readPendingChanges();
 
 private:
 	friend class ChangeSubscription;

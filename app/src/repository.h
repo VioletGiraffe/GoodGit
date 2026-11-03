@@ -169,13 +169,6 @@ public:
 	// A window must not close while it holds a write: the answers would arrive after it is gone
 	[[nodiscard]] bool writeHeldBy(const QObject* holder) const { return _mutationHolder == holder || pushHeldBy(holder); }
 	[[nodiscard]] bool pushHeldBy(const QObject* holder) const { return _pushHolder == holder; }
-	// Refreshes now, or once no write is in flight: for a refresh no write flow asked for, which would land in that
-	// flow's dialogs and fail its StateStamp check
-	void refreshAfterWrites();
-
-	// Only called by the writer, after a successful write
-	void announceHistoryChange() { emit historyChanged(); }
-	void announcePush() { emit pushed(); }
 
 	// An action below without a context answers while this object lives, which may be past the caller.
 	// Each such action runs under the write lock, and its caller must stay alive until the lock is released.
@@ -386,10 +379,10 @@ public:
 	virtual void launchExternalDiffTool(const QString& repoRelativePath) const = 0;
 
 signals:
+	// A refresh run is starting. Its queries read every change the subscriptions reported before it.
+	void refreshStarted();
 	void refreshed();
 	void writeStateChanged(); // a write flow began or ended
-	void historyChanged();    // a write moved a ref or the checkout: every history listing is stale
-	void pushed();            // commits were published: the unpushed marks are stale
 
 protected:
 	// Runs whatever queries the backend needs and calls completeRefresh() exactly once, when the last has answered
@@ -408,9 +401,6 @@ protected:
 	void runAfterCurrentRefresh(std::function<void()> fn);
 
 private:
-	// Runs the refresh refreshAfterWrites() deferred, once no write is in flight
-	void runRefreshDeferredByWrite();
-
 	const QString _rootPath;
 
 	RepoState _state;
@@ -425,7 +415,6 @@ private:
 
 	const QObject* _mutationHolder = nullptr;
 	const QObject* _pushHolder = nullptr;
-	bool _refreshDeferredByWrite = false;
 
 	std::unique_ptr<RepositoryWatcher> _watcher; // created with the first subscription
 };

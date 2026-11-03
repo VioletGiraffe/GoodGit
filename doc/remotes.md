@@ -2,8 +2,9 @@
 
 ## The incoming check
 
-Every refresh of a commit window starts an incoming check, unless one is in flight, a push is running (its end
-refreshes), or the branch has no upstream or a gone one. Nothing pulls or merges.
+A commit window starts an incoming check when it opens, on F5, after a push, and when it is activated a minute or
+more after its last check: the change watch cannot see the remote. Not while one is in flight or a push runs, nor
+where the branch has no upstream or a gone one. Nothing pulls or merges.
 
 - git: `git fetch`, then `rev-list --count` and `log` from HEAD to what it compares against: its upstream, or for
   a detached HEAD what `submodule update --remote` follows (below). The check is the only thing that fetches, and

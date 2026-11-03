@@ -132,11 +132,9 @@ void closeWelcomeWindow()
 		welcome->close();
 }
 
-} // namespace
-
-CommitWindow* repositoryWindow(const QString& root)
+// The open windows are the registry: a closed one drops out without any bookkeeping
+[[nodiscard]] CommitWindow* repositoryWindow(const QString& root)
 {
-	// The open windows are the registry: a closed one drops out without any bookkeeping
 	for (CommitWindow* window : WidgetUtils::findTopLevelWindows<CommitWindow>())
 	{
 		if (sameDirectoryOnDisk(window->repositoryPath(), root))
@@ -144,6 +142,8 @@ CommitWindow* repositoryWindow(const QString& root)
 	}
 	return nullptr;
 }
+
+} // namespace
 
 CommitWindow* openRepositoryWindow(const RepositoryLocation& location)
 {

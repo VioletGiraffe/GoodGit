@@ -125,7 +125,6 @@ void DirectoryWatch::setExcludedDirectories(const QStringList& relativePaths)
 	_watcher.set_excluded_directories(nativeStrings(relativePaths));
 }
 
-// Reads at once: the handle stays signalled until drained, and the notifier would fire again
 void DirectoryWatch::readEvents()
 {
 	auto events = _watcher.read_events();
@@ -166,6 +165,16 @@ std::unique_ptr<ChangeSubscription> RepositoryWatcher::subscribe(bool workingTre
 	else
 		armNeededRoots(); // the tree, for the first subscription wanting it; ready() for this one in any case
 	return subscription;
+}
+
+void RepositoryWatcher::readPendingChanges()
+{
+	// A copy: a stop releases its watch
+	std::vector<std::shared_ptr<DirectoryWatch>> watches;
+	for (const Watch& watch : _watches)
+		watches.push_back(watch.watch);
+	for (const std::shared_ptr<DirectoryWatch>& watch : watches)
+		watch->readEvents();
 }
 
 void RepositoryWatcher::unsubscribe(const ChangeSubscription* subscription)

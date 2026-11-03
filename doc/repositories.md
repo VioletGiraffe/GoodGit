@@ -26,7 +26,7 @@ every window and dialog on it until the last one closes. They share:
 - its state and refresh;
 - its write lock: a write started in one window disables the writing actions of every other. The lock records
   which window holds it, and only that one cannot close until the write ends;
-- its announcements: a history change or a push reaches every history view of it.
+- its change watch (`refresh.md`): a write in one window reaches the others.
 
 Instances are independent: nothing stops a second process, and it may open a repository the first already
 shows. They share the settings store, so the recent list is written as one value, and the repository, so a

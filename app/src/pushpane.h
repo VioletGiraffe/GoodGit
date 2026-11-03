@@ -17,6 +17,8 @@ class ConsoleLogView;
 // Holds the push lock itself, so the window hosting it must not close while pushRunning().
 class PushPane final : public QWidget
 {
+	Q_OBJECT
+
 public:
 	explicit PushPane(std::shared_ptr<Repository> repo, QWidget* parent = nullptr);
 
@@ -27,14 +29,17 @@ public:
 	void startPush(PushMode mode, const QString& upToCommit = {});
 	[[nodiscard]] bool pushRunning() const;
 
+signals:
+	// The push flow ended, finished or failed. The repositories it wrote report it through their change watches.
+	void pushEnded();
+
 private:
 	// Takes the push lock of every submodule the planned push writes, all or none. A busy one is reported, and
 	// nothing is locked.
 	[[nodiscard]] bool lockPushedSubmodules();
-	// Ends the push flow, finished or failed: this repository's push lock and the submodules'. Each submodule's
-	// history views re-read the unpushed marks, and its window refreshes.
+	// Ends the push flow, finished or failed: this repository's push lock and the submodules'
 	void endPush();
-	// After this repository's own push: a refresh, and the announcement that stales the unpushed marks
+	// After this repository's own push: the header's ahead count
 	void refreshAfterPush();
 	// Before a one-by-one push of the planned steps: each push of a commit can start a CI run
 	[[nodiscard]] bool confirmOneByOnePush();

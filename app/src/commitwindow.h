@@ -5,6 +5,7 @@
 #include "unifieddiff.h"
 
 DISABLE_COMPILER_WARNINGS
+#include <QElapsedTimer>
 #include <QMainWindow>
 #include <QPointer>
 #include <QSet>
@@ -21,6 +22,7 @@ class DiffPane;
 class FileListView;
 class IncomingChangesDialog;
 class MessageEdit;
+class RefreshScheduler;
 class PushPane;
 class CLabelElided;
 
@@ -31,14 +33,10 @@ public:
 	explicit CommitWindow(const RepositoryLocation& location);
 
 	[[nodiscard]] const QString& repositoryPath() const;
-	// Called by another window whose write changed this repository: a submodule's commit moves a pointer here,
-	// a parent's discard inside the submodule changes its working tree, and a parent's push may publish its commits
-	void refreshRepository();
-	// Refreshes this window on every history change in `submodule`: a commit or undo there moves its pointer row here
-	void followSubmoduleHistory(const CommitWindow& submodule);
 
 protected:
 	bool eventFilter(QObject* watched, QEvent* event) override;
+	void changeEvent(QEvent* event) override;
 	void closeEvent(QCloseEvent* event) override;
 
 private:
@@ -70,9 +68,8 @@ private:
 	void saveDraftMessage();
 	void restoreDraftIfParentUnchanged();
 
-	// The completion for a mutation with no follow-up work: ends the mutation, `errorTitle` on failure, refresh.
-	// `changesHistory`: success reshapes the log, so the history change is announced too.
-	[[nodiscard]] Vcs::Answer<void> mutationDone(const QString& errorTitle, bool changesHistory = false);
+	// The completion for a mutation with no follow-up work: ends the mutation, `errorTitle` on failure, refresh
+	[[nodiscard]] Vcs::Answer<void> mutationDone(const QString& errorTitle);
 	// False while a mutation is in flight, and while the rows are only the last state that could be read
 	[[nodiscard]] bool canActOnList() const;
 
@@ -89,8 +86,10 @@ private:
 	void doCommit(bool pushAfterwards, StateStamp decisionStamp);
 	// The menu's check: opens the dialog, which checks the submodules; this repository's own check joins the one in flight
 	void checkForIncomingChanges();
-	// Every refresh starts one, non-interactive; the header shows its outcome
+	// The header shows its outcome
 	void startIncomingCheck(bool interactive);
+	// A background check, where the state has an upstream to check and none is running; due until then
+	void startDueIncomingCheck();
 
 	void showHistoryWindow();
 	void undoLastCommit();
@@ -141,6 +140,7 @@ private:
 
 private:
 	const std::shared_ptr<Repository> _repo;
+	std::unique_ptr<RefreshScheduler> _refreshScheduler; // after _repo: its subscription must end before the repository does
 	ChangedFilesModel _filesModel;
 
 	QSplitter* _splitter = nullptr;
@@ -193,7 +193,11 @@ private:
 	enum class IncomingCheckOutcome : uint8_t { None, Succeeded, Failed };
 	IncomingCheckOutcome _incomingCheckOutcome = IncomingCheckOutcome::None;
 	QString _incomingCheckError; // Failed: the reason, for the header's tooltip
-	bool _incomingCheckInFlight = false; // a refresh landing meanwhile starts no second check
+	bool _incomingCheckInFlight = false;
+	// The window opened, F5 was pressed, a push ended, or the window was activated a while after the last check.
+	// The check starts once a refresh has read an upstream to check.
+	bool _incomingCheckDue = true;
+	QElapsedTimer _sinceIncomingCheck; // started by every check
 	// A submodule discard plan is being built; disables the menu's discard action, or a second plan's dialog
 	// could stack over the first's
 	bool _discardPlanInFlight = false;

@@ -3,6 +3,7 @@
 #include "diffpane.h"
 #include "filelistview.h"
 #include "fileviewerwindow.h"
+#include "refreshscheduler.h"
 #include "pushpane.h"
 #include "repositoryfactory.h"
 #include "settings.h"
@@ -158,11 +159,10 @@ HistoryWindow::HistoryWindow(const RepositoryLocation& location, const QString& 
 	// One geometry for every history window
 	enablePersistence(this, QStringLiteral("HistoryWindow"));
 
-	WidgetUtils::callOnReturnFromOtherApp(this, [this] { reloadIfHistoryChanged(); });
-	connect(_repo.get(), &Repository::historyChanged, this, &HistoryWindow::reload);
-	connect(_repo.get(), &Repository::pushed, this, &HistoryWindow::refreshUnpushedMarks);
-
-	reload();
+	// The first run reloads: no listing has a fingerprint yet
+	_refreshScheduler = std::make_unique<RefreshScheduler>(*this, *_repo, std::initializer_list<ChangeScope>{ ChangeScope::StateDirectory },
+		[this] { reloadIfHistoryChanged(); });
+	connect(_pushPane, &PushPane::pushEnded, this, &HistoryWindow::reloadIfHistoryChanged);
 }
 
 void HistoryWindow::buildUi()
@@ -544,8 +544,8 @@ void HistoryWindow::startPickaxeQuery()
 void HistoryWindow::reloadIfHistoryChanged()
 {
 	refreshUnpushedMarks(); // a push can publish commits without moving any ref the fingerprint covers
-	_returnCheckQuery.cancel();
-	_returnCheckQuery = _repo->historyFingerprint(this, [this](std::expected<QString, QString> fingerprint) {
+	_fingerprintCheckQuery.cancel();
+	_fingerprintCheckQuery = _repo->historyFingerprint(this, [this](std::expected<QString, QString> fingerprint) {
 		if (!fingerprint || *fingerprint != _listedFingerprint)
 			reload();
 	});
@@ -967,7 +967,7 @@ void HistoryWindow::checkOut(const CheckoutTarget& target)
 		if (!result)
 			MessageDialog::notice(this, tr("Checkout failed"), tr("Checkout failed."), result.error());
 		else
-			_repo->announceHistoryChange();
+			reload();
 		_repo->refresh();
 	});
 }

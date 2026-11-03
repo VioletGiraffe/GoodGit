@@ -25,6 +25,7 @@ class QTimer;
 class QTreeView;
 class CLabelElided;
 class FileListView;
+class RefreshScheduler;
 class PushPane;
 
 // What a reveal does where the listing does not hold the commit
@@ -37,7 +38,7 @@ enum class RevealMiss
 // The commit history of one repository. Its writes are a checkout and a push up to a commit.
 // Holds the shared Repository: a submodule's history opens without a CommitWindow on that submodule.
 // Reads what it shows from its own queries, never from the state: without a CommitWindow nothing refreshes it.
-// Reloads on Repository::historyChanged, and re-reads the unpushed marks on Repository::pushed.
+// Reloads after its own checkout and push, and when its repository's state directory changes (RefreshScheduler).
 // Every query is scoped to this window, so closing it drops the pending ones.
 // Parentless: it takes its own taskbar entry and outlives the window that opened it.
 class HistoryWindow final : public QMainWindow
@@ -128,6 +129,7 @@ private:
 
 private:
 	const std::shared_ptr<Repository> _repo;
+	std::unique_ptr<RefreshScheduler> _refreshScheduler; // after _repo: its subscription must end before the repository does
 	CommitLogModel _logModel;
 	CommitFilesModel _filesModel;
 
@@ -176,7 +178,7 @@ private:
 	// Repository::historyFingerprint() as of the listing shown; empty where it could not be read
 	QString _listedFingerprint;
 	Vcs::Query _listedFingerprintQuery;
-	Vcs::Query _returnCheckQuery; // reloadIfHistoryChanged()'s
+	Vcs::Query _fingerprintCheckQuery; // reloadIfHistoryChanged()'s
 	Vcs::Query _pickaxeQuery;
 	Vcs::Query _unpushedQuery;
 	Vcs::Query _currentCommitQuery;

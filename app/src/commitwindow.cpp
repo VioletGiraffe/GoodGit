@@ -7,6 +7,7 @@
 #include "historywindow.h"
 #include "incomingchangesdialog.h"
 #include "messageedit.h"
+#include "refreshscheduler.h"
 #include "pushpane.h"
 #include "recentrepositories.h"
 #include "recentrepositoriespanel.h"
@@ -76,6 +77,9 @@ bool incomingCheckPossible(const RepoState& state)
 {
 	return !state.upstream.isEmpty() && !state.upstreamGone;
 }
+
+// An activation sooner than this after the last incoming check starts none: switching windows would fetch every time
+constexpr qint64 IncomingCheckIntervalMs = 60'000;
 
 // Empty where the path is not a file on disk: a deleted entry, or a submodule's own directory
 QString workingTreeSizeLabel(const QString& absolutePath)
@@ -265,25 +269,15 @@ CommitWindow::CommitWindow(const RepositoryLocation& location) :
 
 	connect(_repo.get(), &Repository::refreshed, this, &CommitWindow::onRefreshed);
 	connect(_repo.get(), &Repository::writeStateChanged, this, &CommitWindow::updateControlStates);
-	WidgetUtils::callOnReturnFromOtherApp(this, [this] { _repo->refreshAfterWrites(); });
-
-	_repo->refresh();
+	_refreshScheduler = std::make_unique<RefreshScheduler>(*this, *_repo, std::initializer_list<ChangeScope>{ ChangeScope::WorkingTree, ChangeScope::StateDirectory },
+		[this] { _repo->refresh(); });
+	// Whichever window started it, a refresh of the shared repository reads what this one has pending
+	connect(_repo.get(), &Repository::refreshStarted, _refreshScheduler.get(), &RefreshScheduler::cancelPending);
 }
 
 const QString& CommitWindow::repositoryPath() const
 {
 	return _repo->path();
-}
-
-void CommitWindow::refreshRepository()
-{
-	_repo->refresh();
-}
-
-void CommitWindow::followSubmoduleHistory(const CommitWindow& submodule)
-{
-	// Unique: every open of the submodule's window from here follows it again
-	connect(submodule._repo.get(), &Repository::historyChanged, this, &CommitWindow::refreshRepository, Qt::UniqueConnection);
 }
 
 void CommitWindow::buildUi()
@@ -325,7 +319,10 @@ void CommitWindow::buildMenuBar()
 	// Everything: the dock that would show a scan's finds can be hidden
 	QMenu* repositoryMenu = addRepositoryMenu(*menuBar(), this, openRepositoryAction, ScanReport::Everything);
 	repositoryMenu->addSeparator();
-	repositoryMenu->addAction(tr("&Refresh"), this, [this] { _repo->refresh(); })->setShortcut(QKeySequence::Refresh);
+	repositoryMenu->addAction(tr("&Refresh"), this, [this] {
+		_incomingCheckDue = true;
+		_repo->refresh();
+	})->setShortcut(QKeySequence::Refresh);
 	_checkIncomingAction = repositoryMenu->addAction(tr("Check for &Incoming Changes"), this, &CommitWindow::checkForIncomingChanges);
 	_checkIncomingAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_I));
 	_checkIncomingAction->setToolTip(tr("Fetch and list the commits on the upstream that this branch does not have yet"));
@@ -526,6 +523,7 @@ QWidget* CommitWindow::buildRightPane()
 	});
 	_pushPane = new PushPane{ _repo };
 	rightLayout->addWidget(_pushPane);
+	connect(_pushPane, &PushPane::pushEnded, this, [this] { _incomingCheckDue = true; }); // the refresh after the push starts it
 	return rightPane;
 }
 
@@ -661,6 +659,20 @@ bool CommitWindow::eventFilter(QObject* watched, QEvent* event)
 	return QMainWindow::eventFilter(watched, event);
 }
 
+// The change watch cannot see the remote, so activation takes its place there
+void CommitWindow::changeEvent(QEvent* event)
+{
+	QMainWindow::changeEvent(event);
+	if (event->type() != QEvent::ActivationChange || !isActiveWindow())
+		return;
+	if (_sinceIncomingCheck.isValid() && _sinceIncomingCheck.elapsed() < IncomingCheckIntervalMs)
+		return;
+
+	_incomingCheckDue = true;
+	if (_stateWasRead)
+		startDueIncomingCheck();
+}
+
 void CommitWindow::onRefreshed()
 {
 	const SelectionByPath selection = captureSelectionByPath();
@@ -673,9 +685,7 @@ void CommitWindow::onRefreshed()
 	updateStrips();
 	updateControlStates();
 
-	// Not during a push: its end refreshes
-	if (!_incomingCheckInFlight && !_repo->pushInFlight() && incomingCheckPossible(state))
-		startIncomingCheck(/*interactive=*/false);
+	startDueIncomingCheck();
 
 	if (_initialWidthPending)
 	{
@@ -964,14 +974,12 @@ bool CommitWindow::canActOnList() const
 	return !_repo->mutationInFlight() && _repo->state().known();
 }
 
-Vcs::Answer<void> CommitWindow::mutationDone(const QString& errorTitle, bool changesHistory)
+Vcs::Answer<void> CommitWindow::mutationDone(const QString& errorTitle)
 {
-	return [this, errorTitle, changesHistory](std::expected<void, QString> result) {
+	return [this, errorTitle](std::expected<void, QString> result) {
 		_repo->endMutation();
 		if (!result)
 			showError(errorTitle, result.error());
-		else if (changesHistory)
-			_repo->announceHistoryChange();
 		_repo->refresh();
 	};
 }
@@ -1061,7 +1069,7 @@ void CommitWindow::reattachHeadFromStrip()
 		return;
 
 	_repo->beginMutation(this);
-	_repo->reattachHead(*chosen, mutationDone(tr("Could not put HEAD on a branch"), /*changesHistory=*/true));
+	_repo->reattachHead(*chosen, mutationDone(tr("Could not put HEAD on a branch")));
 }
 
 std::optional<ReattachCandidate> CommitWindow::chooseReattachCandidate(std::vector<ReattachCandidate> candidates, const StateStamp& stamp)
@@ -1109,7 +1117,6 @@ void CommitWindow::doCommit(bool pushAfterwards, StateStamp decisionStamp)
 		}
 		if (_messageEdit->toPlainText() == message) // text typed while the commit ran stays put
 			_messageEdit->clear();
-		_repo->announceHistoryChange();
 		_repo->refresh();
 		if (pushAfterwards)
 			_pushPane->startPush(PushMode::Branch);
@@ -1140,6 +1147,7 @@ void CommitWindow::startIncomingCheck(bool interactive)
 {
 	assert_r(!_incomingCheckInFlight);
 	_incomingCheckInFlight = true;
+	_sinceIncomingCheck.start();
 
 	// Never detached here: a detached HEAD has no upstream, and no check starts without one
 	_repo->checkIncoming(interactive, /*detachedHeadBranch=*/{}, MaxListedIncomingCommits, this,
@@ -1152,6 +1160,16 @@ void CommitWindow::startIncomingCheck(bool interactive)
 			if (_incomingDialog)
 				_incomingDialog->setOwnAnswer(commits, _repo->state().behind);
 		});
+}
+
+void CommitWindow::startDueIncomingCheck()
+{
+	// A push in flight: the refresh after it starts the check
+	if (!_incomingCheckDue || _incomingCheckInFlight || _repo->pushInFlight() || !incomingCheckPossible(_repo->state()))
+		return;
+
+	_incomingCheckDue = false;
+	startIncomingCheck(/*interactive=*/false);
 }
 
 void CommitWindow::showDiffForCurrentRow()
@@ -1304,7 +1322,7 @@ void CommitWindow::continueOperation()
 	// No confirmation: continuing is what the operation is waiting for, and it destroys nothing.
 	// The command may open the user's editor, so the mutation can stay in flight for as long as that is up.
 	_repo->beginMutation(this);
-	_repo->continueOperation(mutationDone(tr("Continue failed"), /*changesHistory=*/true));
+	_repo->continueOperation(mutationDone(tr("Continue failed")));
 }
 
 void CommitWindow::abortOperation()
@@ -1340,12 +1358,12 @@ void CommitWindow::abortOperation()
 		return;
 
 	_repo->beginMutation(this);
-	_repo->abortOperation(mutationDone(tr("Abort failed"), /*changesHistory=*/true));
+	_repo->abortOperation(mutationDone(tr("Abort failed")));
 }
 
 void CommitWindow::openNestedRepositoryWindow(const FileEntry& entry)
 {
-	followSubmoduleHistory(*openRepositoryWindow(_repo->nestedRepositoryLocation(entry.path)));
+	openRepositoryWindow(_repo->nestedRepositoryLocation(entry.path));
 }
 
 void CommitWindow::showContextMenu(const QPoint& pos)
@@ -1734,11 +1752,7 @@ void CommitWindow::discardSubmoduleContent(const FileEntry& submodule)
 void CommitWindow::startSubmoduleContentDiscard(const QString& path, const SubmoduleDiscardPlan& plan)
 {
 	_repo->beginMutation(this);
-	_repo->discardSubmoduleContent(path, plan, [this, path, done = mutationDone(tr("Discard failed"))](std::expected<void, QString> result) {
-		done(std::move(result));
-		if (CommitWindow* window = repositoryWindow(_repo->nestedRepositoryLocation(path).root))
-			window->refreshRepository(); // its rows are stale: its working tree was changed from here
-	});
+	_repo->discardSubmoduleContent(path, plan, mutationDone(tr("Discard failed")));
 }
 
 void CommitWindow::undoLastCommit()
@@ -1804,7 +1818,7 @@ void CommitWindow::confirmThenUndoLastCommit()
 		return;
 	}
 
-	_repo->undoLastCommit([this, message = state.headMessage, done = mutationDone(tr("Undo failed"), /*changesHistory=*/true)](std::expected<void, QString> result) {
+	_repo->undoLastCommit([this, message = state.headMessage, done = mutationDone(tr("Undo failed"))](std::expected<void, QString> result) {
 		if (result && _messageEdit->toPlainText().trimmed().isEmpty())
 		{
 			_messageEdit->setPlainText(message);
