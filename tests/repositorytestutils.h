@@ -161,6 +161,26 @@ inline void refreshToCompletion(Repository& repository)
 	return "?";
 }
 
+// Requires the query to succeed
+[[nodiscard]] inline std::vector<WatchedRoot> requireWatchedRoots(Repository& repository)
+{
+	return requireSuccess(awaitAnswer<std::vector<WatchedRoot>>([&](Vcs::Answer<std::vector<WatchedRoot>> onDone) {
+		repository.watchedRoots(&repository, std::move(onDone));
+	}));
+}
+
+// The same directories in the same order, each compared by identity on disk: the tools spell a path their own way
+inline void requireSameDirectories(const QStringList& actual, const QStringList& expected)
+{
+	INFO(actual.join(QLatin1Char('\n')).toStdString());
+	REQUIRE(actual.size() == expected.size());
+	for (qsizetype i = 0; i < actual.size(); ++i)
+	{
+		INFO(expected[i].toStdString());
+		CHECK(sameDirectoryOnDisk(actual[i], expected[i]));
+	}
+}
+
 // The rows, one per line, for a failed check to print: `CHECK(describedRows(files) == "")` asserts there are none
 [[nodiscard]] inline std::string describedRows(const std::vector<FileEntry>& files)
 {

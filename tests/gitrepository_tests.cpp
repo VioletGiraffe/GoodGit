@@ -59,6 +59,16 @@ public:
 		git({ QStringLiteral("commit"), QStringLiteral("-q"), QStringLiteral("-m"), QStringLiteral("nested") }, relativePath);
 	}
 
+	// A committed submodule at `relativePath` whose git directory is under this repository's .git/modules
+	void addAbsorbedSubmodule(const QString& relativePath) const
+	{
+		createNestedRepository(relativePath);
+		write(QStringLiteral(".gitmodules"),
+			QStringLiteral("[submodule \"%1\"]\n\tpath = %1\n\turl = ./%1\n").arg(relativePath).toUtf8());
+		commitAll(QStringLiteral("with a submodule"));
+		git({ QStringLiteral("submodule"), QStringLiteral("absorbgitdirs") });
+	}
+
 	void commitAll(const QString& message) const
 	{
 		git({ QStringLiteral("add"), QStringLiteral("-A") });
@@ -843,4 +853,92 @@ TEST_CASE("A push up to a commit pushes the submodules that commit references, n
 	REQUIRE(toUnpublished.size() == 2);
 	CHECK(toUnpublished[0].subject == QStringLiteral("sub"));
 	CHECK(toUnpublished[1].commit == local.sha(QStringLiteral("HEAD")));
+}
+
+TEST_CASE("The watched roots are the working tree, plus an absorbed submodule's git directory or a linked worktree's common one", "[git]")
+{
+	const ScratchRepository scratch;
+	scratch.write(QStringLiteral("committed.txt"), "committed\n");
+	scratch.commitAll(QStringLiteral("initial"));
+
+	SECTION("a repository with its .git inside")
+	{
+		GitRepository repository{ scratch.root() };
+		const std::vector<WatchedRoot> roots = requireWatchedRoots(repository);
+		REQUIRE(roots.size() == 1);
+		CHECK(roots[0].scope == ChangeScope::WorkingTree);
+		CHECK(sameDirectoryOnDisk(roots[0].path, scratch.root()));
+	}
+
+	SECTION("an absorbed submodule")
+	{
+		scratch.addAbsorbedSubmodule(QStringLiteral("sub"));
+		const QString submoduleRoot = QDir{ scratch.root() }.filePath(QStringLiteral("sub"));
+
+		GitRepository repository{ submoduleRoot };
+		const std::vector<WatchedRoot> roots = requireWatchedRoots(repository);
+		REQUIRE(roots.size() == 2);
+		CHECK(roots[0].scope == ChangeScope::WorkingTree);
+		CHECK(roots[1].scope == ChangeScope::StateDirectory);
+		requireSameDirectories({ roots[0].path, roots[1].path },
+			{ submoduleRoot, QDir{ scratch.root() }.filePath(QStringLiteral(".git/modules/sub")) });
+	}
+
+	SECTION("a linked worktree")
+	{
+		const QString worktree = QDir::cleanPath(QDir{ scratch.root() }.filePath(QStringLiteral("../worktree")));
+		scratch.git({ QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-q"), QStringLiteral("-b"), QStringLiteral("wt"), worktree });
+
+		GitRepository repository{ worktree };
+		const std::vector<WatchedRoot> roots = requireWatchedRoots(repository);
+		REQUIRE(roots.size() == 2);
+		CHECK(roots[1].scope == ChangeScope::StateDirectory);
+		requireSameDirectories({ roots[0].path, roots[1].path }, { worktree, QDir{ scratch.root() }.filePath(QStringLiteral(".git")) });
+	}
+}
+
+TEST_CASE("A change in the git directory is noise or reaches every view, and one in a submodule's reaches the parent's rows only", "[git]")
+{
+	const ScratchRepository scratch;
+	scratch.addAbsorbedSubmodule(QStringLiteral("sub"));
+
+	GitRepository parent{ scratch.root() };
+	const std::vector<WatchedRoot> parentRoots = requireWatchedRoots(parent);
+	REQUIRE(parentRoots.size() == 1);
+	const auto parentScope = [&](const char* path) { return parent.changeScope(parentRoots[0], QString::fromLatin1(path)); };
+
+	CHECK(parentScope("committed.txt") == ChangeScope::WorkingTree);
+	CHECK(parentScope("sub/inside.txt") == ChangeScope::WorkingTree);
+	CHECK(parentScope(".git/HEAD") == ChangeScope::StateDirectory);
+	CHECK(parentScope(".git/refs/heads/objects/x") == ChangeScope::StateDirectory);
+	CHECK(parentScope(".git/modules/sub/HEAD") == ChangeScope::WorkingTree);
+	CHECK_FALSE(parentScope(".git/objects/ab/cdef"));
+	CHECK_FALSE(parentScope(".git/index.lock"));
+	CHECK_FALSE(parentScope(".git/modules/sub/objects/ab/cdef"));
+
+	GitRepository submodule{ QDir{ scratch.root() }.filePath(QStringLiteral("sub")) };
+	const std::vector<WatchedRoot> submoduleRoots = requireWatchedRoots(submodule);
+	REQUIRE(submoduleRoots.size() == 2);
+	CHECK(submodule.changeScope(submoduleRoots[0], u".git") == ChangeScope::WorkingTree);
+	CHECK(submodule.changeScope(submoduleRoots[1], u"refs/heads/main") == ChangeScope::StateDirectory);
+	CHECK_FALSE(submodule.changeScope(submoduleRoots[1], u"objects/ab/cdef"));
+}
+
+TEST_CASE("The unwatched directories are those ignored whole, a nested untracked repository and every object store", "[git]")
+{
+	const ScratchRepository scratch;
+	scratch.write(QStringLiteral(".gitignore"), "build/\n*.o\n");
+	scratch.addAbsorbedSubmodule(QStringLiteral("sub"));
+
+	scratch.write(QStringLiteral("build/out.bin"), "out\n");
+	// Holds only ignored files, which --ignored=matching still lists one by one: a new file there would be untracked
+	scratch.write(QStringLiteral("junk/z.o"), "z\n");
+	scratch.createNestedRepository(QStringLiteral("nested"));
+
+	GitRepository repository{ scratch.root() };
+	refreshToCompletion(repository);
+
+	const QDir root{ scratch.root() };
+	requireSameDirectories(repository.unwatchedDirectories(), { root.filePath(QStringLiteral("build")), root.filePath(QStringLiteral("nested")),
+		root.filePath(QStringLiteral(".git/objects")), root.filePath(QStringLiteral(".git/modules/sub/objects")) });
 }

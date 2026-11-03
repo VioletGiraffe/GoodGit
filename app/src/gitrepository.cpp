@@ -17,7 +17,9 @@ DISABLE_COMPILER_WARNINGS
 RESTORE_COMPILER_WARNINGS
 
 #include <algorithm>
+#include <functional>
 #include <map>
+#include <optional>
 
 namespace {
 
@@ -100,6 +102,63 @@ QStringList branchAndUnmergedStatusArgs()
 {
 	return { QStringLiteral("status"), QStringLiteral("--porcelain=v2"), QStringLiteral("--branch"),
 		QStringLiteral("--untracked-files=no"), QStringLiteral("--ignore-submodules=all"), QStringLiteral("-z") };
+}
+
+// The same records, plus every untracked path and the directories ignored as a whole (git.md: --ignored)
+QStringList refreshStatusArgs()
+{
+	return { QStringLiteral("status"), QStringLiteral("--porcelain=v2"), QStringLiteral("--branch"), QStringLiteral("--untracked-files=all"),
+		QStringLiteral("--ignored=matching"), QStringLiteral("--ignore-submodules=all"), QStringLiteral("-z") };
+}
+
+// The output Git::parseGitDirectories reads
+QStringList gitDirectoriesArgs()
+{
+	return { QStringLiteral("rev-parse"), QStringLiteral("--absolute-git-dir"), QStringLiteral("--git-common-dir") };
+}
+
+[[nodiscard]] QString unreadGitDirectoriesError(const QByteArray& output)
+{
+	return QObject::tr("Unexpected git directories: %1").arg(QString::fromUtf8(output.trimmed()));
+}
+
+// `relativePath` is `directory` itself or a path under it
+[[nodiscard]] bool isSameOrUnder(QStringView relativePath, QStringView directory)
+{
+	return relativePath.startsWith(directory) && (relativePath.size() == directory.size() || relativePath[directory.size()] == u'/');
+}
+
+// `directory` relative to `root`, where it is `root` itself ("") or under it
+[[nodiscard]] std::optional<QString> relativePathWithin(const QString& root, const QString& directory)
+{
+	const QString relative = QDir{ root }.relativeFilePath(directory);
+	if (relative == QLatin1String("."))
+		return QString{};
+	if (QDir::isAbsolutePath(relative) || isSameOrUnder(relative, u".."))
+		return std::nullopt;
+	return relative;
+}
+
+// `gitDir`'s object store, and those of the git directories under its modules/, at any depth
+void collectObjectStores(const QString& gitDir, ChangeFilter::GitDirectoryProbe& isGitDirectory, QStringList& stores);
+
+// Each directory under modules/ is a submodule's git directory, or one level of a name holding slashes
+void collectModuleObjectStores(const QString& directory, ChangeFilter::GitDirectoryProbe& isGitDirectory, QStringList& stores)
+{
+	for (const QString& name : QDir{ directory }.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden))
+	{
+		const QString child = directory + QLatin1Char('/') + name;
+		if (isGitDirectory(child))
+			collectObjectStores(child, isGitDirectory, stores);
+		else
+			collectModuleObjectStores(child, isGitDirectory, stores);
+	}
+}
+
+void collectObjectStores(const QString& gitDir, ChangeFilter::GitDirectoryProbe& isGitDirectory, QStringList& stores)
+{
+	stores.push_back(gitDir + QStringLiteral("/objects"));
+	collectModuleObjectStores(gitDir + QStringLiteral("/modules"), isGitDirectory, stores);
 }
 
 // One unfinished operation as the git directory records it, with the arguments that end it.
@@ -552,7 +611,8 @@ struct GitRepository::RefreshRun
 	QString headMessage;
 	std::vector<CommitFileChange> diffEntries;
 	std::map<QString, LineCounts> changeCounts; // by path; only the tracked changes have one
-	QStringList untracked;
+	QStringList untracked; // a nested repository with a trailing '/'
+	QStringList ignoredDirectories; // ignored as a whole
 	QStringList submodules; // repo-relative paths of the gitlink entries
 	std::map<QString, SubmoduleContent> submoduleContent; // only the submodules that were queried at all
 	// Detached only: the two listings the options are selected from, then the options with their counts
@@ -585,6 +645,7 @@ void GitRepository::startRefresh()
 {
 	auto run = std::make_shared<RefreshRun>();
 	_run = run;
+	_gitDirectoryProbe.forget();
 
 	// The independent base queries, plus the one-time per-repository resolutions
 	QueryRound round{ Git::readOnlyQueries(this), [self = QPointer<GitRepository>{ this }, run] {
@@ -594,12 +655,13 @@ void GitRepository::startRefresh()
 
 	if (_gitDir.isEmpty())
 	{
-		round.launch(path(), { QStringLiteral("rev-parse"), QStringLiteral("--absolute-git-dir") },
+		round.launch(path(), gitDirectoriesArgs(),
 			[this, run](const ProcessResult& r) {
-				if (r.ok)
-					_gitDir = Git::pathFromOutput(r.out.trimmed());
-				else
-					run->noteFailure(r); // without it a merge in progress is indistinguishable from none
+				// Without the git dir a merge in progress is indistinguishable from none
+				if (!r.ok)
+					run->noteFailure(r);
+				else if (!setGitDirectories(r.out))
+					run->failure = unreadGitDirectoriesError(r.out);
 			});
 	}
 	if (_emptyTreeSha.isEmpty())
@@ -609,12 +671,15 @@ void GitRepository::startRefresh()
 		round.launch(path(), { QStringLiteral("hash-object"), QStringLiteral("-t"), QStringLiteral("tree"), QStringLiteral("--stdin") },
 			[this](const ProcessResult& r) { _emptyTreeSha = QString::fromUtf8(r.out.trimmed()); });
 	}
-	round.launch(path(), branchAndUnmergedStatusArgs(),
+	round.launch(path(), refreshStatusArgs(),
 		[run](const ProcessResult& r) {
 			if (r.ok)
 			{
 				run->header = Git::parseBranchHeader(r.out);
 				run->conflicted = Git::parseUnmergedPaths(r.out);
+				Git::UntrackedListing listing = Git::parseUntrackedListing(r.out);
+				run->untracked = std::move(listing.untracked);
+				run->ignoredDirectories = std::move(listing.ignoredDirectories);
 			}
 			else
 				run->noteFailure(r); // an unread header would parse as "on a branch, born"
@@ -642,9 +707,6 @@ void GitRepository::startRefresh()
 	// Failure costs the rows their counts, which is a shorter answer rather than a wrong one
 	round.launch(path(), trackedChangeCountsArgs(QStringLiteral("HEAD")),
 		[run](const ProcessResult& r) { run->changeCounts = Git::parseNumstatZ(r.out); });
-	// Failure costs the untracked rows, which is a shorter list rather than a wrong one
-	round.launch(path(), { QStringLiteral("ls-files"), QStringLiteral("--others"), QStringLiteral("--exclude-standard"), QStringLiteral("-z") },
-		[run](const ProcessResult& r) { run->untracked = Git::parseZList(r.out); });
 	round.launch(path(), Git::submoduleListingArgs(),
 		[run](const ProcessResult& r) {
 			if (r.ok)
@@ -767,6 +829,7 @@ void GitRepository::finishRefresh()
 	{
 		state = stateFromRun(run);
 		files = filesFromRun(run);
+		setUnwatchedDirectories(unwatchedDirectoriesFromRun(run));
 	}
 	state.readFailure = failure;
 
@@ -861,7 +924,7 @@ std::vector<FileEntry> GitRepository::filesFromRun(const RefreshRun& run) const
 			files.push_back({ .path = conflictedPath, .type = ChangeType::Conflicted });
 	}
 
-	// ls-files does not descend into a directory holding a repository: it lists the directory, with a trailing slash
+	// status does not descend into a directory holding a repository: it lists the directory, with a trailing slash
 	for (const QString& path : run.untracked)
 	{
 		const bool isRepository = path.endsWith(QLatin1Char('/'));
@@ -1489,6 +1552,82 @@ QByteArray GitRepository::ignoreFileWithPatternAdded(QByteArray content, const I
 		content += eol;
 	// A pattern is matched against path bytes, so it is written as one
 	return content + Git::pathBytes(pattern.text) + eol;
+}
+
+Vcs::Query GitRepository::watchedRoots(const QObject* context, Vcs::Answer<std::vector<WatchedRoot>> onDone)
+{
+	return runQuery(path(), gitDirectoriesArgs(), context, [this, onDone = std::move(onDone)](const ProcessResult& r) {
+		if (!r.ok)
+		{
+			onDone(std::unexpected(r.errorText()));
+			return;
+		}
+		if (!setGitDirectories(r.out))
+		{
+			onDone(std::unexpected(unreadGitDirectoriesError(r.out)));
+			return;
+		}
+
+		// A state directory under a root already listed is watched with it: a linked worktree's git dir is under the common dir
+		std::vector<WatchedRoot> roots{ { path(), ChangeScope::WorkingTree } };
+		for (const QString& stateDir : { _commonDir, _gitDir })
+		{
+			if (std::ranges::none_of(roots, [&stateDir](const WatchedRoot& root) { return relativePathWithin(root.path, stateDir).has_value(); }))
+				roots.push_back({ stateDir, ChangeScope::StateDirectory });
+		}
+		onDone(std::move(roots));
+	});
+}
+
+std::optional<ChangeScope> GitRepository::changeScope(const WatchedRoot& root, QStringView path) const
+{
+	const ChangeFilter::IsGitDirectory isGitDirectory = std::ref(_gitDirectoryProbe);
+	// `statePath` is relative to `stateDir`
+	const auto stateScope = [&isGitDirectory](const QString& stateDir, QStringView statePath) -> std::optional<ChangeScope> {
+		if (ChangeFilter::isGitNoise(stateDir, statePath, isGitDirectory))
+			return std::nullopt;
+		return isSameOrUnder(statePath, u"modules") ? ChangeScope::WorkingTree : ChangeScope::StateDirectory;
+	};
+
+	if (root.scope == ChangeScope::StateDirectory)
+		return stateScope(root.path, path);
+
+	for (const QString& stateDir : { _gitDir, _commonDir })
+	{
+		const std::optional<QString> relative = relativePathWithin(root.path, stateDir);
+		if (relative && !relative->isEmpty() && isSameOrUnder(path, *relative))
+			return stateScope(stateDir, path.sliced(std::min(relative->size() + 1, path.size())));
+	}
+	if (ChangeFilter::isNestedStateNoise(root.path, path, isGitDirectory))
+		return std::nullopt;
+	return ChangeScope::WorkingTree;
+}
+
+bool GitRepository::setGitDirectories(const QByteArray& revParseOutput)
+{
+	const std::optional<Git::GitDirectories> directories = Git::parseGitDirectories(revParseOutput, path());
+	if (!directories)
+		return false;
+
+	_gitDir = directories->gitDir;
+	_commonDir = directories->commonDir;
+	return true;
+}
+
+QStringList GitRepository::unwatchedDirectoriesFromRun(const RefreshRun& run) const
+{
+	const QDir root{ path() };
+	QStringList directories;
+	for (const QString& ignored : run.ignoredDirectories)
+		directories.push_back(root.filePath(ignored));
+	for (const QString& untracked : run.untracked)
+	{
+		if (untracked.endsWith(QLatin1Char('/')))
+			directories.push_back(root.filePath(untracked.chopped(1)));
+	}
+	if (!_commonDir.isEmpty())
+		collectObjectStores(_commonDir, _gitDirectoryProbe, directories);
+	return directories;
 }
 
 void GitRepository::launchExternalDiffTool(const QString& repoRelativePath) const

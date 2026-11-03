@@ -1,5 +1,6 @@
 #pragma once
 
+#include "changefilter.h"
 #include "repository.h"
 
 #include <memory>
@@ -82,6 +83,10 @@ public:
 	[[nodiscard]] std::vector<IgnorePattern> ignorePatternsFor(const QString& repoRelativePath) const override;
 	[[nodiscard]] QByteArray ignoreFileWithPatternAdded(QByteArray content, const IgnorePattern& pattern) const override;
 
+	Vcs::Query watchedRoots(const QObject* context, Vcs::Answer<std::vector<WatchedRoot>> onDone) override;
+	// modules/ is WorkingTree: a submodule's state changes the parent's rows, never its history
+	[[nodiscard]] std::optional<ChangeScope> changeScope(const WatchedRoot& root, QStringView path) const override;
+
 	void launchExternalDiffTool(const QString& repoRelativePath) const override;
 
 protected:
@@ -95,6 +100,9 @@ private:
 	// Only called for a run that answered in full
 	[[nodiscard]] std::vector<FileEntry> filesFromRun(const RefreshRun& run) const;
 	[[nodiscard]] RepoState stateFromRun(const RefreshRun& run) const;
+	[[nodiscard]] QStringList unwatchedDirectoriesFromRun(const RefreshRun& run) const;
+	// From `rev-parse --absolute-git-dir --git-common-dir` output; false where the output holds no pair
+	bool setGitDirectories(const QByteArray& revParseOutput);
 	// HEAD, or the empty tree while there is no HEAD
 	[[nodiscard]] QString diffBase() const;
 	// The rest of checkIncoming(), once HEAD's comparison is resolved: `range` is HEAD..<that ref>
@@ -103,8 +111,10 @@ private:
 
 private:
 	// In a submodule .git is a file pointing here
-	QString _gitDir; // absolute, resolved on first refresh
+	QString _gitDir; // absolute, resolved by the first refresh or watchedRoots()
+	QString _commonDir; // resolved with _gitDir
 	QString _emptyTreeSha; // resolved on first refresh; empty only if that query failed
+	mutable ChangeFilter::GitDirectoryProbe _gitDirectoryProbe; // forgotten at every refresh
 
 	std::shared_ptr<RefreshRun> _run; // shared with the async callbacks; reset invalidates stragglers
 };

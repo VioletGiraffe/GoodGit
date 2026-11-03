@@ -6,6 +6,10 @@ RESTORE_COMPILER_WARNINGS
 
 #include "gitparsers.h"
 
+DISABLE_COMPILER_WARNINGS
+#include <QDir>
+RESTORE_COMPILER_WARNINGS
+
 #include <initializer_list>
 
 namespace {
@@ -73,6 +77,49 @@ TEST_CASE("Unmerged paths keep their spaces, and other records are ignored", "[g
 	});
 
 	CHECK(Git::parseUnmergedPaths(status) == QStringList{ QStringLiteral("con flict.txt") });
+}
+
+TEST_CASE("The untracked listing keeps a nested repository's trailing slash and lists only the directories ignored whole", "[gitparsers]")
+{
+	const Git::UntrackedListing listing = Git::parseUntrackedListing(nulTerminated({
+		"# branch.head main",
+		"2 R. N... 100644 100644 100644 f384549cbeb481e437091320de6d1f2e15e11b4a f384549cbeb481e437091320de6d1f2e15e11b4a R100 new.txt",
+		"? not-untracked.txt", // the origin path of the rename above
+		"? plain/a b.txt",
+		"? nested/",
+		"! build/",
+		"! x.o",
+	}));
+
+	CHECK(listing.untracked == QStringList{ QStringLiteral("plain/a b.txt"), QStringLiteral("nested/") });
+	CHECK(listing.ignoredDirectories == QStringList{ QStringLiteral("build") });
+}
+
+TEST_CASE("The git directories resolve a relative common directory against the working directory", "[gitparsers]")
+{
+	const QString workDir = QDir::currentPath() + QStringLiteral("/repo");
+
+	SECTION("relative")
+	{
+		const auto directories = Git::parseGitDirectories(Git::pathBytes(workDir + QStringLiteral("/.git\n.git\n")), workDir);
+		REQUIRE(directories);
+		CHECK(directories->gitDir == workDir + QStringLiteral("/.git"));
+		CHECK(directories->commonDir == workDir + QStringLiteral("/.git"));
+	}
+
+	SECTION("absolute, a linked worktree's")
+	{
+		const QString main = QDir::currentPath() + QStringLiteral("/main/.git");
+		const auto directories = Git::parseGitDirectories(Git::pathBytes(main + QStringLiteral("/worktrees/wt\n") + main + QLatin1Char('\n')), workDir);
+		REQUIRE(directories);
+		CHECK(directories->gitDir == main + QStringLiteral("/worktrees/wt"));
+		CHECK(directories->commonDir == main);
+	}
+
+	SECTION("one line is no answer")
+	{
+		CHECK_FALSE(Git::parseGitDirectories(Git::pathBytes(workDir + QStringLiteral("/.git\n")), workDir));
+	}
 }
 
 TEST_CASE("Name-status rows, a rename naming both paths", "[gitparsers]")

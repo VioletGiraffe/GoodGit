@@ -11,6 +11,7 @@ RESTORE_COMPILER_WARNINGS
 #include <functional>
 #include <map>
 #include <optional>
+#include <utility>
 #include <vector>
 
 // `text` with a backslash before every character in `metacharacters`
@@ -356,6 +357,16 @@ public:
 	// The caller does the file I/O; only the placement is the backend's.
 	[[nodiscard]] virtual QByteArray ignoreFileWithPatternAdded(QByteArray content, const IgnorePattern& pattern) const = 0;
 
+	// The directories a change to this repository can land in: the root, and any state directory outside it (an absorbed
+	// submodule's, a linked worktree's). Read from the tool or the disk, never from the state: a history window runs no refresh.
+	virtual Vcs::Query watchedRoots(const QObject* context, Vcs::Answer<std::vector<WatchedRoot>> onDone) = 0;
+	// The views a change at `path`, '/'-separated and relative to `root`, can make stale; empty where it alters nothing a
+	// view reads. Only called with a root watchedRoots() answered.
+	[[nodiscard]] virtual std::optional<ChangeScope> changeScope(const WatchedRoot& root, QStringView path) const = 0;
+	// Absolute directories under which no view reads anything, as of the last refresh that read the state: those ignored as
+	// a whole, the untracked repositories nested in the tree, the object stores. Empty before the first.
+	[[nodiscard]] const QStringList& unwatchedDirectories() const { return _unwatchedDirectories; }
+
 	// Opens the configured external diff tool on one path, detached from the job queue: the tool blocks the
 	// process that launched it until closed, and a queue slot held for minutes would starve refreshes.
 	virtual void launchExternalDiffTool(const QString& repoRelativePath) const = 0;
@@ -374,6 +385,8 @@ protected:
 	// rows built from partial answers would look as complete as full ones.
 	// Only the failure is recorded; the window refuses to act on what it shows.
 	void completeRefresh(RepoState state, std::vector<FileEntry> files);
+	// Only called before completeRefresh(), for a run that read the state
+	void setUnwatchedDirectories(QStringList directories) { _unwatchedDirectories = std::move(directories); }
 
 	// For checkIncoming(): the count is not a new state, so refreshGeneration stays
 	void setBehindCount(int behind) { _state.behind = behind; }
@@ -388,6 +401,7 @@ private:
 
 	RepoState _state;
 	std::vector<FileEntry> _files;
+	QStringList _unwatchedDirectories;
 
 	bool _refreshing = false;
 	bool _refreshPending = false;

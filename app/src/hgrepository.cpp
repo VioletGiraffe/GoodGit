@@ -345,6 +345,7 @@ void HgRepository::startRefresh()
 {
 	auto run = std::make_shared<RefreshRun>();
 	_run = run;
+	_gitDirectoryProbe.forget();
 
 	// Re-read first: this decides which subrepos are asked about, and which tool answers for each
 	_subrepoNodes = Hg::parseSubrepoState(fileContents(QDir{ path() }.filePath(QStringLiteral(".hgsubstate"))));
@@ -1293,6 +1294,41 @@ QByteArray HgRepository::ignoreFileWithPatternAdded(QByteArray content, const Ig
 	if (!content.isEmpty() && !content.endsWith('\n'))
 		content += eol;
 	return content + "syntax: " + section + eol + Hg::localBytes(pattern.text) + eol;
+}
+
+Vcs::Query HgRepository::watchedRoots(const QObject* context, Vcs::Answer<std::vector<WatchedRoot>> onDone)
+{
+	std::vector<WatchedRoot> roots{ { path(), ChangeScope::WorkingTree } };
+	// Holds the path of the source's .hg directory, relative to this one's under share.relative
+	const QDir stateDir{ QDir{ path() }.filePath(QStringLiteral(".hg")) };
+	const QByteArray sharedPath = fileContents(stateDir.filePath(QStringLiteral("sharedpath"))).trimmed();
+	if (!sharedPath.isEmpty())
+		roots.push_back({ QDir::cleanPath(stateDir.absoluteFilePath(Hg::textFromOutput(sharedPath))), ChangeScope::StateDirectory });
+
+	// Answered from the event loop, never before this returns, as a query is
+	QMetaObject::invokeMethod(this, [contextGuard = QPointer<const QObject>{ context }, hasContext = context != nullptr, onDone = std::move(onDone),
+		roots = std::move(roots)]() mutable {
+		if (!hasContext || contextGuard)
+			onDone(std::move(roots));
+	}, Qt::QueuedConnection);
+	return {};
+}
+
+std::optional<ChangeScope> HgRepository::changeScope(const WatchedRoot& root, QStringView path) const
+{
+	const auto stateScope = [](QStringView statePath) {
+		return ChangeFilter::isHgNoise(statePath) ? std::nullopt : std::optional{ ChangeScope::StateDirectory };
+	};
+
+	if (root.scope == ChangeScope::StateDirectory)
+		return stateScope(path);
+	if (path == u".hg")
+		return stateScope({});
+	if (path.startsWith(u".hg/"))
+		return stateScope(path.sliced(4));
+	if (ChangeFilter::isNestedStateNoise(root.path, path, std::ref(_gitDirectoryProbe)))
+		return std::nullopt;
+	return ChangeScope::WorkingTree;
 }
 
 void HgRepository::launchExternalDiffTool(const QString& repoRelativePath) const

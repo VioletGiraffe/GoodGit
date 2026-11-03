@@ -28,6 +28,20 @@ struct Submodule
 
 enum class ChangeType : uint8_t { Modified, Added, Untracked, Deleted, Renamed, TypeChanged, Conflicted };
 
+// The views a filesystem change can make stale
+enum class ChangeScope : uint8_t
+{
+	WorkingTree,    // the file rows: the working tree, and the state directories of the repositories nested in it
+	StateDirectory, // every view, the history included: the refs, the checkout, the index
+};
+
+// A directory watched for changes, with everything under it
+struct WatchedRoot
+{
+	QString path; // absolute, '/'-separated
+	ChangeScope scope = ChangeScope::WorkingTree; // the repository root, or a state directory outside it
+};
+
 // Each backend renders a scope into its own ignore syntax and knows where in its ignore file it belongs
 enum class IgnoreScope : uint8_t
 {

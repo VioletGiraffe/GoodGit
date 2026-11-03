@@ -41,8 +41,16 @@ struct BranchHeader
 	bool aheadBehindKnown = false;
 };
 
-// Input: `status --porcelain=v2 --branch --untracked-files=no -z` output
+// Input: `status --porcelain=v2 --branch -z` output
 [[nodiscard]] BranchHeader parseBranchHeader(const QByteArray& statusOutput);
+
+// The `?` and `!` records of the same output, run with --untracked-files=all --ignored=matching
+struct UntrackedListing
+{
+	QStringList untracked;          // a directory, listed with its trailing '/', holds a repository
+	QStringList ignoredDirectories; // ignored as a whole (git.md), without the trailing '/'
+};
+[[nodiscard]] UntrackedListing parseUntrackedListing(const QByteArray& statusOutput);
 
 // The unmerged paths from the same output.
 // The only refresh query that names them: a diff reports an unmerged path as modified or (UD) not at all,
@@ -82,8 +90,16 @@ struct StagedEntry
 // Fails on anything else, so a size is never mistaken for zero.
 [[nodiscard]] std::expected<qint64, QString> parseObjectSize(const QByteArray& output);
 
-// Input: any NUL-separated path list (`ls-files -z` and friends)
-[[nodiscard]] QStringList parseZList(const QByteArray& output);
+// Absolute, '/'-separated. In a linked worktree the common directory is the main one's, holding the shared refs and
+// objects; elsewhere it is the git directory itself.
+struct GitDirectories
+{
+	QString gitDir;
+	QString commonDir;
+};
+
+// Input: `rev-parse --absolute-git-dir --git-common-dir` output, run in `workDir`: the common directory may be relative to it
+[[nodiscard]] std::optional<GitDirectories> parseGitDirectories(const QByteArray& output, const QString& workDir);
 
 // Input: any newline-separated list; blank lines and surrounding whitespace are dropped
 [[nodiscard]] QStringList parseLineList(const QByteArray& output);

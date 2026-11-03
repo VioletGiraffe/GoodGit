@@ -27,9 +27,9 @@ writing; a mismatch refuses the action and asks the user to retry against the ne
 tracked changes, untracked files and rename sources together, alongside the unpushed set, each submodule's
 pointer and dirtiness, and the conflicted paths where a mergestate exists.
 
-Some queries the state cannot be established without (the branch header, the submodule list, the git
-directory, the tracked-changes diff). If one fails, the run is discarded whole: the previous state and rows
-stay, a strip says why, and committing, discarding and deleting are refused until a refresh succeeds.
-Reading rows is still allowed; a stale row is worth opening. **The distinction is between a shorter answer
-and a wrong one**: a failure outside that set costs untracked rows, line counts or a tooltip, never
+Some queries the state cannot be established without (the status listing the branch header, the conflicts and
+the untracked paths; the submodule list, the git directory, the tracked-changes diff). If one fails, the run is
+discarded whole: the previous state and rows stay, a strip says why, and committing, discarding and deleting are
+refused until a refresh succeeds. Reading rows is still allowed; a stale row is worth opening. **The distinction
+is between a shorter answer and a wrong one**: a failure outside that set costs line counts or a tooltip, never
 correctness, so those fail silently.

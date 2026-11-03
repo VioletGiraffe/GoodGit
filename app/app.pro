@@ -48,6 +48,7 @@ INCLUDEPATH += \
 HEADERS += \
 	src/appmenus.h \
 	src/changedfilesmodel.h \
+	src/changefilter.h \
 	src/commitgraph.h \
 	src/commitgraphdelegate.h \
 	src/commitwindow.h \
@@ -96,6 +97,7 @@ HEADERS += \
 SOURCES += \
 	src/appmenus.cpp \
 	src/changedfilesmodel.cpp \
+	src/changefilter.cpp \
 	src/commitgraph.cpp \
 	src/commitgraphdelegate.cpp \
 	src/commitwindow.cpp \

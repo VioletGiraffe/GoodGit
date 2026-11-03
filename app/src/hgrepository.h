@@ -1,5 +1,6 @@
 #pragma once
 
+#include "changefilter.h"
 #include "queryround.h"
 #include "repository.h"
 
@@ -84,6 +85,10 @@ public:
 	// first), so a pattern goes into the section matching its scope rather than at the end
 	[[nodiscard]] QByteArray ignoreFileWithPatternAdded(QByteArray content, const IgnorePattern& pattern) const override;
 
+	// A share's store is in the source's .hg directory, watched as a second root
+	Vcs::Query watchedRoots(const QObject* context, Vcs::Answer<std::vector<WatchedRoot>> onDone) override;
+	[[nodiscard]] std::optional<ChangeScope> changeScope(const WatchedRoot& root, QStringView path) const override;
+
 	void launchExternalDiffTool(const QString& repoRelativePath) const override;
 
 protected:
@@ -119,6 +124,7 @@ private:
 	// each one's source, which names the tool its queries run with
 	std::map<QString, QString> _subrepoNodes;
 	std::map<QString, QString> _subrepoSources;
+	mutable ChangeFilter::GitDirectoryProbe _gitDirectoryProbe; // for git subrepos; forgotten at every refresh
 
 	std::shared_ptr<RefreshRun> _run; // shared with the async callbacks; reset invalidates stragglers
 };

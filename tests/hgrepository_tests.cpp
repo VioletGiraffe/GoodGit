@@ -576,3 +576,38 @@ TEST_CASE("An hg push up to a changeset publishes it and its ancestors, and one 
 	REQUIRE_FALSE(pushedAlready.has_value());
 	CHECK(pushedAlready.error().contains(QLatin1String("public already")));
 }
+
+TEST_CASE("The hg watched roots are the working tree, plus a share's source .hg directory, whose caches are noise", "[hg]")
+{
+	const ScratchHgRepository source;
+	source.write(QStringLiteral("file.txt"), "x\n");
+	source.commitAll(QStringLiteral("initial"));
+
+	SECTION("a repository")
+	{
+		HgRepository repository{ source.root() };
+		const std::vector<WatchedRoot> roots = requireWatchedRoots(repository);
+		REQUIRE(roots.size() == 1);
+		CHECK(sameDirectoryOnDisk(roots[0].path, source.root()));
+
+		CHECK(repository.changeScope(roots[0], u"file.txt") == ChangeScope::WorkingTree);
+		CHECK(repository.changeScope(roots[0], u".hg/dirstate") == ChangeScope::StateDirectory);
+		CHECK_FALSE(repository.changeScope(roots[0], u".hg/cache/branch2-served"));
+		CHECK_FALSE(repository.changeScope(roots[0], u"gitsub/.git/objects/ab/cdef"));
+	}
+
+	SECTION("a share")
+	{
+		const QString share = source.root() + QStringLiteral("-share");
+		source.hg({ QStringLiteral("--config"), QStringLiteral("extensions.share="), QStringLiteral("share"), QStringLiteral("-q"), source.root(), share });
+
+		HgRepository repository{ share };
+		const std::vector<WatchedRoot> roots = requireWatchedRoots(repository);
+		REQUIRE(roots.size() == 2);
+		CHECK(roots[1].scope == ChangeScope::StateDirectory);
+		requireSameDirectories({ roots[0].path, roots[1].path }, { share, QDir{ source.root() }.filePath(QStringLiteral(".hg")) });
+
+		CHECK(repository.changeScope(roots[1], u"store/phaseroots") == ChangeScope::StateDirectory);
+		CHECK_FALSE(repository.changeScope(roots[1], u"cache/branch2-served"));
+	}
+}

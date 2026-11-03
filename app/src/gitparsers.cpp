@@ -1,6 +1,7 @@
 #include "gitparsers.h"
 
 DISABLE_COMPILER_WARNINGS
+#include <QDir>
 #include <QHash>
 #include <QList>
 RESTORE_COMPILER_WARNINGS
@@ -113,6 +114,18 @@ QStringList parseUnmergedPaths(const QByteArray& statusOutput)
 			paths.push_back(pathFromOutput(record.mid(pathStart)));
 	});
 	return paths;
+}
+
+UntrackedListing parseUntrackedListing(const QByteArray& statusOutput)
+{
+	UntrackedListing listing;
+	forEachStatusV2Record(statusOutput, [&listing](const QByteArray& record) {
+		if (record.startsWith("? "))
+			listing.untracked.push_back(pathFromOutput(record.sliced(2)));
+		else if (record.startsWith("! ") && record.endsWith('/'))
+			listing.ignoredDirectories.push_back(pathFromOutput(record.sliced(2).chopped(1)));
+	});
+	return listing;
 }
 
 namespace {
@@ -255,15 +268,15 @@ std::map<QString, LineCounts> parseNumstatZ(const QByteArray& diffOutput)
 	return counts;
 }
 
-QStringList parseZList(const QByteArray& output)
+std::optional<GitDirectories> parseGitDirectories(const QByteArray& output, const QString& workDir)
 {
-	QStringList paths;
-	for (const QByteArray& token : output.split('\0'))
-	{
-		if (!token.isEmpty())
-			paths.push_back(pathFromOutput(token));
-	}
-	return paths;
+	const QList<QByteArray> lines = output.trimmed().split('\n');
+	if (lines.size() != 2)
+		return std::nullopt;
+
+	const QDir base{ workDir };
+	return GitDirectories{ .gitDir = QDir::cleanPath(base.absoluteFilePath(pathFromOutput(lines[0].trimmed()))),
+		.commonDir = QDir::cleanPath(base.absoluteFilePath(pathFromOutput(lines[1].trimmed()))) };
 }
 
 QStringList parseLineList(const QByteArray& output)

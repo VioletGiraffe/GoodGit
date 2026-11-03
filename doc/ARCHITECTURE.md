@@ -44,7 +44,7 @@ Dependencies point one way, top to bottom:
   `recentrepositories`.
 - Backends: `gitrepository`, `hgrepository`, over `gitprocess`, `hgprocess` and the parsers.
 - Transport: `vcsprocess`, `hgcommandserver`, `queryround`.
-- VCS-, process- and UI-free, tested directly: `vcstypes`, `gitparsers`, `hgparsers`, `unifieddiff`,
+- VCS-, process- and UI-free, tested directly: `vcstypes`, `gitparsers`, `hgparsers`, `changefilter`, `unifieddiff`,
   `textdiff`, `movedblocks`, `commitgraph`.
 
 Nothing above `Repository` names a backend; nothing below it knows which window shows an answer. Beside the
@@ -67,6 +67,7 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `init_logging`, `up
 | `gitparsers` | Parsers for the git outputs the app consumes. UI- and process-free, so they can be tested directly |
 | `gitrepository` | The git backend: every `Repository` operation as `git` subprocesses plus parsing |
 | `hgprocess`, `hgparsers`, `hgrepository` | The same three for Mercurial. The parsers read `-T json` throughout, so nothing needs unquoting or positional pairing |
+| `changefilter` | The changes under a git or Mercurial state directory that alter nothing a view reads: the object store, the reflogs, the caches, the lock files. Applied in every git directory nested in another, which only the disk can identify: a submodule's name may hold slashes |
 | `changedfilesmodel` | The checkable file list, and the column layout and status ranking both file lists share; row styling comes from the theme as item data roles |
 | `fileicons` | The system's icon for a file type, by name alone, so deleted and history-only files get one too. Cached per type as rendered pixmaps: Qt's file icon engines do not cache a missing file. macOS looks the type up natively (`fileicons_mac`), since Qt resolves icons there from the file on disk |
 | `filelistdelegate` | Paints what item roles cannot express: the recolored deleted strikethrough and the selected-row accent stripe. Shared by both file lists |
@@ -125,7 +126,8 @@ every pure virtual (the actions, the read-only queries, and `startRefresh()`, wh
 its kind needs and calls `completeRefresh()` once); its own knowledge of itself (the ignore file and where a
 pattern belongs in it, the label the push log shows, which push failure means a missing upstream, where a
 submodule row's repository is and of what kind, how the external diff tool is launched, which operation its
-state directory records and how that one is named, continued and ended); and a line in `repositoryfactory`.
+state directory records and how that one is named, continued and ended, which directories a change can land in,
+which of those changes are noise, and which directories hold nothing a view reads); and a line in `repositoryfactory`.
 
 The refresh policy is the base class's, not the backend's: re-entry is coalesced, and a run is applied
 whole or not at all.

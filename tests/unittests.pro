@@ -26,6 +26,7 @@ DEFINES += FIXTURES_DIR=\\\"$$PWD/fixtures/\\\"
 
 HEADERS += \
 	../app/src/changedfilesmodel.h \
+	../app/src/changefilter.h \
 	../app/src/commitgraph.h \
 	../app/src/fileicons.h \
 	../app/src/filelistdelegate.h \
@@ -51,6 +52,7 @@ HEADERS += \
 
 SOURCES += \
 	../app/src/changedfilesmodel.cpp \
+	../app/src/changefilter.cpp \
 	../app/src/commitgraph.cpp \
 	../app/src/fileicons.cpp \
 	../app/src/filelistdelegate.cpp \
@@ -68,6 +70,7 @@ SOURCES += \
 	../app/src/theme.cpp \
 	../app/src/unifieddiff.cpp \
 	../app/src/vcsprocess.cpp \
+	changefilter_tests.cpp \
 	commitgraph_tests.cpp \
 	fileicons_tests.cpp \
 	filelist_tests.cpp \
