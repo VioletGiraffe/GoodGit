@@ -17,7 +17,9 @@ builds the packages with it. It and the tests' build script share their setup th
 `build_env.sh`: the Qt kit, the MSVC environment, and a sweep of stale `.qmake.stash` files.
 
 `app/res` holds `theme.qrc` (the monochrome glyph SVGs the theme tints at load, and the window icon), the
-platform icons, `Info.plist` and the Linux desktop file.
+platform icons, `Info.plist` and the Linux desktop file. `goodgit.svg` is the master of every app icon: the
+`.ico` and `.icns` are generated from it with
+`python qtutils/scripts/svg_to_icons.py app/res/goodgit.svg app/res/goodgit.ico`, then the same with `.icns`.
 
 ## `gg` on PATH
 

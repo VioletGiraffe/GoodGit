@@ -145,7 +145,7 @@ SOURCES += \
 
 RESOURCES += res/theme.qrc
 
-macx:ICON = res/goodgit-mac.icns   # built from res/goodgit-mac.svg (Apple icon grid variant), see that file
+macx:ICON = res/goodgit.icns   # generated from res/goodgit.svg, see doc/BUILD.md
 
 ###################################################
 #                 LIBS
