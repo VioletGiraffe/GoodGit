@@ -6,6 +6,8 @@
 #include "repositorywindows.h"
 #include "theme.h"
 
+#include "utils/painterutils.h"
+
 DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QFileInfo>
@@ -53,9 +55,9 @@ constexpr qreal KeyboardCursorRadius = 2.0;
 
 // Splits `path` across at most two lines at a component boundary, eliding the second in the middle if
 // needed. A path that fits stays on one line, one with nothing to break on is elided as is.
-[[nodiscard]] QStringList pathLines(const QString& path, const QFontMetrics& metrics, int width)
+[[nodiscard]] QStringList pathLines(const QString& path, const QFont& font, int width)
 {
-	if (metrics.horizontalAdvance(path) <= width)
+	if (roundedUpTextWidth(font, path) <= width)
 		return { path };
 
 	qsizetype split = -1;
@@ -63,11 +65,12 @@ constexpr qreal KeyboardCursorRadius = 2.0;
 	{
 		if (path[i] != QLatin1Char('/') && path[i] != QLatin1Char('\\'))
 			continue;
-		if (metrics.horizontalAdvance(path.left(i + 1)) > width)
+		if (roundedUpTextWidth(font, path.left(i + 1)) > width)
 			break;
 		split = i;
 	}
 
+	const QFontMetrics metrics{ font };
 	if (split < 0)
 		return { metrics.elidedText(path, Qt::ElideMiddle, width) };
 	return { path.left(split + 1), metrics.elidedText(path.mid(split + 1), Qt::ElideMiddle, width) };
@@ -171,7 +174,7 @@ public:
 			const int width = textWidth(index);
 			painter->setFont(pathFont);
 			painter->setPen(theme.palette.textDim);
-			for (const QString& line : pathLines(path, pathMetrics, width))
+			for (const QString& line : pathLines(path, pathFont, width))
 			{
 				painter->drawText(QRect{ x, y, width, pathMetrics.height() }, Qt::AlignLeft | Qt::AlignVCenter, line);
 				y += pathMetrics.height();
@@ -185,8 +188,8 @@ public:
 		int height = QFontMetrics{ option.font }.height();
 		if (const QString path = index.data(PathRole).toString(); !path.isEmpty())
 		{
-			const QFontMetrics pathMetrics{ smallerFont(option.font) };
-			height += int(pathLines(path, pathMetrics, textWidth(index)).size()) * pathMetrics.height();
+			const QFont pathFont = smallerFont(option.font);
+			height += int(pathLines(path, pathFont, textWidth(index)).size()) * QFontMetrics{ pathFont }.height();
 		}
 		return { MinimumTextWidth, height + 2 * VerticalPadding };
 	}

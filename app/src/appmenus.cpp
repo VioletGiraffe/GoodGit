@@ -10,7 +10,7 @@
 #include "appdialogs/caboutdialog.h"
 #include "appdialogs/csettingsdialog.h"
 #include "appdialogs/reportbugdialog.h"
-#include "utils/displayformatting.h"
+#include "qtcore_helpers/displayformatting.hpp"
 #ifdef _DEBUG
 #include "ui/widget-gallery/cwidgetgallery.h"
 #endif

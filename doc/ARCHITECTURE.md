@@ -100,7 +100,7 @@ stack: `settings`, `theme` and `stylesheet`, `externalapps`, `init_logging`, `up
 | `updatecheck` | The interactive and the automatic update check, see `updates.md` |
 | `commandlinetool` | macOS and Linux: the `gg` link on PATH, see `doc/BUILD.md`. `commandlinetool_mac` creates it with administrator credentials |
 | `smoketest` | `gg --smoke-test <repository>`: the launch mode CI runs on the deployed build, see `doc/BUILD.md` |
-| `stylesheet` | The application QSS with `@token@` placeholders filled from a `Theme`. Detail header of `theme.cpp` |
+| `stylesheet` | The application QSS with `@token@` placeholders filled from a `Theme` by qtutils `CStyleSheetTokens`. Detail header of `theme.cpp` |
 | `version` | `GG_VERSION`, the one place the version is written; `app.pro` and the installer read it from here, see `doc/BUILD.md`. `GG_GITHUB_REPOSITORY`: home of the releases and the issue tracker |
 
 ## Window kinds

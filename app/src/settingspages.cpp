@@ -156,8 +156,7 @@ ThemeFontSettingsPage::ThemeFontSettingsPage(QWidget* parent) :
 	_colorScheme->addItem(tr("System"), int(Qt::ColorScheme::Unknown));
 	_colorScheme->addItem(tr("Light"), int(Qt::ColorScheme::Light));
 	_colorScheme->addItem(tr("Dark"), int(Qt::ColorScheme::Dark));
-	_schemeOnEntry = CThemeController::instance().schemePreference();
-	_colorScheme->setCurrentIndex(_colorScheme->findData(int(_schemeOnEntry)));
+	_colorScheme->setCurrentIndex(_colorScheme->findData(int(_themeSelectionOnEntry.schemePreference)));
 	// Applied as picked, so the choice is judged on the real windows rather than a swatch
 	connect(_colorScheme, &QComboBox::currentIndexChanged, this, [this] {
 		CThemeController::instance().setSchemePreference(Qt::ColorScheme(_colorScheme->currentData().toInt()));
@@ -165,14 +164,13 @@ ThemeFontSettingsPage::ThemeFontSettingsPage(QWidget* parent) :
 	layout->addRow(tr("Color scheme:"), _colorScheme);
 
 	// One combo per polarity, applied as picked like the scheme
-	const auto themeCombo = [this](bool dark, QString& nameOnEntry) {
-		nameOnEntry = CThemeController::instance().themeName(dark);
+	const auto themeCombo = [this](bool dark, const QString& nameOnEntry) {
 		auto* combo = new QComboBox;
 		for (const Theme& theme : allThemes())
 			if (theme.dark == dark)
 				combo->addItem(theme.name);
 		// A stored name can be empty or outlive its theme; the combo then shows the polarity's first theme,
-		// matching what selectActiveTheme() falls back to
+		// matching what CThemeController::selectedTheme() falls back to
 		if (const int storedIndex = combo->findText(nameOnEntry); storedIndex != -1)
 			combo->setCurrentIndex(storedIndex);
 		connect(combo, &QComboBox::currentTextChanged, this, [dark](const QString& name) {
@@ -180,8 +178,8 @@ ThemeFontSettingsPage::ThemeFontSettingsPage(QWidget* parent) :
 		});
 		return combo;
 	};
-	layout->addRow(tr("Light theme:"), themeCombo(false, _lightThemeOnEntry));
-	layout->addRow(tr("Dark theme:"), themeCombo(true, _darkThemeOnEntry));
+	layout->addRow(tr("Light theme:"), themeCombo(false, _themeSelectionOnEntry.lightThemeName));
+	layout->addRow(tr("Dark theme:"), themeCombo(true, _themeSelectionOnEntry.darkThemeName));
 
 	_systemFont = new QCheckBox{ tr("Use the system monospace font") };
 	_systemFont->setChecked(QSettings{}.value(Settings::MonospaceFontFamilyKey).toString().isEmpty());
@@ -224,9 +222,5 @@ void ThemeFontSettingsPage::acceptSettings()
 
 void ThemeFontSettingsPage::rejectSettings()
 {
-	// Names first: restoring the scheme can flip the polarity, which re-resolves against the names in force
-	CThemeController& controller = CThemeController::instance();
-	controller.setThemeName(false, _lightThemeOnEntry);
-	controller.setThemeName(true, _darkThemeOnEntry);
-	controller.setSchemePreference(_schemeOnEntry);
+	CThemeController::instance().setSelection(_themeSelectionOnEntry);
 }

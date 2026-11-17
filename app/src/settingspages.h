@@ -1,10 +1,7 @@
 #pragma once
 
 #include "appdialogs/csettingspage.h"
-
-DISABLE_COMPILER_WARNINGS
-#include <Qt>
-RESTORE_COMPILER_WARNINGS
+#include "theme/cthemecontroller.h"
 
 class QCheckBox;
 class QComboBox;
@@ -49,8 +46,6 @@ private:
 	QFontComboBox* _fontFamily = nullptr;
 	QSpinBox* _fontSize = nullptr;
 	QSpinBox* _diffTabWidth = nullptr;
-	// The scheme and theme picks apply immediately, so cancelling has to restore these
-	Qt::ColorScheme _schemeOnEntry = Qt::ColorScheme::Unknown;
-	QString _lightThemeOnEntry;
-	QString _darkThemeOnEntry;
+	// The scheme and theme picks apply immediately, so cancelling has to restore this
+	const CThemeController::Selection _themeSelectionOnEntry = CThemeController::instance().selection();
 };

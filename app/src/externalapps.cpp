@@ -2,7 +2,7 @@
 #include "settings.h"
 
 #include "dialogs/messagedialog.h"
-#include "utils/displayformatting.h"
+#include "qtcore_helpers/displayformatting.hpp"
 
 DISABLE_COMPILER_WARNINGS
 #include <QDesktopServices>

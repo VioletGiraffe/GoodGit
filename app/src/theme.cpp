@@ -15,7 +15,6 @@ DISABLE_COMPILER_WARNINGS
 #include <QSettings>
 RESTORE_COMPILER_WARNINGS
 
-#include <algorithm>
 #include <optional>
 
 namespace {
@@ -30,18 +29,7 @@ inline QColor c(QRgb rgb) { return QColor::fromRgb(rgb); }
 
 void selectActiveTheme()
 {
-	const CThemeController& controller = CThemeController::instance();
-	const bool dark = controller.darkActive();
-	const QString storedName = controller.themeName(dark);
-
-	const std::vector<Theme>& themes = allThemes();
-	const auto matchesStored = [&](const Theme& t) { return t.dark == dark && t.name == storedName; };
-	auto it = std::find_if(themes.begin(), themes.end(), matchesStored);
-	if (it == themes.end()) // the stored name can outlive its theme
-		it = std::find_if(themes.begin(), themes.end(), [dark](const Theme& t) { return t.dark == dark; });
-	assert_r(it != themes.end()); // no theme of this polarity at all
-
-	s_active = *it;
+	s_active = CThemeController::instance().selectedTheme(allThemes());
 	s_active.palette = resolvedPalette(s_active.palette);
 }
 

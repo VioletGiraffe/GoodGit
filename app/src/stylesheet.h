@@ -2,6 +2,7 @@
 
 #include "theme.h"
 
+#include "theme/cstylesheettokens.h"
 #include "theme/cthemeiconhandler.h"
 
 DISABLE_COMPILER_WARNINGS
@@ -9,8 +10,6 @@ DISABLE_COMPILER_WARNINGS
 #include <QFontInfo>
 #include <QString>
 RESTORE_COMPILER_WARNINGS
-
-#include <utility>
 
 // The application-wide stylesheet, built from a Theme. @token@ placeholders are named after the Theme /
 // CBasePalette fields they substitute. Detail header of theme.cpp, not part of the theme API.
@@ -120,41 +119,26 @@ QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
 )qss");
 	qss += t.qssFragment; // last, so a theme's rules win equal-specificity ties; tokens are substituted here too
 
-	const std::pair<QString, QString> tokens[] = {
-		{ QStringLiteral("@windowBg@"), t.palette.windowBg.name() },
-		{ QStringLiteral("@surface@"), t.palette.surface.name() },
-		{ QStringLiteral("@surfaceAlt@"), t.palette.surfaceAlt.name() },
-		{ QStringLiteral("@border@"), t.palette.border.name() },
-		{ QStringLiteral("@borderSubtle@"), t.palette.borderSubtle.name() },
-		{ QStringLiteral("@text@"), t.palette.text.name() },
-		{ QStringLiteral("@textDim@"), t.palette.textDim.name() },
-		{ QStringLiteral("@accent@"), t.palette.accent.name() },
-		{ QStringLiteral("@accentFg@"), t.palette.accentFg.name() },
-		{ QStringLiteral("@accentText@"), t.palette.accentText.name() },
-		{ QStringLiteral("@selectionBg@"), t.palette.selectionBg.name() },
-		{ QStringLiteral("@button@"), t.palette.button.name() },
-		{ QStringLiteral("@buttonBorder@"), t.palette.buttonBorder.name() },
-		{ QStringLiteral("@warnBg@"), t.warnBg.name() },
-		{ QStringLiteral("@warnFg@"), t.warnFg.name() },
-		{ QStringLiteral("@errBg@"), t.errBg.name() },
-		{ QStringLiteral("@errFg@"), t.errFg.name() },
-		{ QStringLiteral("@diffCtx@"), t.diffCtx.name() },
-		{ QStringLiteral("@buttonHover@"), hoverShade(t.palette.button, t.dark).name() },
-		{ QStringLiteral("@buttonPressed@"), pressedShade(t.palette.button, t.dark).name() },
-		{ QStringLiteral("@accentHover@"), hoverShade(t.palette.accent, t.dark).name() },
-		{ QStringLiteral("@accentPressed@"), pressedShade(t.palette.accent, t.dark).name() },
-		{ QStringLiteral("@controlRadius@"), QString::number(t.metrics.controlRadius) },
-		{ QStringLiteral("@checkboxSize@"), QString::number(t.metrics.checkboxSize) },
-		{ QStringLiteral("@checkboxRadius@"), QString::number(t.metrics.checkboxRadius) },
-		{ QStringLiteral("@scrollBarThickness@"), QString::number(t.metrics.scrollBarThickness) },
-		{ QStringLiteral("@scrollBarHandleRadius@"), QString::number(t.metrics.scrollBarHandleRadius) },
-		// QFontInfo resolves the size in points even where the UI font was set in pixels, which QSS cannot express
-		{ QStringLiteral("@menuBarFontPt@"), QString::number(QFontInfo{ QApplication::font() }.pointSize() - 1) },
-		// Monochrome SVGs tinted per theme and served by CThemeIconHandler, since QSS url() only takes a path
-		{ QStringLiteral("@checkIcon@"), themeIconUrl(QStringLiteral("check"), t.palette.accentFg) },
-		{ QStringLiteral("@dashIcon@"), themeIconUrl(QStringLiteral("dash"), t.palette.accentFg) },
-	};
-	for (const auto& [token, value] : tokens)
-		qss.replace(token, value);
-	return qss;
+	CStyleSheetTokens tokens;
+	tokens.addPalette(t.palette);
+	tokens.add(QStringLiteral("warnBg"), t.warnBg);
+	tokens.add(QStringLiteral("warnFg"), t.warnFg);
+	tokens.add(QStringLiteral("errBg"), t.errBg);
+	tokens.add(QStringLiteral("errFg"), t.errFg);
+	tokens.add(QStringLiteral("diffCtx"), t.diffCtx);
+	tokens.add(QStringLiteral("buttonHover"), hoverShade(t.palette.button, t.dark));
+	tokens.add(QStringLiteral("buttonPressed"), pressedShade(t.palette.button, t.dark));
+	tokens.add(QStringLiteral("accentHover"), hoverShade(t.palette.accent, t.dark));
+	tokens.add(QStringLiteral("accentPressed"), pressedShade(t.palette.accent, t.dark));
+	tokens.add(QStringLiteral("controlRadius"), t.metrics.controlRadius);
+	tokens.add(QStringLiteral("checkboxSize"), t.metrics.checkboxSize);
+	tokens.add(QStringLiteral("checkboxRadius"), t.metrics.checkboxRadius);
+	tokens.add(QStringLiteral("scrollBarThickness"), t.metrics.scrollBarThickness);
+	tokens.add(QStringLiteral("scrollBarHandleRadius"), t.metrics.scrollBarHandleRadius);
+	// QFontInfo resolves the size in points even where the UI font was set in pixels, which QSS cannot express
+	tokens.add(QStringLiteral("menuBarFontPt"), QFontInfo{ QApplication::font() }.pointSize() - 1);
+	// Monochrome SVGs tinted per theme and served by CThemeIconHandler, since QSS url() only takes a path
+	tokens.add(QStringLiteral("checkIcon"), themeIconUrl(QStringLiteral("check"), t.palette.accentFg));
+	tokens.add(QStringLiteral("dashIcon"), themeIconUrl(QStringLiteral("dash"), t.palette.accentFg));
+	return tokens.expanded(qss);
 }
