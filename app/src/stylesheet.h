@@ -85,7 +85,7 @@ QLineEdit, QComboBox[editable="true"], QAbstractSpinBox { background: @surface@;
 
 QSplitter::handle { background: @border@; }
 
-/* Completion popup */
+/* Completion and find-match popups */
 QListView { background: @surface@; color: @text@; border: 1px solid @border@; outline: none; }
 
 /* ---------- menus ---------- */

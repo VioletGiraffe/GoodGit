@@ -97,9 +97,15 @@ FileViewerWindow::FileViewerWindow(const QString& title, const QString& headerTe
 		viewer->setCountedMatchesHighlighted(highlight);
 		return viewer->countMatches(pattern, flags, deadline);
 	};
+	const auto listMatches = [viewer = _viewer](const auto& pattern, QTextDocument::FindFlags flags, QDeadlineTimer deadline) {
+		return viewer->listMatches(pattern, flags, deadline);
+	};
 	_findBar = new CFindBar{
 		CFindBar::HostFunctions{ .findText = findWithWrapAround, .findRegex = findWithWrapAround, .countText = countMatches, .countRegex = countMatches,
-			.clearHighlights = [viewer = _viewer] { viewer->setCountedMatchesHighlighted(false); } },
+			.clearHighlights = [viewer = _viewer] { viewer->setCountedMatchesHighlighted(false); },
+			.listText = listMatches, .listRegex = listMatches,
+			.describeMatch = [viewer = _viewer](MatchRange match, int64_t contextLength) { return viewer->describeMatch(match, contextLength); },
+			.selectMatch = [viewer = _viewer](MatchRange match) { viewer->selectMatch(match); } },
 		CFindBar::Keys{ .find = QKeySequence::Find, .findNext = QKeySequence::FindNext, .findPrevious = QKeySequence::FindPrevious },
 		QString::fromLatin1(Settings::FileViewerWindowFindGroupKey) };
 	_findBar->setObjectName(QStringLiteral("findBar"));
