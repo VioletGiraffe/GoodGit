@@ -25,7 +25,7 @@ void recordCheckTime()
 void checkForUpdatesInteractively(QWidget* parent)
 {
 	recordCheckTime();
-	CUpdaterDialog{ parent, QStringLiteral(GG_GITHUB_REPOSITORY), QStringLiteral(GG_VERSION) }.exec();
+	CUpdaterDialog{ parent, QStringLiteral(GG_GITHUB_REPOSITORY), QStringLiteral(GG_RELEASE_ASSET_NAME), QStringLiteral(GG_VERSION) }.exec();
 }
 
 void checkForUpdatesIfDue()
@@ -42,6 +42,6 @@ void checkForUpdatesIfDue()
 
 	recordCheckTime();
 	// Parentless: the check starts before any window is up
-	auto* dialog = new CUpdaterDialog{ nullptr, QStringLiteral(GG_GITHUB_REPOSITORY), QStringLiteral(GG_VERSION), true };
+	auto* dialog = new CUpdaterDialog{ nullptr, QStringLiteral(GG_GITHUB_REPOSITORY), QStringLiteral(GG_RELEASE_ASSET_NAME), QStringLiteral(GG_VERSION), true };
 	QObject::connect(dialog, &QDialog::finished, dialog, &QDialog::deleteLater);
 }
