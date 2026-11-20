@@ -262,13 +262,14 @@ void clearRecentRepositories(QWidget* dialogParent)
 	RecentRepositories::forgetAll();
 }
 
-void showWelcomeWindow()
+WelcomeWindow* showWelcomeWindow()
 {
 	WelcomeWindow* welcome = welcomeWindow();
 	if (!welcome)
 		welcome = new WelcomeWindow;
 
 	WidgetUtils::bringWindowToFront(welcome);
+	return welcome;
 }
 
 void acceptRepositoryFolderDrops(QWidget* target)

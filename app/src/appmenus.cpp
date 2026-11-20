@@ -10,6 +10,7 @@
 #include "appdialogs/caboutdialog.h"
 #include "appdialogs/csettingsdialog.h"
 #include "appdialogs/reportbugdialog.h"
+#include "appimage/appimagedesktopentry.h"
 #include "qtcore_helpers/displayformatting.hpp"
 #ifdef _DEBUG
 #include "ui/widget-gallery/cwidgetgallery.h"
@@ -77,6 +78,7 @@ void addHelpMenu(QMenuBar& menuBar, QWidget* dialogParent)
 	menu->addAction(QObject::tr("Report a &Bug..."), dialogParent, [dialogParent] {
 		ReportBugDialog::show(dialogParent, applicationLog(), QUrl{ QStringLiteral("https://github.com/" GG_GITHUB_REPOSITORY "/issues") });
 	});
+	AppImageDesktopEntry::addToggleAction(*menu, dialogParent); // only when run from an AppImage
 #ifdef _DEBUG
 	menu->addSeparator();
 	// Not tr(): debug-only functionality is never translated

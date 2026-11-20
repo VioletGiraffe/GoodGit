@@ -3,6 +3,7 @@
 #include "commandlinetool_mac.h"
 #endif
 
+#include "appimage/appimagedesktopentry.h"
 #include "dialogs/messagedialog.h"
 
 DISABLE_COMPILER_WARNINGS
@@ -50,12 +51,8 @@ QString withNoticeIfNotOnPath(const QString& message)
 // The file that launches this copy: inside an AppImage the executable sits in a mount that is gone once the app exits
 QString linkTargetPath()
 {
-	const QString executable = QCoreApplication::applicationFilePath();
-	const QString appImage = qEnvironmentVariable("APPIMAGE");
-	const QString appDir = QFileInfo(qEnvironmentVariable("APPDIR")).canonicalFilePath(); // empty if unset or gone
-	// Child processes inherit both variables, so they describe this process only when the executable is inside APPDIR
-	const bool runningFromAppImage = !appImage.isEmpty() && !appDir.isEmpty() && executable.startsWith(appDir + QLatin1Char('/'));
-	return QFileInfo(runningFromAppImage ? appImage : executable).canonicalFilePath();
+	const bool fromAppImage = AppImageDesktopEntry::runningFromAppImage();
+	return QFileInfo(fromAppImage ? qEnvironmentVariable("APPIMAGE") : QCoreApplication::applicationFilePath()).canonicalFilePath();
 }
 
 }

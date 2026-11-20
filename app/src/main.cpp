@@ -1,3 +1,4 @@
+#include "commitwindow.h"
 #include "hgprocess.h"
 #include "init_logging.h"
 #include "recentrepositories.h"
@@ -7,6 +8,9 @@
 #include "smoketest.h"
 #include "theme.h"
 #include "updatecheck.h"
+#include "welcomewindow.h"
+
+#include "appimage/appimagedesktopentry.h"
 
 DISABLE_COMPILER_WARNINGS
 #include <QApplication>
@@ -14,8 +18,12 @@ DISABLE_COMPILER_WARNINGS
 #include <QDir>
 #include <QIcon>
 #include <QString>
+#include <QStringList>
 #include <QtGlobal> // qgetenv, qputenv
 RESTORE_COMPILER_WARNINGS
+
+#include <expected>
+#include <vector>
 
 namespace {
 
@@ -47,6 +55,29 @@ void prependPackageManagerDirectoriesToPath()
 }
 #endif
 
+// The first window, shown. Null when the explicit path holds no repository, with the failure already reported.
+QWidget* openStartupWindow(const QStringList& arguments)
+{
+	// No fallback for an explicit path: used as a command line tool, the app fails like one
+	if (arguments.size() > 1)
+		return openRepositoryWindowAt(arguments[1], nullptr);
+
+	// The current directory is only the first guess: started from a shortcut it is wherever that pointed,
+	// and the last repository worked on is the better guess then
+	if (const std::expected<RepositoryLocation, std::vector<ProcessResult>> location = findRepository(QDir::currentPath()))
+		return openRepositoryWindow(*location);
+
+	// The welcome screen also stands in where the repository to reopen is gone: a deleted folder, a drive not mounted yet
+	const std::vector<RecentRepository> recent = RecentRepositories::list();
+	if (Settings::startsWithLastRepository() && !recent.empty())
+	{
+		if (CommitWindow* window = openRecentRepository(recent.front().root, nullptr))
+			return window;
+	}
+
+	return showWelcomeWindow();
+}
+
 } // namespace
 
 // On Windows the application is a DLL that the launcher exe loads and calls into, see doc/BUILD.md
@@ -67,6 +98,8 @@ int main(int argc, char* argv[])
 	QApplication app{ argc, argv };
 	QApplication::setOrganizationName(QStringLiteral("GoodGit"));
 	QApplication::setApplicationName(QStringLiteral("GoodGit"));
+	// The name of app/res/goodgit.desktop: the AppImage desktop entry is installed from it, and Wayland matches windows to the entry by it
+	QApplication::setDesktopFileName(QStringLiteral("goodgit"));
 	QApplication::setWindowIcon(QIcon{ QStringLiteral(":/goodgit.svg") });
 
 	// Not argv, which on Windows arrives in the local codepage and mangles anything outside it
@@ -78,22 +111,10 @@ int main(int argc, char* argv[])
 	applyTheme(app);
 	checkForUpdatesIfDue();   // not in a window constructor: one window per repository would mean one check per window
 
-	// No fallback for an explicit path: used as a command line tool, the app fails like one
-	if (arguments.size() > 1)
-		return openRepositoryWindowAt(arguments[1], nullptr) ? runApplication() : 1;
+	QWidget* startupWindow = openStartupWindow(arguments);
+	if (!startupWindow)
+		return 1;
 
-	// The current directory is only the first guess: started from a shortcut it is wherever that pointed,
-	// and the last repository worked on is the better guess then
-	if (const std::expected<RepositoryLocation, std::vector<ProcessResult>> location = findRepository(QDir::currentPath()))
-	{
-		openRepositoryWindow(*location);
-		return runApplication();
-	}
-
-	const std::vector<RecentRepository> recent = RecentRepositories::list();
-	// The welcome screen also stands in where the repository to reopen is gone: a deleted folder, a drive not mounted yet
-	if (!Settings::startsWithLastRepository() || recent.empty() || !openRecentRepository(recent.front().root, nullptr))
-		showWelcomeWindow();
-
+	AppImageDesktopEntry::offerOnce(startupWindow);
 	return runApplication();
 }

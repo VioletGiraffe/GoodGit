@@ -10,6 +10,7 @@ RESTORE_COMPILER_WARNINGS
 
 class CommitWindow;
 class QWidget;
+class WelcomeWindow;
 struct RepositoryLocation;
 
 // Opening a repository in a window, from the command line, the current directory, the recent list, a chosen
@@ -52,7 +53,7 @@ void clearRecentRepositories(QWidget* dialogParent);
 
 // The welcome window, raised if one is already up. It deletes itself when closed, and any open through
 // openRepositoryWindow() closes it.
-void showWelcomeWindow();
+WelcomeWindow* showWelcomeWindow();
 
 // Opens the repository containing any folder dropped on `target`, framing it while the drag hovers; its window
 // is the dialogs' parent. Repeat for a child that accepts drops itself: a drag over it never reaches the window.
