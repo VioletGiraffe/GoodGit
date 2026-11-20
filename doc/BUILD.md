@@ -82,7 +82,7 @@ must spell the same value: the update check compares `GG_VERSION` against the ta
   and produces `GoodGit-x86_64.AppImage` or `GoodGit-arm64.AppImage`. The AppImage uses the system's glibc and
   libstdc++, so it runs only where both are at least as new as the build machine's: CI pins Ubuntu 24.04.
   - Run from an AppImage, the app adds itself to the applications menu through qtutils `AppImageDesktopEntry`: Help >
-    Install desktop entry, also offered once at startup. The entry is built from the desktop file and icon at the AppDir
+    Install Desktop Entry, also offered once at startup. The entry is built from the desktop file and icon at the AppDir
     root, found by `QGuiApplication::desktopFileName()`, so `main` sets that to the desktop file's name.
 
 A tag push creates a draft GitHub release with every artifact and a changelog of the commits since the previous
