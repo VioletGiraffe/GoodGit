@@ -122,6 +122,7 @@ private:
 	void loadRemainingCommits();
 	// Selects the commit revealCommit() asked for, the one a reload replaced, or the newest row
 	void selectLoadedCommit();
+	void selectAndCenterRow(int row);
 	void showFilesForCurrentCommit();
 	void showDiffForCurrentFile();
 	// Hidden while the body is empty; sized to its lines up to a cap

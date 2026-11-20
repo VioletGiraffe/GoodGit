@@ -57,7 +57,8 @@ while a commit window is open on it.
 
 Text search runs in memory over the loaded records (sha, revision, author, refs, date, message) and hides
 non-matching rows, which is why a miss is reported against the loaded count rather than as "not found": the
-commit may be older than the limit.
+commit may be older than the limit. The selected commit stays selected while the search still shows it, so
+clearing the search shows a found commit among its neighbours; otherwise the first match is selected.
 
 Searching diff *content* is the one thing the records cannot answer, so "Find in contents" re-runs the log.
 It is one search reported at two strengths: `-G` lists every commit that changed a line containing the

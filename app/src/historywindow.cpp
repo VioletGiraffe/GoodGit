@@ -361,7 +361,7 @@ void HistoryWindow::buildUi()
 bool HistoryWindow::eventFilter(QObject* watched, QEvent* event)
 {
 	// Down and Enter move focus from the search box to the list, applying a still-pending debounced search
-	// first: applySearch makes the first match current, so the arrows work straight away
+	// first: applySearch leaves a row current, so the arrows work straight away
 	if (watched == _searchEdit && event->type() == QEvent::KeyPress)
 	{
 		const int key = static_cast<QKeyEvent*>(event)->key();
@@ -661,19 +661,13 @@ void HistoryWindow::revealCommit(const QString& sha, RevealMiss onMiss)
 
 void HistoryWindow::selectLoadedCommit()
 {
-	const auto selectRow = [this](int row) {
-		const QModelIndex index = _logModel.index(row, CommitLogModel::CommitColumn);
-		_logView->setCurrentIndex(index); // updates the panes below through currentChanged
-		_logView->scrollTo(index, QAbstractItemView::PositionAtCenter);
-	};
-
 	if (!_revealSha.isEmpty())
 	{
 		if (const int row = _logModel.rowOfSha(_revealSha); row >= 0)
 		{
 			_revealSha.clear();
 			_reselectSha.clear(); // the reveal outranks the row the reload replaced
-			selectRow(row);
+			selectAndCenterRow(row);
 			return;
 		}
 		if (_fullLoadPending)
@@ -708,7 +702,7 @@ void HistoryWindow::selectLoadedCommit()
 		_reselectSha.clear();
 		if (row >= 0)
 		{
-			selectRow(row);
+			selectAndCenterRow(row);
 			return;
 		}
 	}
@@ -716,6 +710,13 @@ void HistoryWindow::selectLoadedCommit()
 	// The newest row stands in where a reset left no selection
 	if (!_logView->currentIndex().isValid() && _logModel.rowCount() > 0)
 		_logView->setCurrentIndex(_logModel.index(0, CommitLogModel::CommitColumn));
+}
+
+void HistoryWindow::selectAndCenterRow(int row)
+{
+	const QModelIndex index = _logModel.index(row, CommitLogModel::CommitColumn);
+	_logView->setCurrentIndex(index); // updates the panes below through currentChanged
+	_logView->scrollTo(index, QAbstractItemView::PositionAtCenter);
 }
 
 void HistoryWindow::onFileRowActivated(const QModelIndex& sourceIndex, Qt::KeyboardModifiers modifiers)
@@ -769,12 +770,17 @@ void HistoryWindow::openSubmoduleHistory(const CommitFileChange& entry)
 
 void HistoryWindow::applySearch()
 {
+	// Read before the model's reset, which drops the selection
+	const QString selected = selectedSha();
 	_logModel.setSearchText(_searchEdit->text());
 	updateCountLabel();
 
-	// Land on the first match, so the arrows step between matches from there
-	if (_logModel.rowCount() > 0)
-		_logView->setCurrentIndex(_logModel.index(0, CommitLogModel::CommitColumn));
+	// The selected commit stays selected while it still shows, so clearing the search shows it among its neighbours.
+	// The first match stands in otherwise, so the arrows step between matches from there.
+	if (const int row = _logModel.rowOfSha(selected); row >= 0)
+		selectAndCenterRow(row);
+	else if (_logModel.rowCount() > 0)
+		selectAndCenterRow(0);
 }
 
 void HistoryWindow::updateCountLabel()
