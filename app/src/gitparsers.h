@@ -4,6 +4,7 @@
 
 DISABLE_COMPILER_WARNINGS
 #include <QByteArray>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 RESTORE_COMPILER_WARNINGS
@@ -155,6 +156,8 @@ inline constexpr char RemoteBranchRefFormat[] = "%(refname)%1f%(objectname)%1f%(
 // Input: `for-each-ref --format=<RemoteBranchRefFormat> refs/remotes` output. A symbolic ref such as
 // origin/HEAD is skipped: it names another listed branch.
 [[nodiscard]] std::vector<RemoteBranchRef> parseRemoteBranchRefs(const QByteArray& forEachRefOutput);
+// The query listing the remote-tracking branches whose history has `commit`, for parseRemoteBranchRefs
+[[nodiscard]] QStringList remoteBranchesContainingArgs(const QString& commit);
 
 // US-separated, as LocalBranchRefFormat. %(HEAD) is "*" on the branch HEAD is on; %(worktreepath) is set for every
 // worktree's branch, this one's included.
@@ -179,6 +182,18 @@ inline constexpr char BranchPushTargetFormat[] = "%(upstream)%1f%(push)%1f%(upst
 // Input: `for-each-ref --format=<BranchPushTargetFormat> refs/heads/<branch>` output. Empty when the branch is not listed.
 [[nodiscard]] std::optional<BranchPushTarget> parseBranchPushTarget(const QByteArray& forEachRefOutput);
 
+// HEAD's first-parent line down to its fork point (ReattachCandidate)
+struct UnpublishedHistory
+{
+	QSet<QString> commits; // the line's commits no remote-tracking branch has
+	QString forkPoint;     // empty where the line has no published commit
+};
+
+// The query parseUnpublishedHistory reads
+[[nodiscard]] QStringList unpublishedHistoryArgs();
+// Input: `rev-list --first-parent --parents HEAD --not --remotes` output: a commit and its parents per line
+[[nodiscard]] UnpublishedHistory parseUnpublishedHistory(const QByteArray& revListOutput);
+
 struct ReattachOptions
 {
 	std::vector<ReattachCandidate> candidates; // in Kind order, their commit counts not yet filled
@@ -186,9 +201,10 @@ struct ReattachOptions
 };
 
 // The ways off a detached HEAD at `headSha`, and the branches that nearly qualify.
-// `remotesContainingHead`: the remote-tracking branches whose history has HEAD.
+// `relatedRemotes`: the remote-tracking branches related to HEAD (ReattachCandidate).
+// `unpublished`: empty when they contain HEAD; HEAD's line down to the fork point they contain otherwise.
 [[nodiscard]] ReattachOptions reattachOptions(const QString& headSha, const std::vector<LocalBranchRef>& localBranches,
-	const std::vector<RemoteBranchRef>& remotesContainingHead);
+	const std::vector<RemoteBranchRef>& relatedRemotes, const UnpublishedHistory& unpublished);
 
 // The query filling a Move or Create candidate's commit counts, read by parseLeftRightCount into refOnly, headOnly
 [[nodiscard]] QStringList reattachCountArgs(const ReattachCandidate& candidate);

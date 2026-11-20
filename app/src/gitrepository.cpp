@@ -614,10 +614,12 @@ struct GitRepository::RefreshRun
 	QStringList ignoredDirectories; // ignored as a whole
 	QStringList submodules; // repo-relative paths of the gitlink entries
 	std::map<QString, SubmoduleContent> submoduleContent; // only the submodules that were queried at all
-	// Detached only: the two listings the options are selected from, then the options with their counts
+	// Detached only: the listings and HEAD's unpublished history the options are selected from, then the options with their counts
 	std::vector<Git::LocalBranchRef> localBranches;
-	std::vector<Git::RemoteBranchRef> remotesContainingHead;
-	int refListingsPending = 2;
+	std::vector<Git::RemoteBranchRef> relatedRemotes; // containing HEAD; where none does, containing HEAD's fork point
+	bool remoteBranchesExist = false;
+	int refListingsPending = 3;
+	Git::UnpublishedHistory unpublishedHistory; // read only when no remote-tracking branch contains HEAD
 	Git::ReattachOptions reattachOptions;
 	QStringList unpushedSubjects;
 	QStringList conflicted; // paths with unmerged index entries
@@ -748,13 +750,9 @@ void GitRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run
 
 	if (run->header.head == QLatin1String("(detached)"))
 	{
-		// Called by each listing as it answers; the last one selects the options and counts the candidates within this round.
-		// Every failure fails the run: the strip states what the listings found, and an unread one would read as nothing found.
+		// Every failure fails the run: the strip states what the queries found, and an unread one would read as nothing found.
 		auto selectAndCountCandidates = [run, round, workDir = path()]() mutable {
-			if (--run->refListingsPending > 0 || !run->failure.isEmpty())
-				return;
-
-			run->reattachOptions = Git::reattachOptions(run->header.oid, run->localBranches, run->remotesContainingHead);
+			run->reattachOptions = Git::reattachOptions(run->header.oid, run->localBranches, run->relatedRemotes, run->unpublishedHistory);
 			std::vector<ReattachCandidate>& candidates = run->reattachOptions.candidates;
 			for (size_t i = 0; i < candidates.size(); ++i)
 			{
@@ -776,24 +774,57 @@ void GitRepository::startDependentQueries(const std::shared_ptr<RefreshRun>& run
 				});
 			}
 		};
+		// Called by each listing as it answers; the last one goes on to the selection within this round
+		auto afterListing = [run, round, workDir = path(), selectAndCountCandidates]() mutable {
+			if (--run->refListingsPending > 0 || !run->failure.isEmpty())
+				return;
+			// A remote-tracking branch containing HEAD leaves no commit of HEAD's unpublished.
+			// Without remote-tracking branches every commit is unpublished: the walk would cover the whole first-parent line for nothing.
+			if (!run->relatedRemotes.empty() || !run->remoteBranchesExist)
+				return selectAndCountCandidates();
+
+			round.launch(workDir, Git::unpublishedHistoryArgs(), [run, round, workDir, selectAndCountCandidates](const ProcessResult& r) mutable {
+				if (!r.ok)
+					return run->noteFailure(r);
+				run->unpublishedHistory = Git::parseUnpublishedHistory(r.out);
+				if (run->unpublishedHistory.forkPoint.isEmpty())
+					return selectAndCountCandidates();
+
+				round.launch(workDir, Git::remoteBranchesContainingArgs(run->unpublishedHistory.forkPoint),
+					[run, selectAndCountCandidates](const ProcessResult& listing) mutable {
+						if (!listing.ok)
+							return run->noteFailure(listing);
+						run->relatedRemotes = Git::parseRemoteBranchRefs(listing.out);
+						selectAndCountCandidates();
+					});
+			});
+		};
 
 		round.launch(path(), { QStringLiteral("for-each-ref"), QStringLiteral("--format=") + QLatin1String(Git::LocalBranchRefFormat),
 				QStringLiteral("refs/heads") },
-			[run, selectAndCountCandidates](const ProcessResult& r) mutable {
+			[run, afterListing](const ProcessResult& r) mutable {
 				if (r.ok)
 					run->localBranches = Git::parseLocalBranchRefs(r.out);
 				else
 					run->noteFailure(r);
-				selectAndCountCandidates();
+				afterListing();
 			});
-		round.launch(path(), { QStringLiteral("for-each-ref"), QStringLiteral("--contains"), QStringLiteral("HEAD"),
-				QStringLiteral("--format=") + QLatin1String(Git::RemoteBranchRefFormat), QStringLiteral("refs/remotes") },
-			[run, selectAndCountCandidates](const ProcessResult& r) mutable {
+		round.launch(path(), Git::remoteBranchesContainingArgs(QStringLiteral("HEAD")),
+			[run, afterListing](const ProcessResult& r) mutable {
 				if (r.ok)
-					run->remotesContainingHead = Git::parseRemoteBranchRefs(r.out);
+					run->relatedRemotes = Git::parseRemoteBranchRefs(r.out);
 				else
 					run->noteFailure(r);
-				selectAndCountCandidates();
+				afterListing();
+			});
+		round.launch(path(), { QStringLiteral("for-each-ref"), QStringLiteral("--count=1"), QStringLiteral("--format=%(refname)"),
+				QStringLiteral("refs/remotes") },
+			[run, afterListing](const ProcessResult& r) mutable {
+				if (r.ok)
+					run->remoteBranchesExist = !r.out.trimmed().isEmpty();
+				else
+					run->noteFailure(r);
+				afterListing();
 			});
 	}
 

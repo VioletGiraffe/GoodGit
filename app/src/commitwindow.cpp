@@ -116,6 +116,11 @@ QString reattachDescription(const ReattachCandidate& candidate)
 	case ReattachCandidate::Kind::AtHead:
 		return CommitWindow::tr("'%1' points here.").arg(candidate.branch);
 	case ReattachCandidate::Kind::Move:
+		if (candidate.upstreamLacksHead && candidate.refOnlyCommits == 0)
+			return CommitWindow::tr("'%1' is %2 commit(s) behind here, and %3 lacks this commit.").arg(candidate.branch, headOnly, candidate.upstream);
+		if (candidate.upstreamLacksHead)
+			return CommitWindow::tr("'%1' has %2 commit(s) this one lacks and lacks %3 of its; %4 has the branch's commits, not this one.")
+				.arg(candidate.branch, refOnly, headOnly, candidate.upstream);
 		if (candidate.refOnlyCommits == 0)
 			return CommitWindow::tr("'%1' is %2 commit(s) behind here, and %3 contains this commit.").arg(candidate.branch, headOnly, candidate.upstream);
 		if (candidate.headOnlyCommits == 0)
@@ -123,6 +128,11 @@ QString reattachDescription(const ReattachCandidate& candidate)
 		return CommitWindow::tr("'%1' has %2 commit(s) this one lacks and lacks %3 of its; %4 contains both.")
 			.arg(candidate.branch, refOnly, headOnly, candidate.upstream);
 	case ReattachCandidate::Kind::Create:
+		if (candidate.upstreamLacksHead && candidate.refOnlyCommits == 0)
+			return CommitWindow::tr("This commit is %1 commit(s) past %2, and there is no local '%3' yet.").arg(headOnly, candidate.upstream, candidate.branch);
+		if (candidate.upstreamLacksHead)
+			return CommitWindow::tr("This commit forked from %1, which has %2 commit(s) this one lacks, and there is no local '%3' yet.")
+				.arg(candidate.upstream, refOnly, candidate.branch);
 		if (candidate.refOnlyCommits == 0)
 			return CommitWindow::tr("%1 points here, and there is no local '%2' yet.").arg(candidate.upstream, candidate.branch);
 		return CommitWindow::tr("%1 contains this commit, %2 commit(s) further on, and there is no local '%3' yet.")
@@ -151,7 +161,8 @@ QString reattachObstaclesText(const std::vector<ReattachObstacle>& obstacles)
 			sentences.push_back(CommitWindow::tr("'%1' is checked out in another worktree.").arg(obstacle.branch));
 			break;
 		case ReattachObstacle::Reason::NameTaken:
-			sentences.push_back(CommitWindow::tr("%1 contains this commit, but the local '%2' does not track it.").arg(obstacle.upstream, obstacle.branch));
+			sentences.push_back((obstacle.upstreamLacksHead ? CommitWindow::tr("This commit forked from %1, but the local '%2' does not track it.")
+				: CommitWindow::tr("%1 contains this commit, but the local '%2' does not track it.")).arg(obstacle.upstream, obstacle.branch));
 			break;
 		}
 	}

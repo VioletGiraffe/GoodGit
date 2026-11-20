@@ -176,19 +176,22 @@ enum class UndoRefusal : uint8_t
 	UpstreamGone,        // whether the commit was pushed cannot be checked against a ref that is gone
 };
 
-// A branch a detached HEAD can be put on without moving the working tree or orphaning a commit
+// A branch a detached HEAD can be put on without moving the working tree or orphaning a commit.
+// A remote-tracking branch is related to HEAD when it contains HEAD, or, where none does, when it contains HEAD's fork point:
+// the commit on HEAD's first-parent line where HEAD's unpublished commits, the ones no remote-tracking branch has, begin.
 struct ReattachCandidate
 {
 	enum class Kind : uint8_t
 	{
 		AtHead, // an existing branch whose tip is HEAD: checked out
-		Move,   // an existing branch with nothing unpushed, its upstream containing HEAD: moved to HEAD, then checked out
-		Create, // a remote-tracking branch containing HEAD, its local name free: created at HEAD, tracking it
+		Move,   // an existing branch whose upstream is related to HEAD, and which loses no commit by moving: moved to HEAD, then checked out
+		Create, // a remote-tracking branch related to HEAD, its local name free: created at HEAD, tracking it
 	};
 
 	Kind kind = Kind::AtHead;
 	QString branch;    // the local branch, existing or to be created
-	QString upstream;  // Move, Create: the remote-tracking branch that contains HEAD
+	QString upstream;  // Move, Create: the remote-tracking branch related to HEAD
+	bool upstreamLacksHead = false; // Move, Create: the upstream is related through HEAD's fork point
 	QString branchSha; // Move: the tip being replaced; the move fails if the branch no longer points there
 	// Commits the ref has that HEAD lacks, and the reverse. The ref is the branch for Move, the upstream for Create.
 	int refOnlyCommits = 0;
@@ -203,14 +206,15 @@ struct ReattachObstacle
 {
 	enum class Reason : uint8_t
 	{
-		Unpushed,            // its upstream contains HEAD, but it has commits the upstream lacks
-		CheckedOutElsewhere, // at HEAD or its upstream containing HEAD, but checked out in another worktree
-		NameTaken,           // a remote-tracking branch contains HEAD, but the local branch of its name tracks something else
+		Unpushed,            // its upstream is related to HEAD, but moving it would drop commits the upstream lacks
+		CheckedOutElsewhere, // at HEAD or its upstream related to HEAD, but checked out in another worktree
+		NameTaken,           // a remote-tracking branch is related to HEAD, but the local branch of its name tracks something else
 	};
 
 	Reason reason = Reason::Unpushed;
 	QString branch;          // the local branch
-	QString upstream;        // Unpushed, NameTaken: the remote-tracking branch that contains HEAD
+	QString upstream;        // Unpushed, NameTaken: the remote-tracking branch related to HEAD
+	bool upstreamLacksHead = false; // Unpushed, NameTaken: see ReattachCandidate::upstreamLacksHead
 	int unpushedCommits = 0; // Unpushed
 };
 

@@ -441,6 +441,12 @@ std::vector<RemoteBranchRef> parseRemoteBranchRefs(const QByteArray& forEachRefO
 	return branches;
 }
 
+QStringList remoteBranchesContainingArgs(const QString& commit)
+{
+	return { QStringLiteral("for-each-ref"), QStringLiteral("--contains"), commit,
+		QStringLiteral("--format=") + QLatin1String(RemoteBranchRefFormat), QStringLiteral("refs/remotes") };
+}
+
 std::vector<BranchTip> parseBranchTips(const QByteArray& forEachRefOutput)
 {
 	std::vector<BranchTip> tips;
@@ -472,41 +478,72 @@ std::optional<BranchPushTarget> parseBranchPushTarget(const QByteArray& forEachR
 	return target;
 }
 
-ReattachOptions reattachOptions(const QString& headSha, const std::vector<LocalBranchRef>& localBranches,
-	const std::vector<RemoteBranchRef>& remotesContainingHead)
+QStringList unpublishedHistoryArgs()
 {
-	QHash<QString, QString> containingRemoteNames; // by full ref name
-	for (const RemoteBranchRef& remote : remotesContainingHead)
-		containingRemoteNames.insert(remote.ref, remote.name);
+	return { QStringLiteral("rev-list"), QStringLiteral("--first-parent"), QStringLiteral("--parents"), QStringLiteral("HEAD"),
+		QStringLiteral("--not"), QStringLiteral("--remotes"), QStringLiteral("--") };
+}
+
+UnpublishedHistory parseUnpublishedHistory(const QByteArray& revListOutput)
+{
+	UnpublishedHistory history;
+	QStringList firstParents;
+	for (const QString& line : parseLineList(revListOutput))
+	{
+		const QStringList shas = line.split(QLatin1Char(' '));
+		history.commits.insert(shas.front());
+		if (shas.size() > 1)
+			firstParents.push_back(shas[1]);
+	}
+	// The line is linear, so at most one first parent is unlisted: the published one
+	for (const QString& parent : firstParents)
+	{
+		if (!history.commits.contains(parent))
+			history.forkPoint = parent;
+	}
+	return history;
+}
+
+ReattachOptions reattachOptions(const QString& headSha, const std::vector<LocalBranchRef>& localBranches,
+	const std::vector<RemoteBranchRef>& relatedRemotes, const UnpublishedHistory& unpublished)
+{
+	const bool upstreamsLackHead = !unpublished.commits.isEmpty();
+	QHash<QString, QString> relatedRemoteNames; // by full ref name
+	for (const RemoteBranchRef& remote : relatedRemotes)
+		relatedRemoteNames.insert(remote.ref, remote.name);
 
 	ReattachOptions options;
 	QHash<QString, QString> upstreamsByLocalName; // full ref names, empty for no upstream
 	for (const LocalBranchRef& local : localBranches)
 	{
 		upstreamsByLocalName.insert(local.name, local.upstream);
-		const auto upstream = containingRemoteNames.constFind(local.upstream);
-		if (local.sha != headSha && upstream == containingRemoteNames.cend())
+		const auto upstream = relatedRemoteNames.constFind(local.upstream);
+		if (local.sha != headSha && upstream == relatedRemoteNames.cend())
 			continue; // unrelated to HEAD
 
 		if (local.checkedOutElsewhere)
 			options.obstacles.push_back({ .reason = ReattachObstacle::Reason::CheckedOutElsewhere, .branch = local.name });
 		else if (local.sha == headSha)
 			options.candidates.push_back({ .kind = ReattachCandidate::Kind::AtHead, .branch = local.name });
-		else if (local.unpushedCommits == 0)
-			options.candidates.push_back({ .kind = ReattachCandidate::Kind::Move, .branch = local.name, .upstream = *upstream, .branchSha = local.sha });
+		// The upstream has every commit the branch has, or the branch's tip is on HEAD's line past the fork point
+		else if (local.unpushedCommits == 0 || unpublished.commits.contains(local.sha))
+			options.candidates.push_back({ .kind = ReattachCandidate::Kind::Move, .branch = local.name, .upstream = *upstream,
+				.upstreamLacksHead = upstreamsLackHead, .branchSha = local.sha });
 		else
 			options.obstacles.push_back({ .reason = ReattachObstacle::Reason::Unpushed, .branch = local.name, .upstream = *upstream,
-				.unpushedCommits = local.unpushedCommits });
+				.upstreamLacksHead = upstreamsLackHead, .unpushedCommits = local.unpushedCommits });
 	}
 
-	for (const RemoteBranchRef& remote : remotesContainingHead)
+	for (const RemoteBranchRef& remote : relatedRemotes)
 	{
 		const QString localName = localBranchNameFor(remote.name);
 		const auto localUpstream = upstreamsByLocalName.constFind(localName);
 		if (localUpstream == upstreamsByLocalName.cend())
-			options.candidates.push_back({ .kind = ReattachCandidate::Kind::Create, .branch = localName, .upstream = remote.name });
+			options.candidates.push_back({ .kind = ReattachCandidate::Kind::Create, .branch = localName, .upstream = remote.name,
+				.upstreamLacksHead = upstreamsLackHead });
 		else if (*localUpstream != remote.ref) // a branch tracking it was judged above
-			options.obstacles.push_back({ .reason = ReattachObstacle::Reason::NameTaken, .branch = localName, .upstream = remote.name });
+			options.obstacles.push_back({ .reason = ReattachObstacle::Reason::NameTaken, .branch = localName, .upstream = remote.name,
+				.upstreamLacksHead = upstreamsLackHead });
 	}
 
 	std::ranges::stable_sort(options.candidates, {}, &ReattachCandidate::kind);

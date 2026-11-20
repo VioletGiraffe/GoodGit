@@ -592,6 +592,121 @@ TEST_CASE("A branch with unpushed commits is not offered, and the state says why
 	CHECK(state.reattachObstacles[0].unpushedCommits == 1);
 }
 
+TEST_CASE("A detached HEAD with commits past its upstream is offered its branch fast-forwarded, or a new one, and no older remote branch", "[git]")
+{
+	const ScratchRepository scratch;
+	for (const char* content : { "1\n", "2\n", "3\n", "4\n" })
+	{
+		scratch.write(QStringLiteral("file.txt"), content);
+		scratch.commitAll(QString::fromLatin1(content).trimmed());
+	}
+	scratch.setUpstreamOfMainToOriginMain();
+	scratch.git({ QStringLiteral("update-ref"), QStringLiteral("refs/remotes/origin/main"), QStringLiteral("HEAD~1") });
+	scratch.git({ QStringLiteral("update-ref"), QStringLiteral("refs/remotes/origin/feature"), QStringLiteral("HEAD~1") });
+	scratch.git({ QStringLiteral("update-ref"), QStringLiteral("refs/remotes/origin/merged"), QStringLiteral("HEAD~3") }); // merged before the fork point
+	// What a commit on a submodule update's detached HEAD leaves: one commit past the upstream, the local branch further behind
+	const QString detachedAt = scratch.sha(QStringLiteral("HEAD"));
+	scratch.git({ QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("--detach") });
+	scratch.git({ QStringLiteral("update-ref"), QStringLiteral("refs/heads/main"), scratch.sha(QStringLiteral("HEAD~2")) });
+
+	const RepoState detached = scratch.refreshed().second;
+	REQUIRE(detached.detached);
+	REQUIRE(detached.reattachCandidates.size() == 2);
+	const ReattachCandidate& move = detached.reattachCandidates[0];
+	CHECK(move.kind == ReattachCandidate::Kind::Move);
+	CHECK(move.branch == QStringLiteral("main"));
+	CHECK(move.upstream == QStringLiteral("origin/main"));
+	CHECK(move.upstreamLacksHead);
+	CHECK(move.refOnlyCommits == 0);
+	CHECK(move.headOnlyCommits == 2);
+	const ReattachCandidate& create = detached.reattachCandidates[1];
+	CHECK(create.kind == ReattachCandidate::Kind::Create);
+	CHECK(create.branch == QStringLiteral("feature"));
+	CHECK(create.upstream == QStringLiteral("origin/feature"));
+	CHECK(create.upstreamLacksHead);
+	CHECK(create.refOnlyCommits == 0);
+	CHECK(create.headOnlyCommits == 1);
+
+	// The whole case runs once per index, each over a repository of its own
+	const ReattachCandidate taken = detached.reattachCandidates[GENERATE(size_t{ 0 }, size_t{ 1 })];
+	scratch.reattachThroughBackend(taken);
+
+	const auto [files, attached] = scratch.refreshed();
+	CHECK(files.empty());
+	CHECK_FALSE(attached.detached);
+	CHECK(attached.branch == taken.branch);
+	CHECK(attached.headSha == detachedAt);
+	CHECK(attached.upstream == taken.upstream);
+	CHECK(attached.ahead == 1);
+	CHECK(attached.behind == 0);
+}
+
+TEST_CASE("A detached HEAD with commits of its own is still offered its branch once the upstream has moved on", "[git]")
+{
+	const ScratchRepository scratch;
+	for (const char* content : { "1\n", "2\n" })
+	{
+		scratch.write(QStringLiteral("file.txt"), content);
+		scratch.commitAll(QString::fromLatin1(content).trimmed());
+	}
+	scratch.setUpstreamOfMainToOriginMain();
+	scratch.git({ QStringLiteral("update-ref"), QStringLiteral("refs/remotes/origin/old"), QStringLiteral("HEAD~1") }); // older than the fork point
+	scratch.git({ QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("--detach") });
+	scratch.write(QStringLiteral("file.txt"), "upstream\n");
+	scratch.commitAll(QStringLiteral("upstream"));
+	scratch.git({ QStringLiteral("update-ref"), QStringLiteral("refs/remotes/origin/main"), QStringLiteral("HEAD") });
+	scratch.git({ QStringLiteral("update-ref"), QStringLiteral("refs/remotes/origin/feature"), QStringLiteral("HEAD") });
+	// A commit on the fork point, which main is still at, after both remote-tracking branches moved past it
+	scratch.git({ QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("--detach"), QStringLiteral("main") });
+	scratch.write(QStringLiteral("file.txt"), "local\n");
+	scratch.commitAll(QStringLiteral("local"));
+	const QString detachedAt = scratch.sha(QStringLiteral("HEAD"));
+
+	const RepoState detached = scratch.refreshed().second;
+	REQUIRE(detached.detached);
+	REQUIRE(detached.reattachCandidates.size() == 2);
+	const ReattachCandidate& move = detached.reattachCandidates[0];
+	CHECK(move.kind == ReattachCandidate::Kind::Move);
+	CHECK(move.branch == QStringLiteral("main"));
+	CHECK(move.upstreamLacksHead);
+	CHECK(move.refOnlyCommits == 0);
+	CHECK(move.headOnlyCommits == 1);
+	const ReattachCandidate& create = detached.reattachCandidates[1];
+	CHECK(create.kind == ReattachCandidate::Kind::Create);
+	CHECK(create.branch == QStringLiteral("feature"));
+	CHECK(create.upstreamLacksHead);
+	CHECK(create.refOnlyCommits == 1);
+	CHECK(create.headOnlyCommits == 1);
+
+	// The whole case runs once per index, each over a repository of its own
+	const ReattachCandidate taken = detached.reattachCandidates[GENERATE(size_t{ 0 }, size_t{ 1 })];
+	scratch.reattachThroughBackend(taken);
+
+	const auto [files, attached] = scratch.refreshed();
+	CHECK(files.empty());
+	CHECK(attached.branch == taken.branch);
+	CHECK(attached.headSha == detachedAt);
+	CHECK(attached.upstream == taken.upstream);
+	CHECK(attached.ahead == 1);
+	CHECK(attached.behind == 1);
+}
+
+TEST_CASE("A detached HEAD in a repository without remote-tracking branches is offered nothing, and the refresh succeeds", "[git]")
+{
+	const ScratchRepository scratch;
+	scratch.write(QStringLiteral("file.txt"), "1\n");
+	scratch.commitAll(QStringLiteral("1"));
+	scratch.git({ QStringLiteral("checkout"), QStringLiteral("-q"), QStringLiteral("--detach") });
+	scratch.write(QStringLiteral("file.txt"), "2\n");
+	scratch.commitAll(QStringLiteral("2")); // main is behind HEAD but has no upstream, so it is unrelated
+
+	const RepoState state = scratch.refreshed().second;
+	CHECK(state.known());
+	CHECK(state.detached);
+	CHECK(state.reattachCandidates.empty());
+	CHECK(state.reattachObstacles.empty());
+}
+
 TEST_CASE("An incoming check fetches, counts every incoming commit and lists the newest, without a refresh", "[git]")
 {
 	const ScratchRepository upstream;

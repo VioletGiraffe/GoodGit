@@ -44,17 +44,21 @@ ships with hg but is off by default, so the command enables it for itself.
 ## Detached HEAD
 
 A detached HEAD is put back on a branch only where the working tree stays put and no commit is orphaned.
-The candidates, computed on refresh:
+A remote-tracking branch is related to HEAD when it contains HEAD. Where none does, HEAD has unpublished
+commits, the ones no remote-tracking branch has, and a remote-tracking branch is related when it contains
+HEAD's fork point: the commit on HEAD's first-parent line where those begin. The candidates, computed on refresh:
 
 | Kind | Condition | Action |
 |---|---|---|
 | At HEAD | a local branch's tip is HEAD | check it out |
-| Move | a local branch with nothing unpushed, its upstream containing HEAD | move it to HEAD, check it out |
-| Create | a remote-tracking branch containing HEAD, its local name free | create it at HEAD, tracking that branch |
+| Move | a local branch whose upstream is related to HEAD, with nothing unpushed or its tip on HEAD's first-parent line past the fork point | move it to HEAD, check it out |
+| Create | a remote-tracking branch related to HEAD, its local name free | create it at HEAD, tracking that branch |
 
 A branch checked out in another worktree is never a candidate. A move loses nothing: every commit the
-branch leaves behind is on its upstream. It covers a submodule update's detached HEAD, older or newer
-than the local branch.
+branch leaves behind is on its upstream, or it leaves none behind. It covers a submodule update's detached
+HEAD, older or newer than the local branch, and commits made on that HEAD since, before or after the
+upstream moves on. A remote-tracking branch merged before the fork point does not contain it, so it is not
+offered; one created from the fork point on is.
 
 The header strip describes the candidates and offers them on a button; several are offered as a choice.
 Committing takes only a candidate whose ref already points at HEAD, silently if there is one; moving a

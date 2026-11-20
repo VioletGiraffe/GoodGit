@@ -44,6 +44,7 @@ A path is bytes, not text in a known encoding. Git stores what the filesystem ga
 | `ls-files -s` | `<mode> <sha1> <stage>\t<path>` |
 | `ls-tree` | `<mode> <type> <sha>\t<path>` |
 | `packed-refs` | `<sha> <ref>` per line; a peeled tag adds a `^<sha>` line naming no ref |
+| `rev-list --parents` | `<sha> <parent>...` per line |
 
 Mode 160000 on either side of a raw record is a gitlink, so that row is a submodule.
 
@@ -74,6 +75,8 @@ Other format facts:
 - `log` default ordering only guarantees that a commit comes above the child it was first reached through.
   `--date-order` and `--topo-order` guarantee it against every child; the former then sorts by commit date, the
   latter lists each line of history as one block.
+- `--first-parent` limits which commits a walk lists, not what it prints about them: `--parents` still prints
+  every parent of a merge, and `--boundary` every excluded one.
 - `--all` means every ref under `refs/`, `refs/stash` and `refs/notes` included. `--branches --tags
   --remotes HEAD` is the same set without those two, and names a detached checkout, which is on no branch.
 - A revision named like a path in the worktree is an ambiguous argument unless `--` follows it, so the walks always

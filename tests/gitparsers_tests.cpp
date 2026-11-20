@@ -339,7 +339,7 @@ TEST_CASE("Reattach options: candidates that neither move the working tree nor o
 		{ .ref = QStringLiteral("refs/remotes/fork/topic/y"), .name = QStringLiteral("fork/topic/y"), .sha = head },
 	};
 
-	const Git::ReattachOptions options = Git::reattachOptions(head, locals, remotes);
+	const Git::ReattachOptions options = Git::reattachOptions(head, locals, remotes, {});
 	const std::vector<ReattachCandidate>& candidates = options.candidates;
 	REQUIRE(candidates.size() == 3);
 	CHECK(candidates[0].kind == ReattachCandidate::Kind::AtHead);
@@ -347,6 +347,7 @@ TEST_CASE("Reattach options: candidates that neither move the working tree nor o
 	CHECK(candidates[1].kind == ReattachCandidate::Kind::Move);
 	CHECK(candidates[1].branch == QStringLiteral("main"));
 	CHECK(candidates[1].upstream == QStringLiteral("origin/main"));
+	CHECK_FALSE(candidates[1].upstreamLacksHead);
 	CHECK(candidates[1].branchSha == QStringLiteral("m"));
 	CHECK(candidates[2].kind == ReattachCandidate::Kind::Create);
 	CHECK(candidates[2].branch == QStringLiteral("topic/y"));
@@ -367,6 +368,65 @@ TEST_CASE("Reattach options: candidates that neither move the working tree nor o
 
 	CHECK(Git::reattachCountArgs(candidates[1]).last() == QStringLiteral("m...HEAD"));
 	CHECK(Git::reattachCountArgs(candidates[2]).last() == QStringLiteral("refs/remotes/fork/topic/y...HEAD"));
+}
+
+TEST_CASE("Unpublished history: the first-parent line's commits, and the one first parent not among them", "[gitparsers]")
+{
+	// A merge lists both parents; only the first is on the line
+	const Git::UnpublishedHistory history = Git::parseUnpublishedHistory("head merge\nmerge local side\nlocal fork\n");
+	CHECK(history.commits == QSet<QString>{ QStringLiteral("head"), QStringLiteral("merge"), QStringLiteral("local") });
+	CHECK(history.forkPoint == QStringLiteral("fork"));
+
+	const Git::UnpublishedHistory toRoot = Git::parseUnpublishedHistory("head root\nroot\n");
+	CHECK(toRoot.commits.size() == 2);
+	CHECK(toRoot.forkPoint.isEmpty());
+
+	const Git::UnpublishedHistory none = Git::parseUnpublishedHistory("");
+	CHECK(none.commits.isEmpty());
+	CHECK(none.forkPoint.isEmpty());
+}
+
+TEST_CASE("Reattach options: through HEAD's fork point, a branch is offered a move only if the move drops no commit", "[gitparsers]")
+{
+	const QString head = QStringLiteral("head");
+	const auto remote = [](const char* name) {
+		return Git::RemoteBranchRef{ .ref = QStringLiteral("refs/remotes/") + QString::fromLatin1(name), .name = QString::fromLatin1(name) };
+	};
+	const std::vector<Git::RemoteBranchRef> related = { remote("origin/main"), remote("origin/ahead"), remote("origin/diverged"),
+		remote("fork/new"), remote("fork/main") };
+	const std::vector<Git::LocalBranchRef> locals = {
+		{ .name = QStringLiteral("main"), .sha = QStringLiteral("m"), .upstream = related[0].ref },
+		// One commit past its upstream, and that commit is HEAD's parent
+		{ .name = QStringLiteral("ahead"), .sha = QStringLiteral("mid"), .upstream = related[1].ref, .unpushedCommits = 1 },
+		{ .name = QStringLiteral("diverged"), .sha = QStringLiteral("d"), .upstream = related[2].ref, .unpushedCommits = 1 },
+		{ .name = QStringLiteral("stale"), .sha = QStringLiteral("s"), .upstream = QStringLiteral("refs/remotes/origin/stale") }, // unrelated
+	};
+	const Git::UnpublishedHistory unpublished{ .commits = { head, QStringLiteral("mid") }, .forkPoint = QStringLiteral("fork") };
+
+	const Git::ReattachOptions options = Git::reattachOptions(head, locals, related, unpublished);
+	const std::vector<ReattachCandidate>& candidates = options.candidates;
+	REQUIRE(candidates.size() == 3);
+	CHECK(candidates[0].kind == ReattachCandidate::Kind::Move);
+	CHECK(candidates[0].branch == QStringLiteral("main"));
+	CHECK(candidates[0].upstream == QStringLiteral("origin/main"));
+	CHECK(candidates[0].upstreamLacksHead);
+	CHECK(candidates[1].kind == ReattachCandidate::Kind::Move);
+	CHECK(candidates[1].branch == QStringLiteral("ahead"));
+	CHECK(candidates[1].branchSha == QStringLiteral("mid"));
+	CHECK(candidates[2].kind == ReattachCandidate::Kind::Create);
+	CHECK(candidates[2].branch == QStringLiteral("new"));
+	CHECK(candidates[2].upstream == QStringLiteral("fork/new"));
+	CHECK(candidates[2].upstreamLacksHead);
+
+	const std::vector<ReattachObstacle>& obstacles = options.obstacles;
+	REQUIRE(obstacles.size() == 2);
+	CHECK(obstacles[0].reason == ReattachObstacle::Reason::Unpushed);
+	CHECK(obstacles[0].branch == QStringLiteral("diverged"));
+	CHECK(obstacles[0].upstreamLacksHead);
+	CHECK(obstacles[1].reason == ReattachObstacle::Reason::NameTaken);
+	CHECK(obstacles[1].branch == QStringLiteral("main"));
+	CHECK(obstacles[1].upstream == QStringLiteral("fork/main"));
+	CHECK(obstacles[1].upstreamLacksHead);
 }
 
 TEST_CASE("A left-right count is two numbers or nothing", "[gitparsers]")
